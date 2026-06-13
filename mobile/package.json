@@ -5,7 +5,7 @@
   "scripts": { "start": "expo start", "android": "expo start --android", "ios": "expo start --ios" },
   "dependencies": {
     "expo": "~52.0.0",
-    "expo-image-picker": "~16.0.4",
+    "expo-image-picker": "~56.0.17",
     "expo-status-bar": "~2.0.0",
     "react": "18.3.1",
     "react-native": "0.76.5"
