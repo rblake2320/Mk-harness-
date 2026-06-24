@@ -1,0 +1,75 @@
+# MK Copilot — Product Roadmap
+*Last updated: June 24, 2026. This is a living document — reorder by what the data says.*
+
+Roadmap priorities are driven by two things: what the STRATEGY.md growth plan needs,
+and what the `ConsultantProfile` analytics tell us consultants actually use. Ship the
+thing that drives a paid conversion or prevents a churn first.
+
+---
+
+## Now (next release — 1.2.0)
+
+These are the features that directly move retention and conversion.
+
+- [ ] **Revenue-impact surfacing.** After a Power Hour contact, show the consultant the
+      estimated revenue recovered ("this customer last ordered 90 days ago — a reorder is
+      worth ~$X"). Makes the value visible, which is the #1 retention driver per STRATEGY.
+- [ ] **Billing & subscription tiers.** Stripe integration for Solo / Director / Studio.
+      Annual prepay as the default-selected option (8x lower churn). Referral credit
+      ($5/activated referral) baked into signup.
+- [ ] **Data deletion / export endpoints.** `DELETE /api/customers/{id}` cascades to
+      skin photos and derived data; `GET /api/account/export`. Required for the privacy
+      posture (see SECURITY-PRIVACY.md) and for CCPA/state-law compliance.
+- [ ] **Photo retention policy enforcement.** Auto-purge raw skin photos after analysis;
+      keep only derived non-biometric attributes unless the consultant opts to retain.
+
+## Next (1.3.0 – 1.4.0)
+
+- [ ] **Director dashboard.** Team-level analytics for Director tier — unit activity,
+      who's using which skills, aggregate (anonymized) compliance health. This is the
+      feature that makes Directors evangelize to their units.
+- [ ] **Social content calendar.** Generate a week of MK-specific organic posts at once,
+      scheduled. Replaces the Buffer use case without leaving the app. Organic only —
+      no paid-ad copy (compliance boundary held).
+- [ ] **Live-selling assistant.** Real-time prompt support for TikTok/Instagram Live
+      selling — product talking points, objection responses, on-the-fly compliance
+      checking. (Live selling is where 2026 beauty-rep growth is — see TRENDS.md.)
+- [ ] **Onboarding flow for new consultants.** First-session guided setup that produces
+      immediate value (first follow-up draft, first social post) before they hit a paywall.
+
+## Later (1.5.0+)
+
+- [ ] **Network-effects model improvements.** Use aggregated, anonymized cross-consultant
+      data to improve skill prompts and skin→product recommendation accuracy. This is the
+      moat compounding (see STRATEGY.md "The Moat").
+- [ ] **Brand expansion framework hardening.** Tooling/CLI to scaffold a new brand config,
+      validate it, and run the brand-specific test matrix — so adding brand #3, #4 takes
+      hours not days.
+- [ ] **AvonNow / InTouch-style read-only integrations** *if and when* official APIs exist.
+      Do not build against unofficial/scraped endpoints — flag as blocked until official.
+- [ ] **Voice/phone follow-up drafting** for consultants who prefer calling over texting.
+
+---
+
+## Explicitly Not Doing (and why)
+
+These are recorded so they don't get re-litigated every planning cycle.
+
+- **Accounting/tax/inventory.** Pink Office and Direct Sidekick own this. Different
+  product, different regulatory surface. We stay on the customer-relationship side.
+- **Paid-ad copy generation.** Platform ad-policy compliance changes constantly and we
+  can't fully control it. Organic content only.
+- **Replicating MK's own free apps** (Mirror Me, Interactive Catalog). Brand-locked,
+  free, not our lane. We're the AI intelligence layer, not a catalog.
+- **Income projections / earnings calculators.** Any feature that outputs a predicted
+  income is an FTC income claim. Never build it.
+
+---
+
+## Versioning Discipline
+
+- `VERSION` at repo root is the source of truth. Bump it, then sync `main.py`,
+  `web/package.json`, `mobile/app.json`.
+- Tag every release: `git tag -a v1.2.0 -m "..."` and push tags.
+- Every release gets a CHANGELOG.md entry before the tag.
+- Breaking schema changes require Alembic (see CLAUDE.md) — no silent `create_all` drift.
