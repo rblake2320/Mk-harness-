@@ -17,11 +17,14 @@ These are the features that directly move retention and conversion.
 - [ ] **Billing & subscription tiers.** Stripe integration for Solo / Director / Studio.
       Annual prepay as the default-selected option (8x lower churn). Referral credit
       ($5/activated referral) baked into signup.
-- [ ] **Data deletion / export endpoints.** `DELETE /api/customers/{id}` cascades to
-      skin photos and derived data; `GET /api/account/export`. Required for the privacy
-      posture (see SECURITY-PRIVACY.md) and for CCPA/state-law compliance.
-- [ ] **Photo retention policy enforcement.** Auto-purge raw skin photos after analysis;
-      keep only derived non-biometric attributes unless the consultant opts to retain.
+- [x] **Consent capture (skin).** Shipped v1.2.0 — `ConsentRecord` + `/api/consent/skin`,
+      operator + per-customer, gate before photo read. See SECURITY-PRIVACY.md.
+- [x] **Data deletion / export endpoints.** Shipped v1.2.0 — `DELETE /api/me/skin-data`
+      (purge + receipt) and `GET /api/me/skin-data/export` (MHMDA access/portability).
+- [x] **Photo retention policy enforcement.** Shipped v1.2.0 — raw + sanitized buffers
+      dropped after use; `AuditLog skin.analyze photo_discarded=1`. No raw image persisted.
+- [ ] **Chat-UI AI disclosure banner** (California SB 243) — frontend "you're talking to AI".
+      (Skin-output disclosure already ships; this is the chat surface.)
 - [ ] **Usage-metering dashboard.** Token cost per user/team, visible to tenant admins —
       needed for margin visibility and the Studio/Director tiers.
 - [ ] **Redis rate limiting.** Swap the in-process sliding-window store (`ratelimit.py`)

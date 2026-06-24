@@ -16,6 +16,41 @@ See `ROADMAP.md` for the forward plan.
 
 ---
 
+## [1.2.0] — 2026-06-24
+
+Customer skin-data privacy core. Closes the launch-blocking gaps from
+`SECURITY-PRIVACY.md` so the skin-analysis feature is clean to demo, launch, and put in
+front of acquirers without a liability asterisk. Driven by Washington's My Health My Data
+Act, which gives individuals a private right of action over derived skin attributes
+(undertone, Fitzpatrick type) — one rep's pre-consent analyses are potential plaintiffs.
+
+### Added
+- **Consent capture** — `ConsentRecord` model + `app/consent.py` (versioned text, SHA-256
+  integrity hashing, gate helpers). `POST /api/consent/skin` records operator and
+  per-customer consent; `GET /api/consent/skin` and `/api/consent/skin/customer/{id}`
+  report status and return the exact text to display; `DELETE /api/consent/skin` revokes.
+- **Consent gate on skin analysis** — `require_skin_consent()` runs *before the photo is
+  read*; missing consent returns `403` with a machine-readable code
+  (`operator_consent_required` / `customer_consent_required`). Re-consent is forced when
+  `SKIN_CONSENT_VERSION` bumps.
+- **AI disclosure** — every skin analyze response and history row carries a persistent
+  `ai_disclosure` field.
+- **Subject-rights endpoints** — `GET /api/me/skin-data/export` (MHMDA access/portability:
+  analyses + customer skin profiles + consent trail) and `DELETE /api/me/skin-data`
+  (purges analyses, clears derived `Customer` skin fields, returns a deletion receipt;
+  optional `?customer_id=` to scope to one customer).
+
+### Changed
+- **Photo retention made explicit** — raw bytes and sanitized base64 are `del`-eted after
+  use; an `AuditLog` `skin.analyze` row records `photo_discarded=1`. No raw image is ever
+  persisted (this was already true; now enforced and audited).
+
+### Tests
+- 45 → 51. New: consent gate (operator + customer), consent status/grant/revoke flow,
+  export, deletion receipt + purge verification, cross-user skin-data isolation.
+
+---
+
 ## [1.1.0] — 2026-06-24
 
 The multi-brand and consultant-intelligence release. This is the version that turns a

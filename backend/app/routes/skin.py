@@ -23,8 +23,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
+from ..consent import AI_DISCLOSURE, require_skin_consent
 from ..db import get_db
-from ..models import ConsultantProfile, Customer, SkinAnalysis, User
+from ..models import AuditLog, ConsultantProfile, Customer, SkinAnalysis, User
 from ..providers.base import ChatMessage, ChatRequest, ImagePart, ProviderError
 from ..providers.router import complete_with_failover
 from ..ratelimit import check_rate
@@ -238,13 +239,22 @@ async def analyze(
     db: Session = Depends(get_db),
 ):
     s = get_settings()
-    raw = await file.read()
-    data_b64, media_type = _sanitize_image(raw, s.max_upload_mb)
 
     if customer_id:
         cust = db.get(Customer, customer_id)
         if not cust or cust.user_id != user.id:
             raise HTTPException(404, "Customer not found")
+
+    # Consent gate — operator must accept the data terms; the named customer must have
+    # consented. Blocks BEFORE the photo is read/processed (MHMDA / BIPA). 403 carries a
+    # machine-readable code the client uses to raise the right consent modal.
+    require_skin_consent(db, user, customer_id)
+
+    raw = await file.read()
+    data_b64, media_type = _sanitize_image(raw, s.max_upload_mb)
+    # Photo retention policy: the raw bytes are processed in memory only and never
+    # persisted. Drop the original immediately after sanitizing/encoding.
+    del raw
 
     # Try local PanDerm first — better analysis, zero API cost, privacy-preserving.
     local_payload = await _call_local_panderm(data_b64, actual_age)
@@ -267,16 +277,25 @@ async def analyze(
         payload = _parse_and_validate(result.text)
         result_provider, result_model = result.provider, result.model
 
+    # Persistent AI disclosure — surfaces on every observation, not dismissable client-side.
+    payload["ai_disclosure"] = AI_DISCLOSURE
+
     # Persist skin profile to customer record.
     _update_skin_profile(db, customer_id, user.id, payload)
     _bump_skin_analytics(db, user)
+
+    # The sanitized image is dropped here too; only the derived cosmetic result is stored.
+    del data_b64
 
     row = SkinAnalysis(tenant_id=user.tenant_id, user_id=user.id, customer_id=customer_id,
                        result_json=json.dumps(payload), provider=result_provider,
                        model=result_model)
     db.add(row)
+    db.add(AuditLog(tenant_id=user.tenant_id, user_id=user.id, action="skin.analyze",
+                    detail=f"customer={customer_id or ''} provider={result_provider} photo_discarded=1"))
     db.commit()
-    return {"id": row.id, "provider": result_provider, "model": result_model, "result": payload}
+    return {"id": row.id, "provider": result_provider, "model": result_model,
+            "ai_disclosure": AI_DISCLOSURE, "result": payload}
 
 
 @router.get("/history")
@@ -284,5 +303,5 @@ def history(user: User = Depends(get_current_user), db: Session = Depends(get_db
     rows = db.scalars(select(SkinAnalysis).where(SkinAnalysis.user_id == user.id)
                       .order_by(SkinAnalysis.created_at.desc()).limit(50))
     return [{"id": r.id, "customer_id": r.customer_id, "created_at": r.created_at.isoformat(),
-             "provider": r.provider, "model": r.model,
+             "provider": r.provider, "model": r.model, "ai_disclosure": AI_DISCLOSURE,
              "result": json.loads(r.result_json)} for r in rows]

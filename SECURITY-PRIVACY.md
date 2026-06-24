@@ -69,27 +69,40 @@ disgorgement* (deletion of models trained on improperly obtained data).
 
 ---
 
-## Gaps to close before scaled customer-data handling
+## Implemented in v1.2.0 — the skin-data compliance core
 
-Tracked as roadmap items (see ROADMAP.md "Now").
+These were the launch-blocking gaps. They now ship and are covered by tests.
 
-1. **Consent capture.** Add an explicit, logged opt-in the consultant collects from the
-   customer before skin analysis ("I consent to a photo-based skin analysis"). Store the
-   consent record (who, when, scope) alongside the customer. Required by MHMDA + BIPA.
-2. **AI disclosure in chat UI.** Visible "You're chatting with an AI assistant" notice
-   (California SB 243).
-3. **Raw photo retention enforcement.** Confirm and enforce: raw photo is processed in
-   memory, derived attributes stored, **raw image discarded by default**. If any caching
-   exists, auto-purge on a published schedule (≤ 3 years, BIPA cap; sooner is better).
-4. **Data deletion + export endpoints.** `DELETE /api/customers/{id}` cascading to all
-   derived skin data; `GET /api/account/export`. Honor deletion within **45 days** with
-   vendor pass-through.
-5. **Published privacy policy + retention schedule.** Public-facing, plain-language.
-   BIPA specifically requires a publicly available retention/destruction policy.
-6. **DPAs with any cloud LLM/vision vendor**, with subcontractor flow-down terms.
-7. **No-training guarantee.** Contractually and technically ensure customer photos are
-   never used to train models without fresh, specific consent.
-8. **Per-tenant data-residency option** for the privacy-sensitive segment (local PanDerm
+1. ✅ **Consent capture.** `ConsentRecord` table + `POST /api/consent/skin`. Two subjects:
+   *operator* (consultant accepts the data terms — gates the whole feature) and *customer*
+   (per-customer consent before their photo is analyzed). Each grant stores the SHA-256 of
+   the exact text shown and the version; mirrored to `AuditLog`. The skin route calls
+   `require_skin_consent()` **before the photo is read** — missing consent returns `403`
+   with a machine-readable code (`operator_consent_required` / `customer_consent_required`)
+   so the client raises the right modal. Material text changes bump `SKIN_CONSENT_VERSION`,
+   which forces re-consent. Text lives in `app/consent.py`.
+2. ✅ **AI disclosure on skin output.** Every analyze response and history row carries a
+   persistent `ai_disclosure` ("AI-generated cosmetic estimate — not medical advice…").
+   *(The chat-UI "you're talking to AI" banner for California SB 243 is a separate
+   frontend item — see "Still open".)*
+3. ✅ **Photo retention enforcement.** Raw bytes are `del`-eted right after sanitize/encode,
+   the sanitized base64 is `del`-eted after use, and an `AuditLog` `skin.analyze` row records
+   `photo_discarded=1`. No raw image is ever persisted — only the derived cosmetic result.
+4. ✅ **Deletion + export endpoints.** `DELETE /api/me/skin-data` (optionally `?customer_id=`)
+   purges `SkinAnalysis` rows and clears the derived `Customer` skin fields, returns a
+   deletion **receipt**; `GET /api/me/skin-data/export` returns everything stored
+   (analyses + customer skin profiles + the consent trail) for MHMDA access/portability.
+   Synchronous — the 45-day deadline is trivially met. Revocation: `DELETE /api/consent/skin`.
+
+## Still open (next sprint — only acute with paying enterprise tenants)
+
+5. **Chat-UI AI disclosure banner** (California SB 243) — frontend "you're chatting with AI".
+6. **Published privacy policy + retention schedule.** Public-facing, plain-language. BIPA
+   requires a publicly available retention/destruction policy.
+7. **DPAs with any cloud LLM/vision vendor**, with subcontractor flow-down terms.
+8. **No-training guarantee.** Contractually + technically ensure customer photos are never
+   used to train models without fresh, specific consent.
+9. **Per-tenant data-residency option** for the privacy-sensitive segment (local PanDerm
    already enables the strongest version of this).
 
 ---

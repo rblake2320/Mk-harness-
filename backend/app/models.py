@@ -166,6 +166,34 @@ class ConsultantProfile(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
 
+class ConsentRecord(Base):
+    """Records consent for sensitive-data processing (skin analysis).
+
+    Two subjects:
+      - subject="operator": the consultant accepts the data-processing terms.
+        One active record gates the whole skin-analysis feature. customer_id is null.
+      - subject="customer": a specific customer consented to a skin analysis.
+        customer_id is set; required before analyzing that customer.
+
+    We keep every grant/revocation as an immutable audit trail (never hard-deleted),
+    storing the SHA-256 of the exact consent text shown so we can prove WHAT was agreed
+    to. This is the Washington My Health My Data Act / BIPA consent record — derived skin
+    attributes (undertone, Fitzpatrick) are "consumer health data" with a private right
+    of action, so the consent record is the liability shield.
+    """
+    __tablename__ = "consent_records"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=uid)
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    subject: Mapped[str] = mapped_column(String(20))  # operator | customer
+    customer_id: Mapped[str | None] = mapped_column(ForeignKey("customers.id"), nullable=True, index=True)
+    scope: Mapped[str] = mapped_column(String(40), default="skin")  # data scope this consent covers
+    consent_version: Mapped[str] = mapped_column(String(40))        # version of the text shown
+    text_sha256: Mapped[str] = mapped_column(String(64))           # integrity hash of exact text
+    granted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class AuditLog(Base):
     __tablename__ = "audit_logs"
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=uid)

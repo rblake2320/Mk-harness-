@@ -23,6 +23,18 @@ def _setup_user_with_anthropic_key(client):
     return t
 
 
+def _grant_skin_consent(client, t, customer_id=None):
+    """Grant operator (and optionally customer) skin-analysis consent for tests."""
+    h = auth_headers(t)
+    r = client.post("/api/consent/skin", headers=h,
+                    json={"subject": "operator", "accepted": True})
+    assert r.status_code == 200, r.text
+    if customer_id:
+        r = client.post("/api/consent/skin", headers=h,
+                        json={"subject": "customer", "customer_id": customer_id, "accepted": True})
+        assert r.status_code == 200, r.text
+
+
 def _anthropic_sse(text="Sure thing!"):
     return (
         'data: {"type":"message_start","message":{"usage":{"input_tokens":20}}}\n\n'
@@ -116,6 +128,7 @@ def _skin_json(extra_note="even tone overall"):
 @respx.mock
 def test_skin_analysis_happy_path(client):
     t = _setup_user_with_anthropic_key(client)
+    _grant_skin_consent(client, t)
     route = respx.post("https://api.anthropic.com/v1/messages").mock(
         return_value=httpx.Response(200, json={
             "model": "claude-sonnet-4-6",
@@ -143,6 +156,7 @@ def test_skin_analysis_happy_path(client):
 def test_skin_analysis_blocks_medical_language(client):
     """If a model leaks a diagnosis term, the result is discarded — never shown."""
     t = _setup_user_with_anthropic_key(client)
+    _grant_skin_consent(client, t)
     respx.post("https://api.anthropic.com/v1/messages").mock(
         return_value=httpx.Response(200, json={
             "model": "claude-sonnet-4-6",
@@ -158,6 +172,7 @@ def test_skin_analysis_blocks_medical_language(client):
 
 def test_skin_rejects_non_image(client):
     t = _setup_user_with_anthropic_key(client)
+    _grant_skin_consent(client, t)
     r = client.post("/api/skin/analyze", headers=auth_headers(t),
                     files={"file": ("evil.jpg", b"<script>alert(1)</script>", "image/jpeg")})
     assert r.status_code == 422
@@ -175,6 +190,116 @@ def test_skin_strips_exif_gps():
     b64, _ = _sanitize_image(buf.getvalue(), max_mb=8)
     out = Image.open(io.BytesIO(base64.b64decode(b64)))
     assert dict(out.getexif()) == {}
+
+
+def test_skin_blocked_without_consent(client):
+    """No operator consent on file -> analysis is refused before the photo is read."""
+    t = _setup_user_with_anthropic_key(client)
+    r = client.post("/api/skin/analyze", headers=auth_headers(t),
+                    files={"file": ("face.jpg", _face_jpeg(), "image/jpeg")},
+                    data={"provider": "anthropic"})
+    assert r.status_code == 403
+    assert r.json()["detail"]["code"] == "operator_consent_required"
+
+
+@respx.mock
+def test_skin_requires_customer_consent(client):
+    """Operator consent alone is not enough when a customer is named."""
+    t = _setup_user_with_anthropic_key(client)
+    h = auth_headers(t)
+    _grant_skin_consent(client, t)  # operator only
+    cid = client.post("/api/customers", headers=h, json={"name": "Dana"}).json()["id"]
+    respx.post("https://api.anthropic.com/v1/messages").mock(
+        return_value=httpx.Response(200, json={
+            "model": "claude-sonnet-4-6",
+            "content": [{"type": "text", "text": _skin_json()}],
+            "usage": {"input_tokens": 1, "output_tokens": 1}}))
+    r = client.post("/api/skin/analyze", headers=h,
+                    files={"file": ("face.jpg", _face_jpeg(), "image/jpeg")},
+                    data={"provider": "anthropic", "customer_id": cid})
+    assert r.status_code == 403
+    assert r.json()["detail"]["code"] == "customer_consent_required"
+    # Record the customer's consent -> now it goes through.
+    client.post("/api/consent/skin", headers=h,
+                json={"subject": "customer", "customer_id": cid, "accepted": True})
+    r = client.post("/api/skin/analyze", headers=h,
+                    files={"file": ("face.jpg", _face_jpeg(), "image/jpeg")},
+                    data={"provider": "anthropic", "customer_id": cid})
+    assert r.status_code == 200, r.text
+    assert "not medical advice" in r.json()["ai_disclosure"].lower()
+
+
+def test_consent_status_reflects_grant(client):
+    t = _setup_user_with_anthropic_key(client)
+    h = auth_headers(t)
+    before = client.get("/api/consent/skin", headers=h).json()
+    assert before["operator_consent"] is False
+    assert before["operator_text"] and before["version"].startswith("skin-")
+    client.post("/api/consent/skin", headers=h, json={"subject": "operator", "accepted": True})
+    after = client.get("/api/consent/skin", headers=h).json()
+    assert after["operator_consent"] is True and after["operator_granted_at"]
+
+
+def test_consent_revoke_blocks_analysis(client):
+    t = _setup_user_with_anthropic_key(client)
+    h = auth_headers(t)
+    _grant_skin_consent(client, t)
+    rev = client.request("DELETE", "/api/consent/skin", headers=h).json()
+    assert rev["revoked"] >= 1
+    r = client.post("/api/skin/analyze", headers=h,
+                    files={"file": ("face.jpg", _face_jpeg(), "image/jpeg")},
+                    data={"provider": "anthropic"})
+    assert r.status_code == 403
+    assert r.json()["detail"]["code"] == "operator_consent_required"
+
+
+@respx.mock
+def test_skin_data_export_and_delete(client):
+    t = _setup_user_with_anthropic_key(client)
+    h = auth_headers(t)
+    cid = client.post("/api/customers", headers=h, json={"name": "Erin"}).json()["id"]
+    _grant_skin_consent(client, t, customer_id=cid)
+    respx.post("https://api.anthropic.com/v1/messages").mock(
+        return_value=httpx.Response(200, json={
+            "model": "claude-sonnet-4-6",
+            "content": [{"type": "text", "text": _skin_json()}],
+            "usage": {"input_tokens": 1, "output_tokens": 1}}))
+    r = client.post("/api/skin/analyze", headers=h,
+                    files={"file": ("face.jpg", _face_jpeg(), "image/jpeg")},
+                    data={"provider": "anthropic", "customer_id": cid})
+    assert r.status_code == 200, r.text
+
+    # Export shows the analysis + the consent trail.
+    exp = client.get("/api/me/skin-data/export", headers=h).json()
+    assert len(exp["skin_analyses"]) == 1
+    assert any(c["subject"] == "customer" for c in exp["consent_records"])
+
+    # Delete returns a receipt and actually purges.
+    rec = client.request("DELETE", "/api/me/skin-data", headers=h).json()
+    assert rec["ok"] and rec["deleted_analyses"] == 1 and rec["receipt_id"]
+    assert client.get("/api/skin/history", headers=h).json() == []
+    exp2 = client.get("/api/me/skin-data/export", headers=h).json()
+    assert exp2["skin_analyses"] == [] and exp2["customer_skin_profiles"] == []
+
+
+@respx.mock
+def test_skin_data_isolation_between_users(client):
+    """One consultant's deletion/export never touches another's skin data."""
+    ta = _setup_user_with_anthropic_key(client)
+    tb = _setup_user_with_anthropic_key(client)
+    _grant_skin_consent(client, ta)
+    respx.post("https://api.anthropic.com/v1/messages").mock(
+        return_value=httpx.Response(200, json={
+            "model": "claude-sonnet-4-6",
+            "content": [{"type": "text", "text": _skin_json()}],
+            "usage": {"input_tokens": 1, "output_tokens": 1}}))
+    client.post("/api/skin/analyze", headers=auth_headers(ta),
+                files={"file": ("face.jpg", _face_jpeg(), "image/jpeg")},
+                data={"provider": "anthropic"})
+    # User B sees nothing and deleting as B leaves A intact.
+    assert client.get("/api/me/skin-data/export", headers=auth_headers(tb)).json()["skin_analyses"] == []
+    client.request("DELETE", "/api/me/skin-data", headers=auth_headers(tb))
+    assert len(client.get("/api/me/skin-data/export", headers=auth_headers(ta)).json()["skin_analyses"]) == 1
 
 
 @respx.mock
