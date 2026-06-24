@@ -59,20 +59,28 @@ Directors are fewer in number but 2.5x the revenue per seat and they bring their
 
 | Tool | What It Does | Monthly Cost |
 |------|-------------|-------------|
-| Teamzy | CRM + daily contact suggestions + scripts | $24.99 |
+| Teamzy | CRM + daily contact suggestions + scripts | $29.99 ($24.99 annual) |
 | ChatGPT Plus | Social content, message drafting | $20.00 |
-| Buffer/Later | Social scheduling (content still manual) | $15.00 |
-| **Total** | | **$59.99/mo** |
+| Buffer (paid) | Social scheduling — free tier exists but limited | $0–$15 |
+| **Total** | | **$50–65/mo** |
 
-**We cost $9.99/mo and replace the core value of all three.**
+Note: Mary Kay provides free apps (Mirror Me skin analyzer, Interactive Catalog, Mobile
+Learning). We're not competing with those — they're brand-locked feature tools, not AI.
+We compete with the third-party stack above.
 
-- Our daily suggestions endpoint (Power Hour) = Teamzy's main feature
+Also watch: **Penny CRM** ($6.99/mo, annual) is a newer, lighter-weight Teamzy
+alternative. Lower price, less feature depth. If consultants migrate to Penny to save
+on CRM cost, we still replace their ChatGPT usage ($20) and add things Penny can't do.
+
+**We cost $9.99/mo and replace the core value of the expensive half of that stack.**
+
+- Our daily suggestions endpoint (Power Hour) = Teamzy's main feature at 1/3 the price
 - Our social content skill generates custom MK-specific captions = ChatGPT + Buffer,
   but without hallucinated prices or FTC-violating income claims
 - Our follow-up writer generates the actual message, not just the reminder to send one
 
-The pitch is one sentence: *"You're paying $60/month for tools that don't know Mary Kay.
-We charge $10 and we know it cold."*
+The pitch is one sentence: *"You're paying $50+ a month for tools that don't know Mary
+Kay. We charge $10 and we know it cold."*
 
 ### What We Do That Nothing Else Does
 
