@@ -20,7 +20,12 @@ Business: Star Consultant requires $1,800 wholesale in a quarter (Sapphire level
 Animal testing: Mary Kay does NOT test finished products on animals and has not done so since 1989;
   however products sold in China may be subject to local regulatory testing requirements —
   always acknowledge this nuance if a customer raises it, do not make an unqualified blanket claim.
-Income: Never quote specific income figures. Direct recruits to the Income Disclosure Statement.
+Income/FTC compliance: The FTC (Act §5; 16 CFR Part 437) treats ANY statement implying a
+  minimum income level as an earnings claim requiring substantiation — including dollar figures,
+  lifestyle claims (luxury cars, vacations), phrases like 'financial freedom', 'passive income',
+  'quit your job', 'six-figure income', or 'part-time work and full-time pay'. NEVER make such
+  claims. Instead direct recruits to the official Mary Kay Income Disclosure Statement (IDS) which
+  shows the actual range of earnings across all active consultants.
 """
 
 _BASE = (
@@ -34,10 +39,17 @@ _BASE = (
     + _MK_PRICE_FACTS
 )
 
-# FTC-prohibited income claim patterns — server-side output scan.
-# These phrases constitute earnings representations that violate FTC guidance
-# (16 CFR Part 437) and the FTC's 2023 revised Business Opportunity Rule.
+# FTC income claim trigger phrases — server-side output scan.
+# Sources: FTC September 2024 MLM Income Disclosure Staff Report,
+#          FTC January 2025 Proposed Earnings Claim Rule (16 CFR Part 437),
+#          DSSRC August 2020 Guidance on Earnings Claims,
+#          FTC March 2024 Letter to DSSRC, Kevin Thompson/Thompson Burton MLM Law.
+#
+# Standard (FTC): ANY statement from which a prospective purchaser can reasonably
+# infer a minimum level of income is an earnings claim requiring substantiation
+# and IDS disclosure. Violation = FTC Act Section 5 deceptive practice.
 INCOME_CLAIM_PATTERNS = [
+    # Explicit dollar/guarantee claims
     "guaranteed income",
     "guaranteed earnings",
     "guaranteed to make",
@@ -46,24 +58,62 @@ INCOME_CLAIM_PATTERNS = [
     "will earn $",
     "you will make",
     "you will earn",
-    "make $5,000",
-    "earn $5,000",
-    "make $10,000",
-    "earn $10,000",
-    "make $1,000",
-    "earn $1,000",
+    "earn up to $",
     "make up to $",
+    "make $1,000",
+    "make $5,000",
+    "make $10,000",
+    "earn $1,000",
+    "earn $5,000",
+    "earn $10,000",
     "average earnings",
     "typical earnings",
     "average income",
     "most consultants earn",
     "most consultants make",
     "promise you",
+    # FTC/DSSRC trigger phrases — income type descriptors
+    "passive income",
+    "residual income",
+    "replacement income",
+    "full-time income",
+    "career-level income",
+    "life-changing income",
+    "unlimited income",
+    "six-figure income",
+    "seven-figure income",
+    "six-figure earning",
+    "seven-figure earning",
+    "six figures",
+    "seven figures",
+    # FTC/DSSRC lifestyle & aspiration phrases
+    "quit your job",
+    "fire your boss",
+    "retire early",
+    "retire from your job",
+    "be set for life",
+    "financial freedom",
+    "financial independence",
+    "time and financial freedom",
+    "be your own boss",       # only in income context; model handles nuance
+    "make more money than you",
+    "part-time work and full-time pay",
+    "income will never go away",
+    "no limit to the amount",
+    "make an incredible income",
+    "extraordinary level of success",
+    "life of your dreams",
+    "get everything you ever wanted",
 ]
 
 
 def response_has_income_claim(text: str) -> tuple[bool, str]:
-    """Return (True, matched_phrase) if text contains a prohibited income claim."""
+    """Return (True, matched_phrase) if text contains an FTC-regulated income claim.
+
+    Uses a case-insensitive substring match. The FTC standard is broad: any statement
+    from which a reasonable person could infer a minimum income level is an earnings
+    claim requiring substantiation (FTC Act Section 5; 16 CFR Part 437).
+    """
     low = text.lower()
     for phrase in INCOME_CLAIM_PATTERNS:
         if phrase in low:
