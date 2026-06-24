@@ -1,5 +1,8 @@
 """Auth: tenant signup (creates org + admin), login, refresh, member invite."""
-from fastapi import APIRouter, Depends, HTTPException
+import threading
+import time
+
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -12,6 +15,37 @@ from ..security import (
 )
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+# ---------------------------------------------------------------------------
+# Login brute-force protection: 5 failures per email per 15 minutes → lockout.
+# In-process store; swap for Redis on multi-replica deployments.
+# ---------------------------------------------------------------------------
+_bf_lock = threading.Lock()
+_bf_hits: dict[str, list[float]] = {}
+_BF_MAX = 5
+_BF_WINDOW = 900  # 15 minutes
+
+
+def _check_brute_force(email: str) -> None:
+    now = time.monotonic()
+    with _bf_lock:
+        window = [t for t in _bf_hits.get(email, []) if now - t < _BF_WINDOW]
+        if len(window) >= _BF_MAX:
+            raise HTTPException(429, "Too many failed attempts. Try again in 15 minutes.")
+        _bf_hits[email] = window
+
+
+def _record_failure(email: str) -> None:
+    now = time.monotonic()
+    with _bf_lock:
+        hits = [t for t in _bf_hits.get(email, []) if now - t < _BF_WINDOW]
+        hits.append(now)
+        _bf_hits[email] = hits
+
+
+def _clear_failures(email: str) -> None:
+    with _bf_lock:
+        _bf_hits.pop(email, None)
 
 
 class SignupIn(BaseModel):
@@ -61,11 +95,14 @@ def signup(body: SignupIn, db: Session = Depends(get_db)):
 
 @router.post("/login", response_model=TokenOut)
 def login(body: LoginIn, db: Session = Depends(get_db)):
+    _check_brute_force(body.email.lower())
     user = db.scalar(select(User).where(User.email == body.email.lower()))
     if not user or not verify_password(body.password, user.password_hash):
+        _record_failure(body.email.lower())
         raise HTTPException(401, "Invalid email or password")
     if not user.is_active:
         raise HTTPException(403, "Account deactivated")
+    _clear_failures(body.email.lower())
     return _tokens(user)
 
 

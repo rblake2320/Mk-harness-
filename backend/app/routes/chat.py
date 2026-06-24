@@ -14,7 +14,7 @@ from ..providers.base import ChatMessage, ChatRequest, MODEL_CATALOG, ProviderEr
 from ..providers.router import DEFAULT_CHAIN, NoKeyAvailable, record_usage, resolve
 from ..ratelimit import check_rate
 from ..security import get_current_user
-from ..skills import SKILLS
+from ..skills import SKILLS, _PROMPT_LEAK_REPLY, response_has_income_claim, response_leaks_system_prompt
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -122,6 +122,16 @@ async def chat_stream(body: ChatIn, user: User = Depends(check_rate),
                 if e.retryable and not body.provider and not full:
                     continue  # failover to next provider
                 yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+                return
+            # Server-side compliance checks — must run before any persistence.
+            # 1. System prompt leak: replace streamed text with a safe refusal.
+            if response_leaks_system_prompt(full):
+                yield f"data: {json.dumps({'type': 'correction', 'text': _PROMPT_LEAK_REPLY})}\n\n"
+                full = _PROMPT_LEAK_REPLY
+            # 2. FTC income claim: block persistence and warn; streamed deltas already sent.
+            claim_found, claim_phrase = response_has_income_claim(full)
+            if claim_found:
+                yield f"data: {json.dumps({'type': 'income_claim_warning', 'phrase': claim_phrase, 'message': 'This response may contain a prohibited income representation and was not saved. Review before sharing with anyone.'})}\n\n"
                 return
             # Persist turn + meter usage
             db.add(Message(conversation_id=conv.id, role="user", content=body.message))

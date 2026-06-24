@@ -91,10 +91,10 @@ class OllamaAdapter(ProviderAdapter):
     """Local or self-hosted models. No API key required; base_url points at
     the Ollama server (default http://localhost:11434)."""
     name = "ollama"
-    DEFAULT = "llama3.1"
+    DEFAULT = "student-mk-trained:latest"
 
     def default_model(self, vision: bool = False) -> str:
-        return "llama3.2-vision" if vision else self.DEFAULT
+        return "qwen3-vl:latest" if vision else self.DEFAULT
 
     def _payload(self, req: ChatRequest, stream: bool) -> dict:
         messages: list[dict] = []
