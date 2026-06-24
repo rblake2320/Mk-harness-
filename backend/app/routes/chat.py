@@ -9,12 +9,15 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..db import get_db
-from ..models import Conversation, Message, User
+from ..models import ConsultantProfile, Conversation, Message, Tenant, User
 from ..providers.base import ChatMessage, ChatRequest, MODEL_CATALOG, ProviderError
 from ..providers.router import DEFAULT_CHAIN, NoKeyAvailable, record_usage, resolve
 from ..ratelimit import check_rate
 from ..security import get_current_user
-from ..skills import SKILLS, _PROMPT_LEAK_REPLY, response_has_income_claim, response_leaks_system_prompt
+from ..skills import (
+    SKILLS, _PROMPT_LEAK_REPLY, get_skills,
+    response_has_income_claim, response_leaks_system_prompt,
+)
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -35,9 +38,47 @@ def _own_conversation(db: Session, user: User, cid: str) -> Conversation:
     return conv
 
 
+def _brand_skills(user: User, db: Session) -> dict:
+    tenant = db.get(Tenant, user.tenant_id)
+    brand = tenant.brand if tenant else "mary_kay"
+    return get_skills(brand)
+
+
+def _get_or_create_profile(db: Session, user: User) -> "ConsultantProfile":
+    prof = db.scalar(select(ConsultantProfile).where(ConsultantProfile.user_id == user.id))
+    if not prof:
+        prof = ConsultantProfile(
+            user_id=user.id, tenant_id=user.tenant_id,
+            skill_usage_json="{}", total_conversations=0,
+            total_skin_analyses=0, compliance_flags=0,
+        )
+        db.add(prof)
+        db.flush()
+    return prof
+
+
+def _bump_chat_profile(db: Session, user: User, skill: str) -> None:
+    import json as _json
+    from datetime import datetime, timezone
+    prof = _get_or_create_profile(db, user)
+    prof.total_conversations = (prof.total_conversations or 0) + 1
+    usage = _json.loads(prof.skill_usage_json or "{}")
+    usage[skill] = usage.get(skill, 0) + 1
+    prof.skill_usage_json = _json.dumps(usage)
+    prof.last_active = datetime.now(timezone.utc)
+    prof.updated_at = datetime.now(timezone.utc)
+
+
+def _bump_compliance_flag(db: Session, user: User) -> None:
+    from datetime import datetime, timezone
+    prof = _get_or_create_profile(db, user)
+    prof.compliance_flags = (prof.compliance_flags or 0) + 1
+    prof.updated_at = datetime.now(timezone.utc)
+
+
 @router.get("/skills")
-def list_skills():
-    return {k: {"label": v["label"]} for k, v in SKILLS.items()}
+def list_skills(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    return {k: {"label": v["label"]} for k, v in _brand_skills(user, db).items()}
 
 
 @router.get("/models")
@@ -75,8 +116,9 @@ def delete_conversation(cid: str, user: User = Depends(get_current_user),
 @router.post("/stream")
 async def chat_stream(body: ChatIn, user: User = Depends(check_rate),
                       db: Session = Depends(get_db)):
-    if body.skill not in SKILLS:
-        raise HTTPException(422, f"Unknown skill. Choose from {sorted(SKILLS)}")
+    skills = _brand_skills(user, db)
+    if body.skill not in skills:
+        raise HTTPException(422, f"Unknown skill. Choose from {sorted(skills)}")
     if body.provider and body.provider not in DEFAULT_CHAIN:
         raise HTTPException(422, f"Unknown provider. Choose from {DEFAULT_CHAIN}")
 
@@ -90,7 +132,7 @@ async def chat_stream(body: ChatIn, user: User = Depends(check_rate),
 
     history = [ChatMessage(role=m.role, content=m.content) for m in conv.messages][-20:]
     history.append(ChatMessage(role="user", content=body.message))
-    req = ChatRequest(messages=history, system=SKILLS[body.skill]["system"],
+    req = ChatRequest(messages=history, system=skills[body.skill]["system"],
                       model=body.model or "", max_tokens=1500, temperature=body.temperature)
 
     chain = [body.provider] if body.provider else DEFAULT_CHAIN
@@ -129,14 +171,19 @@ async def chat_stream(body: ChatIn, user: User = Depends(check_rate),
                 yield f"data: {json.dumps({'type': 'correction', 'text': _PROMPT_LEAK_REPLY})}\n\n"
                 full = _PROMPT_LEAK_REPLY
             # 2. FTC income claim: block persistence and warn; streamed deltas already sent.
-            claim_found, claim_phrase = response_has_income_claim(full)
+            tenant = db.get(Tenant, user.tenant_id)
+            brand_name = tenant.brand if tenant else "mary_kay"
+            claim_found, claim_phrase = response_has_income_claim(full, brand_name)
             if claim_found:
+                _bump_compliance_flag(db, user)
+                db.commit()
                 yield f"data: {json.dumps({'type': 'income_claim_warning', 'phrase': claim_phrase, 'message': 'This response may contain a prohibited income representation and was not saved. Review before sharing with anyone.'})}\n\n"
                 return
-            # Persist turn + meter usage
+            # Persist turn + meter usage + profile
             db.add(Message(conversation_id=conv.id, role="user", content=body.message))
             db.add(Message(conversation_id=conv.id, role="assistant", content=full,
                            provider=name, model=model))
+            _bump_chat_profile(db, user, body.skill)
             db.commit()
             if usage:
                 record_usage(db, user, model, name, resolved.key_scope, usage, "chat")

@@ -22,6 +22,11 @@ class Settings(BaseSettings):
     access_token_minutes: int = 30
     refresh_token_days: int = 14
 
+    # Local PanDerm skin analysis API (port 8101). Empty = use cloud vision model.
+    skin_analysis_url: str = ""
+    # Default brand for new tenants.
+    default_brand: str = "mary_kay"
+
     model_config = {"env_file": ".env", "extra": "ignore"}
 
     @property

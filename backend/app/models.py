@@ -30,6 +30,8 @@ class Tenant(Base):
     name: Mapped[str] = mapped_column(String(120))
     # Key policy: "central" (company keys only), "byo" (consultant keys only), "both"
     key_policy: Mapped[str] = mapped_column(String(10), default="both")
+    # Brand config identifier — drives system prompts and product catalog.
+    brand: Mapped[str] = mapped_column(String(40), default="mary_kay")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
     users: Mapped[list["User"]] = relationship(back_populates="tenant")
@@ -102,6 +104,11 @@ class Customer(Base):
     email: Mapped[str] = mapped_column(String(255), default="")
     notes: Mapped[str] = mapped_column(Text, default="")        # preferences, shade matches, history
     last_contact: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Skin profile — populated by skin analysis, powers personalized recommendations.
+    skin_undertone: Mapped[str] = mapped_column(String(20), default="")  # warm | cool | neutral
+    fitzpatrick_type: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 1-6
+    skin_profile_json: Mapped[str] = mapped_column(Text, default="")  # latest 7-dim scores
+    skin_profile_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
 
@@ -131,6 +138,32 @@ class UsageRecord(Base):
     cost_usd: Mapped[float] = mapped_column(Float, default=0.0)
     kind: Mapped[str] = mapped_column(String(20), default="chat")  # chat | vision
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class ConsultantProfile(Base):
+    """Per-consultant behavioral analytics and business context.
+
+    Created lazily on first meaningful interaction. Drives personalized system
+    prompts and cross-brand network effects — aggregate data trains better agents.
+    """
+    __tablename__ = "consultant_profiles"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=uid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), unique=True, index=True)
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), index=True)
+    # Skill usage counts (JSON: {"sales_coach": 42, "social": 18, ...})
+    skill_usage_json: Mapped[str] = mapped_column(Text, default="{}")
+    # Engagement metrics
+    total_conversations: Mapped[int] = mapped_column(Integer, default=0)
+    total_skin_analyses: Mapped[int] = mapped_column(Integer, default=0)
+    compliance_flags: Mapped[int] = mapped_column(Integer, default=0)
+    # Business context (consultant-provided or inferred)
+    tenure_months: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    team_size: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    star_wholesale_qtd: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Timestamps
+    last_active: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
 
 class AuditLog(Base):

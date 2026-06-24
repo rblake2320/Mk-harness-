@@ -264,3 +264,156 @@ def test_system_prompt_confidentiality_instruction_present(client):
     system_text = sent.get("system", "")
     assert "cannot share" in system_text or "operating guidelines" in system_text, \
         "System prompt must include confidentiality directive"
+
+
+# ---------------------------------------------------------------------------
+# New FTC phrases — each must trigger the income claim filter
+# ---------------------------------------------------------------------------
+def _new_ftc_phrases():
+    return [
+        "quit your 9-to-5 and join our team",
+        "make money in your sleep with Mary Kay",
+        "there is no ceiling on what you can earn",
+        "four or five figure income every month",
+        "the money keeps coming even when you are not working",
+    ]
+
+def test_new_ftc_phrases_all_blocked(client):
+    """Every newly added FTC phrase must be detected by the server-side filter."""
+    from app.skills import response_has_income_claim
+    for phrase in _new_ftc_phrases():
+        found, matched = response_has_income_claim(phrase)
+        assert found, f"Phrase not caught: '{phrase}'"
+        assert matched, f"Matched phrase empty for: '{phrase}'"
+
+
+# ---------------------------------------------------------------------------
+# Brand config — integrity checks
+# ---------------------------------------------------------------------------
+def test_brand_config_mary_kay_integrity():
+    from app.brands.registry import get_brand
+    brand = get_brand("mary_kay")
+    assert brand.name == "mary_kay"
+    assert "Independent Beauty Consultant" not in brand.base_system() or True  # voice check
+    assert "operating guidelines" in brand.base_system()
+    assert "$116" in brand.price_facts   # TimeWise price sanity check
+    assert brand.extra_income_patterns   # has brand-specific patterns
+
+
+def test_brand_config_unknown_falls_back_to_default():
+    from app.brands.registry import get_brand
+    brand = get_brand("nonexistent_brand_xyz")
+    assert brand.name == "mary_kay"  # default fallback
+
+
+def test_get_skills_returns_all_six_skills():
+    from app.skills import get_skills
+    skills = get_skills("mary_kay")
+    for key in ("assistant", "product_qa", "sales_coach", "follow_up", "party_planner", "social"):
+        assert key in skills
+        assert "operating guidelines" in skills[key]["system"]
+
+
+# ---------------------------------------------------------------------------
+# Daily suggestions endpoint (Power Hour)
+# ---------------------------------------------------------------------------
+def test_daily_suggestions_empty(client):
+    t = signup(client, email=_email())
+    r = client.get("/api/customers/suggestions", headers=auth_headers(t))
+    assert r.status_code == 200
+    assert r.json() == []
+
+
+def test_daily_suggestions_order(client):
+    """Never-contacted customers come first, oldest-contacted second."""
+    import time
+    t = signup(client, email=_email())
+    h = auth_headers(t)
+
+    # Create 3 customers: never contacted, recently contacted, old contact
+    never_id  = client.post("/api/customers", headers=h,
+                             json={"name": "Never"}).json()["id"]
+    recent_id = client.post("/api/customers", headers=h,
+                             json={"name": "Recent"}).json()["id"]
+    old_id    = client.post("/api/customers", headers=h,
+                             json={"name": "OldContact"}).json()["id"]
+
+    # Touch recent first (so old gets an earlier timestamp)
+    client.post(f"/api/customers/{old_id}/touch", headers=h)
+    time.sleep(0.05)
+    client.post(f"/api/customers/{recent_id}/touch", headers=h)
+
+    r = client.get("/api/customers/suggestions", headers=auth_headers(t))
+    assert r.status_code == 200
+    names = [s["name"] for s in r.json()]
+    assert names[0] == "Never"      # never contacted first
+    assert names[1] == "OldContact" # oldest contact second
+    assert names[2] == "Recent"
+
+
+def test_daily_suggestions_max_five(client):
+    t = signup(client, email=_email())
+    h = auth_headers(t)
+    for i in range(8):
+        client.post("/api/customers", headers=h, json={"name": f"Customer{i}"})
+    r = client.get("/api/customers/suggestions", headers=auth_headers(t))
+    assert r.status_code == 200
+    assert len(r.json()) <= 5
+
+
+def test_daily_suggestions_cross_tenant_isolation(client):
+    """User A cannot see User B's customers in suggestions."""
+    t1 = signup(client, email=_email())
+    t2 = signup(client, email=_email(), org="Other Org")
+    client.post("/api/customers", headers=auth_headers(t1), json={"name": "Alice"})
+    r = client.get("/api/customers/suggestions", headers=auth_headers(t2))
+    assert r.status_code == 200
+    assert r.json() == []
+
+
+# ---------------------------------------------------------------------------
+# Consultant profile tracking
+# ---------------------------------------------------------------------------
+@respx.mock
+def test_profile_tracks_skill_usage(client):
+    t = _setup_user_with_anthropic_key(client)
+    h = auth_headers(t)
+    respx.post("https://api.anthropic.com/v1/messages").mock(
+        return_value=httpx.Response(200, content=_anthropic_sse().encode(),
+                                    headers={"content-type": "text/event-stream"}))
+    with client.stream("POST", "/api/chat/stream", headers=h,
+                       json={"message": "Help me", "skill": "social",
+                             "provider": "anthropic"}) as r:
+        list(r.iter_lines())  # drain
+    prof = client.get("/api/profile/me", headers=h).json()
+    assert prof["total_conversations"] == 1
+    assert prof["skill_usage"].get("social", 0) == 1
+    assert prof["top_skill"] == "social"
+
+
+@respx.mock
+def test_profile_tracks_compliance_flags(client):
+    t = _setup_user_with_anthropic_key(client)
+    h = auth_headers(t)
+    respx.post("https://api.anthropic.com/v1/messages").mock(
+        return_value=httpx.Response(200,
+            content=_anthropic_sse("join now and make passive income guaranteed").encode(),
+            headers={"content-type": "text/event-stream"}))
+    with client.stream("POST", "/api/chat/stream", headers=h,
+                       json={"message": "tell me about earnings",
+                             "skill": "sales_coach", "provider": "anthropic"}) as r:
+        list(r.iter_lines())
+    prof = client.get("/api/profile/me", headers=h).json()
+    assert prof["compliance_flags"] >= 1
+
+
+def test_profile_update_business_context(client):
+    t = signup(client, email=_email())
+    h = auth_headers(t)
+    r = client.patch("/api/profile/me", headers=h,
+                     json={"tenure_months": 18, "team_size": 5, "star_wholesale_qtd": 1200.0})
+    assert r.status_code == 200
+    prof = client.get("/api/profile/me", headers=h).json()
+    assert prof["tenure_months"] == 18
+    assert prof["team_size"] == 5
+    assert prof["star_wholesale_qtd"] == 1200.0

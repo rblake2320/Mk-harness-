@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .config import get_settings, require_secret
 from .db import init_engine
-from .routes import auth, chat, customers, keys, skin, usage
+from .routes import auth, chat, customers, keys, profile, skin, usage
 
 
 @asynccontextmanager
@@ -28,7 +28,8 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type"],
 )
 
-for r in (auth.router, chat.router, skin.router, customers.router, keys.router, usage.router):
+for r in (auth.router, chat.router, skin.router, customers.router,
+          keys.router, usage.router, profile.router):
     app.include_router(r, prefix="/api")
 
 
