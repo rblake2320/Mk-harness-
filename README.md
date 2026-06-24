@@ -14,7 +14,7 @@ required.
 mk-harness/
 ├── backend/          FastAPI · Postgres · multi-tenant · JWT auth
 │   ├── app/providers/   The harness core: 4 adapters + router + failover
-│   └── tests/           31 tests (auth, crypto, isolation, adapters, e2e)
+│   └── tests/           45 tests (auth, crypto, isolation, adapters, e2e)
 ├── packages/sdk/     Shared TypeScript SDK (web + mobile)
 ├── web/              React + Vite web client (dark "vanity mirror" UI)
 ├── mobile/           Expo React Native client (camera skin analysis)
@@ -96,7 +96,7 @@ npx expo start
 ## Tests
 
 ```bash
-cd backend && python -m pytest -v    # 31 tests
+cd backend && python -m pytest -v    # 45 tests
 ```
 
 Provider adapters are tested against each vendor's documented wire format

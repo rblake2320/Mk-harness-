@@ -26,7 +26,7 @@ JWT_SECRET=dev-secret-dev-secret-dev-secret-123 \
 MASTER_KEY=$(python3 -c "import os,base64;print(base64.b64encode(os.urandom(32)).decode())") \
 uvicorn app.main:app --reload --port 8000
 
-# Tests (31 tests, all in-process — no live endpoints required)
+# Tests (45 tests, all in-process — no live endpoints required)
 python -m pytest -v
 ```
 
@@ -108,7 +108,7 @@ a copied row will not decrypt in a different scope.
   always talks to real endpoints — never add `respx` outside `tests/`.
 - Every new route needs a test for: happy path, auth failure (401), and cross-tenant
   isolation (second user/tenant gets 404).
-- Run `python -m pytest -v` — all 31 must pass before any commit.
+- Run `python -m pytest -v` — all 45 must pass before any commit.
 
 ---
 

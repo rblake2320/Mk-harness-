@@ -22,6 +22,15 @@ These are the features that directly move retention and conversion.
       posture (see SECURITY-PRIVACY.md) and for CCPA/state-law compliance.
 - [ ] **Photo retention policy enforcement.** Auto-purge raw skin photos after analysis;
       keep only derived non-biometric attributes unless the consultant opts to retain.
+- [ ] **Usage-metering dashboard.** Token cost per user/team, visible to tenant admins —
+      needed for margin visibility and the Studio/Director tiers.
+- [ ] **Redis rate limiting.** Swap the in-process sliding-window store (`ratelimit.py`)
+      for Redis so we can run multiple replicas. Interface is already Redis-shaped.
+- [ ] **Mobile device test.** Expo EAS build, real iOS + Android. Camera skin-analysis flow
+      is code-complete but never run on a physical device.
+
+> See `MONSTER-MOVE.md` for the scale-up/exit thesis and the 90-day sprint these ladder into.
+> Two items there (repo merge, provisional patent) are **open decisions** — not scheduled work.
 
 ## Next (1.3.0 – 1.4.0)
 
