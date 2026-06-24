@@ -6,7 +6,9 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .config import get_settings, require_secret
 from .db import init_engine
-from .routes import auth, chat, consent, customers, keys, profile, skin, skindata, usage
+from .routes import (
+    auth, billing, chat, consent, customers, keys, profile, skin, skindata, usage,
+)
 
 
 @asynccontextmanager
@@ -18,7 +20,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="MK Consultant Harness", version="1.2.0", lifespan=lifespan)
+app = FastAPI(title="MK Consultant Harness", version="1.3.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -29,7 +31,8 @@ app.add_middleware(
 )
 
 for r in (auth.router, chat.router, skin.router, customers.router,
-          keys.router, usage.router, profile.router, consent.router, skindata.router):
+          keys.router, usage.router, profile.router, consent.router, skindata.router,
+          billing.router):
     app.include_router(r, prefix="/api")
 
 

@@ -10,6 +10,12 @@ os.environ["DATABASE_URL"] = "sqlite://"
 os.environ["JWT_SECRET"] = "test-secret-test-secret-test-secret-1234"
 os.environ["MASTER_KEY"] = base64.b64encode(b"0" * 32).decode()
 os.environ["RATE_LIMIT_PER_MINUTE"] = "1000"
+# Stripe billing — test keys + a small price map so billing routes are exercisable.
+os.environ["STRIPE_SECRET_KEY"] = "sk_test_dummy"
+os.environ["STRIPE_WEBHOOK_SECRET"] = "whsec_test_dummy"
+os.environ["STRIPE_PRICES"] = (
+    '{"solo:month":"price_solo_m","solo:year":"price_solo_y","director:year":"price_dir_y"}')
+os.environ["BILLING_TRIAL_DAYS"] = "90"
 
 from app.config import get_settings  # noqa: E402
 get_settings.cache_clear()

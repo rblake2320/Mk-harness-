@@ -9,6 +9,7 @@ import httpx
 import respx
 from PIL import Image
 
+from app import billing
 from tests.conftest import auth_headers, signup
 
 
@@ -542,3 +543,133 @@ def test_profile_update_business_context(client):
     assert prof["tenure_months"] == 18
     assert prof["team_size"] == 5
     assert prof["star_wholesale_qtd"] == 1200.0
+
+
+# ---------------------------------------------------------------------------
+# Billing: Stripe checkout, webhook lifecycle, referral credit
+# ---------------------------------------------------------------------------
+def _uid(client, t):
+    return client.get("/api/auth/me", headers=auth_headers(t)).json()["id"]
+
+
+def _send_webhook(client, event):
+    payload = json.dumps(event).encode()
+    sig = billing.sign_payload(payload, "whsec_test_dummy")
+    return client.post("/api/billing/webhook", content=payload,
+                       headers={"Stripe-Signature": sig, "Content-Type": "application/json"})
+
+
+def _mock_stripe_customers():
+    """Mock Stripe customer-create. Returns a list that captures each created id (the
+    test DB is shared across the session, so ids must be globally unique)."""
+    created: list[str] = []
+
+    def _make(request):
+        cid = f"cus_{uuid.uuid4().hex[:14]}"
+        created.append(cid)
+        return httpx.Response(200, json={"id": cid})
+
+    respx.post("https://api.stripe.com/v1/customers").mock(side_effect=_make)
+    return created
+
+
+def test_referral_code_issued_on_signup(client):
+    t = signup(client, email=_email())
+    me = client.get("/api/billing/me", headers=auth_headers(t)).json()
+    assert me["referral_code"] and len(me["referral_code"]) >= 8
+    assert me["status"] == "none" and me["active"] is False
+
+
+def test_billing_plans_lists_configured(client):
+    t = signup(client, email=_email())
+    plans = client.get("/api/billing/plans", headers=auth_headers(t)).json()
+    assert plans["configured"] is True and plans["trial_days"] == 90
+    pairs = {(p["tier"], p["interval"]) for p in plans["plans"]}
+    assert ("solo", "year") in pairs and ("director", "year") in pairs
+
+
+@respx.mock
+def test_checkout_creates_session(client):
+    _mock_stripe_customers()
+    respx.post("https://api.stripe.com/v1/checkout/sessions").mock(
+        return_value=httpx.Response(200, json={"id": "cs_1", "url": "https://checkout.stripe.com/c/cs_1"}))
+    t = signup(client, email=_email())
+    r = client.post("/api/billing/checkout", headers=auth_headers(t),
+                    json={"tier": "solo", "interval": "year"})
+    assert r.status_code == 200, r.text
+    assert r.json()["url"].startswith("https://checkout.stripe.com/")
+    me = client.get("/api/billing/me", headers=auth_headers(t)).json()
+    assert me["tier"] == "solo" and me["interval"] == "year"
+
+
+def test_checkout_rejects_unknown_plan(client):
+    t = signup(client, email=_email())
+    r = client.post("/api/billing/checkout", headers=auth_headers(t),
+                    json={"tier": "platinum", "interval": "year"})
+    assert r.status_code == 422
+
+
+def test_webhook_rejects_bad_signature(client):
+    payload = json.dumps({"type": "checkout.session.completed", "data": {"object": {}}}).encode()
+    r = client.post("/api/billing/webhook", content=payload,
+                    headers={"Stripe-Signature": "t=1,v1=deadbeef", "Content-Type": "application/json"})
+    assert r.status_code == 400
+
+
+@respx.mock
+def test_webhook_drives_subscription_lifecycle(client):
+    created = _mock_stripe_customers()
+    respx.post("https://api.stripe.com/v1/checkout/sessions").mock(
+        return_value=httpx.Response(200, json={"id": "cs_1", "url": "https://checkout.stripe.com/c/cs_1"}))
+    t = signup(client, email=_email())
+    uid = _uid(client, t)
+    client.post("/api/billing/checkout", headers=auth_headers(t),
+                json={"tier": "solo", "interval": "year"})
+    cust = created[0]
+    # checkout.session.completed -> trialing
+    r = _send_webhook(client, {"type": "checkout.session.completed",
+                               "data": {"object": {"client_reference_id": uid,
+                                                   "customer": cust, "subscription": "sub_1"}}})
+    assert r.status_code == 200 and r.json()["received"] is True
+    assert client.get("/api/billing/me", headers=auth_headers(t)).json()["status"] == "trialing"
+    # invoice.paid -> active + first_paid recorded
+    r = _send_webhook(client, {"type": "invoice.paid",
+                               "data": {"object": {"customer": cust}}})
+    assert r.status_code == 200
+    me = client.get("/api/billing/me", headers=auth_headers(t)).json()
+    assert me["status"] == "active" and me["active"] is True
+
+
+@respx.mock
+def test_referral_credit_applied_on_referred_first_payment(client):
+    created = _mock_stripe_customers()  # [0]=B's checkout customer, [1]=A's credit account
+    respx.post("https://api.stripe.com/v1/checkout/sessions").mock(
+        return_value=httpx.Response(200, json={"id": "cs_1", "url": "https://checkout.stripe.com/c/cs_1"}))
+    credit_route = respx.post(
+        url__regex=r"https://api\.stripe\.com/v1/customers/[^/]+/balance_transactions").mock(
+        return_value=httpx.Response(200, json={"id": "ibt_1"}))
+
+    # Referrer A signs up and gets a code (no Stripe customer yet).
+    ta = signup(client, email=_email())
+    code = client.get("/api/billing/me", headers=auth_headers(ta)).json()["referral_code"]
+
+    # Referred B signs up WITH A's code, then checks out -> B's Stripe customer = created[0].
+    rb = client.post("/api/auth/signup", json={"org_name": "B Org", "email": _email(),
+                                               "password": "superSecret123!", "ref": code})
+    assert rb.status_code == 201
+    tb = rb.json()
+    client.post("/api/billing/checkout", headers=auth_headers(tb),
+                json={"tier": "solo", "interval": "year"})
+    b_customer = created[0]
+
+    # B's first invoice paid -> A earns one $5 credit, pushed to Stripe's balance API.
+    r = _send_webhook(client, {"type": "invoice.paid", "data": {"object": {"customer": b_customer}}})
+    assert r.status_code == 200
+    me_a = client.get("/api/billing/me", headers=auth_headers(ta)).json()
+    assert me_a["referral_count"] == 1 and me_a["referral_credits_earned_cents"] == 500
+    assert credit_route.called
+
+    # Idempotent: a second invoice.paid for B does NOT double-credit A.
+    _send_webhook(client, {"type": "invoice.paid", "data": {"object": {"customer": b_customer}}})
+    me_a2 = client.get("/api/billing/me", headers=auth_headers(ta)).json()
+    assert me_a2["referral_count"] == 1

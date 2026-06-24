@@ -27,7 +27,31 @@ class Settings(BaseSettings):
     # Default brand for new tenants.
     default_brand: str = "mary_kay"
 
+    # Stripe billing (REST API via httpx — no SDK dependency). All from env.
+    stripe_secret_key: str = ""       # sk_live_... / sk_test_...
+    stripe_webhook_secret: str = ""   # whsec_... — verifies inbound webhook signatures
+    billing_trial_days: int = 90
+    billing_enforced: bool = False    # when True, AI features require an active/trialing sub
+    billing_success_url: str = "http://localhost:5173/billing/success"
+    billing_cancel_url: str = "http://localhost:5173/billing/cancel"
+    billing_portal_return_url: str = "http://localhost:5173/billing"
+    referral_credit_cents: int = 500  # $5 credit per referred conversion
+    # Price IDs created in the Stripe dashboard, supplied as JSON: {"tier:interval": "price_..."}
+    # e.g. {"solo:month":"price_a","solo:year":"price_b","director:year":"price_c"}
+    stripe_prices: str = ""
+
     model_config = {"env_file": ".env", "extra": "ignore"}
+
+    @property
+    def stripe_price_map(self) -> dict[str, str]:
+        import json
+        if not self.stripe_prices:
+            return {}
+        try:
+            data = json.loads(self.stripe_prices)
+            return {str(k): str(v) for k, v in data.items()}
+        except (ValueError, AttributeError):
+            return {}
 
     @property
     def master_key_bytes(self) -> bytes:

@@ -16,6 +16,39 @@ See `ROADMAP.md` for the forward plan.
 
 ---
 
+## [1.3.0] — 2026-06-24
+
+Revenue infrastructure. The product is consent-gated, compliance-audited, and test-covered;
+this is the Stripe layer that turns it into a business. Annual-first, 90-day trial, referral
+flywheel — matching the unit economics in `STRATEGY.md`.
+
+### Added
+- **Stripe billing via REST (`app/billing.py`)** — no SDK dependency; calls Stripe over
+  httpx so the same respx test harness covers it, and webhook signatures are verified with
+  our own HMAC-SHA256 (`verify_webhook` / `sign_payload`).
+- **Billing routes (`routes/billing.py`)**: `POST /api/billing/checkout` (hosted Stripe
+  Checkout, annual-first, 90-day trial), `GET /api/billing/me` (status + referral),
+  `GET /api/billing/plans` (configured tier:interval), `POST /api/billing/portal`
+  (Stripe customer portal), `POST /api/billing/webhook` (lifecycle + referral engine).
+- **Subscription model** — mirrors Stripe state (`none → trialing → active → past_due →
+  canceled`), driven entirely by webhooks. One per user.
+- **Referral program** — every user gets a `referral_code`; signup accepts `?ref=`; the
+  referrer earns a $5 credit on the referred user's *first paid invoice*, ledgered in
+  `ReferralCredit` and pushed to their Stripe customer balance. Idempotent (one credit per
+  referred user).
+- **Entitlement gate (`app/entitlements.py`)** — `require_active_subscription` dependency,
+  a no-op until `BILLING_ENFORCED=1` flips it on at launch (then unsubscribed → HTTP 402).
+- **Config** — `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICES` (JSON
+  `tier:interval → price_id` map), `BILLING_TRIAL_DAYS`, `BILLING_ENFORCED`,
+  `REFERRAL_CREDIT_CENTS`, success/cancel/portal URLs. All from env — nothing hardcoded.
+
+### Tests
+- 51 → 58. New: referral-code issuance, plans listing, checkout session creation, unknown-
+  plan rejection, webhook signature rejection, full lifecycle (trialing → active),
+  referral credit on first payment + idempotency.
+
+---
+
 ## [1.2.0] — 2026-06-24
 
 Customer skin-data privacy core. Closes the launch-blocking gaps from

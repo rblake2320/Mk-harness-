@@ -47,6 +47,9 @@ class User(Base):
     display_name: Mapped[str] = mapped_column(String(120), default="")
     role: Mapped[str] = mapped_column(String(20), default="consultant")  # admin | consultant
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Referral program: every user gets a shareable code; referred_by points at the referrer.
+    referral_code: Mapped[str | None] = mapped_column(String(16), unique=True, nullable=True, index=True)
+    referred_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
     tenant: Mapped[Tenant] = relationship(back_populates="users")
@@ -164,6 +167,48 @@ class ConsultantProfile(Base):
     last_active: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class Subscription(Base):
+    """One subscription per consultant. Mirrors Stripe state, driven by webhooks.
+
+    status: none (never subscribed) | trialing | active | past_due | canceled | incomplete.
+    Tier/interval are the chosen plan (e.g. solo/year). stripe_subscription_id is null
+    until checkout completes.
+    """
+    __tablename__ = "subscriptions"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=uid)
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), unique=True, index=True)
+    stripe_customer_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    stripe_subscription_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    tier: Mapped[str] = mapped_column(String(20), default="")        # solo | director | leader | studio
+    interval: Mapped[str] = mapped_column(String(10), default="")    # month | year
+    status: Mapped[str] = mapped_column(String(20), default="none")
+    trial_end: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    current_period_end: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    first_paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class ReferralCredit(Base):
+    """Ledger of referral rewards. One row per referred conversion.
+
+    status: pending (earned, not yet pushed to Stripe) | applied (credited to Stripe
+    customer balance) | void. amount_cents is the reward to the referrer.
+    """
+    __tablename__ = "referral_credits"
+    __table_args__ = (UniqueConstraint("referred_user_id", name="uq_referral_per_referred"),)
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=uid)
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)  # referrer (earns)
+    referred_user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    amount_cents: Mapped[int] = mapped_column(Integer, default=0)
+    status: Mapped[str] = mapped_column(String(10), default="pending")
+    stripe_txn_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    applied_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class ConsentRecord(Base):

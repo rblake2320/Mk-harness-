@@ -26,7 +26,7 @@ JWT_SECRET=dev-secret-dev-secret-dev-secret-123 \
 MASTER_KEY=$(python3 -c "import os,base64;print(base64.b64encode(os.urandom(32)).decode())") \
 uvicorn app.main:app --reload --port 8000
 
-# Tests (51 tests, all in-process — no live endpoints required)
+# Tests (58 tests, all in-process — no live endpoints required)
 python -m pytest -v
 ```
 
@@ -108,7 +108,7 @@ a copied row will not decrypt in a different scope.
   always talks to real endpoints — never add `respx` outside `tests/`.
 - Every new route needs a test for: happy path, auth failure (401), and cross-tenant
   isolation (second user/tenant gets 404).
-- Run `python -m pytest -v` — all 51 must pass before any commit.
+- Run `python -m pytest -v` — all 58 must pass before any commit.
 
 ---
 
@@ -170,3 +170,15 @@ alembic upgrade head
 | `OLLAMA_BASE_URL` | No | Local model endpoint |
 | `MK_ALLOW_DEV_SECRETS` | Dev only | Disables secret-length enforcement |
 | `RATE_LIMIT_PER_MINUTE` | No | Default 30 |
+| `SKIN_ANALYSIS_URL` | No | Local PanDerm endpoint (port 8101); empty = cloud vision |
+| `STRIPE_SECRET_KEY` | Billing | `sk_live_…`/`sk_test_…`; empty = billing routes 503 |
+| `STRIPE_WEBHOOK_SECRET` | Billing | `whsec_…`; verifies inbound webhook signatures |
+| `STRIPE_PRICES` | Billing | JSON map `{"tier:interval":"price_…"}` e.g. `solo:year` |
+| `BILLING_TRIAL_DAYS` | No | Default 90 |
+| `BILLING_ENFORCED` | No | Default false; true → AI features require active sub (402) |
+| `REFERRAL_CREDIT_CENTS` | No | Default 500 ($5 per referred conversion) |
+
+**Billing note:** Stripe is called over REST via httpx (no SDK). Create Products/Prices in
+the Stripe dashboard, then supply their price IDs via `STRIPE_PRICES`. Point a Stripe
+webhook at `POST /api/billing/webhook` and set `STRIPE_WEBHOOK_SECRET`. Secrets live only in
+env / `~/.secrets` — never inline, never tracked.

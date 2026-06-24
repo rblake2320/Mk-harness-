@@ -1,4 +1,5 @@
 """Auth: tenant signup (creates org + admin), login, refresh, member invite."""
+import secrets
 import threading
 import time
 
@@ -48,12 +49,22 @@ def _clear_failures(email: str) -> None:
         _bf_hits.pop(email, None)
 
 
+def _gen_referral_code(db: Session) -> str:
+    """8-char uppercase code, retried on the rare collision."""
+    for _ in range(5):
+        code = secrets.token_hex(4).upper()
+        if not db.scalar(select(User).where(User.referral_code == code)):
+            return code
+    return secrets.token_hex(6).upper()
+
+
 class SignupIn(BaseModel):
     org_name: str = Field(min_length=2, max_length=120)
     email: EmailStr
     password: str = Field(min_length=10, max_length=128)
     display_name: str = ""
     key_policy: str = "both"
+    ref: str | None = None   # referral code of the inviting consultant
 
 
 class LoginIn(BaseModel):
@@ -81,14 +92,21 @@ def signup(body: SignupIn, db: Session = Depends(get_db)):
         raise HTTPException(422, "key_policy must be central, byo, or both")
     if db.scalar(select(User).where(User.email == body.email.lower())):
         raise HTTPException(409, "Email already registered")
+    referred_by = None
+    if body.ref:
+        referrer = db.scalar(select(User).where(User.referral_code == body.ref.upper()))
+        if referrer:
+            referred_by = referrer.id
     tenant = Tenant(name=body.org_name, key_policy=body.key_policy)
     db.add(tenant)
     db.flush()
     user = User(tenant_id=tenant.id, email=body.email.lower(),
                 password_hash=hash_password(body.password),
-                display_name=body.display_name or body.email.split("@")[0], role="admin")
+                display_name=body.display_name or body.email.split("@")[0], role="admin",
+                referral_code=_gen_referral_code(db), referred_by=referred_by)
     db.add(user)
-    db.add(AuditLog(tenant_id=tenant.id, user_id=user.id, action="tenant.signup"))
+    db.add(AuditLog(tenant_id=tenant.id, user_id=user.id, action="tenant.signup",
+                    detail=f"ref={body.ref}" if referred_by else ""))
     db.commit()
     return _tokens(user)
 
@@ -135,7 +153,8 @@ def add_member(body: InviteIn, admin: User = Depends(require_admin),
         raise HTTPException(409, "Email already registered")
     user = User(tenant_id=admin.tenant_id, email=body.email.lower(),
                 password_hash=hash_password(body.password),
-                display_name=body.display_name or body.email.split("@")[0], role=body.role)
+                display_name=body.display_name or body.email.split("@")[0], role=body.role,
+                referral_code=_gen_referral_code(db))
     db.add(user)
     db.add(AuditLog(tenant_id=admin.tenant_id, user_id=admin.id,
                     action="member.add", detail=body.email.lower()))

@@ -14,9 +14,10 @@ These are the features that directly move retention and conversion.
 - [ ] **Revenue-impact surfacing.** After a Power Hour contact, show the consultant the
       estimated revenue recovered ("this customer last ordered 90 days ago — a reorder is
       worth ~$X"). Makes the value visible, which is the #1 retention driver per STRATEGY.
-- [ ] **Billing & subscription tiers.** Stripe integration for Solo / Director / Studio.
-      Annual prepay as the default-selected option (8x lower churn). Referral credit
-      ($5/activated referral) baked into signup.
+- [x] **Billing & subscription tiers.** Shipped v1.3.0 — Stripe Checkout (annual-first,
+      90-day trial), `Subscription` model + webhook lifecycle, customer portal, and the
+      referral-credit flywheel ($5 on referred first payment). Set `STRIPE_PRICES` + keys
+      to go live; flip `BILLING_ENFORCED=1` to gate AI on an active sub.
 - [x] **Consent capture (skin).** Shipped v1.2.0 — `ConsentRecord` + `/api/consent/skin`,
       operator + per-customer, gate before photo read. See SECURITY-PRIVACY.md.
 - [x] **Data deletion / export endpoints.** Shipped v1.2.0 — `DELETE /api/me/skin-data`
