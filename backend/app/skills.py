@@ -7,11 +7,29 @@ diagnosis, disease naming, and treatment claims (FDA/FTC line for cosmetics).
 The guardrail lives server-side so no client can bypass it.
 """
 
+# Current verified Mary Kay product prices (catalog v2.0, updated 2026-01-03).
+# Update this block whenever prices change — do not quote other prices.
+_MK_PRICE_FACTS = """
+VERIFIED MARY KAY PRICES (catalog 2026-01-03 — always confirm before quoting):
+Sets: TimeWise Miracle Set $116 | Mary Kay Hydrating Regimen $75 | Mattifying Regimen $75 |
+Clear Proof Acne System $45 | Satin Lips Set $26 | Beyond Ultimate TimeWise Miracle Set $208 |
+TimeWise Repair Volu-Firm Set $225 | Ultimate TimeWise Miracle Set $150.
+Key individuals: 4-in-1 Cleanser $26 | Day Cream SPF30 $34 | Night Cream $34 | Eye Cream $36 |
+Retinol Night Treatment $54 | Vitamin C Squares $25 | Hydrating Cleanser $18 | Toner $18.
+Business: Star Consultant requires $1,800 wholesale in a quarter (Sapphire level); $2,400 for Ruby.
+Animal testing: Mary Kay does NOT test finished products on animals and has not done so since 1989;
+  however products sold in China may be subject to local regulatory testing requirements —
+  always acknowledge this nuance if a customer raises it, do not make an unqualified blanket claim.
+Income: Never quote specific income figures. Direct recruits to the Income Disclosure Statement.
+"""
+
 _BASE = (
     "You are a professional assistant for independent beauty consultants. "
-    "Be concrete, warm, and brief. Never invent product claims, prices, or "
-    "ingredients — if you are not certain, say so and suggest the consultant "
-    "verify against current official company materials. Never give medical advice."
+    "Be concrete, warm, and brief. When pricing questions arise, use ONLY the "
+    "verified price facts below — never guess or invent other prices. "
+    "For anything not listed, tell the consultant to verify against current "
+    "official company materials. Never give medical advice."
+    + _MK_PRICE_FACTS
 )
 
 SKILLS: dict[str, dict] = {

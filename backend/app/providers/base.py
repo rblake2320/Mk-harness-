@@ -100,6 +100,15 @@ MODEL_CATALOG: dict[str, dict] = {
     # provider: ollama (local — no per-token cost)
     "llama3.2-vision":            {"provider": "ollama",    "in": 0.0,   "out": 0.0,   "vision": True},
     "llama3.1":                   {"provider": "ollama",    "in": 0.0,   "out": 0.0,   "vision": False},
+    # MK-trained local models (DGX Spark GB10)
+    "mk-copilot-nano:latest":     {"provider": "ollama",    "in": 0.0,   "out": 0.0,   "vision": False},
+    "mk-copilot-v2:latest":       {"provider": "ollama",    "in": 0.0,   "out": 0.0,   "vision": False},
+    "mk-copilot-trained:latest":  {"provider": "ollama",    "in": 0.0,   "out": 0.0,   "vision": False},
+    "student-mk-trained:latest":  {"provider": "ollama",    "in": 0.0,   "out": 0.0,   "vision": False},
+    "aiarmy-mk-copilot:latest":   {"provider": "ollama",    "in": 0.0,   "out": 0.0,   "vision": False},
+    "qwen3-vl:latest":            {"provider": "ollama",    "in": 0.0,   "out": 0.0,   "vision": True},
+    "llama3.2-vision:latest":     {"provider": "ollama",    "in": 0.0,   "out": 0.0,   "vision": True},
+    "qwen2.5:7b":                 {"provider": "ollama",    "in": 0.0,   "out": 0.0,   "vision": False},
 }
 
 
