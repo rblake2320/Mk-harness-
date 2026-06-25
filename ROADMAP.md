@@ -24,8 +24,11 @@ These are the features that directly move retention and conversion.
       (purge + receipt) and `GET /api/me/skin-data/export` (MHMDA access/portability).
 - [x] **Photo retention policy enforcement.** Shipped v1.2.0 — raw + sanitized buffers
       dropped after use; `AuditLog skin.analyze photo_discarded=1`. No raw image persisted.
-- [ ] **Chat-UI AI disclosure banner** (California SB 243) — frontend "you're talking to AI".
-      (Skin-output disclosure already ships; this is the chat surface.)
+- [x] **Chat-UI AI disclosure banner** (California SB 243). Shipped v1.4.0 — once-per-session
+      modal + persistent strip + per-output AI badge across chat and skin surfaces.
+- [x] **Web client first pass.** Shipped v1.4.0 — SDK extended (consent/billing/referral),
+      Billing view, consent-gated Skin, Power Hour, referral capture. tsc + vite build clean.
+      *Next web items: account/settings polish, social calendar, live-selling assistant.*
 - [ ] **Usage-metering dashboard.** Token cost per user/team, visible to tenant admins —
       needed for margin visibility and the Studio/Director tiers.
 - [ ] **Redis rate limiting.** Swap the in-process sliding-window store (`ratelimit.py`)

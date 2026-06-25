@@ -3,7 +3,9 @@ import { MKClient, Tokens } from '../../packages/sdk/src/index.ts';
 import ChatView from './views/Chat.tsx';
 import SkinView from './views/Skin.tsx';
 import CustomersView from './views/Customers.tsx';
+import BillingView from './views/Billing.tsx';
 import SettingsView from './views/Settings.tsx';
+import { AiNoticeModal } from './components/AiDisclosure.tsx';
 import './styles.css';
 
 export const client = new MKClient(import.meta.env.VITE_API_URL ?? '');
@@ -14,9 +16,15 @@ function loadTokens(): Tokens | null {
   try { return JSON.parse(sessionStorage.getItem(TOKEN_KEY) ?? 'null'); } catch { return null; }
 }
 
+/** Capture a ?ref=CODE referral code from the URL so signup can attribute it. */
+function refFromUrl(): string | undefined {
+  try { return new URLSearchParams(window.location.search).get('ref') || undefined; }
+  catch { return undefined; }
+}
+
 export default function App() {
   const [tokens, setTokens] = useState<Tokens | null>(loadTokens);
-  const [view, setView] = useState<'chat' | 'skin' | 'customers' | 'settings'>('chat');
+  const [view, setView] = useState<'chat' | 'skin' | 'customers' | 'billing' | 'settings'>('chat');
 
   useEffect(() => {
     client.tokens = tokens;
@@ -29,10 +37,12 @@ export default function App() {
 
   return (
     <div className="shell">
+      <AiNoticeModal />
       <nav className="rail" aria-label="Main">
         <div className="brand display">Consultant <em>Studio</em></div>
         {([['chat', 'Ask anything'], ['skin', 'Skin studio'],
-           ['customers', 'My customers'], ['settings', 'Settings']] as const).map(([k, label]) => (
+           ['customers', 'My customers'], ['billing', 'Plan & billing'],
+           ['settings', 'Settings']] as const).map(([k, label]) => (
           <button key={k} className={view === k ? 'active' : ''} onClick={() => setView(k)}>
             {label}
           </button>
@@ -48,6 +58,7 @@ export default function App() {
         {view === 'chat' && <ChatView />}
         {view === 'skin' && <SkinView />}
         {view === 'customers' && <CustomersView />}
+        {view === 'billing' && <BillingView />}
         {view === 'settings' && <SettingsView role={tokens.role} />}
       </main>
     </div>
@@ -55,7 +66,8 @@ export default function App() {
 }
 
 function AuthScreen({ onAuthed }: { onAuthed: (t: Tokens) => void }) {
-  const [mode, setMode] = useState<'login' | 'signup'>('login');
+  const ref = refFromUrl();
+  const [mode, setMode] = useState<'login' | 'signup'>(ref ? 'signup' : 'login');
   const [org, setOrg] = useState('');
   const [email, setEmail] = useState('');
   const [pw, setPw] = useState('');
@@ -67,7 +79,7 @@ function AuthScreen({ onAuthed }: { onAuthed: (t: Tokens) => void }) {
     try {
       const t = mode === 'login'
         ? await client.login(email, pw)
-        : await client.signup(org, email, pw);
+        : await client.signup(org, email, pw, { ref });
       onAuthed(t);
     } catch (e: any) { setErr(e.message); } finally { setBusy(false); }
   }
@@ -79,6 +91,9 @@ function AuthScreen({ onAuthed }: { onAuthed: (t: Tokens) => void }) {
         <p className="muted" style={{ margin: 0 }}>
           {mode === 'login' ? 'Welcome back.' : 'Set up your team in one minute.'}
         </p>
+        {ref && mode === 'signup' && (
+          <div className="invited" role="note">You were invited — your referrer gets credit when you join.</div>
+        )}
         {mode === 'signup' && (
           <input placeholder="Team or unit name" value={org} onChange={e => setOrg(e.target.value)} />
         )}

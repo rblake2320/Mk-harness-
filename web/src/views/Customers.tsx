@@ -1,18 +1,23 @@
 import { useEffect, useState } from 'react';
 import { client } from '../App.tsx';
-import type { Customer } from '../../../packages/sdk/src/index.ts';
+import { AiBadge } from '../components/AiDisclosure.tsx';
+import type { Customer, Suggestion } from '../../../packages/sdk/src/index.ts';
 
 const EMPTY = { name: '', phone: '', email: '', notes: '' };
 
 export default function CustomersView() {
   const [list, setList] = useState<Customer[]>([]);
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [form, setForm] = useState<typeof EMPTY & { id?: string }>(EMPTY);
   const [editing, setEditing] = useState(false);
   const [err, setErr] = useState('');
   const [drafts, setDrafts] = useState<{ name: string; text: string } | null>(null);
   const [busyId, setBusyId] = useState('');
 
-  function refresh() { client.listCustomers().then(setList).catch(e => setErr(e.message)); }
+  function refresh() {
+    client.listCustomers().then(setList).catch(e => setErr(e.message));
+    client.suggestions().then(setSuggestions).catch(() => {});
+  }
   useEffect(refresh, []);
 
   async function save() {
@@ -43,6 +48,27 @@ export default function CustomersView() {
         </button>
       </div>
       {err && <div className="error" role="alert" style={{ margin: '10px 0' }}>{err}</div>}
+
+      {suggestions.length > 0 && (
+        <div className="card power-hour" style={{ margin: '16px 0', maxWidth: 760 }}>
+          <h3 style={{ marginTop: 0 }}>Power Hour — reach out today</h3>
+          <p className="muted" style={{ marginTop: 0, marginBottom: 12 }}>
+            Your most overdue customers. One reorder can pay for months of the app.
+          </p>
+          {suggestions.map(s => (
+            <div className="ph-row" key={s.id}>
+              <div>
+                <strong>{s.name}</strong>
+                <div className="level">{s.urgency}</div>
+              </div>
+              <button className="btn ghost" disabled={busyId === s.id}
+                      onClick={() => followUp(s)}>
+                {busyId === s.id ? 'Writing…' : <><AiBadge /> Draft follow-up</>}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
 
       {editing && (
         <div className="card" style={{ margin: '16px 0', maxWidth: 560, display: 'grid', gap: 10 }}>

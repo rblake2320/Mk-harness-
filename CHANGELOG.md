@@ -16,6 +16,38 @@ See `ROADMAP.md` for the forward plan.
 
 ---
 
+## [1.4.0] — 2026-06-25
+
+Web client — first real, demo-able pass. The React/Vite app now compiles and builds
+(it never had before — `node_modules` had never been installed). Scoped to the
+"minimum demo-able" surface for creator/community outreach.
+
+### Added
+- **SDK extended** (`packages/sdk`) to match the backend: `signup(..., {ref})`, consent
+  (`getSkinConsent`/`grantSkinConsent`/`getCustomerConsent`/`revokeSkinConsent`), billing
+  (`getBilling`/`getPlans`/`checkout`/`billingPortal`), skin-data (`exportSkinData`/
+  `deleteSkinData`), `suggestions`, and a structured **`ApiError`** (carries `status` +
+  `detail.code`) so the UI can branch on the consent gate's machine-readable codes.
+- **SB 243 AI disclosure** (`components/AiDisclosure.tsx`): a once-per-session notice modal
+  before the first AI surface, a persistent non-dismissible strip on every AI surface, and
+  a per-output `AI` badge on chat messages and skin results. The server-side `ai_disclosure`
+  now renders visibly in the skin result.
+- **Billing view** — plans (annual-first), current status/trial, Stripe Checkout hand-off,
+  customer-portal link, and a shareable **referral link** (`/?ref=CODE`) with earned-credit
+  display.
+- **Referral capture** — `?ref=` in the URL pre-selects signup and is attributed on signup.
+- **Consent-gated skin analysis** — the Skin view catches the backend's 403 consent codes
+  and raises the operator / customer consent modal (showing the exact consent text), then
+  retries. No analysis happens until consent is recorded.
+- **Power Hour** — the daily-suggestions endpoint surfaces as a "reach out today" card at
+  the top of My Customers, each with a one-click AI follow-up draft.
+- Mobile-responsive throughout (plan grid, Power Hour rows, modals collapse on phones).
+
+### Verified
+- `tsc -b --noEmit` clean; `vite build` succeeds (175 kB JS / 5.5 kB CSS gzipped ~57 kB).
+
+---
+
 ## [1.3.0] — 2026-06-24
 
 Revenue infrastructure. The product is consent-gated, compliance-audited, and test-covered;

@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { client } from '../App.tsx';
-import type { SkinResult } from '../../../packages/sdk/src/index.ts';
+import { AiStrip, AiBadge } from '../components/AiDisclosure.tsx';
+import { ApiError } from '../../../packages/sdk/src/index.ts';
+import type { SkinResult, ConsentStatus } from '../../../packages/sdk/src/index.ts';
 
 export default function SkinView() {
   const [preview, setPreview] = useState<string | null>(null);
@@ -10,14 +12,18 @@ export default function SkinView() {
   const [provider, setProvider] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
-  const [result, setResult] = useState<SkinResult | null>(null);
+  const [result, setResult] = useState<(SkinResult & { ai_disclosure?: string }) | null>(null);
   const [resultMeta, setResultMeta] = useState('');
   const [history, setHistory] = useState<any[]>([]);
+  const [consentInfo, setConsentInfo] = useState<ConsentStatus | null>(null);
+  const [consentModal, setConsentModal] = useState<null | 'operator' | 'customer'>(null);
+  const [granting, setGranting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     client.listCustomers().then(setCustomers).catch(() => {});
     client.skinHistory().then(setHistory).catch(() => {});
+    client.getSkinConsent().then(setConsentInfo).catch(() => {});
   }, []);
 
   function pick(f: File | null) {
@@ -26,26 +32,73 @@ export default function SkinView() {
     setPreview(f ? URL.createObjectURL(f) : null);
   }
 
+  async function runAnalyze() {
+    const r = await client.analyzeSkin(file!, {
+      customer_id: customerId || undefined, provider: provider || undefined });
+    setResult(r.result);
+    setResultMeta(`${r.provider} · ${r.model}`);
+    client.skinHistory().then(setHistory).catch(() => {});
+  }
+
   async function analyze() {
     if (!file || busy) return;
     setBusy(true); setErr(''); setResult(null);
     try {
-      const r = await client.analyzeSkin(file, {
-        customer_id: customerId || undefined, provider: provider || undefined });
-      setResult(r.result);
-      setResultMeta(`${r.provider} · ${r.model}`);
-      client.skinHistory().then(setHistory).catch(() => {});
-    } catch (e: any) { setErr(e.message); } finally { setBusy(false); }
+      await runAnalyze();
+    } catch (e: any) {
+      // Backend is the source of truth for the consent gate — raise the right modal.
+      if (e instanceof ApiError && e.code === 'operator_consent_required') setConsentModal('operator');
+      else if (e instanceof ApiError && e.code === 'customer_consent_required') setConsentModal('customer');
+      else setErr(e.message);
+    } finally { setBusy(false); }
+  }
+
+  async function grantAndRetry(subject: 'operator' | 'customer') {
+    setGranting(true); setErr('');
+    try {
+      await client.grantSkinConsent(subject, subject === 'customer' ? customerId : undefined);
+      client.getSkinConsent().then(setConsentInfo).catch(() => {});
+      setConsentModal(null);
+      setBusy(true);
+      try { await runAnalyze(); }
+      catch (e: any) {
+        if (e instanceof ApiError && e.code === 'customer_consent_required') setConsentModal('customer');
+        else setErr(e.message);
+      } finally { setBusy(false); }
+    } catch (e: any) { setErr(e.message); } finally { setGranting(false); }
   }
 
   return (
     <div>
       <h1>Skin studio</h1>
+      <AiStrip />
       <p className="muted" style={{ maxWidth: 640 }}>
         Upload a clear, well-lit face photo. You'll get cosmetic observations,
         care focus areas, and talking points you can use with your customer.
-        This is never medical advice.
+        This is never medical advice. The photo is analyzed and not stored — only
+        cosmetic notes are kept, and you can delete them anytime from Settings.
       </p>
+
+      {consentModal && consentInfo && (
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Consent required">
+          <div className="card modal">
+            <h3 style={{ marginTop: 0 }}>
+              {consentModal === 'operator' ? 'Before you analyze a photo' : 'Confirm customer consent'}
+            </h3>
+            <p className="muted" style={{ whiteSpace: 'pre-wrap' }}>
+              {consentModal === 'operator' ? consentInfo.operator_text : consentInfo.customer_text}
+            </p>
+            <div className="row">
+              <button className="btn" disabled={granting} onClick={() => grantAndRetry(consentModal)}>
+                {granting ? 'Saving…'
+                  : consentModal === 'operator' ? 'I agree — continue' : 'My customer consented — continue'}
+              </button>
+              <button className="btn ghost" disabled={granting}
+                      onClick={() => { setConsentModal(null); setBusy(false); }}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="card" style={{ maxWidth: 720 }}>
         <div className="row">
@@ -80,8 +133,14 @@ export default function SkinView() {
 
       {result && (
         <div className="mirror" style={{ marginTop: 20 }}>
-          <h3 className="display">Cosmetic observations</h3>
+          <h3 className="display"><AiBadge /> Cosmetic observations</h3>
           <div className="muted" style={{ fontSize: 13, marginBottom: 8 }}>{resultMeta}</div>
+          {result.ai_disclosure && (
+            <div className="disclaimer" style={{ marginTop: 0, marginBottom: 10, borderTop: 0,
+                 borderBottom: '1px solid var(--edge-hi)', paddingBottom: 10 }}>
+              {result.ai_disclosure}
+            </div>
+          )}
           {result.observations.map((o, i) => (
             <div className="obs" key={i}>
               <strong>{o.category.replace(/_/g, ' ')}</strong>

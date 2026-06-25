@@ -11,10 +11,38 @@ export interface SkinResult {
   observations: SkinObservation[]; care_focus: string[];
   routine_suggestion: { am: string[]; pm: string[] };
   consultant_talking_points: string[]; see_professional: boolean; disclaimer: string;
+  ai_disclosure?: string;
 }
 export interface Customer {
   id: string; name: string; phone: string; email: string;
   notes: string; last_contact: string | null;
+}
+export interface Suggestion extends Customer {
+  days_since_contact: number | null; urgency: string;
+}
+export interface ConsentStatus {
+  version: string; operator_consent: boolean; operator_granted_at: string | null;
+  operator_text: string; customer_text: string; ai_disclosure: string;
+}
+export interface Plan { tier: string; interval: string }
+export interface BillingStatus {
+  status: string; tier: string; interval: string;
+  trial_end: string | null; current_period_end: string | null; active: boolean;
+  referral_code: string | null;
+  referral_credits_earned_cents: number; referral_count: number;
+}
+
+/** Structured API error: `status` is the HTTP code, `detail` is the parsed body's
+ *  `detail` field — a string, or an object like { code, message } for gated routes. */
+export class ApiError extends Error {
+  status: number; detail: any;
+  constructor(status: number, detail: any) {
+    super(typeof detail === 'string' ? detail : (detail?.message ?? `HTTP ${status}`));
+    this.status = status; this.detail = detail; this.name = 'ApiError';
+  }
+  get code(): string | undefined {
+    return this.detail && typeof this.detail === 'object' ? this.detail.code : undefined;
+  }
 }
 export type StreamEvent =
   | { type: 'meta'; conversation_id: string }
@@ -44,17 +72,19 @@ export class MKClient {
       this.onAuthExpired?.();
     }
     if (!r.ok) {
-      let detail = `HTTP ${r.status}`;
+      let detail: any = `HTTP ${r.status}`;
       try { detail = (await r.json()).detail ?? detail; } catch { /* keep status */ }
-      throw new Error(typeof detail === 'string' ? detail : JSON.stringify(detail));
+      throw new ApiError(r.status, detail);
     }
     return r.json() as Promise<T>;
   }
 
   // ---- auth ----
-  async signup(org_name: string, email: string, password: string, key_policy = 'both') {
+  async signup(org_name: string, email: string, password: string,
+               opts: { key_policy?: string; ref?: string } = {}) {
     this.tokens = await this.request<Tokens>('/api/auth/signup', {
-      method: 'POST', body: JSON.stringify({ org_name, email, password, key_policy }) });
+      method: 'POST', body: JSON.stringify({
+        org_name, email, password, key_policy: opts.key_policy ?? 'both', ref: opts.ref }) });
     return this.tokens;
   }
   async login(email: string, password: string) {
@@ -125,7 +155,36 @@ export class MKClient {
   }
   skinHistory() { return this.request<any[]>('/api/skin/history'); }
 
+  // ---- consent (skin sensitive-data gate) ----
+  getSkinConsent() { return this.request<ConsentStatus>('/api/consent/skin'); }
+  getCustomerConsent(customer_id: string) {
+    return this.request<{ customer_id: string; version: string; customer_consent: boolean; granted_at: string | null }>(
+      `/api/consent/skin/customer/${customer_id}`);
+  }
+  grantSkinConsent(subject: 'operator' | 'customer', customer_id?: string) {
+    return this.request<{ ok: boolean; id: string; granted_at: string; version: string }>(
+      '/api/consent/skin', { method: 'POST', body: JSON.stringify({ subject, customer_id, accepted: true }) });
+  }
+  revokeSkinConsent() { return this.request<{ ok: boolean; revoked: number }>('/api/consent/skin', { method: 'DELETE' }); }
+
+  // ---- subject rights (skin data export / deletion) ----
+  exportSkinData() { return this.request<any>('/api/me/skin-data/export'); }
+  deleteSkinData(customer_id?: string) {
+    const q = customer_id ? `?customer_id=${encodeURIComponent(customer_id)}` : '';
+    return this.request<any>(`/api/me/skin-data${q}`, { method: 'DELETE' });
+  }
+
+  // ---- billing ----
+  getBilling() { return this.request<BillingStatus>('/api/billing/me'); }
+  getPlans() { return this.request<{ configured: boolean; trial_days: number; plans: Plan[] }>('/api/billing/plans'); }
+  checkout(tier: string, interval = 'year') {
+    return this.request<{ url: string; session_id: string }>(
+      '/api/billing/checkout', { method: 'POST', body: JSON.stringify({ tier, interval }) });
+  }
+  billingPortal() { return this.request<{ url: string }>('/api/billing/portal', { method: 'POST' }); }
+
   // ---- customers ----
+  suggestions() { return this.request<Suggestion[]>('/api/customers/suggestions'); }
   listCustomers() { return this.request<Customer[]>('/api/customers'); }
   createCustomer(c: Partial<Customer>) { return this.request<{ id: string }>('/api/customers', { method: 'POST', body: JSON.stringify(c) }); }
   updateCustomer(id: string, c: Partial<Customer>) { return this.request(`/api/customers/${id}`, { method: 'PUT', body: JSON.stringify(c) }); }

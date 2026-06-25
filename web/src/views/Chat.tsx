@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { client } from '../App.tsx';
+import { AiStrip, AiBadge } from '../components/AiDisclosure.tsx';
 
 interface Msg { role: 'user' | 'assistant'; content: string; provider?: string; model?: string }
 
@@ -73,6 +74,7 @@ export default function ChatView() {
 
   return (
     <div className="chat">
+      <AiStrip />
       <div className="row" style={{ marginBottom: 12 }}>
         <select value={skill} onChange={e => setSkill(e.target.value)} style={{ width: 200 }}
                 aria-label="Skill">
@@ -110,6 +112,7 @@ export default function ChatView() {
         )}
         {msgs.map((m, i) => (
           <div key={i} className={`msg ${m.role}`}>
+            {m.role === 'assistant' && <AiBadge />}
             {m.content || <span className="muted">…</span>}
             {m.provider && <span className="meta">{m.provider} · {m.model}</span>}
           </div>
