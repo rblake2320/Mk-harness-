@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     ollama_base_url: str = "http://localhost:11434"
 
+    redis_url: str = ""            # e.g. redis://localhost:6379/0; empty = in-process fallback
     rate_limit_per_minute: int = 30
     max_upload_mb: int = 8
     access_token_minutes: int = 30

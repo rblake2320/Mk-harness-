@@ -8,6 +8,7 @@ from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ..cache import get_redis
 from ..db import get_db
 from ..models import AuditLog, Tenant, User
 from ..security import (
@@ -19,7 +20,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 # ---------------------------------------------------------------------------
 # Login brute-force protection: 5 failures per email per 15 minutes → lockout.
-# In-process store; swap for Redis on multi-replica deployments.
+# Redis-backed when REDIS_URL is set; in-process fallback for dev / tests.
 # ---------------------------------------------------------------------------
 _bf_lock = threading.Lock()
 _bf_hits: dict[str, list[float]] = {}
@@ -28,6 +29,14 @@ _BF_WINDOW = 900  # 15 minutes
 
 
 def _check_brute_force(email: str) -> None:
+    r = get_redis()
+    if r is not None:
+        key = f"bf:{email}"
+        count = r.get(key)
+        if count and int(count) >= _BF_MAX:
+            raise HTTPException(429, "Too many failed attempts. Try again in 15 minutes.")
+        return
+
     now = time.monotonic()
     with _bf_lock:
         window = [t for t in _bf_hits.get(email, []) if now - t < _BF_WINDOW]
@@ -37,6 +46,15 @@ def _check_brute_force(email: str) -> None:
 
 
 def _record_failure(email: str) -> None:
+    r = get_redis()
+    if r is not None:
+        key = f"bf:{email}"
+        pipe = r.pipeline()
+        pipe.incr(key)
+        pipe.expire(key, _BF_WINDOW)
+        pipe.execute()
+        return
+
     now = time.monotonic()
     with _bf_lock:
         hits = [t for t in _bf_hits.get(email, []) if now - t < _BF_WINDOW]
@@ -45,6 +63,11 @@ def _record_failure(email: str) -> None:
 
 
 def _clear_failures(email: str) -> None:
+    r = get_redis()
+    if r is not None:
+        r.delete(f"bf:{email}")
+        return
+
     with _bf_lock:
         _bf_hits.pop(email, None)
 
@@ -168,3 +191,20 @@ def me(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     return {"id": user.id, "email": user.email, "display_name": user.display_name,
             "role": user.role, "tenant": {"id": tenant.id, "name": tenant.name,
                                           "key_policy": tenant.key_policy}}
+
+
+class ChangePasswordIn(BaseModel):
+    current_password: str
+    new_password: str = Field(min_length=10, max_length=128)
+
+
+@router.post("/change-password")
+def change_password(body: ChangePasswordIn, user: User = Depends(get_current_user),
+                    db: Session = Depends(get_db)):
+    if not verify_password(body.current_password, user.password_hash):
+        raise HTTPException(401, "Current password is incorrect")
+    user.password_hash = hash_password(body.new_password)
+    db.add(AuditLog(tenant_id=user.tenant_id, user_id=user.id,
+                    action="auth.change_password", detail=""))
+    db.commit()
+    return {"ok": True}

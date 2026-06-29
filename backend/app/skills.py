@@ -88,6 +88,41 @@ UNIVERSAL_INCOME_PATTERNS: list[str] = [
     "make money in your sleep",        # FTC v. IM Mastery Academy, May 2025
     "the money keeps coming",          # FTC v. LifeWave, April 2026
     "four or five figure",             # DSSRC Case #61-2022 (Mary Kay)
+    # FTC April 2026 orders — lifestyle imagery by implication (images of homes,
+    # vehicles, purchases, travel). Text equivalents of those visuals trigger
+    # the same "implied earnings claim" standard (FTC Act §5, April 2026 orders).
+    "dream home",
+    "dream car",
+    "dream vacation",
+    "dream life",
+    "living your best life",
+    "luxury lifestyle",
+    "luxury life",
+    "dream lifestyle",
+    "travel the world",
+    "work from anywhere",
+    "work from the beach",
+    "work from anywhere in the world",
+    "this business changed my life",
+    "changed my life completely",
+    "this changed everything for me",
+    "never have to worry about money",
+    "money is no object",
+    "endless income",
+    "endless possibilities",
+    "build the life you deserve",
+    "build the life you want",
+    "live the life you've always wanted",
+    "live the life of your dreams",
+    "income potential is limitless",
+    "income potential is unlimited",
+    "sky is the limit",
+    "no glass ceiling",
+    "drive your own hours",
+    "set your own paycheck",
+    "pay yourself",
+    "be financially free",
+    "achieve financial freedom",
 ]
 
 # Keep module-level alias for code that imports INCOME_CLAIM_PATTERNS directly.
@@ -189,7 +224,12 @@ def get_skills(brand_name: str = "mary_kay") -> dict[str, dict]:
             "system": base + " Role: social media content creator for a consultant's personal "
             "page. Write captions, hooks, reel scripts, and 30-day content calendars. "
             "Always include a compliant disclosure style ('Independent Beauty Consultant') "
-            "and never fabricate before/after results.",
+            "and never fabricate before/after results. "
+            "FTC RULE — lifestyle imagery is an implied earnings claim: never write captions "
+            "that imply income through luxury imagery (dream home, dream car, travel, designer "
+            "goods, financial freedom, quit your job). The April 2026 FTC enforcement orders "
+            "explicitly named lifestyle imagery as a prohibited implied income representation. "
+            "Focus only on the products, the experience, and the community.",
         },
     }
 
