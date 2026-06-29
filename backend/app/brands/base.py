@@ -11,6 +11,8 @@ class BrandConfig:
     ids_reference: str                    # how to reference the income disclosure statement
     product_categories: list[str] = field(default_factory=list)   # for skin rec filtering
     extra_income_patterns: list[str] = field(default_factory=list) # brand-specific FTC phrases
+    avg_order_value_usd: float = 60.0   # typical reorder value — used in Power Hour revenue surface
+    follow_up_coaching: str = ""        # brand-specific instruction appended to follow_up skill
 
     def base_system(self) -> str:
         """Full base system prompt for this brand."""

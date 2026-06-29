@@ -6,7 +6,9 @@ from pydantic import BaseModel, Field
 from sqlalchemy import asc, select
 from sqlalchemy.orm import Session
 
+from ..brands.registry import get_brand
 from ..db import get_db
+from ..entitlements import require_active_subscription
 from ..models import Customer, Tenant, User
 from ..providers.base import ChatMessage, ChatRequest, ProviderError
 from ..providers.router import complete_with_failover
@@ -54,11 +56,18 @@ def list_customers(user: User = Depends(get_current_user), db: Session = Depends
 
 @router.get("/suggestions")
 def daily_suggestions(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """Return up to 5 customers most overdue for contact.
+    """Return up to 5 customers most overdue for contact with revenue context.
 
     Priority: (1) never contacted, (2) oldest last_contact date.
     This is the Power Hour feature that Teamzy charges $25/month for.
+    Revenue surface: shows avg order value so the rep sees the concrete opportunity,
+    not just a name list. Framed as product/order value, not an earnings projection.
     """
+    tenant = db.get(Tenant, user.tenant_id)
+    brand_name = tenant.brand if tenant else "mary_kay"
+    brand = get_brand(brand_name)
+    avg_order = brand.avg_order_value_usd
+
     rows = db.scalars(
         select(Customer)
         .where(Customer.user_id == user.id)
@@ -75,6 +84,7 @@ def daily_suggestions(user: User = Depends(get_current_user), db: Session = Depe
         if c.last_contact is None:
             days_ago = None
             urgency = "Never contacted — great place to start"
+            revenue_note = f"Avg order ~${avg_order:.0f}"
         else:
             lc = c.last_contact
             if lc.tzinfo is None:
@@ -82,15 +92,25 @@ def daily_suggestions(user: User = Depends(get_current_user), db: Session = Depe
             days_ago = (now - lc).days
             if days_ago >= 60:
                 urgency = f"{days_ago} days — time to reconnect"
+                revenue_note = f"Avg reorder ~${avg_order:.0f}"
             elif days_ago >= 30:
                 urgency = f"{days_ago} days — due for check-in"
+                revenue_note = f"Avg order ~${avg_order:.0f}"
             else:
                 urgency = f"{days_ago} days"
+                revenue_note = None
         entry = _customer_dict(c)
         entry["days_since_contact"] = days_ago
         entry["urgency"] = urgency
+        entry["revenue_note"] = revenue_note
         result.append(entry)
     return result
+
+
+@router.get("/{cid}")
+def get_customer(cid: str, user: User = Depends(get_current_user),
+                 db: Session = Depends(get_db)):
+    return _customer_dict(_own(db, user, cid))
 
 
 @router.post("", status_code=201)
@@ -137,6 +157,7 @@ class FollowUpIn(BaseModel):
 
 @router.post("/{cid}/follow-up")
 async def generate_follow_up(cid: str, body: FollowUpIn, user: User = Depends(check_rate),
+                             _sub: User = Depends(require_active_subscription),
                              db: Session = Depends(get_db)):
     c = _own(db, user, cid)
 
@@ -162,4 +183,8 @@ async def generate_follow_up(cid: str, body: FollowUpIn, user: User = Depends(ch
         result = await complete_with_failover(db, user, req, provider=body.provider)
     except ProviderError as e:
         raise HTTPException(502, str(e))
+    # Auto-touch: drafting a follow-up counts as contact activity so Power Hour
+    # moves this customer off the top of the list until they're actually overdue again.
+    c.last_contact = datetime.now(timezone.utc)
+    db.commit()
     return {"drafts": result.text, "provider": result.provider, "model": result.model}

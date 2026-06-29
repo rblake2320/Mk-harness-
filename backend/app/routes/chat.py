@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..db import get_db
+from ..entitlements import require_active_subscription
 from ..models import ConsultantProfile, Conversation, Message, Tenant, User
 from ..providers.base import ChatMessage, ChatRequest, MODEL_CATALOG, ProviderError
 from ..providers.router import DEFAULT_CHAIN, NoKeyAvailable, record_usage, resolve
@@ -115,6 +116,7 @@ def delete_conversation(cid: str, user: User = Depends(get_current_user),
 
 @router.post("/stream")
 async def chat_stream(body: ChatIn, user: User = Depends(check_rate),
+                      _sub: User = Depends(require_active_subscription),
                       db: Session = Depends(get_db)):
     skills = _brand_skills(user, db)
     if body.skill not in skills:

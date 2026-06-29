@@ -175,7 +175,8 @@ def get_skills(brand_name: str = "mary_kay") -> dict[str, dict]:
             "system": base + " Role: customer follow-up writer. Given customer context (name, "
             "purchase history, preferences, last contact), draft a short personal text or "
             "email the consultant can send as-is. Warm, never pushy, one clear next step. "
-            "Offer 2 variants: a light check-in and a reorder/upsell angle.",
+            "Offer 2 variants: a light check-in and a reorder/upsell angle."
+            + brand.follow_up_coaching,
         },
         "party_planner": {
             "label": "Party planner",

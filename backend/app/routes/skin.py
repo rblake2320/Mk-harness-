@@ -25,6 +25,7 @@ from sqlalchemy.orm import Session
 from ..config import get_settings
 from ..consent import AI_DISCLOSURE, require_skin_consent
 from ..db import get_db
+from ..entitlements import require_active_subscription
 from ..models import AuditLog, ConsultantProfile, Customer, SkinAnalysis, User
 from ..providers.base import ChatMessage, ChatRequest, ImagePart, ProviderError
 from ..providers.router import complete_with_failover
@@ -236,6 +237,7 @@ async def analyze(
     model: str | None = Form(default=None),
     actual_age: int | None = Form(default=None),
     user: User = Depends(check_rate),
+    _sub: User = Depends(require_active_subscription),
     db: Session = Depends(get_db),
 ):
     s = get_settings()

@@ -31,6 +31,7 @@ Income/FTC compliance: The FTC (Act §5; 16 CFR Part 437) treats ANY statement i
   shows the actual range of earnings across all active consultants.
 """,
     ids_reference="the official Mary Kay Income Disclosure Statement (IDS)",
+    avg_order_value_usd=65.0,
     product_categories=[
         "skincare", "color cosmetics", "fragrance", "body care", "sun care",
     ],
