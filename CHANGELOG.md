@@ -9,6 +9,50 @@ Keep `backend/app/main.py`, `web/package.json`, and `mobile/app.json` in sync wi
 
 ---
 
+## [1.6.1] — 2026-07-01
+
+### Security
+- **Session invalidation on password change**: every JWT (access *and* refresh)
+  now carries a `pv` claim — a SHA-256 fingerprint of the current password
+  hash. Changing the password instantly kills all previously issued tokens,
+  with no server-side session store and no schema change. Enforced in both
+  `get_current_user` and `/auth/refresh`.
+- **User-enumeration timing oracle closed**: login now performs a dummy
+  argon2id verification when the email does not exist, equalising the timing
+  of the "no such user" and "wrong password" paths.
+- **Redis features now actually shippable**: `redis==5.2.1` added to
+  requirements (previously the documented Redis-backed rate limiting and
+  brute-force lockout could never activate in the Docker image because the
+  package was absent). If `REDIS_URL` is set but Redis is unreachable, the
+  fallback now logs an ERROR instead of degrading silently.
+- Stricter `MASTER_KEY` parsing (`base64` with `validate=True`).
+- Redis rate limiter: unique sorted-set members (eliminates the
+  same-timestamp collision that could under-count requests).
+
+### Fixed
+- `test_forged_jwt_returns_401` imported `python-jose`, which is not a project
+  dependency — the suite could never fully pass from a clean install. Rewritten
+  against PyJWT (the actual dependency). Suite is now 123/123 from
+  `pip install -r requirements.txt` alone.
+- Privacy policy corrected to match the implementation: passwords are argon2id
+  (not "bcrypt cost 12"); authentication is Bearer JWT in session storage (not
+  an "HttpOnly session cookie"). Inaccurate statements in a legal document are
+  a compliance liability.
+- README CI badge pointed at `rblake2320/mk-harness`; repository is
+  `rblake2320/Mk-harness-`. Badge fixed; stale test counts (58 / 31) updated
+  to 123 in README and CLAUDE.md.
+
+### Performance
+- `_sanitize_image` no longer round-trips every pixel through a Python list
+  (up to ~2.4M tuples per upload). Re-encoding the converted RGB image already
+  writes a metadata-free JPEG; the EXIF-strip guarantee is unchanged and still
+  covered by tests.
+
+### Tests
+- +3 red-team tests: pre-change access token rejected, pre-change refresh
+  token rejected, and a token forged with the correct secret but missing the
+  `pv` claim rejected.
+
 ## [Unreleased]
 
 ### Planned

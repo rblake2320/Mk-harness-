@@ -58,7 +58,10 @@ class Settings(BaseSettings):
     def master_key_bytes(self) -> bytes:
         if not self.master_key:
             raise RuntimeError("MASTER_KEY is not set. Generate 32 random bytes (base64).")
-        raw = base64.b64decode(self.master_key)
+        try:
+            raw = base64.b64decode(self.master_key, validate=True)
+        except Exception:
+            raise RuntimeError("MASTER_KEY is not valid base64.")
         if len(raw) != 32:
             raise RuntimeError("MASTER_KEY must decode to exactly 32 bytes.")
         return raw

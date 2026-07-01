@@ -3,6 +3,7 @@
 Uses Redis sorted sets when REDIS_URL is set — multi-replica safe.
 Falls back to an in-process dict when Redis is unavailable (dev / tests).
 """
+import secrets
 import threading
 import time
 
@@ -26,7 +27,7 @@ def check_rate(user: User = Depends(get_current_user)) -> User:
         key = f"rl:{user.id}"
         pipe = r.pipeline()
         pipe.zremrangebyscore(key, 0, now - 60)
-        pipe.zadd(key, {f"{now}": now})
+        pipe.zadd(key, {f"{now}:{secrets.token_hex(4)}": now})
         pipe.zcard(key)
         pipe.expire(key, 120)
         results = pipe.execute()

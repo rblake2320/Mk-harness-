@@ -12,8 +12,8 @@ from ..cache import get_redis
 from ..db import get_db
 from ..models import AuditLog, Tenant, User
 from ..security import (
-    decode_token, get_current_user, hash_password, make_access_token,
-    make_refresh_token, require_admin, verify_password,
+    decode_token, dummy_verify, get_current_user, hash_password, make_access_token,
+    make_refresh_token, password_fingerprint, require_admin, verify_password,
 )
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -138,7 +138,11 @@ def signup(body: SignupIn, db: Session = Depends(get_db)):
 def login(body: LoginIn, db: Session = Depends(get_db)):
     _check_brute_force(body.email.lower())
     user = db.scalar(select(User).where(User.email == body.email.lower()))
-    if not user or not verify_password(body.password, user.password_hash):
+    if not user:
+        dummy_verify()  # equalise timing — no user-enumeration oracle
+        _record_failure(body.email.lower())
+        raise HTTPException(401, "Invalid email or password")
+    if not verify_password(body.password, user.password_hash):
         _record_failure(body.email.lower())
         raise HTTPException(401, "Invalid email or password")
     if not user.is_active:
@@ -157,6 +161,9 @@ def refresh(body: RefreshIn, db: Session = Depends(get_db)):
     user = db.get(User, payload["sub"])
     if not user or not user.is_active:
         raise HTTPException(401, "User not found or deactivated")
+    # Refresh tokens minted before a password change are dead.
+    if payload.get("pv") != password_fingerprint(user.password_hash):
+        raise HTTPException(401, "Session expired — please sign in again")
     return _tokens(user)
 
 

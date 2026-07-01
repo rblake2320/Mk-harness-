@@ -128,10 +128,13 @@ def _sanitize_image(raw: bytes, max_mb: int) -> tuple[str, str]:
         raise HTTPException(422, "Use a JPEG, PNG, or WebP photo")
     img = img.convert("RGB")
     img.thumbnail((1568, 1568))
-    clean = Image.new("RGB", img.size)
-    clean.putdata(list(img.getdata()))
+    # Re-encoding the converted RGB image writes a brand-new JPEG with no
+    # metadata (EXIF/GPS/ICC are not carried unless explicitly passed to
+    # save()). Avoids the previous per-pixel Python-list copy (~2.4M tuples
+    # at max size) while preserving the identical stripped-output guarantee —
+    # covered by the EXIF-strip test.
     buf = io.BytesIO()
-    clean.save(buf, format="JPEG", quality=88)
+    img.save(buf, format="JPEG", quality=88)
     return base64.b64encode(buf.getvalue()).decode(), "image/jpeg"
 
 

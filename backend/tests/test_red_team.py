@@ -99,7 +99,7 @@ def test_no_token_returns_401(client):
 
 def test_forged_jwt_returns_401(client):
     """Token signed with the wrong secret must be rejected."""
-    import jose.jwt as _jwt
+    import jwt as _jwt  # PyJWT — the project's actual JWT dependency
     fake = _jwt.encode({"sub": "fake-id", "exp": int(time.time()) + 3600},
                        "wrong-secret-wrong-secret-wrong-secret-1234", algorithm="HS256")
     r = client.get("/api/chat/conversations",
@@ -733,3 +733,58 @@ def test_power_hour_revenue_note_absent_for_recent_contact(client):
     recent = next((s for s in suggestions if s["days_since_contact"] == 0), None)
     if recent:
         assert recent["revenue_note"] is None
+
+
+# ---------------------------------------------------------------------------
+# SESSION INVALIDATION (pv claim)
+# ---------------------------------------------------------------------------
+
+def test_password_change_invalidates_old_tokens(client):
+    """Access AND refresh tokens minted before a password change must die."""
+    t = signup(client, email=_email())
+    old_access, old_refresh = t["access_token"], t["refresh_token"]
+    headers = {"Authorization": f"Bearer {old_access}"}
+
+    # Sanity: token works before the change.
+    assert client.get("/api/customers", headers=headers).status_code == 200
+
+    r = client.post("/api/auth/change-password", headers=headers, json={
+        "current_password": "superSecret123!",
+        "new_password": "new-horse-battery-staple",
+    })
+    assert r.status_code == 200
+
+    # Old access token is now rejected.
+    assert client.get("/api/customers", headers=headers).status_code == 401
+    # Old refresh token is now rejected.
+    r = client.post("/api/auth/refresh", json={"refresh_token": old_refresh})
+    assert r.status_code == 401
+
+
+def test_login_after_password_change_issues_working_tokens(client):
+    email = _email()
+    t = signup(client, email=email)
+    client.post("/api/auth/change-password",
+                headers={"Authorization": f"Bearer {t['access_token']}"},
+                json={"current_password": "superSecret123!",
+                      "new_password": "new-horse-battery-staple"})
+    r = client.post("/api/auth/login",
+                    json={"email": email, "password": "new-horse-battery-staple"})
+    assert r.status_code == 200
+    fresh = r.json()["access_token"]
+    assert client.get("/api/customers",
+                      headers={"Authorization": f"Bearer {fresh}"}).status_code == 200
+
+
+def test_token_missing_pv_claim_rejected(client):
+    """A token forged with the right secret but no pv claim must be rejected."""
+    import jwt as _jwt
+    from app.config import get_settings
+    t = signup(client, email=_email())
+    # Decode a real token to grab the sub, then re-mint without pv.
+    real = _jwt.decode(t["access_token"], get_settings().jwt_secret,
+                       algorithms=["HS256"])
+    real.pop("pv", None)
+    forged = _jwt.encode(real, get_settings().jwt_secret, algorithm="HS256")
+    r = client.get("/api/customers", headers={"Authorization": f"Bearer {forged}"})
+    assert r.status_code == 401

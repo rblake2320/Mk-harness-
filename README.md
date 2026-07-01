@@ -1,6 +1,6 @@
 # Consultant Studio — Model-Agnostic AI Harness for Beauty Consultants
 
-[![CI](https://github.com/rblake2320/mk-harness/actions/workflows/ci.yml/badge.svg)](https://github.com/rblake2320/mk-harness/actions/workflows/ci.yml)
+[![CI](https://github.com/rblake2320/Mk-harness-/actions/workflows/ci.yml/badge.svg)](https://github.com/rblake2320/Mk-harness-/actions/workflows/ci.yml)
 
 Push-button AI for independent beauty consultants: sales coaching, party
 planning, customer follow-ups, social content, and photo-based **cosmetic**
@@ -14,7 +14,7 @@ required.
 mk-harness/
 ├── backend/          FastAPI · Postgres · multi-tenant · JWT auth
 │   ├── app/providers/   The harness core: 4 adapters + router + failover
-│   └── tests/           58 tests (auth, crypto, isolation, adapters, e2e)
+│   └── tests/           123 tests (auth, crypto, isolation, adapters, e2e, red team)
 ├── packages/sdk/     Shared TypeScript SDK (web + mobile)
 ├── web/              React + Vite web client (dark "vanity mirror" UI)
 ├── mobile/           Expo React Native client (camera skin analysis)
@@ -96,7 +96,7 @@ npx expo start
 ## Tests
 
 ```bash
-cd backend && python -m pytest -v    # 58 tests
+cd backend && python -m pytest -v    # 123 tests
 ```
 
 Provider adapters are tested against each vendor's documented wire format
@@ -109,8 +109,14 @@ EXIF stripping, and skin-compliance rejection.
 ## Security model
 
 - argon2id password hashing; JWT access (30 min) + refresh (14 d) tokens
-- Per-user sliding-window rate limiting (in-process; swap store for Redis
-  when running >1 API replica — interface is one function in `ratelimit.py`)
+- Password change invalidates **all** previously issued tokens (a `pv`
+  fingerprint claim binds every token to the current password hash — no
+  session store required)
+- Constant-time login path (dummy argon2 verify on unknown emails — no
+  user-enumeration timing oracle)
+- Per-user sliding-window rate limiting — Redis-backed when `REDIS_URL` is
+  set (multi-replica safe; `redis` ships in requirements), with an in-process
+  fallback that logs a loud error if Redis was configured but unreachable
 - Tenant isolation enforced in every query (tested cross-tenant 404s)
 - Audit log on signup, member add, key changes
 - CORS locked to configured origins; uploads capped (default 8 MB) and
@@ -133,7 +139,7 @@ EXIF stripping, and skin-compliance rejection.
 
 ## Honest constraints
 
-Built and verified in a sandboxed container: backend test suite (31/31),
+Built and verified in a sandboxed container: backend test suite (123/123),
 live server smoke test, and web production build all pass here. What I could
 not do from the container: hit OpenAI/Gemini live endpoints (network
 egress), run an iOS/Android simulator (Expo client is code-complete and

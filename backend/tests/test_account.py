@@ -29,7 +29,8 @@ def _email():
 
 class TestChangePassword:
     def test_happy_path(self, client):
-        t = signup(client, email=_email())
+        email = _email()
+        t = signup(client, email=email)
         hdrs = auth_headers(t)
         r = client.post("/api/auth/change-password", json={
             "current_password": "superSecret123!",
@@ -38,10 +39,12 @@ class TestChangePassword:
         assert r.status_code == 200
         assert r.json()["ok"] is True
 
+        # Pre-change tokens are invalidated (pv claim) — this 401 is intentional.
+        assert client.get("/api/auth/me", headers=hdrs).status_code == 401
+
         # Can login with new password
-        me_email = client.get("/api/auth/me", headers=hdrs).json()["email"]
         login_r = client.post("/api/auth/login", json={
-            "email": me_email, "password": "newPasswordABC$99"})
+            "email": email, "password": "newPasswordABC$99"})
         assert login_r.status_code == 200
 
     def test_wrong_current_password(self, client):
