@@ -9,6 +9,31 @@ Keep `backend/app/main.py`, `web/package.json`, and `mobile/app.json` in sync wi
 
 ---
 
+## [1.6.2] — 2026-07-01
+
+### Fixed — self-audit of v1.6.1 against real-world failure, not happy paths
+- **Redis death after startup no longer takes down the API.** v1.6.1 made the
+  Redis path reachable in production for the first time (dependency added) but
+  the rate limiter and brute-force helpers had no runtime exception handling:
+  a Redis outage mid-flight crashed every login and every rate-limited AI
+  endpoint with an unhandled ConnectionError. Verified against a REAL
+  redis-server killed mid-run — not a mock. All Redis operations now degrade
+  per-call to the in-process fallback (lockout still engages during the
+  outage) and automatically resume Redis-backed limiting when it returns, with
+  an error log throttled to once per minute.
+- **`pv` claim comparison is now constant-time** (`hmac.compare_digest`) in
+  both `get_current_user` and `/auth/refresh`.
+
+### Verified empirically (no mocks)
+- Login timing oracle: median 161.5 ms (real argon2 verify, wrong password)
+  vs 162.7 ms (dummy verify, unknown email) — 1.01x ratio; the paths are
+  indistinguishable.
+- New `tests/test_redis_durability.py`: spawns a real redis-server, kills it
+  mid-test, asserts login/chat survive, asserts brute-force lockout still
+  fires during the outage, revives Redis, asserts Redis-backed limiting
+  resumes without restart. Skips only where the redis-server binary is
+  absent; CI now installs it so the test always runs there.
+
 ## [1.6.1] — 2026-07-01
 
 ### Security

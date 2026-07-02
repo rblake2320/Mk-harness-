@@ -47,6 +47,26 @@ def get_redis():
     return _client
 
 
+_last_runtime_log = 0.0
+_RUNTIME_LOG_INTERVAL = 60.0
+
+
+def log_redis_runtime_failure(exc: Exception) -> None:
+    """Log a Redis runtime failure at most once per minute (avoids log floods
+    while keeping the degradation visible)."""
+    global _last_runtime_log
+    import time as _time
+    now = _time.monotonic()
+    if now - _last_runtime_log >= _RUNTIME_LOG_INTERVAL:
+        _last_runtime_log = now
+        logger.error(
+            "Redis operation failed at runtime (%s: %s). Falling back to "
+            "in-process rate limiting / lockout for this call — NOT safe "
+            "across multiple API replicas. Will retry Redis on next call.",
+            type(exc).__name__, exc,
+        )
+
+
 def reset_for_tests() -> None:
     """Force re-initialisation — called from test fixtures that inject a fake Redis."""
     global _client, _initialised

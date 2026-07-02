@@ -1,4 +1,5 @@
 """Auth: tenant signup (creates org + admin), login, refresh, member invite."""
+import hmac
 import secrets
 import threading
 import time
@@ -8,7 +9,7 @@ from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..cache import get_redis
+from ..cache import get_redis, log_redis_runtime_failure
 from ..db import get_db
 from ..models import AuditLog, Tenant, User
 from ..security import (
@@ -31,11 +32,16 @@ _BF_WINDOW = 900  # 15 minutes
 def _check_brute_force(email: str) -> None:
     r = get_redis()
     if r is not None:
-        key = f"bf:{email}"
-        count = r.get(key)
-        if count and int(count) >= _BF_MAX:
-            raise HTTPException(429, "Too many failed attempts. Try again in 15 minutes.")
-        return
+        try:
+            key = f"bf:{email}"
+            count = r.get(key)
+            if count and int(count) >= _BF_MAX:
+                raise HTTPException(429, "Too many failed attempts. Try again in 15 minutes.")
+            return
+        except HTTPException:
+            raise
+        except Exception as exc:
+            log_redis_runtime_failure(exc)  # fall through to in-process check
 
     now = time.monotonic()
     with _bf_lock:
@@ -48,12 +54,15 @@ def _check_brute_force(email: str) -> None:
 def _record_failure(email: str) -> None:
     r = get_redis()
     if r is not None:
-        key = f"bf:{email}"
-        pipe = r.pipeline()
-        pipe.incr(key)
-        pipe.expire(key, _BF_WINDOW)
-        pipe.execute()
-        return
+        try:
+            key = f"bf:{email}"
+            pipe = r.pipeline()
+            pipe.incr(key)
+            pipe.expire(key, _BF_WINDOW)
+            pipe.execute()
+            return
+        except Exception as exc:
+            log_redis_runtime_failure(exc)  # record in-process instead
 
     now = time.monotonic()
     with _bf_lock:
@@ -65,8 +74,11 @@ def _record_failure(email: str) -> None:
 def _clear_failures(email: str) -> None:
     r = get_redis()
     if r is not None:
-        r.delete(f"bf:{email}")
-        return
+        try:
+            r.delete(f"bf:{email}")
+            return
+        except Exception as exc:
+            log_redis_runtime_failure(exc)  # clear in-process instead
 
     with _bf_lock:
         _bf_hits.pop(email, None)
@@ -162,7 +174,8 @@ def refresh(body: RefreshIn, db: Session = Depends(get_db)):
     if not user or not user.is_active:
         raise HTTPException(401, "User not found or deactivated")
     # Refresh tokens minted before a password change are dead.
-    if payload.get("pv") != password_fingerprint(user.password_hash):
+    if not hmac.compare_digest(str(payload.get("pv") or ""),
+                               password_fingerprint(user.password_hash)):
         raise HTTPException(401, "Session expired — please sign in again")
     return _tokens(user)
 

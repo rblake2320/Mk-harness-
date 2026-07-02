@@ -124,7 +124,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="MK Consultant Harness", version="1.6.1", lifespan=lifespan)
+app = FastAPI(title="MK Consultant Harness", version="1.6.2", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

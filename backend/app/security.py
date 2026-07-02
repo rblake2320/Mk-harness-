@@ -6,6 +6,7 @@ which immediately invalidates every previously issued access AND refresh
 token without any server-side session store or schema change.
 """
 import hashlib
+import hmac
 from datetime import datetime, timedelta, timezone
 
 import jwt
@@ -94,7 +95,9 @@ def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
     if not user or not user.is_active:
         raise HTTPException(401, "User not found or deactivated")
     # Reject tokens minted before the most recent password change.
-    if payload.get("pv") != password_fingerprint(user.password_hash):
+    # compare_digest: constant-time — no oracle on how many chars matched.
+    if not hmac.compare_digest(str(payload.get("pv") or ""),
+                               password_fingerprint(user.password_hash)):
         raise HTTPException(401, "Session expired — please sign in again")
     return user
 
