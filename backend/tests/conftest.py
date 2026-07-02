@@ -16,6 +16,12 @@ os.environ["STRIPE_WEBHOOK_SECRET"] = "whsec_test_dummy"
 os.environ["STRIPE_PRICES"] = (
     '{"solo:month":"price_solo_m","solo:year":"price_solo_y","director:year":"price_dir_y"}')
 os.environ["BILLING_TRIAL_DAYS"] = "90"
+# Prevent host-level provider keys from leaking into tests. Tests that need a
+# provider key add one explicitly via the /api/keys endpoint. Without this,
+# any developer machine with ANTHROPIC_API_KEY / OPENAI_API_KEY set will cause
+# respx-mocked tests to hit unmocked routes and fail.
+for _k in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY", "OLLAMA_BASE_URL"):
+    os.environ.pop(_k, None)
 
 from app.config import get_settings  # noqa: E402
 get_settings.cache_clear()
