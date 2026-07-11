@@ -1,4 +1,4 @@
-"""Tenant-scoped call-center tasks and signed PhoneClaw adapter callbacks."""
+"""Tenant-scoped Agent Operations tasks and signed mobile-adapter callbacks."""
 
 from __future__ import annotations
 
@@ -13,10 +13,10 @@ from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from ..call_center.audit import append_event, verify_chain
-from ..call_center.dispatcher import approve_and_dispatch, prepare_task_by_id
-from ..call_center.queue import WORKFLOWS, create_task
-from ..call_center.security import (
+from ..agent_ops.audit import append_event, verify_chain
+from ..agent_ops.dispatcher import approve_and_dispatch, prepare_task_by_id
+from ..agent_ops.queue import WORKFLOWS, create_task
+from ..agent_ops.security import (
     SIGNATURE_TTL_SECONDS,
     decrypt_agent_token,
     destination_fingerprint,
@@ -29,27 +29,26 @@ from ..config import get_settings
 from ..db import get_db
 from ..entitlements import require_active_subscription
 from ..models import (
-    CallCenterAuditEntry,
-    CallCenterContactPermission,
-    CallCenterTask,
-    ClawAgent,
-    ClawCallbackNonce,
+    AgentOpsAuditEntry,
+    AgentOpsContactPermission,
+    AgentOpsContactSuppression,
+    AgentOpsTask,
+    MobileAgent,
+    MobileCallbackNonce,
     User,
 )
 from ..ratelimit import check_rate
 from ..security import get_current_user, require_admin
 
-router = APIRouter(prefix="/claw", tags=["call-center"])
+router = APIRouter(prefix="/agent-ops", tags=["agent-operations"])
 
 
-class AgentIn(BaseModel):
+class MobileAgentIn(BaseModel):
     agent_id: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$")
     webhook_url: str = Field(min_length=1, max_length=2048)
     platform_specialty: str = Field(default="multi", max_length=40)
     capabilities: dict = Field(default_factory=dict)
-    adapter_version: str = Field(
-        default="phoneclaw-clawscript-adapter-v1", max_length=80
-    )
+    adapter_version: str = Field(default="mobile-adapter-v1", max_length=80)
 
 
 class TaskIn(BaseModel):
@@ -75,6 +74,17 @@ class ContactPermissionIn(BaseModel):
     operator_attestation: Literal[True]
 
 
+class ContactSuppressionIn(BaseModel):
+    channel: str = Field(pattern=r"^(sms|instagram|facebook|tiktok|x)$")
+    destination: str = Field(min_length=1, max_length=120)
+    reason: Literal[
+        "customer_opt_out",
+        "complaint",
+        "legal_hold",
+        "operator_safety",
+    ]
+
+
 class ApprovalIn(BaseModel):
     approved: bool
 
@@ -89,7 +99,7 @@ class DeviceResultIn(BaseModel):
     error_code: str = Field(default="", max_length=80)
 
 
-def _agent_dict(agent: ClawAgent) -> dict:
+def _agent_dict(agent: MobileAgent) -> dict:
     return {
         "agent_id": agent.agent_id,
         "webhook_url": agent.webhook_url,
@@ -102,7 +112,7 @@ def _agent_dict(agent: ClawAgent) -> dict:
     }
 
 
-def _task_dict(task: CallCenterTask, *, detail: bool = False) -> dict:
+def _task_dict(task: AgentOpsTask, *, detail: bool = False) -> dict:
     data = {
         "id": task.id,
         "agent_id": task.agent_id,
@@ -120,17 +130,17 @@ def _task_dict(task: CallCenterTask, *, detail: bool = False) -> dict:
     if detail:
         data["payload"] = json.loads(task.payload_json)
         data["work_order"] = (
-            json.loads(task.claw_script_json) if task.claw_script_json else None
+            json.loads(task.work_order_json) if task.work_order_json else None
         )
         data["result"] = json.loads(task.result_json) if task.result_json else None
     return data
 
 
-def _tenant_agent(db: Session, tenant_id: str, agent_id: str) -> ClawAgent | None:
+def _tenant_agent(db: Session, tenant_id: str, agent_id: str) -> MobileAgent | None:
     return db.scalar(
-        select(ClawAgent).where(
-            ClawAgent.tenant_id == tenant_id,
-            ClawAgent.agent_id == agent_id,
+        select(MobileAgent).where(
+            MobileAgent.tenant_id == tenant_id,
+            MobileAgent.agent_id == agent_id,
         )
     )
 
@@ -139,8 +149,20 @@ def _aware(value: datetime) -> datetime:
     return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
 
 
-def _own_task(db: Session, user: User, task_id: str) -> CallCenterTask:
-    task = db.get(CallCenterTask, task_id)
+def _suppression(
+    db: Session, tenant_id: str, channel: str, fingerprint: str
+) -> AgentOpsContactSuppression | None:
+    return db.scalar(
+        select(AgentOpsContactSuppression).where(
+            AgentOpsContactSuppression.tenant_id == tenant_id,
+            AgentOpsContactSuppression.channel == channel,
+            AgentOpsContactSuppression.destination_fingerprint == fingerprint,
+        )
+    )
+
+
+def _own_task(db: Session, user: User, task_id: str) -> AgentOpsTask:
+    task = db.get(AgentOpsTask, task_id)
     if (
         task is None
         or task.tenant_id != user.tenant_id
@@ -154,14 +176,14 @@ def _device_auth(
     request: Request,
     body: bytes,
     db: Session,
-    agent: ClawAgent,
+    agent: MobileAgent,
 ) -> None:
-    timestamp = request.headers.get("X-Claw-Timestamp", "")
-    nonce = request.headers.get("X-Claw-Nonce", "")
-    signature = request.headers.get("X-Claw-Signature", "")
+    timestamp = request.headers.get("X-Mobile-Timestamp", "")
+    nonce = request.headers.get("X-Mobile-Nonce", "")
+    signature = request.headers.get("X-Mobile-Signature", "")
     if (
-        request.headers.get("X-Claw-Agent", "") != agent.agent_id
-        or request.headers.get("X-Claw-Tenant", "") != agent.tenant_id
+        request.headers.get("X-Mobile-Agent", "") != agent.agent_id
+        or request.headers.get("X-Mobile-Tenant", "") != agent.tenant_id
     ):
         raise HTTPException(401, "Invalid device authentication")
     secret = decrypt_agent_token(
@@ -181,14 +203,14 @@ def _device_auth(
     ):
         raise HTTPException(401, "Invalid device authentication")
     db.execute(
-        delete(ClawCallbackNonce).where(
-            ClawCallbackNonce.tenant_id == agent.tenant_id,
-            ClawCallbackNonce.agent_id == agent.agent_id,
-            ClawCallbackNonce.expires_at < datetime.now(UTC),
+        delete(MobileCallbackNonce).where(
+            MobileCallbackNonce.tenant_id == agent.tenant_id,
+            MobileCallbackNonce.agent_id == agent.agent_id,
+            MobileCallbackNonce.expires_at < datetime.now(UTC),
         )
     )
     db.add(
-        ClawCallbackNonce(
+        MobileCallbackNonce(
             tenant_id=agent.tenant_id,
             agent_id=agent.agent_id,
             nonce=nonce,
@@ -204,7 +226,7 @@ def _device_auth(
 
 @router.post("/agents", status_code=201)
 def register_agent(
-    body: AgentIn,
+    body: MobileAgentIn,
     admin: User = Depends(require_admin),
     _sub: User = Depends(require_active_subscription),
     db: Session = Depends(get_db),
@@ -224,7 +246,7 @@ def register_agent(
     if _tenant_agent(db, admin.tenant_id, body.agent_id):
         raise HTTPException(409, "Agent already exists")
     token = new_agent_token()
-    agent = ClawAgent(
+    agent = MobileAgent(
         tenant_id=admin.tenant_id,
         created_by=admin.id,
         agent_id=body.agent_id,
@@ -266,16 +288,19 @@ def record_contact_permission(
         raise HTTPException(422, "granted_at cannot be in the future")
     if expires_at <= now or expires_at > now + timedelta(days=548):
         raise HTTPException(422, "expires_at must be within the next 548 days")
-    permission = CallCenterContactPermission(
+    fingerprint = destination_fingerprint(
+        get_settings().master_key_bytes,
+        user.tenant_id,
+        body.channel,
+        body.destination,
+    )
+    if _suppression(db, user.tenant_id, body.channel, fingerprint):
+        raise HTTPException(409, "Destination is permanently suppressed")
+    permission = AgentOpsContactPermission(
         tenant_id=user.tenant_id,
         created_by=user.id,
         channel=body.channel,
-        destination_fingerprint=destination_fingerprint(
-            get_settings().master_key_bytes,
-            user.tenant_id,
-            body.channel,
-            body.destination,
-        ),
+        destination_fingerprint=fingerprint,
         purpose=body.purpose,
         asserted_basis=body.asserted_basis,
         source_reference=body.source_reference,
@@ -315,14 +340,81 @@ def record_contact_permission(
     }
 
 
+@router.post("/suppressions", status_code=201)
+def record_contact_suppression(
+    body: ContactSuppressionIn,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    fingerprint = destination_fingerprint(
+        get_settings().master_key_bytes,
+        user.tenant_id,
+        body.channel,
+        body.destination,
+    )
+    suppression = _suppression(db, user.tenant_id, body.channel, fingerprint)
+    if suppression is None:
+        suppression = AgentOpsContactSuppression(
+            tenant_id=user.tenant_id,
+            created_by=user.id,
+            channel=body.channel,
+            destination_fingerprint=fingerprint,
+            reason=body.reason,
+        )
+        db.add(suppression)
+        db.flush()
+        append_event(
+            db,
+            tenant_id=user.tenant_id,
+            event="CONTACT_SUPPRESSED",
+            detail={
+                "suppression_id": suppression.id,
+                "channel": suppression.channel,
+                "reason": suppression.reason,
+            },
+        )
+        db.commit()
+    return {
+        "id": suppression.id,
+        "channel": suppression.channel,
+        "destination_fingerprint": suppression.destination_fingerprint,
+        "reason": suppression.reason,
+        "created_at": suppression.created_at.isoformat(),
+        "permanent": True,
+    }
+
+
+@router.get("/suppressions")
+def list_contact_suppressions(
+    admin: User = Depends(require_admin), db: Session = Depends(get_db)
+):
+    rows = db.scalars(
+        select(AgentOpsContactSuppression)
+        .where(AgentOpsContactSuppression.tenant_id == admin.tenant_id)
+        .order_by(AgentOpsContactSuppression.created_at.desc())
+        .limit(500)
+    )
+    return [
+        {
+            "id": row.id,
+            "channel": row.channel,
+            "destination_fingerprint": row.destination_fingerprint,
+            "reason": row.reason,
+            "created_at": row.created_at.isoformat(),
+            "permanent": True,
+        }
+        for row in rows
+    ]
+
+
 @router.get("/permissions")
 def list_contact_permissions(
     user: User = Depends(get_current_user), db: Session = Depends(get_db)
 ):
     permissions = db.scalars(
-        select(CallCenterContactPermission)
-        .where(CallCenterContactPermission.tenant_id == user.tenant_id)
-        .order_by(CallCenterContactPermission.created_at.desc())
+        select(AgentOpsContactPermission)
+        .where(AgentOpsContactPermission.tenant_id == user.tenant_id)
+        .order_by(AgentOpsContactPermission.created_at.desc())
         .limit(200)
     )
     return [
@@ -351,16 +443,34 @@ def revoke_contact_permission(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    permission = db.get(CallCenterContactPermission, permission_id)
+    permission = db.get(AgentOpsContactPermission, permission_id)
     if permission is None or permission.tenant_id != user.tenant_id:
         raise HTTPException(404, "Contact permission not found")
     if permission.revoked_at is None:
         permission.revoked_at = datetime.now(UTC)
+        suppression = _suppression(
+            db,
+            permission.tenant_id,
+            permission.channel,
+            permission.destination_fingerprint,
+        )
+        if suppression is None:
+            suppression = AgentOpsContactSuppression(
+                tenant_id=permission.tenant_id,
+                created_by=user.id,
+                channel=permission.channel,
+                destination_fingerprint=permission.destination_fingerprint,
+                reason="customer_opt_out",
+            )
+            db.add(suppression)
         append_event(
             db,
             tenant_id=user.tenant_id,
             event="CONTACT_PERMISSION_REVOKED",
-            detail={"permission_id": permission.id},
+            detail={
+                "permission_id": permission.id,
+                "permanent_suppression": True,
+            },
         )
         db.commit()
     return {"ok": True, "revoked_at": permission.revoked_at.isoformat()}
@@ -369,9 +479,9 @@ def revoke_contact_permission(
 @router.get("/agents")
 def list_agents(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     agents = db.scalars(
-        select(ClawAgent)
-        .where(ClawAgent.tenant_id == user.tenant_id)
-        .order_by(ClawAgent.agent_id)
+        select(MobileAgent)
+        .where(MobileAgent.tenant_id == user.tenant_id)
+        .order_by(MobileAgent.agent_id)
     )
     return [_agent_dict(agent) for agent in agents]
 
@@ -381,7 +491,7 @@ async def device_ping(agent_id: str, request: Request, db: Session = Depends(get
     body = await request.body()
     if len(body) > 4096:
         raise HTTPException(413, "Ping body too large")
-    tenant_id = request.headers.get("X-Claw-Tenant", "")
+    tenant_id = request.headers.get("X-Mobile-Tenant", "")
     agent = _tenant_agent(db, tenant_id, agent_id) if tenant_id else None
     if agent is None:
         raise HTTPException(401, "Invalid device authentication")
@@ -437,10 +547,10 @@ def list_tasks(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    query = select(CallCenterTask).where(CallCenterTask.tenant_id == user.tenant_id)
+    query = select(AgentOpsTask).where(AgentOpsTask.tenant_id == user.tenant_id)
     if user.role != "admin":
-        query = query.where(CallCenterTask.user_id == user.id)
-    tasks = db.scalars(query.order_by(CallCenterTask.created_at.desc()).limit(limit))
+        query = query.where(AgentOpsTask.user_id == user.id)
+    tasks = db.scalars(query.order_by(AgentOpsTask.created_at.desc()).limit(limit))
     return [_task_dict(task) for task in tasks]
 
 
@@ -478,7 +588,7 @@ async def device_result(task_id: str, request: Request, db: Session = Depends(ge
     body = await request.body()
     if len(body) > 32_000:
         raise HTTPException(413, "Result body too large")
-    task = db.get(CallCenterTask, task_id)
+    task = db.get(AgentOpsTask, task_id)
     if task is None:
         raise HTTPException(401, "Invalid device authentication")
     agent = _tenant_agent(db, task.tenant_id, task.agent_id)
@@ -534,9 +644,9 @@ def audit_tail(
 ):
     entries = list(
         db.scalars(
-            select(CallCenterAuditEntry)
-            .where(CallCenterAuditEntry.tenant_id == admin.tenant_id)
-            .order_by(CallCenterAuditEntry.sequence.desc())
+            select(AgentOpsAuditEntry)
+            .where(AgentOpsAuditEntry.tenant_id == admin.tenant_id)
+            .order_by(AgentOpsAuditEntry.sequence.desc())
             .limit(limit)
         )
     )

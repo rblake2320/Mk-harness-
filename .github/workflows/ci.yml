@@ -8,6 +8,19 @@ on:
 jobs:
   backend-tests:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: mk
+          POSTGRES_PASSWORD: test-postgres-password
+          POSTGRES_DB: mkharness_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U mk -d mkharness_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     defaults: { run: { working-directory: backend } }
     steps:
       - uses: actions/checkout@v4
@@ -18,6 +31,9 @@ jobs:
           cache-dependency-path: backend/requirements.txt
       - run: sudo apt-get update -q && sudo apt-get install -y -q redis-server
       - run: pip install -r requirements.txt
+      - run: alembic upgrade head && alembic check && alembic downgrade base && alembic upgrade head
+        env:
+          DATABASE_URL: postgresql+psycopg://mk:test-postgres-password@localhost:5432/mkharness_test
       - run: python -m pytest -v
         env:
           MK_ALLOW_DEV_SECRETS: "1"

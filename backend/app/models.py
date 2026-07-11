@@ -249,17 +249,16 @@ class AuditLog(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
 
-class ClawAgent(Base):
+class MobileAgent(Base):
     """Tenant-scoped device adapter registration.
 
-    PhoneClaw itself does not currently publish a webhook protocol. ``webhook_url``
-    therefore points at a separately deployed adapter that accepts the versioned,
-    signed work-order envelope produced by this service.
+    ``webhook_url`` points at an operator-controlled adapter that accepts the
+    versioned, signed mobile-work-order envelope produced by this service.
     """
 
-    __tablename__ = "claw_agents"
+    __tablename__ = "mobile_agents"
     __table_args__ = (
-        UniqueConstraint("tenant_id", "agent_id", name="uq_claw_agent_tenant_label"),
+        UniqueConstraint("tenant_id", "agent_id", name="uq_mobile_agent_tenant_label"),
     )
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=uid)
     tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), index=True)
@@ -270,7 +269,7 @@ class ClawAgent(Base):
     platform_specialty: Mapped[str] = mapped_column(String(40), default="multi")
     capabilities_json: Mapped[str] = mapped_column(Text, default="{}")
     adapter_version: Mapped[str] = mapped_column(
-        String(80), default="phoneclaw-clawscript-adapter-v1"
+        String(80), default="mobile-adapter-v1"
     )
     status: Mapped[str] = mapped_column(String(20), default="offline")
     last_ping: Mapped[datetime | None] = mapped_column(
@@ -280,8 +279,8 @@ class ClawAgent(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
 
-class CallCenterTask(Base):
-    __tablename__ = "cc_tasks"
+class AgentOpsTask(Base):
+    __tablename__ = "agent_ops_tasks"
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=uid)
     tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), index=True)
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
@@ -290,7 +289,7 @@ class CallCenterTask(Base):
     payload_json: Mapped[str] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(30), default="pending", index=True)
     result_json: Mapped[str | None] = mapped_column(Text, nullable=True)
-    claw_script_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    work_order_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     compliance_checked: Mapped[bool] = mapped_column(Boolean, default=False)
     requires_approval: Mapped[bool] = mapped_column(Boolean, default=True)
     approved_at: Mapped[datetime | None] = mapped_column(
@@ -308,10 +307,10 @@ class CallCenterTask(Base):
     )
 
 
-class CallCenterContactPermission(Base):
+class AgentOpsContactPermission(Base):
     """Operator-attested permission record; not a legal sufficiency determination."""
 
-    __tablename__ = "cc_contact_permissions"
+    __tablename__ = "agent_ops_contact_permissions"
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=uid)
     tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), index=True)
     created_by: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
@@ -329,8 +328,27 @@ class CallCenterContactPermission(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
 
-class CallCenterAuditHead(Base):
-    __tablename__ = "cc_audit_heads"
+class AgentOpsContactSuppression(Base):
+    """Permanent tenant/channel suppression for a keyed destination."""
+
+    __tablename__ = "agent_ops_contact_suppressions"
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id", "channel", "destination_fingerprint",
+            name="uq_agent_ops_contact_suppression",
+        ),
+    )
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=uid)
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), index=True)
+    created_by: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    channel: Mapped[str] = mapped_column(String(40), index=True)
+    destination_fingerprint: Mapped[str] = mapped_column(String(64), index=True)
+    reason: Mapped[str] = mapped_column(String(40))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class AgentOpsAuditHead(Base):
+    __tablename__ = "agent_ops_audit_heads"
     tenant_id: Mapped[str] = mapped_column(
         ForeignKey("tenants.id"), primary_key=True
     )
@@ -339,15 +357,17 @@ class CallCenterAuditHead(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
 
-class CallCenterAuditEntry(Base):
-    __tablename__ = "cc_audit_entries"
+class AgentOpsAuditEntry(Base):
+    __tablename__ = "agent_ops_audit_entries"
     __table_args__ = (
-        UniqueConstraint("tenant_id", "sequence", name="uq_cc_audit_tenant_sequence"),
+        UniqueConstraint(
+            "tenant_id", "sequence", name="uq_agent_ops_audit_tenant_sequence"
+        ),
     )
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=uid)
     tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), index=True)
     task_id: Mapped[str | None] = mapped_column(
-        ForeignKey("cc_tasks.id"), nullable=True, index=True
+        ForeignKey("agent_ops_tasks.id"), nullable=True, index=True
     )
     agent_id: Mapped[str] = mapped_column(String(80), default="", index=True)
     workflow: Mapped[str] = mapped_column(String(40), default="")
@@ -359,10 +379,12 @@ class CallCenterAuditEntry(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
 
-class ClawCallbackNonce(Base):
-    __tablename__ = "claw_callback_nonces"
+class MobileCallbackNonce(Base):
+    __tablename__ = "mobile_callback_nonces"
     __table_args__ = (
-        UniqueConstraint("tenant_id", "agent_id", "nonce", name="uq_claw_callback_nonce"),
+        UniqueConstraint(
+            "tenant_id", "agent_id", "nonce", name="uq_mobile_callback_nonce"
+        ),
     )
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=uid)
     tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), index=True)

@@ -1,4 +1,4 @@
-"""Translate governed workflow output into a versioned PhoneClaw adapter envelope.
+"""Translate governed workflow output into a versioned mobile-adapter envelope.
 
 The upstream PhoneClaw project documents JavaScript ClawScript helpers but no remote
 webhook protocol. This module therefore targets an operator-controlled adapter, not
@@ -26,7 +26,7 @@ def _js(value: Any) -> str:
 
 
 def _compile_clawscript(steps: list[dict]) -> tuple[str, list[str]]:
-    lines = ['speakText("Starting governed call-center work order");']
+    lines = ['speakText("Starting governed mobile work order");']
     adapter_actions: list[str] = []
     scrape_index = 0
     for step in steps:
@@ -57,7 +57,7 @@ def build(workflow: str, response: str, payload_json: str) -> dict:
     source, adapter_actions = _compile_clawscript(steps)
     return {
         "schema": WORK_ORDER_SCHEMA,
-        "adapter": "phoneclaw-clawscript-adapter-v1",
+        "adapter": "mobile-adapter-v1",
         "upstream_contract": "PhoneClaw ClawScript helper surface at commit c59995b",
         "verified_on_device": False,
         "workflow": workflow,

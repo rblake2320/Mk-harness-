@@ -10,10 +10,17 @@ import re
 from datetime import UTC, datetime
 from urllib.parse import urlsplit
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
-from ..models import CallCenterContactPermission, CallCenterTask, ClawAgent, User
+from ..models import (
+    AgentOpsContactPermission,
+    AgentOpsContactSuppression,
+    AgentOpsTask,
+    MobileAgent,
+    User,
+)
 from .audit import append_event
 from .security import destination_fingerprint
 
@@ -100,30 +107,34 @@ def validate_payload(workflow: str, raw: dict) -> dict:
     return payload
 
 
-def create_task(
-    db: Session,
-    *,
-    user: User,
-    agent: ClawAgent,
-    workflow: str,
-    payload: dict,
-) -> CallCenterTask:
-    payload = validate_payload(workflow, payload)
+def assert_contact_permission(
+    db: Session, tenant_id: str, workflow: str, payload: dict
+) -> None:
+    """Reject direct outreach without current permission or after suppression."""
     if workflow in {"follow_up", "recruit_outreach"}:
         permission_id = str(payload.get("permission_id", ""))
-        permission = db.get(CallCenterContactPermission, permission_id)
+        permission = db.get(AgentOpsContactPermission, permission_id)
         destination = payload["phone"] if workflow == "follow_up" else payload["handle"]
         channel = payload["platform"]
         expected = destination_fingerprint(
             get_settings().master_key_bytes,
-            user.tenant_id,
+            tenant_id,
             channel,
             str(destination),
         )
         now = datetime.now(UTC)
+        suppressed = db.scalar(
+            select(AgentOpsContactSuppression.id).where(
+                AgentOpsContactSuppression.tenant_id == tenant_id,
+                AgentOpsContactSuppression.channel == channel,
+                AgentOpsContactSuppression.destination_fingerprint == expected,
+            )
+        )
+        if suppressed:
+            raise ValueError("destination is permanently suppressed")
         if (
             permission is None
-            or permission.tenant_id != user.tenant_id
+            or permission.tenant_id != tenant_id
             or permission.purpose != "marketing"
             or permission.channel != channel
             or permission.revoked_at is not None
@@ -131,7 +142,19 @@ def create_task(
             or not hmac.compare_digest(permission.destination_fingerprint, expected)
         ):
             raise ValueError("an active matching contact permission is required")
-    task = CallCenterTask(
+
+
+def create_task(
+    db: Session,
+    *,
+    user: User,
+    agent: MobileAgent,
+    workflow: str,
+    payload: dict,
+) -> AgentOpsTask:
+    payload = validate_payload(workflow, payload)
+    assert_contact_permission(db, user.tenant_id, workflow, payload)
+    task = AgentOpsTask(
         tenant_id=user.tenant_id,
         user_id=user.id,
         agent_id=agent.agent_id,

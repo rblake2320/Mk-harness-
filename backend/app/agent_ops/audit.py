@@ -1,4 +1,4 @@
-"""Tenant-scoped hash chain stored atomically with call-center state."""
+"""Tenant-scoped hash chain stored atomically with Agent Operations state."""
 
 from __future__ import annotations
 
@@ -13,9 +13,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..models import (
-    CallCenterAuditEntry,
-    CallCenterAuditHead,
-    CallCenterTask,
+    AgentOpsAuditEntry,
+    AgentOpsAuditHead,
+    AgentOpsTask,
     uid,
 )
 
@@ -42,19 +42,19 @@ def append_event(
     tenant_id: str,
     event: str,
     detail: Any,
-    task: CallCenterTask | None = None,
+    task: AgentOpsTask | None = None,
     agent_id: str = "",
     workflow: str = "",
-) -> CallCenterAuditEntry:
+) -> AgentOpsAuditEntry:
     """Append without committing; the caller commits task and audit together."""
     with _locks[tenant_id]:
         head = db.scalar(
-            select(CallCenterAuditHead)
-            .where(CallCenterAuditHead.tenant_id == tenant_id)
+            select(AgentOpsAuditHead)
+            .where(AgentOpsAuditHead.tenant_id == tenant_id)
             .with_for_update()
         )
         if head is None:
-            head = CallCenterAuditHead(tenant_id=tenant_id)
+            head = AgentOpsAuditHead(tenant_id=tenant_id)
             db.add(head)
             db.flush()
 
@@ -80,7 +80,7 @@ def append_event(
         persistence_fields = {
             key: value for key, value in fields.items() if key != "created_at"
         }
-        entry = CallCenterAuditEntry(
+        entry = AgentOpsAuditEntry(
             **persistence_fields, entry_hash=entry_hash, created_at=created_at
         )
         db.add(entry)
@@ -96,9 +96,9 @@ def append_event(
 def verify_chain(db: Session, tenant_id: str) -> tuple[bool, int, str]:
     entries = list(
         db.scalars(
-            select(CallCenterAuditEntry)
-            .where(CallCenterAuditEntry.tenant_id == tenant_id)
-            .order_by(CallCenterAuditEntry.sequence)
+            select(AgentOpsAuditEntry)
+            .where(AgentOpsAuditEntry.tenant_id == tenant_id)
+            .order_by(AgentOpsAuditEntry.sequence)
         )
     )
     previous = "genesis"
@@ -122,7 +122,7 @@ def verify_chain(db: Session, tenant_id: str) -> tuple[bool, int, str]:
             return False, expected_sequence - 1, "entry_hash_mismatch"
         previous = entry.entry_hash
 
-    head = db.get(CallCenterAuditHead, tenant_id)
+    head = db.get(AgentOpsAuditHead, tenant_id)
     if head is None:
         return (not entries), len(entries), "missing_head" if entries else "empty"
     if head.entry_count != len(entries) or head.last_hash != previous:

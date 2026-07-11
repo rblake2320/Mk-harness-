@@ -15,7 +15,7 @@ SIGNATURE_TTL_SECONDS = 300
 
 
 def agent_aad(tenant_id: str, agent_id: str) -> str:
-    return f"call-center-agent:{tenant_id}:{agent_id}"
+    return f"mobile-agent:{tenant_id}:{agent_id}"
 
 
 def new_agent_token() -> str:
@@ -72,9 +72,9 @@ def sign_request(
         hashlib.sha256,
     ).hexdigest()
     return {
-        "X-Claw-Timestamp": timestamp,
-        "X-Claw-Nonce": nonce,
-        "X-Claw-Signature": signature,
+        "X-Mobile-Timestamp": timestamp,
+        "X-Mobile-Nonce": nonce,
+        "X-Mobile-Signature": signature,
     }
 
 
@@ -101,7 +101,7 @@ def verify_request(
         body,
         timestamp=timestamp,
         nonce=nonce,
-    )["X-Claw-Signature"]
+    )["X-Mobile-Signature"]
     return hmac.compare_digest(expected, signature)
 
 

@@ -27,8 +27,9 @@ from sqlalchemy.orm import Session
 from ..db import get_db
 from ..models import (
     AuditLog,
-    CallCenterContactPermission,
-    CallCenterTask,
+    AgentOpsContactPermission,
+    AgentOpsContactSuppression,
+    AgentOpsTask,
     ConsentRecord,
     ConsultantProfile,
     Conversation,
@@ -137,11 +138,11 @@ def export_account(
         for r in consents
     ]
 
-    # Call-center work orders and operator-attested contact permissions
-    cc_tasks = db.scalars(
-        select(CallCenterTask).where(CallCenterTask.user_id == user.id)
+    # Agent Operations work orders and operator-attested contact permissions
+    agent_operations_tasks = db.scalars(
+        select(AgentOpsTask).where(AgentOpsTask.user_id == user.id)
     ).all()
-    cc_tasks_out = [
+    agent_operations_tasks_out = [
         {
             "id": task.id,
             "agent_id": task.agent_id,
@@ -150,18 +151,18 @@ def export_account(
             "payload": json.loads(task.payload_json),
             "result": json.loads(task.result_json) if task.result_json else None,
             "work_order": (
-                json.loads(task.claw_script_json) if task.claw_script_json else None
+                json.loads(task.work_order_json) if task.work_order_json else None
             ),
             "created_at": task.created_at.isoformat(),
             "completed_at": (
                 task.completed_at.isoformat() if task.completed_at else None
             ),
         }
-        for task in cc_tasks
+        for task in agent_operations_tasks
     ]
     cc_permissions = db.scalars(
-        select(CallCenterContactPermission).where(
-            CallCenterContactPermission.created_by == user.id
+        select(AgentOpsContactPermission).where(
+            AgentOpsContactPermission.created_by == user.id
         )
     ).all()
     cc_permissions_out = [
@@ -179,6 +180,22 @@ def export_account(
             ),
         }
         for permission in cc_permissions
+    ]
+    suppressions = db.scalars(
+        select(AgentOpsContactSuppression).where(
+            AgentOpsContactSuppression.created_by == user.id
+        )
+    ).all()
+    suppressions_out = [
+        {
+            "id": row.id,
+            "channel": row.channel,
+            "destination_fingerprint": row.destination_fingerprint,
+            "reason": row.reason,
+            "created_at": row.created_at.isoformat(),
+            "permanent": True,
+        }
+        for row in suppressions
     ]
 
     # Subscription
@@ -247,8 +264,9 @@ def export_account(
         "conversations": convs_out,
         "skin_analyses": analyses_out,
         "consent_records": consents_out,
-        "call_center_tasks": cc_tasks_out,
-        "call_center_permissions": cc_permissions_out,
+        "agent_operations_tasks": agent_operations_tasks_out,
+        "agent_operations_permissions": cc_permissions_out,
+        "agent_operations_suppressions": suppressions_out,
         "usage_by_provider": usage_by_provider,
     }
 
@@ -312,19 +330,19 @@ def delete_account(
     if prof:
         db.delete(prof)
 
-    # Scrub call-center content while retaining referentially linked audit rows.
+    # Scrub Agent Operations content while retaining linked audit rows.
     for task in db.scalars(
-        select(CallCenterTask).where(CallCenterTask.user_id == uid)
+        select(AgentOpsTask).where(AgentOpsTask.user_id == uid)
     ).all():
         task.payload_json = "{}"
         task.result_json = None
-        task.claw_script_json = None
+        task.work_order_json = None
         task.error_code = "account_deleted"
 
     # Revoke and pseudonymize permission records created by this user.
     for permission in db.scalars(
-        select(CallCenterContactPermission).where(
-            CallCenterContactPermission.created_by == uid
+        select(AgentOpsContactPermission).where(
+            AgentOpsContactPermission.created_by == uid
         )
     ).all():
         permission.revoked_at = permission.revoked_at or datetime.now(timezone.utc)

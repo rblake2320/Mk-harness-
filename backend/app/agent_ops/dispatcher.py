@@ -10,13 +10,14 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from ..db import new_session
-from ..models import CallCenterTask, ClawAgent, Tenant, User
+from ..models import AgentOpsTask, MobileAgent, Tenant, User
 from ..providers.base import ChatMessage, ChatRequest
 from ..providers.router import complete_with_failover
 from ..skills import get_skills, response_has_income_claim, response_leaks_system_prompt
 from .audit import append_event
-from .claw_bridge import build as build_work_order
-from .transport import send_to_phone
+from .mobile_bridge import build as build_work_order
+from .queue import assert_contact_permission
+from .transport import send_to_mobile_agent
 
 _SKILL_MAP = {
     "follow_up": "follow_up",
@@ -33,16 +34,16 @@ def _prompt(workflow: str, payload: dict) -> str:
     )
 
 
-def _agent(db: Session, task: CallCenterTask) -> ClawAgent | None:
+def _agent(db: Session, task: AgentOpsTask) -> MobileAgent | None:
     return db.scalar(
-        select(ClawAgent).where(
-            ClawAgent.tenant_id == task.tenant_id,
-            ClawAgent.agent_id == task.agent_id,
+        select(MobileAgent).where(
+            MobileAgent.tenant_id == task.tenant_id,
+            MobileAgent.agent_id == task.agent_id,
         )
     )
 
 
-async def prepare_task(db: Session, task: CallCenterTask) -> None:
+async def prepare_task(db: Session, task: AgentOpsTask) -> None:
     if task.status != "pending":
         return
     user = db.get(User, task.user_id)
@@ -54,6 +55,21 @@ async def prepare_task(db: Session, task: CallCenterTask) -> None:
     task.updated_at = datetime.now(UTC)
     db.commit()
     payload = json.loads(task.payload_json)
+    try:
+        assert_contact_permission(db, task.tenant_id, task.workflow, payload)
+    except ValueError as exc:
+        task.status = "compliance_blocked"
+        task.compliance_checked = True
+        task.error_code = "contact_permission_invalid"
+        append_event(
+            db,
+            tenant_id=task.tenant_id,
+            task=task,
+            event="CONTACT_PERMISSION_BLOCKED",
+            detail={"reason": str(exc)},
+        )
+        db.commit()
+        return
     response = ""
     if task.workflow in _SKILL_MAP:
         skills = get_skills(tenant.brand)
@@ -65,7 +81,9 @@ async def prepare_task(db: Session, task: CallCenterTask) -> None:
             max_tokens=700,
             temperature=0.5,
         )
-        result = await complete_with_failover(db, user, request, kind="call_center")
+        result = await complete_with_failover(
+            db, user, request, kind="agent_operations"
+        )
         response = result.text
         claim, phrase = response_has_income_claim(response, tenant.brand)
         if claim:
@@ -95,7 +113,7 @@ async def prepare_task(db: Session, task: CallCenterTask) -> None:
             db.commit()
             return
 
-    task.claw_script_json = json.dumps(
+    task.work_order_json = json.dumps(
         build_work_order(task.workflow, response, task.payload_json),
         sort_keys=True,
         separators=(",", ":"),
@@ -116,13 +134,13 @@ async def prepare_task(db: Session, task: CallCenterTask) -> None:
 async def prepare_task_by_id(task_id: str) -> None:
     db = new_session()
     try:
-        task = db.get(CallCenterTask, task_id)
+        task = db.get(AgentOpsTask, task_id)
         if task is None:
             return
         await prepare_task(db, task)
     except Exception as exc:
         db.rollback()
-        task = db.get(CallCenterTask, task_id)
+        task = db.get(AgentOpsTask, task_id)
         if task is not None:
             task.status = "failed"
             task.error_code = type(exc).__name__
@@ -139,21 +157,35 @@ async def prepare_task_by_id(task_id: str) -> None:
         db.close()
 
 
-async def approve_and_dispatch(
-    db: Session, task: CallCenterTask, approver: User
-) -> None:
-    if task.status != "awaiting_approval" or not task.claw_script_json:
+async def approve_and_dispatch(db: Session, task: AgentOpsTask, approver: User) -> None:
+    if task.status != "awaiting_approval" or not task.work_order_json:
         raise ValueError("task is not awaiting approval")
+    try:
+        assert_contact_permission(
+            db, task.tenant_id, task.workflow, json.loads(task.payload_json)
+        )
+    except ValueError as exc:
+        task.status = "compliance_blocked"
+        task.error_code = "contact_permission_invalid"
+        append_event(
+            db,
+            tenant_id=task.tenant_id,
+            task=task,
+            event="CONTACT_PERMISSION_BLOCKED",
+            detail={"reason": str(exc)},
+        )
+        db.commit()
+        raise
     agent = _agent(db, task)
     if agent is None or agent.status != "online":
         raise ValueError("agent is not online")
 
     approved_at = datetime.now(UTC)
     claimed = db.execute(
-        update(CallCenterTask)
+        update(AgentOpsTask)
         .where(
-            CallCenterTask.id == task.id,
-            CallCenterTask.status == "awaiting_approval",
+            AgentOpsTask.id == task.id,
+            AgentOpsTask.status == "awaiting_approval",
         )
         .values(
             status="dispatching",
@@ -175,7 +207,7 @@ async def approve_and_dispatch(
     )
     db.commit()
     try:
-        await send_to_phone(agent, task, json.loads(task.claw_script_json))
+        await send_to_mobile_agent(agent, task, json.loads(task.work_order_json))
     except (httpx.HTTPError, ValueError) as exc:
         task.status = "failed"
         task.error_code = "adapter_delivery_failed"

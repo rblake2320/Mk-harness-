@@ -1,4 +1,4 @@
-"""Signed outbound delivery to an allowlisted PhoneClaw adapter."""
+"""Signed outbound delivery to an allowlisted mobile adapter."""
 
 from __future__ import annotations
 
@@ -8,18 +8,18 @@ from urllib.parse import urlsplit
 import httpx
 
 from ..config import get_settings
-from ..models import CallCenterTask, ClawAgent
+from ..models import AgentOpsTask, MobileAgent
 from .security import decrypt_agent_token, sign_request, validate_webhook_url
 
 
 def callback_url(task_id: str) -> str:
     base = get_settings().agent_operations_public_base_url.rstrip("/")
-    path = f"/api/claw/tasks/{task_id}/result"
+    path = f"/api/agent-ops/tasks/{task_id}/result"
     return f"{base}{path}" if base else path
 
 
-async def send_to_phone(
-    agent: ClawAgent, task: CallCenterTask, work_order: dict
+async def send_to_mobile_agent(
+    agent: MobileAgent, task: AgentOpsTask, work_order: dict
 ) -> None:
     settings = get_settings()
     url = validate_webhook_url(
@@ -42,8 +42,8 @@ async def send_to_phone(
     path = urlsplit(url).path or "/"
     headers = {
         "Content-Type": "application/json",
-        "X-Claw-Agent": agent.agent_id,
-        "X-Claw-Tenant": agent.tenant_id,
+        "X-Mobile-Agent": agent.agent_id,
+        "X-Mobile-Tenant": agent.tenant_id,
         **sign_request(secret, "POST", path, body),
     }
     async with httpx.AsyncClient(
