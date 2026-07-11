@@ -1,4 +1,5 @@
 """MK Consultant Harness API."""
+
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -8,7 +9,17 @@ from fastapi.responses import HTMLResponse
 from .config import get_settings, require_secret
 from .db import init_engine
 from .routes import (
-    account, auth, billing, chat, consent, customers, keys, profile, skin, skindata, usage,
+    account,
+    auth,
+    billing,
+    chat,
+    consent,
+    customers,
+    keys,
+    profile,
+    skin,
+    skindata,
+    usage,
 )
 
 _PRIVACY_HTML = """<!DOCTYPE html>
@@ -40,6 +51,9 @@ how we use it, and your rights.</p>
   <li><strong>Consent records</strong> — timestamps and version hashes of consent agreements
       for skin data processing.</li>
   <li><strong>Usage data</strong> — token counts and cost estimates per AI provider call.</li>
+  <li><strong>Mobile work orders</strong> — workflow inputs, generated instructions,
+      device results, operator-attested contact permission metadata, and keyed
+      permanent contact-suppression records.</li>
   <li><strong>Billing data</strong> — managed by Stripe. We store only a Stripe customer ID;
       card numbers never touch our servers.</li>
 </ul>
@@ -50,6 +64,7 @@ how we use it, and your rights.</p>
   <li>To enforce compliance rules (FTC income-claim filter, consent gates).</li>
   <li>To bill your subscription via Stripe.</li>
   <li>To improve service reliability and detect abuse.</li>
+  <li>To stage, approve, deliver, and audit mobile work orders.</li>
 </ul>
 <p>We do not sell your data to third parties. We do not use your data to train AI models
 without explicit consent.</p>
@@ -72,6 +87,10 @@ time via the app settings, which immediately blocks further processing.</p>
       30 days of account deletion.</li>
   <li>Conversation history: retained for 12 months, then auto-purged.</li>
   <li>Skin analysis scores: retained while the associated customer record exists.</li>
+  <li>Mobile work-order content: retained while the account is active and
+      scrubbed when that account is deleted; audit digests may remain.</li>
+  <li>Contact suppressions: a keyed destination fingerprint and suppression
+      reason may be retained after account deletion to prevent renewed outreach.</li>
   <li>Audit logs: retained for 7 years (legal / compliance requirement).</li>
 </ul>
 
@@ -124,7 +143,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="MK Consultant Harness", version="1.6.2", lifespan=lifespan)
+app = FastAPI(title="MK Consultant Harness", version="1.7.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -134,9 +153,25 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type"],
 )
 
-for r in (auth.router, chat.router, skin.router, customers.router,
-          keys.router, usage.router, profile.router, consent.router, skindata.router,
-          billing.router, account.router):
+routers = [
+    auth.router,
+    chat.router,
+    skin.router,
+    customers.router,
+    keys.router,
+    usage.router,
+    profile.router,
+    consent.router,
+    skindata.router,
+    billing.router,
+    account.router,
+]
+if get_settings().agent_operations_enabled:
+    from .routes import agent_ops
+
+    routers.append(agent_ops.router)
+
+for r in routers:
     app.include_router(r, prefix="/api")
 
 

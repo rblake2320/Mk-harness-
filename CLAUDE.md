@@ -26,7 +26,7 @@ JWT_SECRET=dev-secret-dev-secret-dev-secret-123 \
 MASTER_KEY=$(python3 -c "import os,base64;print(base64.b64encode(os.urandom(32)).decode())") \
 uvicorn app.main:app --reload --port 8000
 
-# Tests (123 tests, all in-process — no live endpoints required)
+# Tests (136 collected as of v1.7.0; 135 passed and 1 skipped in the release run)
 python -m pytest -v
 ```
 
@@ -146,14 +146,18 @@ No other changes required.
 
 ## Schema migrations
 
-v1 uses `Base.metadata.create_all`. Before any breaking schema change, init Alembic:
+Alembic owns application schema changes. Runtime code must not call
+`Base.metadata.create_all`; tests may use it for isolated in-memory fixtures.
 ```bash
 cd backend
-alembic init alembic
-# edit alembic/env.py to import app.models.Base
 alembic revision --autogenerate -m "describe change"
 alembic upgrade head
+alembic check
 ```
+
+`0001` is the v1.6.2 core-schema baseline. Existing pre-Alembic databases must
+be backed up and verified before `alembic stamp 0001`; fresh databases run the
+full chain. `0002` adds Agent Operations.
 
 ---
 
@@ -164,6 +168,11 @@ alembic upgrade head
 | `JWT_SECRET` | Yes | ≥48 hex chars; rotating invalidates all sessions |
 | `MASTER_KEY` | Yes | base64-encoded 32 bytes; rotation needs decrypt-reencrypt script |
 | `POSTGRES_PASSWORD` | Prod | Not needed for SQLite dev |
+| `AGENT_OPERATIONS_ENABLED` | No | Defaults false; router is absent until enabled |
+| `AGENT_OPERATIONS_WEBHOOK_HOSTS` | When enabled | Exact mobile-adapter authorities |
+| `AGENT_OPERATIONS_TARGET_HOSTS` | For portal workflows | Exact booking/carrier authorities |
+| `AGENT_OPERATIONS_PUBLIC_BASE_URL` | When enabled | Public HTTPS callback origin |
+| `AGENT_OPERATIONS_DISPATCH_TIMEOUT_SECONDS` | No | Defaults to 10 seconds |
 | `ANTHROPIC_API_KEY` | No | Central key mode |
 | `OPENAI_API_KEY` | No | Central key mode |
 | `GEMINI_API_KEY` | No | Central key mode |

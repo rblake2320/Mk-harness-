@@ -1,5 +1,6 @@
 """Shared fixtures. SQLite in-memory for speed; identical models run on
 Postgres in production (compose file provisions it)."""
+
 import base64
 import os
 
@@ -14,8 +15,13 @@ os.environ["RATE_LIMIT_PER_MINUTE"] = "1000"
 os.environ["STRIPE_SECRET_KEY"] = "sk_test_dummy"
 os.environ["STRIPE_WEBHOOK_SECRET"] = "whsec_test_dummy"
 os.environ["STRIPE_PRICES"] = (
-    '{"solo:month":"price_solo_m","solo:year":"price_solo_y","director:year":"price_dir_y"}')
+    '{"solo:month":"price_solo_m","solo:year":"price_solo_y","director:year":"price_dir_y"}'
+)
 os.environ["BILLING_TRIAL_DAYS"] = "90"
+os.environ["AGENT_OPERATIONS_ENABLED"] = "true"
+os.environ["AGENT_OPERATIONS_WEBHOOK_HOSTS"] = "phone.example"
+os.environ["AGENT_OPERATIONS_TARGET_HOSTS"] = "carrier.example,booking.example"
+os.environ["AGENT_OPERATIONS_PUBLIC_BASE_URL"] = "https://harness.example"
 # Prevent host-level provider keys from leaking into tests. Tests that need a
 # provider key add one explicitly via the /api/keys endpoint. Without this,
 # any developer machine with ANTHROPIC_API_KEY / OPENAI_API_KEY set will cause
@@ -24,6 +30,7 @@ for _k in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY", "OLLAMA_BASE
     os.environ.pop(_k, None)
 
 from app.config import get_settings  # noqa: E402
+
 get_settings.cache_clear()
 
 from app import db as dbmod  # noqa: E402
@@ -35,8 +42,9 @@ from sqlalchemy import create_engine  # noqa: E402
 from sqlalchemy.orm import sessionmaker  # noqa: E402
 from app.models import Base  # noqa: E402
 
-engine = create_engine("sqlite://", connect_args={"check_same_thread": False},
-                       poolclass=StaticPool)
+engine = create_engine(
+    "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
+)
 Base.metadata.create_all(engine)
 dbmod._engine = engine
 dbmod._SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
@@ -48,10 +56,22 @@ def client():
         yield c
 
 
-def signup(client, org="Pink Org", email="admin@example.com", pw="superSecret123!",
-           key_policy="both"):
-    r = client.post("/api/auth/signup", json={
-        "org_name": org, "email": email, "password": pw, "key_policy": key_policy})
+def signup(
+    client,
+    org="Pink Org",
+    email="admin@example.com",
+    pw="superSecret123!",
+    key_policy="both",
+):
+    r = client.post(
+        "/api/auth/signup",
+        json={
+            "org_name": org,
+            "email": email,
+            "password": pw,
+            "key_policy": key_policy,
+        },
+    )
     assert r.status_code == 201, r.text
     return r.json()
 

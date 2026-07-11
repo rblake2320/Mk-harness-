@@ -9,6 +9,71 @@ Keep `backend/app/main.py`, `web/package.json`, and `mobile/app.json` in sync wi
 
 ---
 
+## [Unreleased]
+
+See `ROADMAP.md` and `PARKED.md` for planned and deliberately deferred work.
+
+### Added
+- Standalone Draft 2020-12 schemas for mobile work orders, device pings,
+  execution state, completion, and failure callbacks.
+- Public non-secret HMAC conformance vector and an upstream source lock that
+  explicitly records the absence of a concrete adapter or device evidence.
+- Loopback-only mobile-adapter simulator with signed callbacks and deterministic
+  accept, reject, first-attempt failure, and unsupported-action modes.
+
+### Changed
+- Production boundaries now validate outbound work orders and inbound device
+  callbacks against the published schemas.
+- Adapter delivery retries transient transport and HTTP failures up to three
+  attempts with a fresh signed nonce per attempt.
+
+### Verified
+- Contract/simulator implementation commit [`4c825bc`](https://github.com/rblake2320/Mk-harness-/commit/4c825bcf1a4e67deb63f0d235d1fbf22a6bda00a).
+- Clean repo-local backend suite: 142 passed, 1 Redis-dependent skip.
+- Agent Operations integration and contract suites: 17 passed.
+- Ruff and `pip-audit -r backend/requirements.txt` passed on July 11, 2026.
+- No concrete mobile adapter or real phone was exercised.
+
+## [1.7.0] — 2026-07-10
+
+### Added
+- Tenant-scoped Agent Operations work orders for SMS follow-up, appointment booking,
+  order status, recruiting outreach, and social posting.
+- Admin-controlled phone-adapter registration with one-time device secrets,
+  AES-GCM storage, HMAC request signing, timestamp bounds, and nonce replay
+  protection.
+- Mandatory human approval before dispatch and an atomic dispatch claim that
+  prevents duplicate approval sends.
+- Operator-attested contact permissions for outbound SMS/DM tasks, including a
+  keyed destination fingerprint, evidence digest, expiry, and revocation gate.
+- Permanent contact suppressions that survive permission revocation and are
+  rechecked immediately before dispatch.
+- Exact allowlists for adapter and customer-portal authorities, with HTTPS-only
+  URL validation and private/reserved IP-literal rejection.
+- Tenant-scoped database audit hash chain and verification/tail endpoints.
+- Alembic core baseline plus an Agent Operations migration; runtime
+  `create_all()` was removed.
+- `LOG.md`, `WHY.md`, and `PARKED.md` for change evidence, decision rationale,
+  restoration conditions, and deferred claims.
+
+### Security
+- Updated pinned dependencies to versions that produced a clean `pip-audit` on
+  July 10, 2026, including FastAPI 0.139.0, Starlette 1.3.1, PyJWT 2.13.0,
+  cryptography 48.0.1, python-multipart 0.0.31, and Pillow 12.2.0.
+- Removed pre-existing unused imports so repository-wide Ruff checks pass.
+
+### Verified
+- Implementation commit [`8af28b7`](https://github.com/rblake2320/Mk-harness-/commit/8af28b71425c5b15aa4a6f73c463b22c97cd87dd).
+- Account portability/erasure follow-up [`fde98ec`](https://github.com/rblake2320/Mk-harness-/commit/fde98ecaaa890a5d22a76d8c7cc54aca232f040d).
+- Disabled-by-default environment gate [`0a03142`](https://github.com/rblake2320/Mk-harness-/commit/0a03142e970e5b21b142ca3e6129e8e8328c5b53).
+- Vendor-neutral naming, suppressions, and migrations [`1888499`](https://github.com/rblake2320/Mk-harness-/commit/188849924b3db5d21f79d9bc2b756af83971705f).
+- Clean repo-local Python environment: 135 passed, 1 skipped.
+- Agent Operations integration suite: 10 passed; migration suite: 2 passed.
+- `pip-audit -r backend/requirements.txt`: no known vulnerabilities found.
+- `npm ci && npm run build`: production build passed; npm audit reported zero.
+- Real PhoneClaw device/adapter execution was not performed; generated envelopes
+  explicitly report `verified_on_device: false`.
+
 ## [1.6.2] — 2026-07-01
 
 ### Fixed — self-audit of v1.6.1 against real-world failure, not happy paths
@@ -77,13 +142,6 @@ Keep `backend/app/main.py`, `web/package.json`, and `mobile/app.json` in sync wi
 - +3 red-team tests: pre-change access token rejected, pre-change refresh
   token rejected, and a token forged with the correct secret but missing the
   `pv` claim rejected.
-
-## [Unreleased]
-
-### Planned
-See `ROADMAP.md` for the forward plan.
-
----
 
 ## [1.4.0] — 2026-06-25
 

@@ -6,10 +6,7 @@ Covers:
   - DELETE /api/account (GDPR erasure)
   - GET /privacy (public, no auth, HTML content)
 """
-import json
 import uuid
-
-import pytest
 
 from .conftest import auth_headers, signup
 

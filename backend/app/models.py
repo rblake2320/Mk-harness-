@@ -247,3 +247,148 @@ class AuditLog(Base):
     action: Mapped[str] = mapped_column(String(60))
     detail: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class MobileAgent(Base):
+    """Tenant-scoped device adapter registration.
+
+    ``webhook_url`` points at an operator-controlled adapter that accepts the
+    versioned, signed mobile-work-order envelope produced by this service.
+    """
+
+    __tablename__ = "mobile_agents"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "agent_id", name="uq_mobile_agent_tenant_label"),
+    )
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=uid)
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), index=True)
+    created_by: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    agent_id: Mapped[str] = mapped_column(String(80), index=True)
+    webhook_url: Mapped[str] = mapped_column(String(2048))
+    secret_ciphertext: Mapped[str] = mapped_column(Text)
+    platform_specialty: Mapped[str] = mapped_column(String(40), default="multi")
+    capabilities_json: Mapped[str] = mapped_column(Text, default="{}")
+    adapter_version: Mapped[str] = mapped_column(
+        String(80), default="mobile-adapter-v1"
+    )
+    status: Mapped[str] = mapped_column(String(20), default="offline")
+    last_ping: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class AgentOpsTask(Base):
+    __tablename__ = "agent_ops_tasks"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=uid)
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    agent_id: Mapped[str] = mapped_column(String(80), index=True)
+    workflow: Mapped[str] = mapped_column(String(40), index=True)
+    payload_json: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(30), default="pending", index=True)
+    result_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    work_order_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    compliance_checked: Mapped[bool] = mapped_column(Boolean, default=False)
+    requires_approval: Mapped[bool] = mapped_column(Boolean, default=True)
+    approved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    approved_by: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id"), nullable=True
+    )
+    audit_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    error_code: Mapped[str] = mapped_column(String(80), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+
+class AgentOpsContactPermission(Base):
+    """Operator-attested permission record; not a legal sufficiency determination."""
+
+    __tablename__ = "agent_ops_contact_permissions"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=uid)
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), index=True)
+    created_by: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    channel: Mapped[str] = mapped_column(String(40), index=True)
+    destination_fingerprint: Mapped[str] = mapped_column(String(64), index=True)
+    purpose: Mapped[str] = mapped_column(String(40), index=True)
+    asserted_basis: Mapped[str] = mapped_column(String(60))
+    source_reference: Mapped[str] = mapped_column(String(500))
+    evidence_digest: Mapped[str] = mapped_column(String(64))
+    granted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class AgentOpsContactSuppression(Base):
+    """Permanent tenant/channel suppression for a keyed destination."""
+
+    __tablename__ = "agent_ops_contact_suppressions"
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id", "channel", "destination_fingerprint",
+            name="uq_agent_ops_contact_suppression",
+        ),
+    )
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=uid)
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), index=True)
+    created_by: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    channel: Mapped[str] = mapped_column(String(40), index=True)
+    destination_fingerprint: Mapped[str] = mapped_column(String(64), index=True)
+    reason: Mapped[str] = mapped_column(String(40))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class AgentOpsAuditHead(Base):
+    __tablename__ = "agent_ops_audit_heads"
+    tenant_id: Mapped[str] = mapped_column(
+        ForeignKey("tenants.id"), primary_key=True
+    )
+    last_hash: Mapped[str] = mapped_column(String(64), default="genesis")
+    entry_count: Mapped[int] = mapped_column(Integer, default=0)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class AgentOpsAuditEntry(Base):
+    __tablename__ = "agent_ops_audit_entries"
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id", "sequence", name="uq_agent_ops_audit_tenant_sequence"
+        ),
+    )
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=uid)
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), index=True)
+    task_id: Mapped[str | None] = mapped_column(
+        ForeignKey("agent_ops_tasks.id"), nullable=True, index=True
+    )
+    agent_id: Mapped[str] = mapped_column(String(80), default="", index=True)
+    workflow: Mapped[str] = mapped_column(String(40), default="")
+    event: Mapped[str] = mapped_column(String(60), index=True)
+    detail_digest: Mapped[str] = mapped_column(String(64))
+    sequence: Mapped[int] = mapped_column(Integer)
+    prev_hash: Mapped[str] = mapped_column(String(64))
+    entry_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class MobileCallbackNonce(Base):
+    __tablename__ = "mobile_callback_nonces"
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id", "agent_id", "nonce", name="uq_mobile_callback_nonce"
+        ),
+    )
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=uid)
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), index=True)
+    agent_id: Mapped[str] = mapped_column(String(80), index=True)
+    nonce: Mapped[str] = mapped_column(String(80))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)

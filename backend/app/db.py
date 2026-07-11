@@ -5,7 +5,6 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from .config import get_settings
-from .models import Base
 
 _engine = None
 _SessionLocal = None
@@ -22,7 +21,6 @@ def init_engine(url: str | None = None):
         kwargs["connect_args"] = {"check_same_thread": False}
     _engine = create_engine(target, pool_pre_ping=True, **kwargs)
     _SessionLocal = sessionmaker(bind=_engine, autoflush=False, expire_on_commit=False)
-    Base.metadata.create_all(_engine)
     return _engine
 
 
@@ -34,3 +32,10 @@ def get_db() -> Generator[Session, None, None]:
         yield db
     finally:
         db.close()
+
+
+def new_session() -> Session:
+    """Create an independent session for background work."""
+    if _SessionLocal is None:
+        init_engine()
+    return _SessionLocal()
