@@ -36,6 +36,10 @@ GitHub run
 subsequently passed backend, web, Docker, and the in-image contract check. That
 run warned that the workflow's GitHub-maintained actions still targeted
 deprecated Node 20; the follow-up pins current major releases by full commit SHA.
+Follow-up run
+[`29140259578`](https://github.com/rblake2320/Mk-harness-/actions/runs/29140259578)
+passed all three jobs with the pinned releases and without those deprecation
+annotations.
 
 ## 2026-07-10 - Governed Mobile Workflows
 
