@@ -119,6 +119,14 @@ Generated envelopes therefore state `verified_on_device: false` until the exact
 adapter build is exercised on a real device. Voice calling and a production
 mobile adapter are not implemented in this release.
 
+The standalone Draft 2020-12 schemas, canonical HMAC test vector, upstream
+source lock, and loopback conformance simulator are in
+[`backend/contracts/agent_ops/v1`](backend/contracts/agent_ops/v1/README.md).
+The simulator validates signatures and schemas, sends signed callbacks, and
+offers deterministic rejection, first-attempt failure, and unsupported-action
+modes. It is a test adapter only; it does not execute phone actions or establish
+real-device compatibility.
+
 Configure exact authorities before registering devices or using portal-based
 workflows. Include a port when the URL uses a non-default port:
 
@@ -141,7 +149,7 @@ for the decisions and deferred claims.
 ## Tests
 
 ```bash
-cd backend && python -m pytest -v    # 136 collected in the v1.7.0 release run
+cd backend && python -m pytest -v    # 143 collected; one local Redis-dependent skip
 ```
 
 Provider adapters are tested against each vendor's documented wire format
@@ -186,9 +194,9 @@ EXIF stripping, and skin-compliance rejection.
 
 ## Honest constraints
 
-Verified in a clean repo-local environment on July 10, 2026: 135 tests passed
+Verified in a clean repo-local environment on July 11, 2026: 142 tests passed
 and 1 environment-dependent Redis durability test skipped. The focused
-Agent Operations suite passed 10/10, two migration tests passed, Ruff reported
+Agent Operations suites passed 17/17, two migration tests passed, Ruff reported
 no violations, `pip-audit` reported
 no known vulnerabilities in the pinned requirements, and the web production
 build completed after `npm ci` with zero npm audit findings. This

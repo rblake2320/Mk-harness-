@@ -13,6 +13,27 @@ Keep `backend/app/main.py`, `web/package.json`, and `mobile/app.json` in sync wi
 
 See `ROADMAP.md` and `PARKED.md` for planned and deliberately deferred work.
 
+### Added
+- Standalone Draft 2020-12 schemas for mobile work orders, device pings,
+  execution state, completion, and failure callbacks.
+- Public non-secret HMAC conformance vector and an upstream source lock that
+  explicitly records the absence of a concrete adapter or device evidence.
+- Loopback-only mobile-adapter simulator with signed callbacks and deterministic
+  accept, reject, first-attempt failure, and unsupported-action modes.
+
+### Changed
+- Production boundaries now validate outbound work orders and inbound device
+  callbacks against the published schemas.
+- Adapter delivery retries transient transport and HTTP failures up to three
+  attempts with a fresh signed nonce per attempt.
+
+### Verified
+- Contract/simulator implementation commit [`4c825bc`](https://github.com/rblake2320/Mk-harness-/commit/4c825bcf1a4e67deb63f0d235d1fbf22a6bda00a).
+- Clean repo-local backend suite: 142 passed, 1 Redis-dependent skip.
+- Agent Operations integration and contract suites: 17 passed.
+- Ruff and `pip-audit -r backend/requirements.txt` passed on July 11, 2026.
+- No concrete mobile adapter or real phone was exercised.
+
 ## [1.7.0] — 2026-07-10
 
 ### Added

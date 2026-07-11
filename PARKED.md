@@ -7,12 +7,14 @@ reason, current replacement, and evidence required before restoration.
 
 - **Parked because:** no upstream HTTP/webhook contract was found.
 - **Current replacement:** signed `consultant-studio.mobile-work-order.v1`
-  envelope delivered to an operator-controlled adapter.
+  envelope, standalone schemas, public HMAC vector, and a loopback conformance
+  simulator for an operator-controlled adapter.
 - **Restore when:** PhoneClaw publishes a versioned remote contract or the
   partner supplies a reviewed adapter specification, and real-device contract
   tests pass for a pinned build.
 - **Links:** [D-001](WHY.md#d-001---use-an-adapter-contract-not-an-invented-phoneclaw-api),
   [implementation](backend/app/agent_ops/mobile_bridge.py),
+  [contract](backend/contracts/agent_ops/v1/README.md),
   [issue #25](https://github.com/rblake2320/Mk-harness-/issues/25).
 
 ## P-002 - Autonomous dispatch without human approval
@@ -72,11 +74,13 @@ reason, current replacement, and evidence required before restoration.
 - **Parked because:** PhoneClaw's documented helper surface does not directly
   cover every input and URL-opening operation used by these workflows.
 - **Current replacement:** those steps remain explicit declarative adapter
-  actions and are never labeled verified on device.
+  actions; the simulator can reject them deterministically and they are never
+  labeled verified on device.
 - **Restore when:** the adapter maps each action to a pinned PhoneClaw build and
   device tests prove input, navigation, result capture, failure, and retry paths.
 - **Links:** [bridge](backend/app/agent_ops/mobile_bridge.py),
   [workflows](backend/app/agent_ops/workflows/),
+  [simulator](backend/app/agent_ops/simulator.py),
   [issue #25](https://github.com/rblake2320/Mk-harness-/issues/25).
 
 ## P-007 - Real customer data

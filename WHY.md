@@ -49,3 +49,14 @@ Unimplemented integrations, stronger evidence properties, and voice calling are
 kept in `PARKED.md` with objective restoration conditions. This prevents a
 roadmap item from being mistaken for a product, security, patent, or compliance
 claim.
+
+## D-007 - Make the adapter boundary executable before partner integration
+
+A prose envelope description is too ambiguous for independent implementations.
+The v1 contract is therefore published as strict JSON Schemas plus a fixed HMAC
+test vector, and the same schemas execute at outbound and callback trust
+boundaries. A loopback-only simulator provides deterministic integration tests
+without pretending to be a PhoneClaw device. Transient delivery retries use a
+fresh nonce while retaining `task_id` as the adapter idempotency key. The
+reviewed PhoneClaw source is pinned separately from the still-absent concrete
+adapter and real-device evidence.

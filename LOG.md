@@ -4,6 +4,33 @@ This is the chronological evidence index. `CHANGELOG.md` describes release
 behavior, `WHY.md` records decisions, and `PARKED.md` preserves deferred or
 removed ideas with restoration conditions.
 
+## 2026-07-11 - Mobile Adapter Contract And Simulator
+
+- **Implementation:** [`4c825bc`](https://github.com/rblake2320/Mk-harness-/commit/4c825bcf1a4e67deb63f0d235d1fbf22a6bda00a)
+- **Actor:** Codex, at the repository owner's request
+- **Scope:** five versioned JSON Schemas, exact-byte HMAC vector, runtime
+  contract validation, bounded transient delivery retry, loopback simulator,
+  Docker contract smoke check, and upstream source lock
+- **Decision:** [D-007](WHY.md#d-007---make-the-adapter-boundary-executable-before-partner-integration)
+- **Still parked:** [P-001](PARKED.md#p-001---direct-phoneclaw-webhook-integration)
+  and [P-006](PARKED.md#p-006---native-execution-of-adapter-required-actions)
+  because no concrete adapter or real device was exercised
+- **Issue:** [#25](https://github.com/rblake2320/Mk-harness-/issues/25)
+
+### Verification evidence
+
+| Check | Result | Boundary |
+|---|---|---|
+| Repo-local `pytest -q` | 142 passed, 1 skipped | Redis durability test skipped because `redis-server` was unavailable locally |
+| Agent Operations integration + contracts | 17 passed | ASGI/HTTP simulation only; no real phone |
+| HMAC vector | Passed | Fixed public vector; no deployment secret |
+| Schema rejection, replay, expiry, duplicate callback, retry, action gap | Passed | Named contract tests |
+| `ruff check app tests` | Passed | Static lint only |
+| `pip-audit -r requirements.txt` | No known vulnerabilities found | Advisory database result on 2026-07-11, not a future guarantee |
+| Docker contract asset check | Pending GitHub CI | Local Docker engine was unavailable |
+| Concrete mobile adapter | Not implemented | Upstream review lock is not an adapter build |
+| Real-device execution | Not performed | `verified_on_device` remains `false` |
+
 ## 2026-07-10 - Governed Mobile Workflows
 
 - **Implementation:** [`8af28b7`](https://github.com/rblake2320/Mk-harness-/commit/8af28b71425c5b15aa4a6f73c463b22c97cd87dd)
