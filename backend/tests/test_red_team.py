@@ -20,7 +20,6 @@ Coverage:
   - Revenue note present for overdue / never-contacted; absent for recent
   - Income claim NOT persisted to Message table after SSE blocking
 """
-import base64
 import io
 import json
 import time

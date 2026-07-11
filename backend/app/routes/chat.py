@@ -16,7 +16,7 @@ from ..providers.router import DEFAULT_CHAIN, NoKeyAvailable, record_usage, reso
 from ..ratelimit import check_rate
 from ..security import get_current_user
 from ..skills import (
-    SKILLS, _PROMPT_LEAK_REPLY, get_skills,
+    _PROMPT_LEAK_REPLY, get_skills,
     response_has_income_claim, response_leaks_system_prompt,
 )
 

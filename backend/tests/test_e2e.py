@@ -457,8 +457,7 @@ def test_daily_suggestions_order(client):
     h = auth_headers(t)
 
     # Create 3 customers: never contacted, recently contacted, old contact
-    never_id  = client.post("/api/customers", headers=h,
-                             json={"name": "Never"}).json()["id"]
+    client.post("/api/customers", headers=h, json={"name": "Never"})
     recent_id = client.post("/api/customers", headers=h,
                              json={"name": "Recent"}).json()["id"]
     old_id    = client.post("/api/customers", headers=h,

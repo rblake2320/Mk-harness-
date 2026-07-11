@@ -6,7 +6,7 @@ from collections.abc import AsyncIterator
 
 import httpx
 
-from .anthropic_openai import _RETRYABLE, _TIMEOUT, _raise_for
+from .anthropic_openai import _TIMEOUT, _raise_for
 from .base import ChatRequest, ChatResult, ProviderAdapter, ProviderError, StreamChunk, Usage
 
 

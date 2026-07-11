@@ -34,3 +34,10 @@ def get_db() -> Generator[Session, None, None]:
         yield db
     finally:
         db.close()
+
+
+def new_session() -> Session:
+    """Create an independent session for background work."""
+    if _SessionLocal is None:
+        init_engine()
+    return _SessionLocal()

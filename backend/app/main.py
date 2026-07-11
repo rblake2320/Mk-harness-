@@ -8,7 +8,7 @@ from fastapi.responses import HTMLResponse
 from .config import get_settings, require_secret
 from .db import init_engine
 from .routes import (
-    account, auth, billing, chat, consent, customers, keys, profile, skin, skindata, usage,
+    account, auth, billing, chat, claw, consent, customers, keys, profile, skin, skindata, usage,
 )
 
 _PRIVACY_HTML = """<!DOCTYPE html>
@@ -124,7 +124,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="MK Consultant Harness", version="1.6.2", lifespan=lifespan)
+app = FastAPI(title="MK Consultant Harness", version="1.7.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -134,9 +134,20 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type"],
 )
 
-for r in (auth.router, chat.router, skin.router, customers.router,
-          keys.router, usage.router, profile.router, consent.router, skindata.router,
-          billing.router, account.router):
+for r in (
+    auth.router,
+    chat.router,
+    skin.router,
+    customers.router,
+    keys.router,
+    usage.router,
+    profile.router,
+    consent.router,
+    skindata.router,
+    billing.router,
+    account.router,
+    claw.router,
+):
     app.include_router(r, prefix="/api")
 
 

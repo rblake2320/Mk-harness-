@@ -41,6 +41,13 @@ class Settings(BaseSettings):
     # e.g. {"solo:month":"price_a","solo:year":"price_b","director:year":"price_c"}
     stripe_prices: str = ""
 
+    # Call-center device bridge. PhoneClaw does not publish a webhook protocol;
+    # these hosts must point at operator-controlled adapters implementing v1.
+    call_center_webhook_hosts: str = ""
+    call_center_target_hosts: str = ""
+    call_center_public_base_url: str = ""
+    call_center_dispatch_timeout_seconds: float = 10.0
+
     model_config = {"env_file": ".env", "extra": "ignore"}
 
     @property
@@ -65,6 +72,22 @@ class Settings(BaseSettings):
         if len(raw) != 32:
             raise RuntimeError("MASTER_KEY must decode to exactly 32 bytes.")
         return raw
+
+    @property
+    def call_center_webhook_host_set(self) -> set[str]:
+        return {
+            host.strip().lower().rstrip(".")
+            for host in self.call_center_webhook_hosts.split(",")
+            if host.strip()
+        }
+
+    @property
+    def call_center_target_host_set(self) -> set[str]:
+        return {
+            host.strip().lower().rstrip(".")
+            for host in self.call_center_target_hosts.split(",")
+            if host.strip()
+        }
 
     @property
     def cors_origin_list(self) -> list[str]:

@@ -16,6 +16,9 @@ os.environ["STRIPE_WEBHOOK_SECRET"] = "whsec_test_dummy"
 os.environ["STRIPE_PRICES"] = (
     '{"solo:month":"price_solo_m","solo:year":"price_solo_y","director:year":"price_dir_y"}')
 os.environ["BILLING_TRIAL_DAYS"] = "90"
+os.environ["CALL_CENTER_WEBHOOK_HOSTS"] = "phone.example"
+os.environ["CALL_CENTER_TARGET_HOSTS"] = "carrier.example,booking.example"
+os.environ["CALL_CENTER_PUBLIC_BASE_URL"] = "https://harness.example"
 # Prevent host-level provider keys from leaking into tests. Tests that need a
 # provider key add one explicitly via the /api/keys endpoint. Without this,
 # any developer machine with ANTHROPIC_API_KEY / OPENAI_API_KEY set will cause
