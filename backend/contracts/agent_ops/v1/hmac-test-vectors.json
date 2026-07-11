@@ -1,0 +1,18 @@
+{
+  "description": "Public conformance vector only. The secret is not used by any deployment.",
+  "algorithm": "hmac-sha256-v1",
+  "canonical_payload": "METHOD\\nPATH\\nTIMESTAMP\\nNONCE\\nLOWERCASE_SHA256_BODY_HEX",
+  "vectors": [
+    {
+      "name": "execution-started-v1",
+      "secret": "not-a-real-secret-for-test-vector",
+      "method": "POST",
+      "path": "/api/agent-ops/tasks/00000000-0000-4000-8000-000000000001/result",
+      "timestamp": "1783728000",
+      "nonce": "test-nonce-0001",
+      "body_utf8": "{\"error_code\":\"\",\"result\":{},\"schema\":\"consultant-studio.mobile-execution-state.v1\",\"status\":\"executing\"}",
+      "body_sha256": "69d8c277719c163c249d2a6371fe39eafd4ae2e9720079bd3cca24d18087f430",
+      "signature_hex": "5c8ac10a0857250b58286cf0a72c74a9211a56d4c6bb232004da0cee4d37c09a"
+    }
+  ]
+}

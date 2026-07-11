@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from urllib.parse import urlsplit
 
@@ -9,7 +10,11 @@ import httpx
 
 from ..config import get_settings
 from ..models import AgentOpsTask, MobileAgent
+from .contracts import validate_contract
 from .security import decrypt_agent_token, sign_request, validate_webhook_url
+
+DELIVERY_ATTEMPTS = 3
+RETRYABLE_STATUS_CODES = {408, 425, 429, 500, 502, 503, 504}
 
 
 def callback_url(task_id: str) -> str:
@@ -32,6 +37,7 @@ async def send_to_mobile_agent(
         "callback_url": callback_url(task.id),
         "callback_auth": "hmac-sha256-v1",
     }
+    validate_contract("work_order", body_obj)
     body = json.dumps(body_obj, sort_keys=True, separators=(",", ":")).encode()
     secret = decrypt_agent_token(
         settings.master_key_bytes,
@@ -40,15 +46,24 @@ async def send_to_mobile_agent(
         agent.agent_id,
     )
     path = urlsplit(url).path or "/"
-    headers = {
-        "Content-Type": "application/json",
-        "X-Mobile-Agent": agent.agent_id,
-        "X-Mobile-Tenant": agent.tenant_id,
-        **sign_request(secret, "POST", path, body),
-    }
     async with httpx.AsyncClient(
         timeout=settings.agent_operations_dispatch_timeout_seconds,
         follow_redirects=False,
     ) as client:
-        response = await client.post(url, content=body, headers=headers)
-    response.raise_for_status()
+        for attempt in range(DELIVERY_ATTEMPTS):
+            headers = {
+                "Content-Type": "application/json",
+                "X-Mobile-Agent": agent.agent_id,
+                "X-Mobile-Tenant": agent.tenant_id,
+                **sign_request(secret, "POST", path, body),
+            }
+            try:
+                response = await client.post(url, content=body, headers=headers)
+                if response.status_code not in RETRYABLE_STATUS_CODES:
+                    response.raise_for_status()
+                    return
+                response.raise_for_status()
+            except (httpx.TransportError, httpx.HTTPStatusError):
+                if attempt + 1 == DELIVERY_ATTEMPTS:
+                    raise
+                await asyncio.sleep(0.25 * (2**attempt))

@@ -57,4 +57,5 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: docker build -t mk-harness-api ./backend
+      - run: docker run --rm --entrypoint python mk-harness-api -c "from app.agent_ops.contracts import validator; validator('work_order')"
       - run: docker build -t mk-harness-web -f web/Dockerfile .

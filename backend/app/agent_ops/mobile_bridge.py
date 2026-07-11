@@ -58,7 +58,10 @@ def build(workflow: str, response: str, payload_json: str) -> dict:
     return {
         "schema": WORK_ORDER_SCHEMA,
         "adapter": "mobile-adapter-v1",
-        "upstream_contract": "PhoneClaw ClawScript helper surface at commit c59995b",
+        "upstream_contract": (
+            "PhoneClaw ClawScript helper surface at commit "
+            "c59995b726a127da16275d2d8e0760408b988542"
+        ),
         "verified_on_device": False,
         "workflow": workflow,
         "steps": steps,

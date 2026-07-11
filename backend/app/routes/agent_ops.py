@@ -14,6 +14,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..agent_ops.audit import append_event, verify_chain
+from ..agent_ops.contracts import ContractValidationError, validate_contract
 from ..agent_ops.dispatcher import approve_and_dispatch, prepare_task_by_id
 from ..agent_ops.queue import WORKFLOWS, create_task
 from ..agent_ops.security import (
@@ -90,10 +91,14 @@ class ApprovalIn(BaseModel):
 
 
 class DevicePingIn(BaseModel):
+    contract_schema: Literal["consultant-studio.mobile-agent-ping.v1"] = Field(
+        alias="schema"
+    )
     status: str = Field(default="online", pattern=r"^(online|busy|offline)$")
 
 
 class DeviceResultIn(BaseModel):
+    contract_schema: str = Field(alias="schema")
     status: str = Field(pattern=r"^(executing|complete|failed)$")
     result: dict = Field(default_factory=dict)
     error_code: str = Field(default="", max_length=80)
@@ -497,8 +502,10 @@ async def device_ping(agent_id: str, request: Request, db: Session = Depends(get
         raise HTTPException(401, "Invalid device authentication")
     _device_auth(request, body, db, agent)
     try:
+        value = json.loads(body)
+        validate_contract("ping", value)
         ping = DevicePingIn.model_validate_json(body)
-    except ValueError:
+    except (ValueError, ContractValidationError):
         raise HTTPException(422, "Invalid ping body")
     agent.status = ping.status
     agent.last_ping = datetime.now(UTC)
@@ -596,8 +603,16 @@ async def device_result(task_id: str, request: Request, db: Session = Depends(ge
         raise HTTPException(401, "Invalid device authentication")
     _device_auth(request, body, db, agent)
     try:
+        value = json.loads(body)
+        if not isinstance(value, dict) or value.get("status") not in {
+            "executing",
+            "complete",
+            "failed",
+        }:
+            raise ContractValidationError("status: unsupported callback state")
+        validate_contract(value["status"], value)
         result = DeviceResultIn.model_validate_json(body)
-    except ValueError:
+    except (ValueError, ContractValidationError):
         raise HTTPException(422, "Invalid result body")
     allowed_from = {"dispatched", "executing"}
     if task.status not in allowed_from:

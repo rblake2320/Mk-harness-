@@ -11,6 +11,7 @@ import httpx
 import respx
 
 from app import db as dbmod
+from app.agent_ops import COMPLETION_SCHEMA, PING_SCHEMA
 from app.agent_ops.security import sign_request
 from app.models import AgentOpsAuditEntry, AgentOpsContactPermission, AgentOpsTask
 from tests.conftest import auth_headers, signup
@@ -83,7 +84,9 @@ def _signed_headers(agent, path, body, **overrides):
 
 def _ping(client, agent):
     path = f"/api/agent-ops/agents/{agent['agent_id']}/ping"
-    body = b'{"status":"online"}'
+    body = json.dumps(
+        {"schema": PING_SCHEMA, "status": "online"}, separators=(",", ":")
+    ).encode()
     response = client.post(
         path, content=body, headers=_signed_headers(agent, path, body)
     )
@@ -192,7 +195,9 @@ def test_device_ping_rejects_tampering_and_replay(client):
     _, headers = _user(client)
     agent = _register(client, headers)
     path = f"/api/agent-ops/agents/{agent['agent_id']}/ping"
-    body = b'{"status":"online"}'
+    body = json.dumps(
+        {"schema": PING_SCHEMA, "status": "online"}, separators=(",", ":")
+    ).encode()
     signed = _signed_headers(agent, path, body)
 
     bad = dict(signed)
@@ -238,7 +243,12 @@ def test_full_task_dispatch_callback_and_audit(client):
 
     path = f"/api/agent-ops/tasks/{task_id}/result"
     result_body = json.dumps(
-        {"status": "complete", "result": {"message_id": "sms-123"}},
+        {
+            "schema": COMPLETION_SCHEMA,
+            "status": "complete",
+            "result": {"message_id": "sms-123"},
+            "error_code": "",
+        },
         separators=(",", ":"),
     ).encode()
     result_headers = _signed_headers(agent, path, result_body)
@@ -249,6 +259,13 @@ def test_full_task_dispatch_callback_and_audit(client):
         client.post(path, content=result_body, headers=result_headers).status_code
         == 409
     )
+    fresh_duplicate_headers = _signed_headers(agent, path, result_body)
+    assert (
+        client.post(
+            path, content=result_body, headers=fresh_duplicate_headers
+        ).status_code
+        == 409
+    )
 
     task = client.get(f"/api/agent-ops/tasks/{task_id}", headers=headers).json()
     assert task["result"] == {"message_id": "sms-123"}
@@ -256,6 +273,33 @@ def test_full_task_dispatch_callback_and_audit(client):
     assert verified.status_code == 200
     assert verified.json()["valid"] is True
     assert verified.json()["entries_checked"] >= 6
+
+
+@respx.mock
+def test_transient_adapter_failure_is_retried(client):
+    _, headers = _user(client)
+    agent = _register(client, headers)
+    _ping(client, agent)
+    permission = _permission(client, headers)
+    respx.post("https://api.anthropic.com/v1/messages").mock(
+        return_value=_anthropic_response()
+    )
+    queued = _queue_follow_up(client, headers, agent["agent_id"], permission["id"])
+    task_id = queued.json()["id"]
+    delivery = respx.post("https://phone.example/work").mock(
+        side_effect=[httpx.Response(503), httpx.Response(202)]
+    )
+    approved = client.post(
+        f"/api/agent-ops/tasks/{task_id}/approve",
+        headers=headers,
+        json={"approved": True},
+    )
+    assert approved.status_code == 200, approved.text
+    assert len(delivery.calls) == 2
+    assert (
+        delivery.calls[0].request.headers["X-Mobile-Nonce"]
+        != delivery.calls[1].request.headers["X-Mobile-Nonce"]
+    )
 
 
 @respx.mock
