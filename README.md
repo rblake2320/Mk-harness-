@@ -14,7 +14,7 @@ required.
 mk-harness/
 ├── backend/          FastAPI · Postgres · multi-tenant · JWT auth
 │   ├── app/providers/   The harness core: 4 adapters + router + failover
-│   └── tests/           132 tests (auth, crypto, isolation, adapters, e2e, red team)
+│   └── tests/           136 tests (auth, crypto, isolation, adapters, e2e, red team)
 ├── packages/sdk/     Shared TypeScript SDK (web + mobile)
 ├── web/              React + Vite web client (dark "vanity mirror" UI)
 ├── mobile/           Expo React Native client (camera skin analysis)
@@ -79,6 +79,7 @@ Local development without Docker:
 
 ```bash
 cd backend && pip install -r requirements.txt
+alembic upgrade head
 MK_ALLOW_DEV_SECRETS=1 JWT_SECRET=dev-secret-dev-secret-dev-secret-123 \
   MASTER_KEY=$(python3 -c "import os,base64;print(base64.b64encode(os.urandom(32)).decode())") \
   uvicorn app.main:app --reload --port 8000
@@ -93,9 +94,9 @@ cd mobile && npm install
 npx expo start
 ```
 
-## Governed phone-agent work orders
+## Governed Mobile Workflows
 
-The `/api/claw` surface queues five workflow types: SMS follow-up, appointment
+The `/api/agent-ops` surface queues five workflow types: SMS follow-up, appointment
 booking, order-status lookup, recruiting outreach, and social posting. Every
 work order is tenant-scoped, checked by the existing content guards, and held
 for explicit human approval before dispatch. Device registration is admin-only;
@@ -116,18 +117,22 @@ This integration targets an operator-controlled adapter. The upstream
 JavaScript ClawScript helpers but does not publish a remote webhook protocol.
 Generated envelopes therefore state `verified_on_device: false` until the exact
 adapter build is exercised on a real device. Voice calling and a production
-PhoneClaw adapter are not implemented in this release.
+mobile adapter are not implemented in this release.
 
 Configure exact authorities before registering devices or using portal-based
 workflows. Include a port when the URL uses a non-default port:
 
 ```bash
-CALL_CENTER_WEBHOOK_HOSTS=adapter.example.com
-CALL_CENTER_TARGET_HOSTS=booking.example.com,carrier.example.com
-CALL_CENTER_PUBLIC_BASE_URL=https://harness.example.com
+AGENT_OPERATIONS_ENABLED=false
+AGENT_OPERATIONS_WEBHOOK_HOSTS=adapter.example.com
+AGENT_OPERATIONS_TARGET_HOSTS=booking.example.com,carrier.example.com
+AGENT_OPERATIONS_PUBLIC_BASE_URL=https://harness.example.com
+AGENT_OPERATIONS_DISPATCH_TIMEOUT_SECONDS=10
 ```
 
-The call-center audit is a tenant-scoped database hash chain. It detects
+Agent Operations is disabled by default; the API router is not mounted until
+the deployment explicitly enables it. Its audit is a tenant-scoped database
+hash chain. It detects
 modification, deletion, truncation, or reordering relative to its retained head,
 but it is not digitally signed, externally anchored, WORM storage, legal proof,
 or a regulatory authorization. See [WHY.md](WHY.md) and [PARKED.md](PARKED.md)
@@ -136,7 +141,7 @@ for the decisions and deferred claims.
 ## Tests
 
 ```bash
-cd backend && python -m pytest -v    # 132 collected in the v1.7.0 release run
+cd backend && python -m pytest -v    # 136 collected in the v1.7.0 release run
 ```
 
 Provider adapters are tested against each vendor's documented wire format
@@ -164,9 +169,11 @@ EXIF stripping, and skin-compliance rejection.
 
 ## Production notes (read before launch)
 
-1. **Migrations:** schema is created via `create_all` for v1. Before your
-   first breaking schema change, adopt Alembic (`alembic init`, autogenerate
-   against `app.models.Base`). Models already use portable types.
+1. **Migrations:** Alembic owns runtime schema creation. Fresh containers run
+   `alembic upgrade head` before the API starts. For a database created by
+   v1.6.2 or earlier, take a backup, verify it matches the v1.6.2 model schema,
+   then run `alembic stamp 0001` followed by `alembic upgrade head` once before
+   deploying v1.7.0. Never stamp an unverified or partially migrated database.
 2. **TLS:** terminate at your load balancer or put Caddy/Traefik in front of
    the web container.
 3. **Key rotation:** to rotate `MASTER_KEY`, decrypt-reencrypt provider_keys
@@ -179,9 +186,10 @@ EXIF stripping, and skin-compliance rejection.
 
 ## Honest constraints
 
-Verified in a clean repo-local environment on July 10, 2026: 131 tests passed
+Verified in a clean repo-local environment on July 10, 2026: 135 tests passed
 and 1 environment-dependent Redis durability test skipped. The focused
-call-center suite passed 8/8, Ruff reported no violations, `pip-audit` reported
+Agent Operations suite passed 10/10, two migration tests passed, Ruff reported
+no violations, `pip-audit` reported
 no known vulnerabilities in the pinned requirements, and the web production
 build completed after `npm ci` with zero npm audit findings. This
 release was not exercised against a real PhoneClaw device, a deployed adapter,

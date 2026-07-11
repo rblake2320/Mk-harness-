@@ -16,7 +16,7 @@ See `ROADMAP.md` and `PARKED.md` for planned and deliberately deferred work.
 ## [1.7.0] — 2026-07-10
 
 ### Added
-- Tenant-scoped call-center work orders for SMS follow-up, appointment booking,
+- Tenant-scoped Agent Operations work orders for SMS follow-up, appointment booking,
   order status, recruiting outreach, and social posting.
 - Admin-controlled phone-adapter registration with one-time device secrets,
   AES-GCM storage, HMAC request signing, timestamp bounds, and nonce replay
@@ -25,9 +25,13 @@ See `ROADMAP.md` and `PARKED.md` for planned and deliberately deferred work.
   prevents duplicate approval sends.
 - Operator-attested contact permissions for outbound SMS/DM tasks, including a
   keyed destination fingerprint, evidence digest, expiry, and revocation gate.
+- Permanent contact suppressions that survive permission revocation and are
+  rechecked immediately before dispatch.
 - Exact allowlists for adapter and customer-portal authorities, with HTTPS-only
   URL validation and private/reserved IP-literal rejection.
 - Tenant-scoped database audit hash chain and verification/tail endpoints.
+- Alembic core baseline plus an Agent Operations migration; runtime
+  `create_all()` was removed.
 - `LOG.md`, `WHY.md`, and `PARKED.md` for change evidence, decision rationale,
   restoration conditions, and deferred claims.
 
@@ -40,8 +44,10 @@ See `ROADMAP.md` and `PARKED.md` for planned and deliberately deferred work.
 ### Verified
 - Implementation commit [`8af28b7`](https://github.com/rblake2320/Mk-harness-/commit/8af28b71425c5b15aa4a6f73c463b22c97cd87dd).
 - Account portability/erasure follow-up [`fde98ec`](https://github.com/rblake2320/Mk-harness-/commit/fde98ecaaa890a5d22a76d8c7cc54aca232f040d).
-- Clean repo-local Python environment: 131 passed, 1 skipped.
-- Call-center integration suite: 8 passed.
+- Disabled-by-default environment gate [`0a03142`](https://github.com/rblake2320/Mk-harness-/commit/0a03142e970e5b21b142ca3e6129e8e8328c5b53).
+- Vendor-neutral naming, suppressions, and migrations [`1888499`](https://github.com/rblake2320/Mk-harness-/commit/188849924b3db5d21f79d9bc2b756af83971705f).
+- Clean repo-local Python environment: 135 passed, 1 skipped.
+- Agent Operations integration suite: 10 passed; migration suite: 2 passed.
 - `pip-audit -r backend/requirements.txt`: no known vulnerabilities found.
 - `npm ci && npm run build`: production build passed; npm audit reported zero.
 - Real PhoneClaw device/adapter execution was not performed; generated envelopes

@@ -8,10 +8,11 @@ derived from those photos** (undertone, Fitzpatrick skin type). In 2026 that der
 is legally sensitive. This document records what the law requires, what we already do,
 and the concrete gaps to close before scaled customer-data handling.
 
-## Phone-agent work orders (v1.7.0)
+## Governed Mobile Workflows (v1.7.0)
 
 - Outbound SMS/DM work requires a matching, unexpired, unrevoked contact
-  permission record. That record is an **operator attestation only**; the system
+  permission record and no permanent suppression. Both are rechecked directly
+  before dispatch. A permission record is an **operator attestation only**; the system
   does not verify evidence authenticity, query the National Do Not Call Registry,
   or determine federal/state/platform legal sufficiency.
 - Every generated work order requires explicit authenticated approval before
