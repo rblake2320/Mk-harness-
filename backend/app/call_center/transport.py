@@ -13,7 +13,7 @@ from .security import decrypt_agent_token, sign_request, validate_webhook_url
 
 
 def callback_url(task_id: str) -> str:
-    base = get_settings().call_center_public_base_url.rstrip("/")
+    base = get_settings().agent_operations_public_base_url.rstrip("/")
     path = f"/api/claw/tasks/{task_id}/result"
     return f"{base}{path}" if base else path
 
@@ -22,7 +22,9 @@ async def send_to_phone(
     agent: ClawAgent, task: CallCenterTask, work_order: dict
 ) -> None:
     settings = get_settings()
-    url = validate_webhook_url(agent.webhook_url, settings.call_center_webhook_host_set)
+    url = validate_webhook_url(
+        agent.webhook_url, settings.agent_operations_webhook_host_set
+    )
     body_obj = {
         **work_order,
         "task_id": task.id,
@@ -45,7 +47,7 @@ async def send_to_phone(
         **sign_request(secret, "POST", path, body),
     }
     async with httpx.AsyncClient(
-        timeout=settings.call_center_dispatch_timeout_seconds,
+        timeout=settings.agent_operations_dispatch_timeout_seconds,
         follow_redirects=False,
     ) as client:
         response = await client.post(url, content=body, headers=headers)

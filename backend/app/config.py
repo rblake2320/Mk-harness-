@@ -1,4 +1,5 @@
 """Application configuration. All secrets come from environment — never hardcoded."""
+
 import base64
 import os
 from functools import lru_cache
@@ -17,7 +18,7 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     ollama_base_url: str = "http://localhost:11434"
 
-    redis_url: str = ""            # e.g. redis://localhost:6379/0; empty = in-process fallback
+    redis_url: str = ""  # e.g. redis://localhost:6379/0; empty = in-process fallback
     rate_limit_per_minute: int = 30
     max_upload_mb: int = 8
     access_token_minutes: int = 30
@@ -29,10 +30,12 @@ class Settings(BaseSettings):
     default_brand: str = "mary_kay"
 
     # Stripe billing (REST API via httpx — no SDK dependency). All from env.
-    stripe_secret_key: str = ""       # sk_live_... / sk_test_...
-    stripe_webhook_secret: str = ""   # whsec_... — verifies inbound webhook signatures
+    stripe_secret_key: str = ""  # sk_live_... / sk_test_...
+    stripe_webhook_secret: str = ""  # whsec_... — verifies inbound webhook signatures
     billing_trial_days: int = 90
-    billing_enforced: bool = False    # when True, AI features require an active/trialing sub
+    billing_enforced: bool = (
+        False  # when True, AI features require an active/trialing sub
+    )
     billing_success_url: str = "http://localhost:5173/billing/success"
     billing_cancel_url: str = "http://localhost:5173/billing/cancel"
     billing_portal_return_url: str = "http://localhost:5173/billing"
@@ -41,18 +44,19 @@ class Settings(BaseSettings):
     # e.g. {"solo:month":"price_a","solo:year":"price_b","director:year":"price_c"}
     stripe_prices: str = ""
 
-    # Call-center device bridge. PhoneClaw does not publish a webhook protocol;
-    # these hosts must point at operator-controlled adapters implementing v1.
-    call_center_webhook_hosts: str = ""
-    call_center_target_hosts: str = ""
-    call_center_public_base_url: str = ""
-    call_center_dispatch_timeout_seconds: float = 10.0
+    # Governed Agent Operations. Disabled unless deployment opts in explicitly.
+    agent_operations_enabled: bool = False
+    agent_operations_webhook_hosts: str = ""
+    agent_operations_target_hosts: str = ""
+    agent_operations_public_base_url: str = ""
+    agent_operations_dispatch_timeout_seconds: float = 10.0
 
     model_config = {"env_file": ".env", "extra": "ignore"}
 
     @property
     def stripe_price_map(self) -> dict[str, str]:
         import json
+
         if not self.stripe_prices:
             return {}
         try:
@@ -64,7 +68,9 @@ class Settings(BaseSettings):
     @property
     def master_key_bytes(self) -> bytes:
         if not self.master_key:
-            raise RuntimeError("MASTER_KEY is not set. Generate 32 random bytes (base64).")
+            raise RuntimeError(
+                "MASTER_KEY is not set. Generate 32 random bytes (base64)."
+            )
         try:
             raw = base64.b64decode(self.master_key, validate=True)
         except Exception:
@@ -74,18 +80,18 @@ class Settings(BaseSettings):
         return raw
 
     @property
-    def call_center_webhook_host_set(self) -> set[str]:
+    def agent_operations_webhook_host_set(self) -> set[str]:
         return {
             host.strip().lower().rstrip(".")
-            for host in self.call_center_webhook_hosts.split(",")
+            for host in self.agent_operations_webhook_hosts.split(",")
             if host.strip()
         }
 
     @property
-    def call_center_target_host_set(self) -> set[str]:
+    def agent_operations_target_host_set(self) -> set[str]:
         return {
             host.strip().lower().rstrip(".")
-            for host in self.call_center_target_hosts.split(",")
+            for host in self.agent_operations_target_hosts.split(",")
             if host.strip()
         }
 

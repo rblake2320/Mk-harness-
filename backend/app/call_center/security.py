@@ -119,7 +119,7 @@ def validate_webhook_url(url: str, allowed_authorities: set[str]) -> str:
         raise ValueError("webhook URL must not contain a query string or fragment")
     authority = parsed.netloc.lower().rstrip(".")
     if authority not in allowed_authorities:
-        raise ValueError("webhook authority is not in CALL_CENTER_WEBHOOK_HOSTS")
+        raise ValueError("webhook authority is not in AGENT_OPERATIONS_WEBHOOK_HOSTS")
     try:
         address = ipaddress.ip_address(parsed.hostname)
     except ValueError:

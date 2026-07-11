@@ -212,7 +212,7 @@ def register_agent(
     settings = get_settings()
     try:
         webhook_url = validate_webhook_url(
-            body.webhook_url, settings.call_center_webhook_host_set
+            body.webhook_url, settings.agent_operations_webhook_host_set
         )
     except ValueError as exc:
         raise HTTPException(422, str(exc))

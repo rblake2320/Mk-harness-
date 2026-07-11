@@ -1,4 +1,5 @@
 """MK Consultant Harness API."""
+
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -8,7 +9,17 @@ from fastapi.responses import HTMLResponse
 from .config import get_settings, require_secret
 from .db import init_engine
 from .routes import (
-    account, auth, billing, chat, claw, consent, customers, keys, profile, skin, skindata, usage,
+    account,
+    auth,
+    billing,
+    chat,
+    consent,
+    customers,
+    keys,
+    profile,
+    skin,
+    skindata,
+    usage,
 )
 
 _PRIVACY_HTML = """<!DOCTYPE html>
@@ -139,7 +150,7 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type"],
 )
 
-for r in (
+routers = [
     auth.router,
     chat.router,
     skin.router,
@@ -151,8 +162,13 @@ for r in (
     skindata.router,
     billing.router,
     account.router,
-    claw.router,
-):
+]
+if get_settings().agent_operations_enabled:
+    from .routes import claw
+
+    routers.append(claw.router)
+
+for r in routers:
     app.include_router(r, prefix="/api")
 
 

@@ -51,8 +51,8 @@ def _https_url(value: str, field: str) -> str:
     if parsed.fragment or len(value) > 2048:
         raise ValueError(f"{field} is invalid")
     authority = parsed.netloc.lower().rstrip(".")
-    if authority not in get_settings().call_center_target_host_set:
-        raise ValueError(f"{field} authority is not in CALL_CENTER_TARGET_HOSTS")
+    if authority not in get_settings().agent_operations_target_host_set:
+        raise ValueError(f"{field} authority is not in AGENT_OPERATIONS_TARGET_HOSTS")
     try:
         address = ipaddress.ip_address(parsed.hostname)
     except ValueError:
