@@ -27,9 +27,15 @@ removed ideas with restoration conditions.
 | Schema rejection, replay, expiry, duplicate callback, retry, action gap | Passed | Named contract tests |
 | `ruff check app tests` | Passed | Static lint only |
 | `pip-audit -r requirements.txt` | No known vulnerabilities found | Advisory database result on 2026-07-11, not a future guarantee |
-| Docker contract asset check | Pending GitHub CI | Local Docker engine was unavailable |
+| Docker contract asset check | Passed in GitHub CI run `29140196647` | Contract schemas loaded from the built API image |
 | Concrete mobile adapter | Not implemented | Upstream review lock is not an adapter build |
 | Real-device execution | Not performed | `verified_on_device` remains `false` |
+
+GitHub run
+[`29140196647`](https://github.com/rblake2320/Mk-harness-/actions/runs/29140196647)
+subsequently passed backend, web, Docker, and the in-image contract check. That
+run warned that the workflow's GitHub-maintained actions still targeted
+deprecated Node 20; the follow-up pins current major releases by full commit SHA.
 
 ## 2026-07-10 - Governed Mobile Workflows
 
