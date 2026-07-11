@@ -75,6 +75,8 @@ time via the app settings, which immediately blocks further processing.</p>
       30 days of account deletion.</li>
   <li>Conversation history: retained for 12 months, then auto-purged.</li>
   <li>Skin analysis scores: retained while the associated customer record exists.</li>
+  <li>Phone-agent work-order content: retained while the account is active and
+      scrubbed when that account is deleted; audit digests may remain.</li>
   <li>Audit logs: retained for 7 years (legal / compliance requirement).</li>
 </ul>
 

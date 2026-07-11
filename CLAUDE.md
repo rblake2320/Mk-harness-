@@ -26,7 +26,7 @@ JWT_SECRET=dev-secret-dev-secret-dev-secret-123 \
 MASTER_KEY=$(python3 -c "import os,base64;print(base64.b64encode(os.urandom(32)).decode())") \
 uvicorn app.main:app --reload --port 8000
 
-# Tests (123 tests, all in-process — no live endpoints required)
+# Tests (132 collected as of v1.7.0; 131 passed and 1 skipped in the release run)
 python -m pytest -v
 ```
 

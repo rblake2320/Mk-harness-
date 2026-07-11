@@ -1,5 +1,5 @@
 # Security & Privacy Posture
-*Last updated: June 24, 2026. Re-verify legal landscape quarterly.*
+*Last updated: July 10, 2026. Re-verify legal landscape quarterly.*
 *This is engineering documentation, not legal advice. Have counsel review before any
 production launch that handles real customer data.*
 
@@ -7,6 +7,27 @@ This product stores customer PII, customer photos (for skin analysis), and **att
 derived from those photos** (undertone, Fitzpatrick skin type). In 2026 that derived data
 is legally sensitive. This document records what the law requires, what we already do,
 and the concrete gaps to close before scaled customer-data handling.
+
+## Phone-agent work orders (v1.7.0)
+
+- Outbound SMS/DM work requires a matching, unexpired, unrevoked contact
+  permission record. That record is an **operator attestation only**; the system
+  does not verify evidence authenticity, query the National Do Not Call Registry,
+  or determine federal/state/platform legal sufficiency.
+- Every generated work order requires explicit authenticated approval before
+  dispatch. Adapter and portal authorities are exact allowlists.
+- Device messages use HMAC authentication, timestamp limits, and nonce replay
+  rejection. Device secrets are returned once and encrypted at rest.
+- Work-order content is included in account export and scrubbed on account
+  deletion. Permission records created by the user are revoked and pseudonymized.
+- The audit chain is tamper-evident only relative to its retained database head.
+  It is not signed, externally anchored, WORM-backed, legal proof, or an
+  authorization artifact.
+- Voice calling is not implemented. See [PARKED.md](PARKED.md) before describing
+  the feature externally.
+
+Current primary guidance: [FTC Telemarketing Sales Rule](https://www.ftc.gov/business-guidance/resources/complying-telemarketing-sales-rule)
+and [FCC 24-17 on AI-generated voice calls](https://docs.fcc.gov/public/attachments/FCC-24-17A1.pdf).
 
 ---
 

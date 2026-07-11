@@ -14,7 +14,7 @@ required.
 mk-harness/
 ├── backend/          FastAPI · Postgres · multi-tenant · JWT auth
 │   ├── app/providers/   The harness core: 4 adapters + router + failover
-│   └── tests/           123 tests (auth, crypto, isolation, adapters, e2e, red team)
+│   └── tests/           132 tests (auth, crypto, isolation, adapters, e2e, red team)
 ├── packages/sdk/     Shared TypeScript SDK (web + mobile)
 ├── web/              React + Vite web client (dark "vanity mirror" UI)
 ├── mobile/           Expo React Native client (camera skin analysis)
@@ -93,10 +93,50 @@ cd mobile && npm install
 npx expo start
 ```
 
+## Governed phone-agent work orders
+
+The `/api/claw` surface queues five workflow types: SMS follow-up, appointment
+booking, order-status lookup, recruiting outreach, and social posting. Every
+work order is tenant-scoped, checked by the existing content guards, and held
+for explicit human approval before dispatch. Device registration is admin-only;
+adapter secrets are returned once, stored with AES-GCM, and used for HMAC-signed
+delivery, ping, and result callbacks with replay protection.
+
+Outbound SMS and direct-message tasks also require an active, matching contact
+permission record. The record stores a keyed destination fingerprint, asserted
+basis, evidence digest, expiry, and revocation status. It is an operator
+attestation, not independent verification that consent satisfies federal, state,
+platform, or campaign-specific requirements. Review the current
+[FTC Telemarketing Sales Rule guidance](https://www.ftc.gov/business-guidance/resources/complying-telemarketing-sales-rule)
+and [FCC AI voice ruling](https://docs.fcc.gov/public/attachments/FCC-24-17A1.pdf)
+with qualified counsel before enabling consumer outreach.
+
+This integration targets an operator-controlled adapter. The upstream
+[PhoneClaw repository](https://github.com/rohanarun/phoneclaw) documents
+JavaScript ClawScript helpers but does not publish a remote webhook protocol.
+Generated envelopes therefore state `verified_on_device: false` until the exact
+adapter build is exercised on a real device. Voice calling and a production
+PhoneClaw adapter are not implemented in this release.
+
+Configure exact authorities before registering devices or using portal-based
+workflows. Include a port when the URL uses a non-default port:
+
+```bash
+CALL_CENTER_WEBHOOK_HOSTS=adapter.example.com
+CALL_CENTER_TARGET_HOSTS=booking.example.com,carrier.example.com
+CALL_CENTER_PUBLIC_BASE_URL=https://harness.example.com
+```
+
+The call-center audit is a tenant-scoped database hash chain. It detects
+modification, deletion, truncation, or reordering relative to its retained head,
+but it is not digitally signed, externally anchored, WORM storage, legal proof,
+or a regulatory authorization. See [WHY.md](WHY.md) and [PARKED.md](PARKED.md)
+for the decisions and deferred claims.
+
 ## Tests
 
 ```bash
-cd backend && python -m pytest -v    # 123 tests
+cd backend && python -m pytest -v    # 132 collected in the v1.7.0 release run
 ```
 
 Provider adapters are tested against each vendor's documented wire format
@@ -139,9 +179,11 @@ EXIF stripping, and skin-compliance rejection.
 
 ## Honest constraints
 
-Built and verified in a sandboxed container: backend test suite (123/123),
-live server smoke test, and web production build all pass here. What I could
-not do from the container: hit OpenAI/Gemini live endpoints (network
-egress), run an iOS/Android simulator (Expo client is code-complete and
-mirrors the tested web flows through the same SDK, but needs a device run),
-or deploy to your infrastructure. First-run checklist is in "Run it" above.
+Verified in a clean repo-local environment on July 10, 2026: 131 tests passed
+and 1 environment-dependent Redis durability test skipped. The focused
+call-center suite passed 8/8, Ruff reported no violations, `pip-audit` reported
+no known vulnerabilities in the pinned requirements, and the web production
+build completed after `npm ci` with zero npm audit findings. This
+release was not exercised against a real PhoneClaw device, a deployed adapter,
+live AI-provider endpoints, an iOS/Android simulator, or production
+infrastructure. First-run instructions are in "Run it" above.
