@@ -9,7 +9,7 @@ import respx
 
 from app import db as dbmod
 from app.call_center.security import sign_request
-from app.models import CallCenterAuditEntry
+from app.models import CallCenterAuditEntry, CallCenterContactPermission, CallCenterTask
 from tests.conftest import auth_headers, signup
 
 
@@ -358,3 +358,48 @@ def test_audit_tampering_is_detected(client):
     result = client.get("/api/claw/audit/verify", headers=headers).json()
     assert result["valid"] is False
     assert result["reason"] == "entry_hash_mismatch"
+
+
+def test_account_export_and_erasure_cover_call_center_data(client):
+    _, headers = _user(client)
+    agent = _register(client, headers)
+    permission = _permission(client, headers)
+    queued = client.post(
+        "/api/claw/tasks",
+        headers=headers,
+        json={
+            "workflow": "order_status",
+            "agent_id": agent["agent_id"],
+            "payload": {
+                "portal_url": "https://carrier.example",
+                "order_id": "PRIVATE-ORDER-42",
+            },
+        },
+    )
+    assert queued.status_code == 202
+    task_id = queued.json()["id"]
+
+    exported = client.get("/api/account/export", headers=headers)
+    assert exported.status_code == 200
+    data = exported.json()
+    assert data["call_center_tasks"][0]["payload"]["order_id"] == "PRIVATE-ORDER-42"
+    assert data["call_center_permissions"][0]["id"] == permission["id"]
+
+    deleted = client.request(
+        "DELETE",
+        "/api/account",
+        headers=headers,
+        json={"password": "superSecret123!"},
+    )
+    assert deleted.status_code == 200, deleted.text
+    db = dbmod._SessionLocal()
+    try:
+        task = db.get(CallCenterTask, task_id)
+        stored_permission = db.get(CallCenterContactPermission, permission["id"])
+        assert task.payload_json == "{}"
+        assert task.claw_script_json is None
+        assert task.error_code == "account_deleted"
+        assert stored_permission.source_reference == "deleted"
+        assert stored_permission.revoked_at is not None
+    finally:
+        db.close()

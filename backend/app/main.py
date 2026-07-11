@@ -40,6 +40,8 @@ how we use it, and your rights.</p>
   <li><strong>Consent records</strong> — timestamps and version hashes of consent agreements
       for skin data processing.</li>
   <li><strong>Usage data</strong> — token counts and cost estimates per AI provider call.</li>
+  <li><strong>Phone-agent work orders</strong> — workflow inputs, generated instructions,
+      device results, and operator-attested contact permission metadata.</li>
   <li><strong>Billing data</strong> — managed by Stripe. We store only a Stripe customer ID;
       card numbers never touch our servers.</li>
 </ul>
@@ -50,6 +52,7 @@ how we use it, and your rights.</p>
   <li>To enforce compliance rules (FTC income-claim filter, consent gates).</li>
   <li>To bill your subscription via Stripe.</li>
   <li>To improve service reliability and detect abuse.</li>
+  <li>To stage, approve, deliver, and audit phone-agent work orders.</li>
 </ul>
 <p>We do not sell your data to third parties. We do not use your data to train AI models
 without explicit consent.</p>
