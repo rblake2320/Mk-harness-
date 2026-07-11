@@ -35,6 +35,16 @@ removed ideas with restoration conditions.
 | PhoneClaw upstream review | ClawScript helper API found; no HTTP/webhook contract found | Reviewed `rohanarun/phoneclaw` main at `c59995b` |
 | Real-device execution | Not performed | `verified_on_device` remains `false` |
 
+### Tracked production gates
+
+- [#21 device-token lifecycle](https://github.com/rblake2320/Mk-harness-/issues/21)
+- [#22 durable queue](https://github.com/rblake2320/Mk-harness-/issues/22)
+- [#23 stale-task recovery](https://github.com/rblake2320/Mk-harness-/issues/23)
+- [#24 PII redaction and retention](https://github.com/rblake2320/Mk-harness-/issues/24)
+- [#25 schema and adapter simulator](https://github.com/rblake2320/Mk-harness-/issues/25)
+- [#26 opt-out/suppression synchronization](https://github.com/rblake2320/Mk-harness-/issues/26)
+- [#27 signed receipts and external anchoring](https://github.com/rblake2320/Mk-harness-/issues/27)
+
 ### Rollback
 
 For an application-only rollback, revert `1888499`, `0a03142`, `fde98ec`, then

@@ -12,7 +12,8 @@ reason, current replacement, and evidence required before restoration.
   partner supplies a reviewed adapter specification, and real-device contract
   tests pass for a pinned build.
 - **Links:** [D-001](WHY.md#d-001---use-an-adapter-contract-not-an-invented-phoneclaw-api),
-  [implementation](backend/app/agent_ops/mobile_bridge.py).
+  [implementation](backend/app/agent_ops/mobile_bridge.py),
+  [issue #25](https://github.com/rblake2320/Mk-harness-/issues/25).
 
 ## P-002 - Autonomous dispatch without human approval
 
@@ -49,7 +50,8 @@ reason, current replacement, and evidence required before restoration.
   anchoring, deletion/truncation monitoring, retention controls, and independent
   assessment are complete.
 - **Links:** [D-004](WHY.md#d-004---keep-audit-data-tenant-scoped-and-transactional),
-  [audit implementation](backend/app/agent_ops/audit.py).
+  [audit implementation](backend/app/agent_ops/audit.py),
+  [issue #27](https://github.com/rblake2320/Mk-harness-/issues/27).
 
 ## P-005 - National Do Not Call and jurisdiction automation
 
@@ -62,7 +64,8 @@ reason, current replacement, and evidence required before restoration.
   ownership, suppression synchronization, and periodic quality-control tests are
   implemented.
 - **Links:** [D-003](WHY.md#d-003---gate-direct-outreach-on-a-recorded-permission),
-  [permission API](backend/app/routes/agent_ops.py).
+  [permission API](backend/app/routes/agent_ops.py),
+  [issue #26](https://github.com/rblake2320/Mk-harness-/issues/26).
 
 ## P-006 - Native execution of adapter-required actions
 
@@ -73,4 +76,28 @@ reason, current replacement, and evidence required before restoration.
 - **Restore when:** the adapter maps each action to a pinned PhoneClaw build and
   device tests prove input, navigation, result capture, failure, and retry paths.
 - **Links:** [bridge](backend/app/agent_ops/mobile_bridge.py),
-  [workflows](backend/app/agent_ops/workflows/).
+  [workflows](backend/app/agent_ops/workflows/),
+  [issue #25](https://github.com/rblake2320/Mk-harness-/issues/25).
+
+## P-007 - Real customer data
+
+- **Parked because:** work orders and results can contain direct and scraped PII;
+  configurable retention, scheduled purge, and comprehensive log-redaction
+  enforcement are not implemented.
+- **Current replacement:** synthetic data only, account export/scrubbing, keyed
+  destination fingerprints, and a disabled-by-default feature flag.
+- **Restore when:** field classification, redaction tests, retention enforcement,
+  backup handling, and privacy/legal review are complete.
+- **Links:** [issue #24](https://github.com/rblake2320/Mk-harness-/issues/24).
+
+## P-008 - Unattended production execution
+
+- **Parked because:** accepted preparation jobs use process-local background work,
+  stale-task leases/recovery are absent, and device tokens cannot rotate or revoke.
+- **Current replacement:** disabled-by-default routing, explicit human approval,
+  and operator monitoring in non-production environments.
+- **Restore when:** durable queueing, stale-task recovery, and token lifecycle work
+  meet their acceptance criteria and pass restart/crash testing.
+- **Links:** [issue #21](https://github.com/rblake2320/Mk-harness-/issues/21),
+  [issue #22](https://github.com/rblake2320/Mk-harness-/issues/22),
+  [issue #23](https://github.com/rblake2320/Mk-harness-/issues/23).
