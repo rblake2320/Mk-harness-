@@ -536,3 +536,26 @@ class KnowledgeSource(Base):
     version: Mapped[int] = mapped_column(Integer, default=1)
     audit_ref: Mapped[str] = mapped_column(String(32), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class ApprovedClaim(Base):
+    """Approved-claims registry (P1). The model may SELECT a claim id; it never writes
+    claim text. Claims are versioned, market-scoped, time-bounded and reviewed."""
+    __tablename__ = "approved_claims"
+    __table_args__ = (UniqueConstraint("tenant_id", "claim_id", "source_version", name="uq_claim_version"),)
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=uid)
+    tenant_id: Mapped[str | None] = mapped_column(ForeignKey("tenants.id"), nullable=True, index=True)  # None = platform-wide
+    claim_id: Mapped[str] = mapped_column(String(64), index=True)
+    product_id: Mapped[str] = mapped_column(String(64), index=True)
+    approved_text: Mapped[str] = mapped_column(Text)
+    source_id: Mapped[str] = mapped_column(ForeignKey("knowledge_sources.id"), index=True)
+    source_reference: Mapped[str] = mapped_column(String(256))
+    source_version: Mapped[str] = mapped_column(String(64))
+    market: Mapped[str] = mapped_column(String(8), default="US")
+    effective_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    reviewer: Mapped[str] = mapped_column(String(120), default="")
+    review_status: Mapped[str] = mapped_column(String(16), default="pending")  # pending | approved | withdrawn
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    audit_ref: Mapped[str] = mapped_column(String(32), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)

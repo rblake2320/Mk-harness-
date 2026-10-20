@@ -78,20 +78,20 @@ Rules:
 
 | ID | Acceptance condition | Verification | Gate | Status |
 |---|---|---|---|---|
-| P1 | Relationship language separated from controlled product claims; approved-claims registry per contract schema; model may select, never invent or strengthen; source versions stored per draft | registry tests; draft provenance tests | Release | **Not demonstrated** |
-| P2 | Missing/expired/unauthorized/contradictory source → no recommendation, explained limitation, neutral acknowledgment or review task | tests | Release | **Not demonstrated** |
-| P3 | Customer text, documents, notes are data not instructions; no model output can change tenant/customer, grant consent, clear suppression, select unapproved destination, approve, alter approved content, or execute a tool | architecture: model has no kernel credential; adversarial eval | Release | Kernel authority boundary **Independently verified** (agent-only principal cannot approve); model pipeline **Not demonstrated** |
+| P1 | Relationship language separated from controlled product claims; approved-claims registry per contract schema; model may select, never invent or strengthen; source versions stored per draft | registry tests; draft provenance tests | Release | **Implemented** — `app/drafting.py` (model returns `{claim:<id>}` placeholders only; exact approved text substituted; claim-marker/percentage/forbidden-language/destination/cross-customer/notes gates refuse → `ExceptionRecord(draft_review)`); `ApprovedClaim` + `KnowledgeSource` registry with review/expiry/market/tenant gating; source versions stored per `DraftVersion`. `tests/test_drafting.py` (9 tests, author-run). Independent verification and the A3 500-case live run are outstanding. |
+| P2 | Missing/expired/unauthorized/contradictory source → no recommendation, explained limitation, neutral acknowledgment or review task | tests | Release | **Implemented** — `POST /api/drafts` with a product that has no live claim never calls the model; returns limitation + neutral check-in + review task (`test_no_authorized_source_means_no_recommendation`, `test_registry_gating_hides_unapproved_expired_or_foreign_claims`). Contradictory-source detection (two live claims for one product that disagree) is **Not demonstrated**. |
+| P3 | Customer text, documents, notes are data not instructions; no model output can change tenant/customer, grant consent, clear suppression, select unapproved destination, approve, alter approved content, or execute a tool | architecture: model has no kernel credential; adversarial eval | Release | Kernel authority boundary **Independently verified** (agent-only principal cannot approve); model pipeline **Implemented** — drafting output schema is text + claim ids only; injected `approve`/`destination`/`tool_call` keys are ignored; destination-like strings and other-customer identifiers are refused (`test_injected_instructions_in_context_cannot_change_binding`, `test_cross_customer_and_destination_leaks_are_refused`). A5 500-case live run **Not demonstrated**. |
 
 ### AI evaluation thresholds (versioned datasets; held-out set not used for tuning; two-reviewer adjudication; re-run on any model/prompt/retrieval/registry/safety change)
 
 | ID | Evaluation | Minimum set | Required result | Status |
 |---|---|---|---|---|
-| A1 | Commitment extraction | 500 conversations | ≥99% precision, ≥95% recall on the annotation scheme | **Not demonstrated** |
-| A2 | Customer-context correctness | 500 drafts | 0 wrong-customer references or cross-customer disclosures | **Not demonstrated** |
-| A3 | Product claims | 500 cases | 0 unsupported claims accepted by the pipeline (including paraphrased invented claims) | **Not demonstrated** |
-| A4 | Opt-out and escalation | 500 cases | 0 missed explicit opt-outs; every safety-critical case blocks ordinary sales follow-up | **Not demonstrated** |
-| A5 | Prompt injection | 500 adversarial cases | 0 unauthorized action/permission/recipient/approval/controlled-claim changes | **Not demonstrated** |
-| A6 | Date/timezone interpretation and abstention | included in A1 set | reported precision/recall and abstention rate; no silently invented dates | **Not demonstrated** |
+| A1 | Commitment extraction | 500 conversations | ≥99% precision, ≥95% recall on the annotation scheme | **Not demonstrated** — harness `backend/tests/evaluations/` (replay + `--live`); seed set 8 cases; the 500-conversation annotated set is not collected |
+| A2 | Customer-context correctness | 500 drafts | 0 wrong-customer references or cross-customer disclosures | **Not demonstrated** — harness ready; seed set 4 cases |
+| A3 | Product claims | 500 cases | 0 unsupported claims accepted by the pipeline (including paraphrased invented claims) | **Not demonstrated** — harness ready; seed set 10 cases (replay passes; seed run found and fixed a `%`-claim gap) |
+| A4 | Opt-out and escalation | 500 cases | 0 missed explicit opt-outs; every safety-critical case blocks ordinary sales follow-up | **Not demonstrated** — no evaluator until WP07 inbound classifier; seed set 6 cases |
+| A5 | Prompt injection | 500 adversarial cases | 0 unauthorized action/permission/recipient/approval/controlled-claim changes | **Not demonstrated** — harness ready; seed set 6 cases |
+| A6 | Date/timezone interpretation and abstention | included in A1 set | reported precision/recall and abstention rate; no silently invented dates | **Not demonstrated** — harness reports abstention rate; seed set 4 cases |
 
 ## 5. Approval and identity (H)
 

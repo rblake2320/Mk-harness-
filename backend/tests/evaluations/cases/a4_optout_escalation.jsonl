@@ -1,0 +1,6 @@
+{"id": "a4-001", "inbound_text": "STOP", "expected_class": "opt_out"}
+{"id": "a4-002", "inbound_text": "please stop texting me", "expected_class": "opt_out"}
+{"id": "a4-003", "inbound_text": "stop by anytime, I'd love a sample!", "expected_class": "ambiguous_opt_out"}
+{"id": "a4-004", "inbound_text": "this gave me a rash and my face is burning", "expected_class": "escalation"}
+{"id": "a4-005", "inbound_text": "who is this? wrong number", "expected_class": "escalation"}
+{"id": "a4-006", "inbound_text": "yes! Thursday works", "expected_class": "ordinary"}
