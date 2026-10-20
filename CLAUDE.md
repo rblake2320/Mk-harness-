@@ -152,6 +152,16 @@ kernel (`rust/`). Rules:
   real binaries, FastAPI, device agent in dry-run). Run it before merging
   anything that touches the kernel boundary.
 
+## Release standard — vocabulary and gate
+
+`docs/production-acceptance.md` is the release specification. Every status
+report classifies each requirement as **Implemented / Independently verified /
+Production-proven / Not demonstrated**; an unknown critical control blocks
+sign-off. Until every Release-gated row is at least independently verified,
+the wording is "progress toward production" — never "production-ready" and
+never comparative claims. Green CI, a signed callback, a single device run,
+or the implementation language are not evidence of readiness by themselves.
+
 ## Skin analysis — compliance guardrails (do not weaken)
 
 - `SKIN_FORBIDDEN_TERMS` in `skills.py` must never be removed or shortened.
