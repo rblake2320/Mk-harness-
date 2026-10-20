@@ -70,7 +70,23 @@ check "relay cannot read approvals"         q_fails "$RELAY_URL" "SELECT 1 FROM 
 check "relay cannot read actions payloads"  q_fails "$RELAY_URL" "SELECT 1 FROM kernel.actions LIMIT 1"
 check "readonly cannot write kill switches" q_fails "$RO_URL" "INSERT INTO kernel.kill_switches (scope,tenant_id,dispatch_enabled,changed_by) VALUES ('global',NULL,false,'x')"
 check "worker can discover tenants (RLS policy present)" q_eq "$PG_ADMIN_URL" "SELECT count(*) FROM pg_policy WHERE polname='worker_tenant_discovery'" 1
-check "RLS forced on every tenant table"    q_eq "$PG_ADMIN_URL" "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='kernel' AND c.relkind='r' AND c.relrowsecurity AND NOT c.relforcerowsecurity" 0
+# Every table that carries a tenant_id column must have RLS ENABLED *and* FORCED
+# (the migration's list); assertion_jtis and kill_switches are the only
+# intentional exceptions. Counting "enabled but not forced" alone would pass a
+# table where RLS was disabled outright.
+rls_ok() {
+  local bad
+  bad=$(q "$PG_ADMIN_URL" "SELECT string_agg(c.relname, ',') FROM pg_class c
+          JOIN pg_namespace n ON n.oid = c.relnamespace
+          JOIN pg_attribute a ON a.attrelid = c.oid AND a.attname = 'tenant_id' AND NOT a.attisdropped
+         WHERE n.nspname = 'kernel' AND c.relkind = 'r'
+           AND c.relname NOT IN ('assertion_jtis','kill_switches')
+           AND NOT (c.relrowsecurity AND c.relforcerowsecurity)")
+  [ -z "$bad" ] || { echo "    tables without enabled+forced RLS: $bad" >&2; return 1; }
+  # and the list is non-trivial (schema present)
+  [ "$(q "$PG_ADMIN_URL" "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='kernel' AND c.relkind='r' AND c.relrowsecurity AND c.relforcerowsecurity")" -ge 16 ]
+}
+check "RLS enabled AND forced on every tenant-scoped table (16+)" rls_ok
 check "no runtime login owns kernel tables" q_eq "$PG_ADMIN_URL" "SELECT count(*) FROM pg_tables WHERE schemaname='kernel' AND tableowner LIKE 'mk_%login'" 0
 
 echo "== 5. kill switches"
@@ -103,14 +119,32 @@ check "compose: no private key in kernel services, no published kernel ports, al
 case "${MK_MOBILE_INTAKE_URL:-}" in https://*) ok "MK_MOBILE_INTAKE_URL is https";; "") fail "MK_MOBILE_INTAKE_URL unset";; *) fail "MK_MOBILE_INTAKE_URL must be https (got ${MK_MOBILE_INTAKE_URL%%:*})";; esac
 
 echo "== 8. enable gate"
+WORKDIR_PROBLEMS=$(mktemp); trap 'rm -f "$WORKDIR_PROBLEMS"' EXIT
 if [ "$FOR_ENABLE" = 1 ]; then
   REC="${MK_ACCEPTANCE_RECORD:-$ROOT/deploy/kernel/ACCEPTANCE.md}"
   if [ -f "$REC" ]; then
-    missing=""
-    for f in "Device:" "Android:" "Kernel commit:" "Agent commit:" "Evidence chain head:" "Audit root:" "Reviewer:" "Date:" "Result: ACCEPTED"; do
-      grep -q "^$f" "$REC" || missing="$missing [$f]"
-    done
-    [ -z "$missing" ] && ok "real-device acceptance record complete ($REC)" || fail "acceptance record missing fields:$missing"
+    # Values must be real, not the template's placeholders; the result line
+    # must be exactly `Result: ACCEPTED`.
+    acceptance_ok() {
+      local f v problems=""
+      for f in "Date" "Device" "Android" "Kernel commit" "Agent commit" "Destination" "Task id" \
+               "Evidence chain head" "Audit root" "Negative runs" "Reviewer" "Result"; do
+        v=$(grep -m1 "^$f:" "$REC" | sed "s/^$f:[[:space:]]*//")
+        [ -z "$v" ] && { problems="$problems [$f missing]"; continue; }
+        grep -qE '<[^>]*>|YYYY|sha256:<|\|' <<<"$v" && problems="$problems [$f placeholder]"
+      done
+      v=$(grep -m1 '^Result:' "$REC" | sed 's/^Result:[[:space:]]*//; s/[[:space:]]*$//')
+      [ "$v" = "ACCEPTED" ] || problems="$problems [Result must be exactly ACCEPTED, got '$v']"
+      grep -m1 '^Task id:' "$REC" | grep -qE ': *[0-9a-f]{32} *$' || problems="$problems [Task id not 32-hex]"
+      grep -m1 '^Evidence chain head:' "$REC" | grep -qE ': *[0-9a-f]{64} *$' || problems="$problems [Evidence chain head not 64-hex]"
+      grep -m1 '^Audit root:' "$REC" | grep -qE ': *sha256:[0-9a-f]{64} *$' || problems="$problems [Audit root not sha256:<64-hex>]"
+      grep -m1 '^Kernel commit:' "$REC" | grep -qE ': *[0-9a-f]{7,40} *$' || problems="$problems [Kernel commit not a sha]"
+      grep -m1 '^Negative runs:' "$REC" | grep -qiE 'revoke[^=]*= *yes.*kill switch[^=]*= *yes' || problems="$problems [Negative runs must both be yes]"
+      grep -m1 '^Destination:' "$REC" | grep -qi 'controlled test phone' || problems="$problems [Destination must state a controlled test phone]"
+      [ -z "$problems" ] || { echo "   $problems" >&2; return 1; }
+    }
+    if acceptance_ok 2>"$WORKDIR_PROBLEMS"; then ok "real-device acceptance record complete and non-placeholder ($REC)"
+    else fail "acceptance record rejected:$(cat "$WORKDIR_PROBLEMS")"; fi
   else fail "no real-device acceptance record at $REC — do not enable dispatch (docs/real-device-acceptance.md)"; fi
 else
   echo "     (run with --for-enable before setting RUST_ACTION_KERNEL_ENABLED=1)"

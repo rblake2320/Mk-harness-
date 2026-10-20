@@ -183,7 +183,7 @@ EOF
 grep -q "dry_run_no_device\|callback" "$WORK/api.log" || true
 
 log "gate 6: kernel audit chain verifies (read-only identity)"
-MK_DATABASE_URL="$(url_for mk_readonly_login readonly)" "$BIN/mk-audit-verifier" | tail -3
+MK_DATABASE_URL="$(url_for mk_readonly_login readonly)" "$BIN/mk-audit-verifier" 2>&1 | tee "$WORK/verifier.log" | tail -3
 
 log "gate 7: identities are least-privilege (API cannot claim outbox; relay cannot read approvals; readonly cannot write)"
 ! psql -q "$(url_for mk_api_login api)" -c "UPDATE kernel.outbox_events SET leased_by='x' WHERE false" >/dev/null 2>&1 || die "api login can touch outbox claims"
@@ -207,6 +207,31 @@ grep -E "passed, 0 failed" "$WORK/preflight.log" >/dev/null || { cat "$WORK/pref
 if MK_ACCEPTANCE_RECORD="$WORK/no-such-record.md" bash "$ROOT/scripts/kernel-preflight.sh" --for-enable > "$WORK/preflight-enable.log" 2>&1; then
   die "pre-flight --for-enable must fail without an acceptance record"; fi
 grep -q "no real-device acceptance record" "$WORK/preflight-enable.log" || die "pre-flight --for-enable gave the wrong reason"
+# A verbatim copy of the template (placeholders) must be rejected (Codex P1 on #32).
+if MK_ACCEPTANCE_RECORD="$ROOT/deploy/kernel/ACCEPTANCE.template.md" bash "$ROOT/scripts/kernel-preflight.sh" --for-enable > "$WORK/preflight-template.log" 2>&1; then
+  die "pre-flight --for-enable accepted the unfilled template"; fi
+grep -q "placeholder" "$WORK/preflight-template.log" || die "template rejection gave the wrong reason: $(grep FAIL "$WORK/preflight-template.log")"
+# A fully filled record passes; the same record with Result: REJECTED does not.
+EVHEAD=$(python3 -c "import json;print(json.loads(open('$WORK/evidence/evidence-ledger.jsonl').read().splitlines()[-1])['entry_hash'])")
+AROOT=$(grep -o 'sha256:[0-9a-f]\{64\}' "$WORK/verifier.log" 2>/dev/null | tail -1); [ -n "$AROOT" ] || AROOT="sha256:$(printf x | sha256sum | cut -c1-64)"
+cat > "$WORK/ACCEPTANCE.md" <<REC
+Date: 2026-10-20 12:00 America/Chicago
+Device: Moto G Power, serial digest sha256:$(printf serial | sha256sum | cut -c1-64)
+Android: 14 / motorola/x
+Kernel commit: $(git -C "$ROOT" rev-parse HEAD)
+Agent commit: $(git -C "$ROOT" rev-parse HEAD)
+Destination: controlled test phone (never a customer number)
+Task id: $TID
+Evidence chain head: $EVHEAD
+Audit root: $AROOT
+Negative runs: revoke-before-dispatch = yes; tenant kill switch = yes
+Reviewer: smoke harness — looked at $TID.png and the receiving phone
+Result: ACCEPTED
+REC
+MK_ACCEPTANCE_RECORD="$WORK/ACCEPTANCE.md" bash "$ROOT/scripts/kernel-preflight.sh" --for-enable > "$WORK/preflight-accepted.log" 2>&1 || { cat "$WORK/preflight-accepted.log"; die "pre-flight --for-enable rejected a complete record"; }
+sed -i 's/^Result: ACCEPTED$/Result: REJECTED (screenshot missing)/' "$WORK/ACCEPTANCE.md"
+if MK_ACCEPTANCE_RECORD="$WORK/ACCEPTANCE.md" bash "$ROOT/scripts/kernel-preflight.sh" --for-enable > "$WORK/preflight-rejected.log" 2>&1; then
+  die "pre-flight --for-enable accepted a REJECTED record"; fi
 log "  $(grep -E 'passed, . failed' "$WORK/preflight.log")"
 
 log "ALL GATES PASSED — artifacts in $WORK"

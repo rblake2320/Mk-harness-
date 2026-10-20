@@ -11,12 +11,20 @@
 
 .EXAMPLE
   pwsh -File scripts\kernel-secrets.ps1 -EnvFile .env
-  pwsh -File scripts\kernel-secrets.ps1 -EnvFile .env -Force   # rotate everything
+  pwsh -File scripts\kernel-secrets.ps1 -EnvFile .env -Force   # rotate everything EXCEPT MASTER_KEY
+  pwsh -File scripts\kernel-secrets.ps1 -EnvFile .env -RotateMasterKey   # only on an empty/fresh environment
 #>
 [CmdletBinding()]
 param(
   [string]$EnvFile = ".env",
   [switch]$Force,
+  # MASTER_KEY seals adapter credentials (AES-GCM). Rotating it without the
+  # decrypt–re-encrypt migration (not yet implemented) makes every stored
+  # credential undecryptable, so -Force never touches it. This switch exists
+  # for brand-new environments only and refuses if a key is already present
+  # unless -IAcceptCredentialLoss is also given.
+  [switch]$RotateMasterKey,
+  [switch]$IAcceptCredentialLoss,
   [string]$DevKeys = ""   # path to mk-devkeys; default: build/find in rust/target
 )
 Set-StrictMode -Version Latest
@@ -58,7 +66,13 @@ foreach ($kv in $existing.GetEnumerator()) { $out[$kv.Key] = $kv.Value }
 # -- core app secrets (main compose) -------------------------------------------
 if (Need "POSTGRES_PASSWORD") { $out["POSTGRES_PASSWORD"] = New-Hex 24 }
 if (Need "JWT_SECRET")        { $out["JWT_SECRET"]        = New-Hex 48 }
-if (Need "MASTER_KEY")        { $out["MASTER_KEY"]        = New-B64 32 }
+$haveMaster = $existing.ContainsKey("MASTER_KEY") -and -not [string]::IsNullOrWhiteSpace($existing["MASTER_KEY"])
+if (-not $haveMaster) { $out["MASTER_KEY"] = New-B64 32 }
+elseif ($RotateMasterKey) {
+  if (-not $IAcceptCredentialLoss) { throw "MASTER_KEY already set. Rotating it orphans every sealed adapter credential (no re-encrypt migration exists). Re-run with -IAcceptCredentialLoss only on an environment with no adapters, or revoke/re-enroll all adapters first." }
+  $out["MASTER_KEY"] = New-B64 32
+  Write-Warning "MASTER_KEY rotated: all previously sealed adapter credentials are now undecryptable."
+}  # -Force deliberately does not reach here
 
 # -- assertion key pair via mk-devkeys ------------------------------------------
 if ((Need "MK_ASSERTION_KEYS") -or (Need "KERNEL_ASSERTION_PRIVATE_KEY")) {

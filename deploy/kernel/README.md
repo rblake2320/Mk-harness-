@@ -69,7 +69,9 @@ PG_ADMIN_URL=postgres://mk:$POSTGRES_PASSWORD@db/mkharness \
 MK_PREFLIGHT_EMAIL=<ops user> MK_PREFLIGHT_PASSWORD=… \
 scripts/kernel-preflight.sh                 # 27 checks: liveness, assertion pairing, schema head,
                                             # least-privilege identities, kill switches, audit chain, compose hygiene
-scripts/kernel-preflight.sh --for-enable    # + requires deploy/kernel/ACCEPTANCE.md (real-device run)
+scripts/kernel-preflight.sh --for-enable    # + requires deploy/kernel/ACCEPTANCE.md: every field filled with a real
+                                            #   value (placeholders, bad hashes, missing negatives are rejected) and
+                                            #   `Result: ACCEPTED` exactly
 ```
 
 The pre-flight is itself exercised by `scripts/kernel-live-smoke.sh` (gate 8)
@@ -107,8 +109,10 @@ The worker also stops dispatching on its own whenever Postgres is unreachable
 * **DB login passwords**: rerun `kernel-roles` with new `MK_DB_*_PASSWORD`
   (`ALTER ROLE … PASSWORD`), then restart the matching process.
 * **MASTER_KEY**: sealed adapter credentials are AES-GCM under it; rotation
-  needs a decrypt–re-encrypt pass (not yet scripted) — treat as a planned
-  maintenance, not a hot rotate.
+  needs a decrypt–re-encrypt pass (not yet scripted). `kernel-secrets` therefore
+  **never** rotates it under `-Force`/`--force`; `-RotateMasterKey` refuses when a
+  key exists unless `-IAcceptCredentialLoss` is given (fresh environments, or after
+  revoking and re-enrolling every adapter).
 
 ### 6. What "production-ready" still does not mean
 

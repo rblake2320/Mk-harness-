@@ -3,7 +3,12 @@
 # .env file (mode 0600), keeping existing non-empty values unless --force.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-ENV_FILE="${1:-.env}"; FORCE=0; [ "${2:-}" = "--force" ] && FORCE=1
+ENV_FILE="${1:-.env}"; FORCE=0; ROTATE_MASTER=0; ACCEPT_LOSS=0
+for a in "${@:2}"; do case "$a" in
+  --force) FORCE=1;;                       # rotates everything EXCEPT MASTER_KEY
+  --rotate-master-key) ROTATE_MASTER=1;;   # refuses if a key exists unless --i-accept-credential-loss
+  --i-accept-credential-loss) ACCEPT_LOSS=1;;
+  *) echo "unknown flag $a" >&2; exit 2;; esac; done
 DEVKEYS="$ROOT/rust/target/release/mk-devkeys"
 [ -x "$DEVKEYS" ] || (cd "$ROOT/rust" && cargo build --release -q --bin mk-devkeys)
 
@@ -21,7 +26,13 @@ hex() { openssl rand -hex "$1"; }
 
 need POSTGRES_PASSWORD && cur[POSTGRES_PASSWORD]=$(hex 24)
 need JWT_SECRET        && cur[JWT_SECRET]=$(hex 48)
-need MASTER_KEY        && cur[MASTER_KEY]=$(openssl rand -base64 32)
+# MASTER_KEY seals adapter credentials; rotating it without a re-encrypt
+# migration (not implemented) orphans them. --force never touches it.
+if [ -z "${cur[MASTER_KEY]:-}" ]; then cur[MASTER_KEY]=$(openssl rand -base64 32)
+elif [ "$ROTATE_MASTER" = 1 ]; then
+  [ "$ACCEPT_LOSS" = 1 ] || { echo "MASTER_KEY already set; rotating orphans every sealed adapter credential. Add --i-accept-credential-loss only on an environment with no adapters." >&2; exit 3; }
+  cur[MASTER_KEY]=$(openssl rand -base64 32); echo "WARNING: MASTER_KEY rotated; sealed adapter credentials are now undecryptable" >&2
+fi
 if need MK_ASSERTION_KEYS || need KERNEL_ASSERTION_PRIVATE_KEY; then
   gen=$("$DEVKEYS" gen)
   cur[MK_ASSERTION_KEYS]=$(sed -n 's/^MK_ASSERTION_KEYS=//p' <<<"$gen")
