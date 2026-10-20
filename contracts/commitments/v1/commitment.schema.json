@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.consultant-studio.invalid/commitments/v1/commitment.schema.json",
+  "title": "MK commitment v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "customer_id", "kind", "text", "status", "due_at", "due_window", "timezone",
+               "source_type", "source_reference", "evidence_digest", "created_by", "confirmed_by", "version"],
+  "properties": {
+    "id": {"type": "string", "pattern": "^[0-9a-f]{32}$"},
+    "customer_id": {"type": "string", "pattern": "^[0-9a-f]{32}$"},
+    "kind": {"enum": ["promise", "customer_request", "unanswered_question", "customer_date"]},
+    "text": {"type": "string", "minLength": 1, "maxLength": 500},
+    "status": {"enum": ["draft", "confirmed", "deferred", "resolved", "cancelled"]},
+    "due_at": {"type": ["string", "null"], "format": "date-time"},
+    "due_window": {"type": "array", "minItems": 2, "maxItems": 2,
+                   "items": {"type": ["string", "null"], "format": "date-time"}},
+    "timezone": {"type": ["string", "null"]},
+    "source_type": {"enum": ["consultant_note", "conversation", "inbound_message"]},
+    "source_reference": {"type": "string", "maxLength": 64},
+    "evidence_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "created_by": {"type": "string", "description": "user id or 'ai'"},
+    "confirmed_by": {"type": ["string", "null"]},
+    "version": {"type": "integer", "minimum": 1}
+  },
+  "allOf": [
+    {"if": {"properties": {"status": {"enum": ["confirmed", "deferred"]}}},
+     "then": {"properties": {"confirmed_by": {"type": "string"}},
+              "anyOf": [{"properties": {"due_at": {"type": "string"}}},
+                        {"properties": {"due_window": {"items": {"type": "string"}}}}]}},
+    {"if": {"properties": {"created_by": {"const": "ai"}, "confirmed_by": {"type": "null"}}},
+     "then": {"properties": {"status": {"const": "draft"}}}}
+  ]
+}

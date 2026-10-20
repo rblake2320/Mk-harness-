@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.consultant-studio.invalid/outcomes/v1/outcome.schema.json",
+  "title": "MK business outcome v1 — separate from transport state",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "kind", "customer_id", "commitment_id"],
+  "properties": {
+    "id": {"type": "string", "pattern": "^[0-9a-f]{32}$"},
+    "kind": {"enum": ["resolved", "deferred", "opted_out", "no_response", "customer_reported_order",
+                      "consultant_confirmed_order", "exception_open", "cancelled"]},
+    "customer_id": {"type": "string", "pattern": "^[0-9a-f]{32}$"},
+    "commitment_id": {"type": ["string", "null"]},
+    "note": {"type": "string"}
+  },
+  "not": {"properties": {"kind": {"enum": ["sent", "delivered", "read", "provider_accepted", "failed"]}}}
+}

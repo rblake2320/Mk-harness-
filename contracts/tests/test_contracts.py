@@ -131,3 +131,27 @@ if __name__ == "__main__":
                 failures += 1
                 print(f"FAIL {name}: {exc!r}")
     sys.exit(1 if failures else 0)
+
+
+def test_commitment_and_outcome_schemas_compile_and_separate_transport_from_business():
+    import jsonschema
+    base = ROOT
+    c = json.loads((base / "commitments/v1/commitment.schema.json").read_text())
+    o = json.loads((base / "outcomes/v1/outcome.schema.json").read_text())
+    Draft202012Validator.check_schema(c)
+    Draft202012Validator.check_schema(o)
+    v = Draft202012Validator(c, format_checker=jsonschema.FormatChecker())
+    draft = {"id": "a" * 32, "customer_id": "b" * 32, "kind": "promise", "text": "Check sample",
+             "status": "draft", "due_at": None, "due_window": ["2026-11-01T00:00:00+00:00", "2026-11-30T23:59:59+00:00"],
+             "timezone": "America/Chicago", "source_type": "conversation", "source_reference": "",
+             "evidence_digest": "sha256:" + "0" * 64, "created_by": "ai", "confirmed_by": None, "version": 1}
+    v.validate(draft)
+    # An AI-created record that is not confirmed cannot be anything but a draft.
+    bad = dict(draft, status="confirmed")
+    assert list(v.iter_errors(bad)), "ai-created unconfirmed record must not be 'confirmed'"
+    # Confirmed needs a date or a full window
+    nodate = dict(draft, status="confirmed", confirmed_by="u", due_window=[None, None])
+    assert list(v.iter_errors(nodate))
+    ov = Draft202012Validator(o)
+    ov.validate({"id": "a" * 32, "kind": "consultant_confirmed_order", "customer_id": "b" * 32, "commitment_id": None})
+    assert list(ov.iter_errors({"id": "a" * 32, "kind": "delivered", "customer_id": "b" * 32, "commitment_id": None}))
