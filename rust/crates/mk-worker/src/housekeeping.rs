@@ -13,6 +13,7 @@ pub struct HousekeepingStats {
     pub leases_recovered: usize,
     pub nonces_purged: u64,
     pub jtis_purged: u64,
+    pub challenges_purged: u64,
 }
 
 /// Expire overdue actions for one tenant, recover expired leases (moving a
@@ -73,6 +74,7 @@ pub async fn run_once(
     }
     stats.nonces_purged = adapters::purge_nonces(store.pool(), now).await?;
     stats.jtis_purged = assertions::purge_jtis(store.pool(), now).await?;
+    stats.challenges_purged = mk_store::human_approval::purge_challenges(store.pool(), now).await?;
     Ok(stats)
 }
 

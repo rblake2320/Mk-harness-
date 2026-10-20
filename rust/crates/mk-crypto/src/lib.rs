@@ -15,6 +15,7 @@ pub mod hmac_sig;
 pub mod nonce;
 pub mod seal;
 pub mod secret;
+pub mod webauthn;
 
 pub use assertion::{ActorAssertion, AssertionError, AssertionSigner, AssertionVerifier};
 pub use canonical::{CanonicalError, canonicalize};
@@ -25,3 +26,4 @@ pub use hmac_sig::{
 pub use nonce::{NonceError, NonceWindow, ReplayGuard};
 pub use seal::{MasterKey, SealError, seal, unseal};
 pub use secret::{AdapterSecret, constant_time_eq, generate_secret};
+pub use webauthn::{CoseAlg, CredentialPublicKey, RegisteredCredential, WebAuthnError};

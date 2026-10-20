@@ -19,7 +19,7 @@ use std::time::Duration;
 use tower_http::request_id::{MakeRequestUuid, PropagateRequestIdLayer, SetRequestIdLayer};
 use tower_http::timeout::TimeoutLayer;
 
-pub use state::AppState;
+pub use state::{AppState, ApprovalRp};
 
 pub const MAX_BODY_BYTES: usize = 256 * 1024;
 
@@ -38,6 +38,24 @@ pub fn router(state: AppState) -> Router {
             post(routes::approvals::reject),
         )
         .route("/approvals/pending", get(routes::approvals::pending))
+        .route(
+            "/actions/{action_id}/approval-challenge",
+            post(routes::human_approval::approval_challenge),
+        )
+        .route(
+            "/approval-credentials/register/begin",
+            post(routes::human_approval::register_begin),
+        )
+        .route(
+            "/approval-credentials/register/finish",
+            post(routes::human_approval::register_finish),
+        )
+        .route("/approval-credentials", get(routes::human_approval::list))
+        .route(
+            "/approval-credentials/{credential_row_id}/revoke",
+            post(routes::human_approval::revoke_credential),
+        )
+        .route("/revocations", post(routes::human_approval::revoke_principal))
         .route(
             "/approvals/{approval_id}/revoke",
             post(routes::approvals::revoke),
@@ -66,7 +84,11 @@ pub fn router(state: AppState) -> Router {
             post(routes::adapters::revoke),
         )
         .route("/kill-switch/tenant", post(routes::ops::tenant_kill_switch))
-        .route("/kill-switch/global", post(routes::ops::global_kill_switch));
+        .route("/kill-switch/global", post(routes::ops::global_kill_switch))
+        .route(
+            "/kill-switch/global/challenge",
+            post(routes::human_approval::global_enable_challenge),
+        );
 
     Router::new()
         .nest("/internal/v1", internal)

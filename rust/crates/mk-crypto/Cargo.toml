@@ -26,6 +26,9 @@ chrono = { workspace = true }
 uuid = { workspace = true }
 schemars = { workspace = true }
 aes-gcm = { workspace = true }
+p256 = { workspace = true }
+rsa = { workspace = true }
+ciborium = { workspace = true }
 
 [dev-dependencies]
 proptest = { workspace = true }

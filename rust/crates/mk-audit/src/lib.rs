@@ -73,6 +73,9 @@ pub enum EventType {
     ReconciliationRequired,
     AuditExport,
     KillSwitchChanged,
+    ApprovalCredentialRegistered,
+    ApprovalCredentialRevoked,
+    PrincipalRevoked,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

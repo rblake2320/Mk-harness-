@@ -51,7 +51,11 @@ async fn main() -> anyhow::Result<()> {
             .and_then(|v| v.parse().ok())
             .unwrap_or(120),
         rust_kernel_enabled: std::env::var("RUST_ACTION_KERNEL_ENABLED").is_ok_and(|v| v == "1"),
+        approval_rp: mk_api::ApprovalRp::from_env().map_err(|e| anyhow::anyhow!(e))?,
     };
+    if state.approval_rp.is_none() {
+        tracing::warn!("MK_ALLOW_UNBOUND_APPROVAL=1: approvals are NOT human-bound; never run production like this");
+    }
     let bind = std::env::var("MK_BIND").unwrap_or_else(|_| "127.0.0.1:8090".into());
     let listener = tokio::net::TcpListener::bind(&bind).await?;
     tracing::info!(%bind, enabled = state.rust_kernel_enabled, "mk-action-api listening (private network only)");

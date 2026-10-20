@@ -445,3 +445,63 @@ def test_forwarded_proposal_matches_published_action_contract(client, kernel_env
                             headers=auth_headers(tok))
             assert r.status_code == 201
             jsonschema.Draft202012Validator(schema).validate(seen["b"])
+
+
+# --------------------------------------------------------------------------- #
+# WP06 — human-approval authority relays (FastAPI never verifies, never signs)
+# --------------------------------------------------------------------------- #
+def test_webauthn_bytes_are_relayed_untouched_and_never_as_agent(client, kernel_env):
+    tok = _signup(client, uuid.uuid4().hex[:6])
+    aid = uuid.uuid4(); seen = {}
+
+    def handler(request):
+        seen["c"] = verify_assertion(request); seen["b"] = json.loads(request.content)
+        return httpx.Response(200, json={"approval": {"human_binding": "webauthn"}, "result": {}})
+
+    wa = {"credential_id": "AQID", "client_data_json": "eyJ0eXBlIjoid2ViYXV0aG4uZ2V0In0",
+          "authenticator_data": "AAAA", "signature": "MEUCIQ"}
+    with respx.mock() as m:
+        m.post(f"{KERNEL}/internal/v1/actions/{aid}/approve").mock(side_effect=handler)
+        r = client.post(f"/api/agent-ops/actions/{aid}/approve",
+                        json={"action_digest": "sha256:" + "b" * 64, "webauthn": wa}, headers=auth_headers(tok))
+    assert r.status_code == 200
+    assert seen["b"]["webauthn"] == wa and "agent" not in seen["c"]["roles"]
+    # Non-base64url bytes are refused before reaching the kernel.
+    bad = dict(wa, signature="not base64!")
+    with respx.mock(assert_all_called=False) as m:
+        m.post(f"{KERNEL}/internal/v1/actions/{aid}/approve").mock(return_value=httpx.Response(200, json={}))
+        r = client.post(f"/api/agent-ops/actions/{aid}/approve",
+                        json={"action_digest": "sha256:" + "b" * 64, "webauthn": bad}, headers=auth_headers(tok))
+        assert r.status_code == 422 and not m.calls
+
+
+def test_passkey_and_challenge_and_revocation_relays(client, kernel_env):
+    tok = _signup(client, uuid.uuid4().hex[:6])
+    aid = uuid.uuid4(); seen = {}
+
+    def rec(name):
+        def h(request):
+            seen[name] = (verify_assertion(request), json.loads(request.content or b"{}"))
+            return httpx.Response(200, json={"ok": name})
+        return h
+
+    with respx.mock() as m:
+        m.post(f"{KERNEL}/internal/v1/actions/{aid}/approval-challenge").mock(side_effect=rec("challenge"))
+        m.post(f"{KERNEL}/internal/v1/approval-credentials/register/begin").mock(side_effect=rec("begin"))
+        m.post(f"{KERNEL}/internal/v1/approval-credentials/register/finish").mock(side_effect=rec("finish"))
+        m.get(f"{KERNEL}/internal/v1/approval-credentials").mock(return_value=httpx.Response(200, json=[]))
+        m.post(f"{KERNEL}/internal/v1/revocations").mock(side_effect=rec("revoke"))
+        h = auth_headers(tok)
+        assert client.post(f"/api/agent-ops/actions/{aid}/approval-challenge", headers=h).status_code == 200
+        assert client.post("/api/agent-ops/approval-credentials/register/begin", headers=h).status_code == 200
+        assert client.post("/api/agent-ops/approval-credentials/register/finish",
+                           json={"client_data_json": "e30", "attestation_object": "oWNmbXRkbm9uZQ", "label": "phone"}, headers=h).status_code == 200
+        assert client.get("/api/agent-ops/approval-credentials", headers=h).status_code == 200
+        # Revoking "my current session" without naming it: FastAPI supplies the kernel session id.
+        assert client.post("/api/agent-ops/revocations", json={"reason": "lost phone"}, headers=h).status_code == 200
+    assert seen["finish"][1] == {"client_data_json": "e30", "attestation_object": "oWNmbXRkbm9uZQ", "label": "phone"}
+    assert seen["revoke"][1]["session_id"] == seen["revoke"][0]["session_id"]
+    for k in ("challenge", "begin", "finish", "revoke"):
+        assert "agent" not in seen[k][0]["roles"]
+    # Unauthenticated → 401 (no kernel call).
+    assert client.post("/api/agent-ops/approval-credentials/register/begin").status_code == 401

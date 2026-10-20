@@ -47,6 +47,11 @@ services:
       MK_ASSERTION_KEYS: ${MK_ASSERTION_KEYS:?kid=base64url-pubkey}
       MK_BIND: "0.0.0.0:8090"
       RUST_ACTION_KERNEL_ENABLED: ${RUST_ACTION_KERNEL_ENABLED:-0}
+      # Human-approval authority (WP06): the approval UI's effective domain and
+      # exact https origins. Required; the API refuses to start without them
+      # unless MK_ALLOW_UNBOUND_APPROVAL=1 (development only, never set here).
+      MK_APPROVAL_RP_ID: ${MK_APPROVAL_RP_ID:?approval UI domain, e.g. app.example.com}
+      MK_APPROVAL_ORIGINS: ${MK_APPROVAL_ORIGINS:?comma list, e.g. https://app.example.com}
     read_only: true
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]

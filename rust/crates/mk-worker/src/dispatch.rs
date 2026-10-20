@@ -12,7 +12,7 @@ use mk_policy::{
 use mk_queue::backoff::Next;
 use mk_queue::{DispatchMessage, RetryPolicy, classify};
 use mk_store::actions::{self, Actor};
-use mk_store::{Store, StoreError, approvals, consent, outbox, policy};
+use mk_store::{Store, StoreError, approvals, consent, human_approval, outbox, policy};
 use serde_json::json;
 
 #[derive(Debug)]
@@ -127,6 +127,28 @@ pub async fn dispatch_one(
         None if action.attempt > 0 => approvals::consumed_for_action(&mut tx, action_id).await?,
         None => None,
     };
+    // Row H9: an approval whose approver (user or the approving session) was
+    // revoked after approving must not dispatch, even if the approval row was
+    // not yet marked revoked. Treated exactly like a revoked approval.
+    if let Some(a) = &approval
+        && human_approval::approver_revoked_since(&mut tx, a.approver_id, a.session_id.as_deref(), a.created_at).await?
+    {
+        let t = actions::transition(
+            &mut tx,
+            action_id,
+            Transition::Cancel,
+            Some(DenyCode::ApprovalRevoked.as_str()),
+            worker_actor,
+            now,
+        )
+        .await?;
+        outbox::release_lease(&mut tx, action_id, lease).await?;
+        tx.commit().await?;
+        return Ok(DispatchOutcome::Blocked {
+            code: DenyCode::ApprovalRevoked,
+            state: t.state,
+        });
+    }
     let attempt = u32::try_from(action.attempt).unwrap_or(0);
     let recheck = RecheckInput {
         action_id,

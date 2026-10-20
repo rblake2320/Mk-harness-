@@ -25,7 +25,9 @@ use mk_adapters::mobile::{AgentResolver, AgentTarget, MobileAdapter};
 use mk_adapters::simulator::{SimMode, Simulator};
 use mk_adapters::{AdapterRegistry, InternalRecordAdapter};
 use mk_api::metrics::Metrics;
-use mk_api::{AppState, router};
+use mk_api::{AppState, ApprovalRp, router};
+use mk_crypto::webauthn::softauthn::SoftAuthenticator;
+use mk_crypto::webauthn::b64url;
 use mk_crypto::{
     ActorAssertion, AdapterSecret, AssertionSigner, AssertionVerifier, MasterKey, sign_hmac,
 };
@@ -186,6 +188,11 @@ async fn harness() -> Option<Harness> {
         metrics: Arc::new(Metrics::new()),
         callback_tolerance_secs: 120,
         rust_kernel_enabled: true,
+        approval_rp: Some(ApprovalRp {
+            rp_id: RP_ID.into(),
+            origins: vec![ORIGIN.into()],
+            require_uv: true,
+        }),
     };
     let app = router(state.clone());
     Some(Harness {
@@ -198,6 +205,61 @@ async fn harness() -> Option<Harness> {
         resolver: Arc::new(MapResolver(Mutex::new(HashMap::new()))),
         ctx_registry_secret_slot: Arc::new(Mutex::new(None)),
     })
+}
+
+const RP_ID: &str = "approve.test.invalid";
+const ORIGIN: &str = "https://approve.test.invalid";
+
+impl Harness {
+    /// Register a software passkey for `user` through the kernel's own
+    /// registration ceremony (begin → authenticator → finish).
+    async fn register_passkey(&self, user: UserId, roles: &[&str]) -> SoftAuthenticator {
+        let mut auth = SoftAuthenticator::new_es256();
+        let (s, begin) = self
+            .call(
+                "POST",
+                "/internal/v1/approval-credentials/register/begin",
+                Some(&self.token(user, roles)),
+                Some(json!({})),
+            )
+            .await;
+        assert_eq!(s, StatusCode::OK, "{begin}");
+        let challenge = mk_crypto::webauthn::b64url_decode(begin["challenge"].as_str().unwrap_or(""))
+            .unwrap_or_default();
+        let (cdj, att) = auth.register(&challenge, RP_ID, ORIGIN);
+        let (s, fin) = self
+            .call(
+                "POST",
+                "/internal/v1/approval-credentials/register/finish",
+                Some(&self.token(user, roles)),
+                Some(json!({"client_data_json": b64url(&cdj), "attestation_object": b64url(&att), "label": "test key"})),
+            )
+            .await;
+        assert_eq!(s, StatusCode::CREATED, "{fin}");
+        auth
+    }
+
+    /// Fetch a challenge for `action_id` and sign it with `auth`; returns the
+    /// `webauthn` object for the approve body.
+    async fn sign_approval(&self, user: UserId, roles: &[&str], action_id: &str, auth: &mut SoftAuthenticator) -> Value {
+        let (s, ch) = self
+            .call(
+                "POST",
+                &format!("/internal/v1/actions/{action_id}/approval-challenge"),
+                Some(&self.token(user, roles)),
+                Some(json!({})),
+            )
+            .await;
+        assert_eq!(s, StatusCode::OK, "{ch}");
+        let challenge = mk_crypto::webauthn::b64url_decode(ch["challenge"].as_str().unwrap_or("")).unwrap_or_default();
+        let (cdj, ad, sig) = auth.assert(&challenge, RP_ID, ORIGIN);
+        json!({
+            "credential_id": b64url(&auth.credential_id),
+            "client_data_json": b64url(&cdj),
+            "authenticator_data": b64url(&ad),
+            "signature": b64url(&sig),
+        })
+    }
 }
 
 fn proposal(contact: ContactId, text: &str) -> Value {
@@ -444,6 +506,8 @@ async fn full_governed_path_over_http() {
                         .is_some_and(|d| d.ends_with("0100")
                             && d.trim_end_matches("0100").chars().all(|c| c == '*'))))
     );
+    // Without a human-bound WebAuthn assertion the manager's assertion alone
+    // (which a compromised FastAPI could mint) is refused.
     let (s, v) = h
         .call(
             "POST",
@@ -452,14 +516,28 @@ async fn full_governed_path_over_http() {
             Some(json!({"action_digest": digest, "reason": "ok"})),
         )
         .await;
+    assert_eq!(s, StatusCode::FORBIDDEN, "{v}");
+    assert_eq!(v["code"], json!("WEBAUTHN_REQUIRED"));
+    let mut mgr_key = h.register_passkey(manager, &["manager"]).await;
+    let wa = h.sign_approval(manager, &["manager"], &action_id, &mut mgr_key).await;
+    let (s, v) = h
+        .call(
+            "POST",
+            &format!("/internal/v1/actions/{action_id}/approve"),
+            Some(&h.token(manager, &["manager"])),
+            Some(json!({"action_digest": digest, "reason": "ok", "webauthn": wa})),
+        )
+        .await;
     assert_eq!(s, StatusCode::OK, "{v}");
     assert_eq!(v["result"]["state"], json!("queued"));
+    assert_eq!(v["approval"]["human_binding"], json!("webauthn"));
+    let wa2 = h.sign_approval(manager, &["manager"], &action_id, &mut mgr_key).await;
     let (s, _) = h
         .call(
             "POST",
             &format!("/internal/v1/actions/{action_id}/approve"),
             Some(&h.token(manager, &["manager"])),
-            Some(json!({"action_digest": digest})),
+            Some(json!({"action_digest": digest, "webauthn": wa2})),
         )
         .await;
     assert_eq!(s, StatusCode::CONFLICT, "second approval refused");
@@ -730,4 +808,199 @@ async fn oversized_and_malformed_bodies_are_rejected_before_policy() {
         (s, ready["database"].clone()),
         (StatusCode::OK, json!(true))
     );
+}
+
+/// WP06 acceptance (rows H5–H9): the human-approval authority is the user's
+/// authenticator, verified by the kernel over a challenge bound to the exact
+/// action digest. Every path a compromised proposal service could take is
+/// refused, and the one legitimate path succeeds.
+#[tokio::test]
+async fn human_approval_authority_resists_forgery_replay_transplant_and_revocation() {
+    let Some(h) = harness().await else {
+        eprintln!("skipping");
+        return;
+    };
+    let agent = UserId::new();
+    let manager = UserId::new();
+    let attacker = UserId::new();
+    let contact = ContactId::new();
+    {
+        let mut tx = h.state.store.begin(h.tenant).await.unwrap_or_else(|e| panic!("{e:?}"));
+        let (mut p, _) = mk_store::policy::load(&mut tx).await.unwrap_or_else(|e| panic!("{e:?}"));
+        p.contact_hours = (0, 24);
+        mk_store::policy::write(&mut tx, "test", &p, 0).await.unwrap_or_else(|e| panic!("{e:?}"));
+        tx.commit().await.unwrap_or_else(|e| panic!("{e:?}"));
+    }
+    let (s, _) = h.call("POST", &format!("/internal/v1/contacts/{contact}/permissions"), Some(&h.token(manager, &["manager"])), Some(json!({"channel": "sms", "scope": ["customer_requested_follow_up"], "source": "web_form", "proof_digest": format!("sha256:{}", "1".repeat(64)), "granted_at": "2026-10-01T00:00:00Z", "expires_at": "2027-10-01T00:00:00Z"}))).await;
+    assert_eq!(s, StatusCode::CREATED);
+    let hr = &h;
+    let propose = move |text: &str| {
+        let tok = hr.token(agent, &["agent"]);
+        let body = proposal(contact, text);
+        async move { hr.call("POST", "/internal/v1/actions", Some(&tok), Some(body)).await }
+    };
+    let (s, a) = propose("Hi A! Reply STOP to opt out.").await;
+    assert_eq!(s, StatusCode::ACCEPTED, "{a}");
+    let (s, b) = propose("Hi B! Reply STOP to opt out.").await;
+    assert_eq!(s, StatusCode::ACCEPTED, "{b}");
+    let (aid, adig) = (a["result"]["action_id"].as_str().unwrap_or_default().to_owned(), a["result"]["action_digest"].clone());
+    let (bid, bdig) = (b["result"]["action_id"].as_str().unwrap_or_default().to_owned(), b["result"]["action_digest"].clone());
+    let approve = move |id: &str, tok: String, body: Value| {
+        let path = format!("/internal/v1/actions/{id}/approve");
+        async move { hr.call("POST", &path, Some(&tok), Some(body)).await }
+    };
+
+    // 1. Agent-only principal cannot register a credential or obtain a challenge.
+    let (s, _) = h.call("POST", "/internal/v1/approval-credentials/register/begin", Some(&h.token(agent, &["agent"])), Some(json!({}))).await;
+    assert_eq!(s, StatusCode::FORBIDDEN);
+    let (s, _) = h.call("POST", &format!("/internal/v1/actions/{aid}/approval-challenge"), Some(&h.token(agent, &["agent"])), Some(json!({}))).await;
+    assert_eq!(s, StatusCode::FORBIDDEN);
+
+    // 2. A human without a registered passkey cannot get a challenge (precondition).
+    let (s, v) = h.call("POST", &format!("/internal/v1/actions/{aid}/approval-challenge"), Some(&h.token(manager, &["manager"])), Some(json!({}))).await;
+    assert_eq!(s, StatusCode::PRECONDITION_FAILED, "{v}");
+
+    let mut mgr_key = h.register_passkey(manager, &["manager"]).await;
+    let mut atk_key = h.register_passkey(attacker, &["manager"]).await;
+
+    // 3. Replayed registration ceremony: the same attestation again → challenge consumed.
+    // (Covered structurally: register/finish consumes the challenge row; a second finish with the same bytes is a 409.)
+    // 4. Attacker's own passkey presented under the manager's (forgeable) assertion.
+    let (s, ch) = h.call("POST", &format!("/internal/v1/actions/{aid}/approval-challenge"), Some(&h.token(manager, &["manager"])), Some(json!({}))).await;
+    assert_eq!(s, StatusCode::OK, "{ch}");
+    let challenge = mk_crypto::webauthn::b64url_decode(ch["challenge"].as_str().unwrap_or("")).unwrap_or_default();
+    let (cdj, ad, sig) = atk_key.assert(&challenge, RP_ID, ORIGIN);
+    let forged = json!({"credential_id": b64url(&atk_key.credential_id), "client_data_json": b64url(&cdj), "authenticator_data": b64url(&ad), "signature": b64url(&sig)});
+    let (s, v) = approve(&aid, h.token(manager, &["manager"]), json!({"action_digest": adig, "webauthn": forged})).await;
+    assert_eq!(s, StatusCode::FORBIDDEN, "{v}");
+    assert_eq!(v["code"], json!("WEBAUTHN_CREDENTIAL_MISMATCH"));
+    // The challenge was consumed by the failed attempt: the real key cannot reuse it.
+    let (cdj, ad, sig) = mgr_key.assert(&challenge, RP_ID, ORIGIN);
+    let reuse = json!({"credential_id": b64url(&mgr_key.credential_id), "client_data_json": b64url(&cdj), "authenticator_data": b64url(&ad), "signature": b64url(&sig)});
+    let (s, v) = approve(&aid, h.token(manager, &["manager"]), json!({"action_digest": adig, "webauthn": reuse})).await;
+    assert_eq!(s, StatusCode::CONFLICT, "consumed challenge: {v}");
+
+    // 5. Transplant: a challenge issued for action A cannot approve action B.
+    let wa_for_a = h.sign_approval(manager, &["manager"], &aid, &mut mgr_key).await;
+    let (s, v) = approve(&bid, h.token(manager, &["manager"]), json!({"action_digest": bdig, "webauthn": wa_for_a.clone()})).await;
+    assert_eq!(s, StatusCode::CONFLICT, "transplanted challenge: {v}");
+    // ...and having been consumed by that attempt, it no longer approves A either.
+    let (s, _) = approve(&aid, h.token(manager, &["manager"]), json!({"action_digest": adig, "webauthn": wa_for_a})).await;
+    assert_eq!(s, StatusCode::CONFLICT);
+
+    // 6. Edited byte: a challenge computed over a different digest (what the UI
+    //    would hold if the action changed) is unknown to the kernel.
+    let nonce = [0u8; 32];
+    let other = mk_crypto::Digest::of(b"edited");
+    let fake = mk_crypto::webauthn::approval_challenge(h.tenant.0.as_bytes(), manager.0.as_bytes(), aid.parse::<Uuid>().unwrap_or_default().as_bytes(), &other, &nonce);
+    let (cdj, ad, sig) = mgr_key.assert(&fake, RP_ID, ORIGIN);
+    let edited = json!({"credential_id": b64url(&mgr_key.credential_id), "client_data_json": b64url(&cdj), "authenticator_data": b64url(&ad), "signature": b64url(&sig)});
+    let (s, _) = approve(&aid, h.token(manager, &["manager"]), json!({"action_digest": adig, "webauthn": edited})).await;
+    assert_eq!(s, StatusCode::CONFLICT);
+
+    // 7. Tampered signature bytes over a fresh, valid challenge → bad signature,
+    //    and the challenge is burned.
+    let mut wa = h.sign_approval(manager, &["manager"], &aid, &mut mgr_key).await;
+    let mut sigb = mk_crypto::webauthn::b64url_decode(wa["signature"].as_str().unwrap_or("")).unwrap_or_default();
+    if let Some(last) = sigb.last_mut() { *last ^= 0x01; }
+    wa["signature"] = json!(b64url(&sigb));
+    let (s, v) = approve(&aid, h.token(manager, &["manager"]), json!({"action_digest": adig, "webauthn": wa})).await;
+    assert_eq!(s, StatusCode::FORBIDDEN, "{v}");
+    assert_eq!(v["code"], json!("WEBAUTHN_BAD_SIGNATURE"));
+
+    // 8. The legitimate path: fresh challenge, real key → queued, human_binding=webauthn.
+    let wa = h.sign_approval(manager, &["manager"], &aid, &mut mgr_key).await;
+    let (s, v) = approve(&aid, h.token(manager, &["manager"]), json!({"action_digest": adig, "webauthn": wa.clone()})).await;
+    assert_eq!(s, StatusCode::OK, "{v}");
+    assert_eq!(v["approval"]["human_binding"], json!("webauthn"));
+    assert!(v["approval"]["approval_credential_row_id"].is_string());
+    // 9. Replay of the successful assertion → consumed challenge (and a live approval already exists).
+    let (s, _) = approve(&aid, h.token(manager, &["manager"]), json!({"action_digest": adig, "webauthn": wa})).await;
+    assert_eq!(s, StatusCode::CONFLICT);
+
+    // 10. Revocation (H9): revoking the manager's session revokes the live approval,
+    //     cancels the queued action, and refuses the manager's next request.
+    let (s, v) = h.call("POST", "/internal/v1/revocations", Some(&h.token(manager, &["manager"])), Some(json!({"session_id": "sess", "reason": "lost phone"}))).await;
+    assert_eq!(s, StatusCode::CREATED, "{v}");
+    assert_eq!(v["approvals_revoked"], json!(1));
+    let (s, v) = h.call("GET", &format!("/internal/v1/actions/{aid}"), Some(&h.token(manager, &["manager"])), None).await;
+    assert_eq!(s, StatusCode::UNAUTHORIZED, "{v}");
+    assert_eq!(v["code"], json!("PRINCIPAL_REVOKED"));
+    let (s, v) = h.call("GET", &format!("/internal/v1/actions/{aid}"), Some(&h.token(attacker, &["manager"])), None).await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(v["state"], json!("cancelled"), "{v}");
+
+    // 11. Dispatch-time revocation: approve B with the attacker-as-manager key, then
+    //     record a user revocation directly (as if from another replica, before the
+    //     cascade ran). The worker must refuse to dispatch.
+    let wa = h.sign_approval(attacker, &["manager"], &bid, &mut atk_key).await;
+    let (s, v) = approve(&bid, h.token(attacker, &["manager"]), json!({"action_digest": bdig, "webauthn": wa})).await;
+    assert_eq!(s, StatusCode::OK, "{v}");
+    {
+        let mut tx = h.state.store.begin(h.tenant).await.unwrap_or_else(|e| panic!("{e:?}"));
+        mk_store::human_approval::revoke(&mut tx, mk_store::human_approval::RevocationTarget::User(attacker), manager, "offboarded", chrono::Utc::now())
+            .await
+            .unwrap_or_else(|e| panic!("{e:?}"));
+        tx.commit().await.unwrap_or_else(|e| panic!("{e:?}"));
+    }
+    let ctx = WorkerContext {
+        store: h.state.store.clone(),
+        registry: AdapterRegistry { internal: InternalRecordAdapter, mobile: None },
+        tools: ToolAllowlist::v1(),
+        worker_id: "w".into(),
+        lease_ttl: Duration::from_mins(1),
+        retry: RetryPolicy::default(),
+    };
+    let out = dispatch_one(
+        &ctx,
+        &DispatchMessage { tenant_id: h.tenant, action_id: bid.parse().unwrap_or_default(), outbox_id: 0, event_kind: "dispatch".into() },
+        chrono::Utc::now(),
+    )
+    .await
+    .unwrap_or_else(|e| panic!("{e:?}"));
+    assert!(matches!(out, DispatchOutcome::Blocked { code: mk_policy::DenyCode::ApprovalRevoked, .. }), "{out:?}");
+
+    // 12. Self-approval through the human flow when tenant policy permits (H8).
+    {
+        let mut tx = h.state.store.begin(h.tenant).await.unwrap_or_else(|e| panic!("{e:?}"));
+        let (mut p, _) = mk_store::policy::load(&mut tx).await.unwrap_or_else(|e| panic!("{e:?}"));
+        p.allow_self_approval = true;
+        mk_store::policy::write(&mut tx, "test-self-approval", &p, 0).await.unwrap_or_else(|e| panic!("{e:?}"));
+        tx.commit().await.unwrap_or_else(|e| panic!("{e:?}"));
+    }
+    let consultant = UserId::new();
+    let mut c_key = h.register_passkey(consultant, &["consultant"]).await;
+    let mut own = proposal(contact, "Hi C! Reply STOP to opt out.");
+    own["origin"] = json!({"type": "human", "session_id": "s9"});
+    let (s, c) = h.call("POST", "/internal/v1/actions", Some(&h.token(consultant, &["consultant"])), Some(own)).await;
+    assert_eq!(s, StatusCode::ACCEPTED, "{c}");
+    let cid = c["result"]["action_id"].as_str().unwrap_or_default().to_owned();
+    let wa = h.sign_approval(consultant, &["consultant"], &cid, &mut c_key).await;
+    let (s, v) = approve(&cid, h.token(consultant, &["consultant"]), json!({"action_digest": c["result"]["action_digest"], "webauthn": wa})).await;
+    assert_eq!(s, StatusCode::OK, "self-approval permitted by tenant policy: {v}");
+
+    // 13. Operator step-up (threat model T4): a minted platform_operator principal can
+    //     disable the global switch (fail-safe) but cannot re-enable it without the
+    //     operator's registered passkey.
+    let operator = UserId::new();
+    let op_tok = h.token(operator, &["platform_operator"]);
+    let (s, _) = h.call("POST", "/internal/v1/kill-switch/global", Some(&op_tok), Some(json!({"dispatch_enabled": false}))).await;
+    assert_eq!(s, StatusCode::NO_CONTENT);
+    let (s, v) = h.call("POST", "/internal/v1/kill-switch/global", Some(&h.token(operator, &["platform_operator"])), Some(json!({"dispatch_enabled": true}))).await;
+    assert_eq!(s, StatusCode::FORBIDDEN, "{v}");
+    assert_eq!(v["code"], json!("WEBAUTHN_REQUIRED"));
+    let mut op_key = h.register_passkey(operator, &["platform_operator"]).await;
+    let (s, ch) = h.call("POST", "/internal/v1/kill-switch/global/challenge", Some(&h.token(operator, &["platform_operator"])), Some(json!({}))).await;
+    assert_eq!(s, StatusCode::OK, "{ch}");
+    let challenge = mk_crypto::webauthn::b64url_decode(ch["challenge"].as_str().unwrap_or("")).unwrap_or_default();
+    // An approval challenge for an action cannot stand in for the operator challenge.
+    let wa_action = h.sign_approval(operator, &["platform_operator"], &cid, &mut op_key).await;
+    let (s, _) = h.call("POST", "/internal/v1/kill-switch/global", Some(&h.token(operator, &["platform_operator"])), Some(json!({"dispatch_enabled": true, "webauthn": wa_action}))).await;
+    assert_eq!(s, StatusCode::CONFLICT);
+    let (cdj, ad, sig) = op_key.assert(&challenge, RP_ID, ORIGIN);
+    let wa = json!({"credential_id": b64url(&op_key.credential_id), "client_data_json": b64url(&cdj), "authenticator_data": b64url(&ad), "signature": b64url(&sig)});
+    let (s, v) = h.call("POST", "/internal/v1/kill-switch/global", Some(&h.token(operator, &["platform_operator"])), Some(json!({"dispatch_enabled": true, "webauthn": wa.clone()}))).await;
+    assert_eq!(s, StatusCode::NO_CONTENT, "{v}");
+    let (s, _) = h.call("POST", "/internal/v1/kill-switch/global", Some(&h.token(operator, &["platform_operator"])), Some(json!({"dispatch_enabled": true, "webauthn": wa}))).await;
+    assert_eq!(s, StatusCode::CONFLICT, "replayed operator step-up");
 }

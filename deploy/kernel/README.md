@@ -21,6 +21,10 @@ Environment:
 | `MK_BIND` | api | default `127.0.0.1:8090`; never expose publicly |
 | `MK_CALLBACK_TOLERANCE_SECS` | api | default 120 |
 | `RUST_ACTION_KERNEL_ENABLED` | api | `1` to enqueue; unset = shadow mode (evaluate + record only) |
+| `MK_APPROVAL_RP_ID` | api | WebAuthn relying-party id = the approval UI's effective domain (e.g. `app.example.com`). **Required.** Every approve needs a kernel-verified passkey assertion over a challenge bound to the action digest (migration 0003) |
+| `MK_APPROVAL_ORIGINS` | api | comma list of exact origins allowed in `clientDataJSON` (`https://app.example.com`); each must be within `MK_APPROVAL_RP_ID` |
+| `MK_ALLOW_UNBOUND_APPROVAL` | api | **development only.** `1` lets the API start without an RP id; approvals are then recorded with `human_binding=unbound`. Never set in staging or production; pre-flight refuses it |
+| `MK_APPROVAL_ALLOW_NO_UV` | api | development only; accept assertions without the user-verified flag |
 | `MK_RUN_MIGRATIONS` | api | `1` to run `migrations/kernel` on boot (migrator role) |
 | `MK_MOBILE_INTAKE_URL` | worker | template, e.g. `https://adapters.internal/agents/{agent_id}/work-orders` |
 | `MK_EGRESS_AUTHORITIES` | worker | comma list of `host[:port]` the worker may call |

@@ -100,6 +100,7 @@ async fn full_lifecycle_with_verified_audit_chain() {
         None,
         None,
         now,
+        mk_store::approvals::HumanBinding::Unbound,
     )
     .await
     .unwrap_or_else(|e| panic!("{e:?}"));
@@ -211,6 +212,7 @@ async fn concurrent_consumers_cannot_both_consume() {
         None,
         None,
         now,
+        mk_store::approvals::HumanBinding::Unbound,
     )
     .await
     .unwrap_or_else(|e| panic!("{e:?}"));
@@ -278,6 +280,7 @@ async fn approval_with_wrong_digest_is_not_consumable() {
         None,
         None,
         now,
+        mk_store::approvals::HumanBinding::Unbound,
     )
     .await
     .unwrap_or_else(|e| panic!("{e:?}"));
@@ -304,6 +307,7 @@ async fn approval_with_wrong_digest_is_not_consumable() {
         None,
         None,
         now,
+        mk_store::approvals::HumanBinding::Unbound,
     )
     .await;
     assert!(matches!(dup, Err(StoreError::Conflict(_))));

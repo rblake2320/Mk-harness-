@@ -18,6 +18,7 @@ pub mod assertions;
 pub mod audit;
 pub mod consent;
 pub mod error;
+pub mod human_approval;
 pub mod idempotency;
 pub mod outbox;
 pub mod policy;
@@ -44,6 +45,11 @@ pub fn migrator() -> sqlx::migrate::Migrator {
             2,
             "assertion jtis",
             include_str!("../../../../migrations/kernel/0002_assertion_jtis.sql"),
+        ),
+        (
+            3,
+            "human approval authority",
+            include_str!("../../../../migrations/kernel/0003_human_approval_authority.sql"),
         ),
     ];
     let migrations: Vec<Migration> = FILES

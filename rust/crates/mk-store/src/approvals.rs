@@ -13,6 +13,16 @@ use crate::audit::append_event;
 use crate::error::StoreError;
 use crate::tx::TenantTx;
 
+/// How the approver proved they are a human holding a registered authenticator.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HumanBinding {
+    /// Kernel-verified WebAuthn assertion from this credential row.
+    WebAuthn(uuid::Uuid),
+    /// No proof beyond the actor assertion. Only legal under
+    /// `MK_ALLOW_UNBOUND_APPROVAL=1`; the row records it.
+    Unbound,
+}
+
 /// Record a human decision. The digest is taken from the *stored* action
 /// (not from the request body), so an approval can only ever bind to what
 /// the kernel actually holds. The caller has already run
@@ -28,8 +38,13 @@ pub async fn record_decision(
     session_id: Option<&str>,
     request_ip_hash: Option<&str>,
     now: DateTime<Utc>,
+    binding: HumanBinding,
 ) -> Result<ApprovalRecord, StoreError> {
     let action = actions::get_for_update(tx, action_id).await?;
+    let (binding_s, cred_row) = match binding {
+        HumanBinding::WebAuthn(row) => ("webauthn", Some(row)),
+        HumanBinding::Unbound => ("unbound", None),
+    };
     let approval_id = ApprovalId::new();
     let expires_at = now + Duration::seconds(i64::from(ttl_secs));
     let decision_s = match decision {
@@ -38,8 +53,8 @@ pub async fn record_decision(
     };
     sqlx::query(
         "INSERT INTO kernel.approvals (approval_id, tenant_id, action_id, action_digest, approver_id, approver_roles, decision,
-           reason, created_at, expires_at, request_ip_hash, session_id)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)",
+           reason, created_at, expires_at, request_ip_hash, session_id, human_binding, approval_credential_row_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)",
     )
     .bind(approval_id.0)
     .bind(tx.tenant().0)
@@ -53,6 +68,8 @@ pub async fn record_decision(
     .bind(expires_at)
     .bind(request_ip_hash)
     .bind(session_id)
+    .bind(binding_s)
+    .bind(cred_row)
     .execute(tx.conn())
     .await
     .map_err(|e| match StoreError::from(e) {
@@ -74,6 +91,7 @@ pub async fn record_decision(
             payload_redacted: json!({
                 "approval_id": approval_id, "action_digest": action.digest.to_string(),
                 "expires_at": expires_at, "roles": approver_roles, "has_reason": reason.is_some(),
+                "human_binding": binding_s, "credential_row_id": cred_row,
             }),
             trace_id: None,
             policy_version: mk_policy::POLICY_VERSION.0,
@@ -110,10 +128,12 @@ fn row_to_record(
         consumed_at: r.try_get("consumed_at")?,
         revoked_at: r.try_get("revoked_at")?,
         session_id: r.try_get("session_id")?,
+        human_binding: r.try_get("human_binding")?,
+        approval_credential_row_id: r.try_get("approval_credential_row_id")?,
     })
 }
 
-const COLS: &str = "approval_id, action_id, action_digest, approver_id, approver_roles, decision, reason, created_at, expires_at, consumed_at, revoked_at, session_id";
+const COLS: &str = "approval_id, action_id, action_digest, approver_id, approver_roles, decision, reason, created_at, expires_at, consumed_at, revoked_at, session_id, human_binding, approval_credential_row_id";
 
 pub async fn get(
     tx: &mut TenantTx<'_>,
@@ -233,6 +253,62 @@ pub async fn revoke(
     )
     .await?;
     Ok(rec)
+}
+
+/// Revoke every live approval made by `approver` (optionally only from one
+/// session) and cancel the queued actions they authorised. Used when a user or
+/// session is revoked (row H9). Returns the number of approvals revoked.
+pub async fn revoke_live_by_approver(
+    tx: &mut TenantTx<'_>,
+    approver: UserId,
+    session_id: Option<&str>,
+    by: UserId,
+    now: DateTime<Utc>,
+) -> Result<u64, StoreError> {
+    let rows = sqlx::query(
+        "UPDATE kernel.approvals SET revoked_at = $2, revoked_by = $3
+         WHERE tenant_id = $1 AND approver_id = $4 AND ($5::text IS NULL OR session_id = $5)
+           AND decision = 'approved' AND consumed_at IS NULL AND revoked_at IS NULL
+         RETURNING approval_id, action_id",
+    )
+    .bind(tx.tenant().0)
+    .bind(now)
+    .bind(by.0)
+    .bind(approver.0)
+    .bind(session_id)
+    .fetch_all(tx.conn())
+    .await?;
+    let by_s = by.to_string();
+    for r in &rows {
+        let approval_id = ApprovalId::from_uuid(r.try_get("approval_id")?);
+        let action_id = ActionId::from_uuid(r.try_get("action_id")?);
+        let actor = Actor {
+            actor_type: ActorType::User,
+            actor_id: &by_s,
+            trace_id: None,
+            policy_version: mk_policy::POLICY_VERSION.0,
+        };
+        append_event(
+            tx,
+            NewEvent {
+                tenant_id: tx.tenant(),
+                occurred_at: now,
+                actor_type: ActorType::User,
+                actor_id: &by_s,
+                action_id: Some(action_id),
+                event_type: EventType::ApprovalRevoked,
+                payload_redacted: json!({"approval_id": approval_id, "cause": "principal_revoked"}),
+                trace_id: None,
+                policy_version: mk_policy::POLICY_VERSION.0,
+            },
+        )
+        .await?;
+        let a = actions::get_for_update(tx, action_id).await?;
+        if a.state.is_cancellable() {
+            actions::transition(tx, action_id, mk_domain::Transition::Cancel, Some("approver_revoked"), actor, now).await?;
+        }
+    }
+    Ok(u64::try_from(rows.len()).unwrap_or(u64::MAX))
 }
 
 /// The most recent *consumed* approval for an action (retry path).

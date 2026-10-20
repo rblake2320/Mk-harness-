@@ -12,6 +12,8 @@ workspace = true
 [dependencies]
 mk-domain = { workspace = true }
 mk-crypto = { workspace = true }
+rand = { workspace = true }
+base64 = { workspace = true }
 mk-contracts = { workspace = true }
 mk-policy = { workspace = true }
 mk-audit = { workspace = true }

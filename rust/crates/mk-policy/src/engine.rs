@@ -654,6 +654,8 @@ mod tests {
             consumed_at: None,
             revoked_at: None,
             session_id: None,
+            human_binding: "webauthn".into(),
+            approval_credential_row_id: None,
         }
     }
 

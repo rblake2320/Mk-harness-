@@ -207,6 +207,15 @@ pub struct ApprovalRecord {
     pub revoked_at: Option<DateTime<Utc>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session_id: Option<String>,
+    /// `webauthn` or `unbound` (see approval.schema.json).
+    #[serde(default = "default_binding")]
+    pub human_binding: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub approval_credential_row_id: Option<uuid::Uuid>,
+}
+
+fn default_binding() -> String {
+    "unbound".into()
 }
 
 #[cfg(test)]

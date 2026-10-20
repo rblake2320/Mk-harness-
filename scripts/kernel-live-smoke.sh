@@ -40,7 +40,7 @@ trap cleanup EXIT
 
 log "building release binaries"
 (cd "$ROOT/rust" && cargo build --release -q --bin mk-action-api --bin mk-outbox-relay \
-   --bin mk-action-worker --bin mk-audit-verifier --bin mk-devkeys)
+   --bin mk-action-worker --bin mk-audit-verifier --bin mk-devkeys --bin mk-softauthn)
 BIN="$ROOT/rust/target/release"
 
 log "fresh database"
@@ -63,7 +63,11 @@ HOSTDB="${PGURL#*@}"
 url_for() { echo "postgres://$1:$2-$PW@$HOSTDB"; }
 
 log "starting kernel api / relay / worker (each as its own DB login)"
+# Human-approval authority configured as in production: approvals require a
+# kernel-verified WebAuthn assertion (rp id = the approval UI's domain).
+RP_ID=localhost; ORIGIN=http://localhost:8000
 MK_DATABASE_URL="$(url_for mk_api_login api)" MK_BIND=127.0.0.1:8090 RUST_ACTION_KERNEL_ENABLED=1 \
+  MK_APPROVAL_RP_ID="$RP_ID" MK_APPROVAL_ORIGINS="$ORIGIN" \
   "$BIN/mk-action-api" >"$WORK/api.log" 2>&1 & PIDS+=($!)
 MK_DATABASE_URL="$(url_for mk_relay_login relay)" MK_RELAY_ID=relay-smoke \
   "$BIN/mk-outbox-relay" >"$WORK/relay.log" 2>&1 & PIDS+=($!)
@@ -91,7 +95,18 @@ TOK2=$(curl -fsS "$APP/api/auth/login" -H 'content-type: application/json' -d '{
 H2=(-H "authorization: Bearer $TOK2" -H 'content-type: application/json')
 TENANT=$(python3 -c "import jwt,sys,uuid;print(uuid.UUID(jwt.decode('$TOK',options={'verify_signature':False})['tid']))")
 ops() { curl -sS -o "$WORK/out.json" -w '%{http_code}' "${H[@]}" "$@"; }
+ops2() { curl -sS -o "$WORK/out.json" -w '%{http_code}' "${H2[@]}" "$@"; }
 j() { python3 -c "import json,sys;d=json.load(open('$WORK/out.json'));print(eval(sys.argv[1]))" "$1"; }
+
+log "approver registers a passkey through the kernel ceremony (software authenticator = test equipment)"
+SA="$WORK/softauthn.json"; "$BIN/mk-softauthn" new "$SA" es256 >/dev/null
+[ "$(ops2 -X POST "$APP/api/agent-ops/approval-credentials/register/begin")" = 200 ] || die "register/begin: $(cat "$WORK/out.json")"
+CH=$(j 'd["challenge"]'); [ "$(j 'd["rp_id"]')" = "$RP_ID" ] || die "rp id"
+REG=$("$BIN/mk-softauthn" register "$SA" "$CH" "$RP_ID" "$ORIGIN")
+[ "$(ops2 -X POST "$APP/api/agent-ops/approval-credentials/register/finish" -d "$REG")" = 201 ] || die "register/finish: $(cat "$WORK/out.json")"
+[ "$(j 'd["alg"]')" = ES256 ] || die "credential alg"
+# Replaying the same registration bytes must fail: the challenge is single-use.
+[ "$(ops2 -X POST "$APP/api/agent-ops/approval-credentials/register/finish" -d "$REG")" = 409 ] || die "registration replay accepted"
 
 log "kernel health through the app"
 [ "$(ops "$APP/api/agent-ops/health")" = 200 ] || die "health via app"
@@ -113,7 +128,11 @@ grant() { ops -X POST "$APP/api/agent-ops/contacts/$1/permissions" -d "{\"channe
 propose_raw() { # $1 contact $2 to $3 idem
   ops -X POST "$APP/api/agent-ops/actions" -d "{\"origin\":\"agent\",\"request\":{\"workflow\":\"customer_follow_up\",\"action_kind\":\"send_sms\",\"tool_id\":\"mobile.sms.send.v1\",\"resource\":{\"type\":\"contact\",\"id\":\"$1\"},\"arguments\":{\"contact_id\":\"$1\",\"agent_id\":\"moto-1\",\"to\":\"$2\",\"template_id\":\"reorder_followup.v1\",\"rendered_text\":\"Hi! Your order shipped. Reply STOP to opt out.\"},\"purpose\":\"customer_requested_follow_up\",\"risk\":\"high\",\"requested_at\":\"$NOW\",\"expires_at\":\"$LATER\",\"idempotency_key\":\"$3\",\"evidence\":[]}}"; }
 propose() { local c; c=$(propose_raw "$@"); case "$c" in 201|202) echo 201;; *) echo "$c";; esac; }
-approve() { curl -sS -o "$WORK/out.json" -w '%{http_code}' "${H2[@]}" -X POST "$APP/api/agent-ops/actions/$1/approve" -d "{\"action_digest\":\"$2\",\"reason\":\"smoke\"}"; }
+# approve = challenge bound to the action digest → authenticator signs → kernel verifies.
+sign_for() { ops2 -X POST "$APP/api/agent-ops/actions/$1/approval-challenge" >/dev/null; "$BIN/mk-softauthn" assert "$SA" "$(j 'd["challenge"]')" "$RP_ID" "$ORIGIN"; }
+approve_with() { curl -sS -o "$WORK/out.json" -w '%{http_code}' "${H2[@]}" -X POST "$APP/api/agent-ops/actions/$1/approve" -d "{\"action_digest\":\"$2\",\"reason\":\"smoke\",\"webauthn\":$3}"; }
+approve() { local wa; wa=$(sign_for "$1"); approve_with "$1" "$2" "$wa"; }
+approve_unbound() { curl -sS -o "$WORK/out.json" -w '%{http_code}' "${H2[@]}" -X POST "$APP/api/agent-ops/actions/$1/approve" -d "{\"action_digest\":\"$2\",\"reason\":\"smoke\"}"; }
 state() { ops "$APP/api/agent-ops/actions/$1" >/dev/null; j 'd["state"]'; }
 
 log "gate 2: suppressed contact is refused at proposal"
@@ -160,8 +179,24 @@ EOF
 log "  state under kill switch: $s"
 [ "$(ops -X POST "$APP/api/agent-ops/kill-switch/tenant" -d '{"dispatch_enabled":true}')" = 204 ] || die "unkill"
 
+log "gate 8: approval authority is the human's authenticator, not the proxy's assertion key"
+c=$(approve_unbound "$A1" "$D1"); [ "$c" = 403 ] && [ "$(j 'd["code"]')" = WEBAUTHN_REQUIRED ] || die "approval without WebAuthn accepted ($c): $(cat "$WORK/out.json")"
+SA2="$WORK/attacker.json"; "$BIN/mk-softauthn" new "$SA2" es256 >/dev/null
+ops2 -X POST "$APP/api/agent-ops/actions/$A1/approval-challenge" >/dev/null; CH=$(j 'd["challenge"]')
+FORGED=$("$BIN/mk-softauthn" assert "$SA2" "$CH" "$RP_ID" "$ORIGIN")
+c=$(approve_with "$A1" "$D1" "$FORGED"); [ "$c" = 403 ] && [ "$(j 'd["code"]')" = WEBAUTHN_CREDENTIAL_MISMATCH ] || die "unregistered authenticator accepted ($c): $(cat "$WORK/out.json")"
+# the burned challenge cannot be reused by the real key
+REAL=$("$BIN/mk-softauthn" assert "$SA" "$CH" "$RP_ID" "$ORIGIN")
+c=$(approve_with "$A1" "$D1" "$REAL"); [ "$c" = 409 ] || die "burned challenge reused ($c)"
+# a challenge for A1 cannot approve A3 (digest-bound), and is burned by the attempt
+WA1=$(sign_for "$A1")
+c=$(approve_with "$A3" "$D3" "$WA1"); [ "$c" = 409 ] || die "transplanted challenge accepted ($c)"
+c=$(approve_with "$A1" "$D1" "$WA1"); [ "$c" = 409 ] || die "transplanted-then-reused challenge accepted ($c)"
+log "  unbound → 403, unregistered key → 403, burned/transplanted challenge → 409"
+
 log "gate 1: approved action reaches the device agent; signed callback accepted"
 [ "$(approve "$A1" "$D1")" = 200 ] || die "approve: $(cat "$WORK/out.json")"
+[ "$(j 'd["approval"]["human_binding"]')" = webauthn ] || die "approval not human-bound"
 for i in $(seq 1 40); do s=$(state "$A1"); case "$s" in completed|failed_final|failed_retryable|reconciliation_required) break;; esac; sleep 1; done
 log "  terminal state: $s (dry-run agent reports failed/dry_run_no_device — honest, no device)"
 case "$s" in completed|failed_final) ;; *) die "action did not reach the agent and back: $s";; esac
@@ -189,6 +224,19 @@ log "gate 7: identities are least-privilege (API cannot claim outbox; relay cann
 
 log "worker log clean under its restricted login (housekeeping under mk_kernel_worker is proven by mk-store::postgres::worker_role_can_discover_tenants_and_purge_nonces_across_tenants)"
 ! grep -qE "tenant listing failed|housekeeping failed|permission denied" "$WORK/worker.log" || die "worker housekeeping failed under mk_worker_login"
+
+log "gate 9: session revocation blocks the approver's next request and any live approval"
+[ "$(propose "$CONTACT" "+15555550100" "smoke-revocation-1")" = 201 ] || die "propose revocation"
+A4=$(j 'd["result"]["action_id"]'); D4=$(j 'd["result"]["action_digest"]')
+[ "$(approve "$A4" "$D4")" = 200 ] || die "approve A4: $(cat "$WORK/out.json")"
+# kill the worker briefly so the approval is still live when the session is revoked
+kill -STOP "${PIDS[2]}" 2>/dev/null || true
+[ "$(ops2 -X POST "$APP/api/agent-ops/revocations" -d '{"reason":"smoke: lost phone"}')" = 201 ] || die "revocation: $(cat "$WORK/out.json")"
+kill -CONT "${PIDS[2]}" 2>/dev/null || true
+c=$(ops2 "$APP/api/agent-ops/approvals/pending"); [ "$c" = 401 ] && [ "$(j 'd["code"]')" = PRINCIPAL_REVOKED ] || die "revoked session still accepted ($c)"
+sleep 3; s=$(state "$A4"); case "$s" in cancelled) ;; *) die "approval by revoked session still dispatched: $s";; esac
+grep -q "$A4" "$WORK/agent.log" && die "revoked-approver action reached the device agent"
+log "  revoked session → 401 PRINCIPAL_REVOKED; its live approval → cancelled"
 
 log "no PII in kernel/agent logs"
 ! grep -q "5555550100\|Your order shipped" "$WORK/api.log" "$WORK/worker.log" "$WORK/relay.log" "$WORK/agent.log" || die "PII leaked to logs"

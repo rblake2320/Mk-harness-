@@ -25,3 +25,7 @@ base64 = { workspace = true }
 [[bin]]
 name = "mk-devkeys"
 path = "src/bin/mk-devkeys.rs"
+
+[[bin]]
+name = "mk-softauthn"
+path = "src/bin/mk-softauthn.rs"

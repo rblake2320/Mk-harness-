@@ -169,6 +169,7 @@ async fn queued_outreach(w: &World) -> mk_domain::ActionId {
         None,
         None,
         now,
+        mk_store::approvals::HumanBinding::Unbound,
     )
     .await
     .unwrap_or_else(|e| panic!("{e:?}"));

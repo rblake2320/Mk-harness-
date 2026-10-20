@@ -193,9 +193,24 @@ async def replay_action(action_id: str, p: Principal = Depends(principal),
 # --------------------------------------------------------------------------- #
 # Approvals — always minted as the human; never as an agent
 # --------------------------------------------------------------------------- #
+_B64URL = r"^[A-Za-z0-9_-]+$"
+_B64URL_MAX = 87_382   # ≤64 KiB decoded
+
+
+class WebAuthnAssertionIn(BaseModel):
+    """Bytes from `navigator.credentials.get()` on the approval screen. FastAPI
+    relays them untouched; only the kernel verifies (it holds the registered
+    public keys and issued the challenge). FastAPI cannot forge these."""
+    credential_id: str = Field(pattern=_B64URL, max_length=_B64URL_MAX)
+    client_data_json: str = Field(pattern=_B64URL, max_length=_B64URL_MAX)
+    authenticator_data: str = Field(pattern=_B64URL, max_length=_B64URL_MAX)
+    signature: str = Field(pattern=_B64URL, max_length=_B64URL_MAX)
+
+
 class DecisionIn(BaseModel):
     action_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
     reason: str | None = None
+    webauthn: WebAuthnAssertionIn | None = None
 
 
 @router.post("/actions/{action_id}/approve")
@@ -218,6 +233,67 @@ async def reject(action_id: str, body: DecisionIn, p: Principal = Depends(princi
 async def pending(p: Principal = Depends(principal),
                   client: KernelClient = Depends(get_kernel_client)):
     return await forward(client, p, "GET", "/approvals/pending")
+
+
+# --------------------------------------------------------------------------- #
+# Human-approval authority (WP06): passkey registration, approval challenges,
+# revocations. Every call is a relay; the kernel is the only verifier.
+# --------------------------------------------------------------------------- #
+@router.post("/actions/{action_id}/approval-challenge")
+async def approval_challenge(action_id: str, p: Principal = Depends(principal),
+                             client: KernelClient = Depends(get_kernel_client)):
+    return await forward(client, p, "POST",
+                         f"/actions/{_uuid_text(action_id, 'action_id')}/approval-challenge", json={})
+
+
+@router.post("/approval-credentials/register/begin")
+async def passkey_register_begin(p: Principal = Depends(principal),
+                                 client: KernelClient = Depends(get_kernel_client)):
+    return await forward(client, p, "POST", "/approval-credentials/register/begin", json={})
+
+
+class PasskeyFinishIn(BaseModel):
+    client_data_json: str = Field(pattern=_B64URL, max_length=_B64URL_MAX)
+    attestation_object: str = Field(pattern=_B64URL, max_length=_B64URL_MAX)
+    label: str = Field(default="", max_length=80)
+
+
+@router.post("/approval-credentials/register/finish")
+async def passkey_register_finish(body: PasskeyFinishIn, p: Principal = Depends(principal),
+                                  client: KernelClient = Depends(get_kernel_client)):
+    return await forward(client, p, "POST", "/approval-credentials/register/finish", json=body.model_dump())
+
+
+@router.get("/approval-credentials")
+async def passkeys(p: Principal = Depends(principal), client: KernelClient = Depends(get_kernel_client)):
+    return await forward(client, p, "GET", "/approval-credentials")
+
+
+@router.post("/approval-credentials/{row_id}/revoke")
+async def passkey_revoke(row_id: str, p: Principal = Depends(principal),
+                         client: KernelClient = Depends(get_kernel_client)):
+    return await forward(client, p, "POST", f"/approval-credentials/{_uuid_text(row_id, 'credential_row_id')}/revoke", json={})
+
+
+class RevocationIn(BaseModel):
+    session_id: str | None = Field(default=None, min_length=1, max_length=128)
+    user_id: str | None = None
+    reason: str = Field(default="", max_length=500)
+
+
+@router.post("/revocations")
+async def revoke_principal(body: RevocationIn, p: Principal = Depends(principal),
+                           client: KernelClient = Depends(get_kernel_client)):
+    """Revoke a kernel session or user (H9). `session_id` omitted + `user_id`
+    omitted → revokes the caller's *current* kernel session."""
+    payload: dict[str, Any] = {"reason": body.reason}
+    if body.user_id:
+        payload["user_id"] = _uuid_text(body.user_id, "user_id")
+    if body.session_id:
+        payload["session_id"] = body.session_id
+    elif not body.user_id:
+        payload["session_id"] = p.session_id
+    return await forward(client, p, "POST", "/revocations", json=payload)
 
 
 @router.post("/approvals/{approval_id}/revoke")
@@ -328,12 +404,13 @@ async def revoke_adapter(adapter_id: str, p: Principal = Depends(principal),
 # --------------------------------------------------------------------------- #
 class KillSwitchIn(BaseModel):
     dispatch_enabled: bool
+    webauthn: WebAuthnAssertionIn | None = None   # required by the kernel to re-enable globally
 
 
 @router.post("/kill-switch/tenant")
 async def tenant_kill_switch(body: KillSwitchIn, p: Principal = Depends(principal),
                              client: KernelClient = Depends(get_kernel_client)):
-    return await forward(client, p, "POST", "/kill-switch/tenant", json=body.model_dump())
+    return await forward(client, p, "POST", "/kill-switch/tenant", json=body.model_dump(exclude_none=True))
 
 
 @router.post("/kill-switch/global")
@@ -343,5 +420,14 @@ async def global_kill_switch(body: KillSwitchIn, p: Principal = Depends(principa
     # KERNEL_PLATFORM_OPERATORS — never for tenant admins, never for agents.
     if p.user_id not in get_settings().platform_operator_ids:
         raise HTTPException(403, "Platform operator required")
-    return await forward(client, p, "POST", "/kill-switch/global", json=body.model_dump(),
+    return await forward(client, p, "POST", "/kill-switch/global", json=body.model_dump(exclude_none=True),
+                         extra_roles=(ROLE_PLATFORM_OPERATOR,))
+
+
+@router.post("/kill-switch/global/challenge")
+async def global_kill_switch_challenge(p: Principal = Depends(principal),
+                                       client: KernelClient = Depends(get_kernel_client)):
+    if p.user_id not in get_settings().platform_operator_ids:
+        raise HTTPException(403, "Platform operator required")
+    return await forward(client, p, "POST", "/kill-switch/global/challenge", json={},
                          extra_roles=(ROLE_PLATFORM_OPERATOR,))
