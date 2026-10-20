@@ -1,0 +1,45 @@
+# JSON-Schema (YAML form) for evidence records. Validated by tools/evidence/check.py.
+$schema: https://json-schema.org/draft/2020-12/schema
+type: object
+additionalProperties: false
+required: [requirement_id, acceptance_condition, owner, source_commit, image_digests, environment,
+           configuration, test_procedure, test_version, expected_result, actual_result, evidence,
+           verifier, verifier_independent_of_author, verification_date, status, invalidation_triggers,
+           remaining_findings]
+properties:
+  requirement_id: {type: string, pattern: "^[A-Z]{1,2}[0-9]{1,2}[a-z]?$"}
+  acceptance_condition: {type: string, minLength: 10}
+  owner: {type: string, minLength: 3}
+  source_commit: {type: string, pattern: "^[0-9a-f]{40}$"}
+  image_digests:
+    type: object
+    minProperties: 1
+    additionalProperties: {type: string, pattern: "^sha256:[0-9a-f]{64}$"}
+  environment: {type: string, minLength: 3}
+  configuration: {type: string, minLength: 3}
+  test_procedure: {type: string, minLength: 3}
+  test_version: {type: string, minLength: 3}
+  expected_result: {type: string, minLength: 3}
+  actual_result: {type: string, minLength: 3}
+  evidence:
+    type: array
+    minItems: 1
+    items:
+      type: object
+      additionalProperties: false
+      required: [location, sha256]
+      properties:
+        location: {type: string, minLength: 3}
+        sha256: {type: string, pattern: "^[0-9a-f]{64}$"}
+  verifier: {type: string, minLength: 3}
+  verifier_independent_of_author: {type: boolean}
+  verification_date: {type: string, format: date-time}
+  status: {enum: [not_demonstrated, implemented, independently_verified, production_proven]}
+  observation_window: {type: string}
+  invalidation_triggers: {type: array, items: {type: string}}
+  remaining_findings: {type: array, items: {type: string}}
+allOf:
+  - if: {properties: {status: {const: independently_verified}}}
+    then: {properties: {verifier_independent_of_author: {const: true}}}
+  - if: {properties: {status: {const: production_proven}}}
+    then: {required: [observation_window], properties: {verifier_independent_of_author: {const: true}}}
