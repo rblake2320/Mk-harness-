@@ -1,0 +1,262 @@
+//! Human decisions. Never reachable by an agent-only principal.
+
+use axum::Json;
+use axum::extract::{Path, State};
+use axum::http::{HeaderMap, StatusCode};
+use chrono::Utc;
+use mk_contracts::{ActionResult, ApprovalRecord};
+use mk_domain::{ActionId, ApprovalDecision, ApprovalId, Transition};
+use mk_policy::{ApproverContext, Decision, check_approver};
+use mk_store::{actions, approvals, outbox, policy};
+use serde::{Deserialize, Serialize};
+use serde_json::json;
+
+use crate::auth::Principal;
+use crate::error::ApiError;
+use crate::routes::actor_of;
+use crate::state::AppState;
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DecisionBody {
+    #[serde(default)]
+    pub reason: Option<String>,
+    /// The digest the approver saw in the UI. Must equal the stored digest;
+    /// this defends against approving a row that changed under the UI.
+    pub action_digest: mk_crypto::Digest,
+}
+
+#[derive(Debug, Serialize)]
+pub struct DecisionResponse {
+    pub approval: ApprovalRecord,
+    pub result: ActionResult,
+}
+
+async fn decide(
+    st: &AppState,
+    p: &Principal,
+    headers: &HeaderMap,
+    action_id: ActionId,
+    decision: ApprovalDecision,
+    body: DecisionBody,
+) -> Result<DecisionResponse, ApiError> {
+    let rid = |e: ApiError| e.with_request_id(headers);
+    if p.has_role("agent") && p.roles.len() == 1 {
+        return Err(rid(ApiError::new(
+            StatusCode::FORBIDDEN,
+            "AGENT_CANNOT_APPROVE",
+            "Approval requires a human principal",
+        )));
+    }
+    let now = Utc::now();
+    let actor_id = p.user.to_string();
+    let actor = actor_of(p, &actor_id);
+    let mut tx = st.store.begin(p.tenant).await.map_err(|e| rid(e.into()))?;
+    let a = actions::get_for_update(&mut tx, action_id)
+        .await
+        .map_err(|e| rid(e.into()))?;
+    if !a.digest.ct_eq(&body.action_digest) {
+        return Err(rid(ApiError::new(
+            StatusCode::CONFLICT,
+            "APPROVAL_DIGEST_MISMATCH",
+            "The action changed since it was displayed",
+        )));
+    }
+    let (tenant_policy, _) = policy::load(&mut tx).await.map_err(|e| rid(e.into()))?;
+    check_approver(&ApproverContext {
+        tenant_id: p.tenant,
+        approver_id: p.user,
+        approver_roles: &p.roles,
+        action_tenant_id: a.tenant_id,
+        requested_by: a.request.requested_by,
+        workflow: a.request.workflow,
+        tenant_allows_self_approval: tenant_policy.allow_self_approval,
+    })
+    .map_err(|e| rid(ApiError::deny(e.code)))?;
+    let ttl = tenant_policy.approval_ttl_secs;
+    let approval = approvals::record_decision(
+        &mut tx,
+        action_id,
+        p.user,
+        &p.roles,
+        decision,
+        body.reason.as_deref(),
+        ttl,
+        Some(&p.session_id),
+        None,
+        now,
+    )
+    .await
+    .map_err(|e| rid(e.into()))?;
+    let result = match decision {
+        ApprovalDecision::Approved => {
+            actions::transition(&mut tx, action_id, Transition::Approve, None, actor, now)
+                .await
+                .map_err(|e| rid(e.into()))?;
+            if st.rust_kernel_enabled {
+                actions::transition(&mut tx, action_id, Transition::Enqueue, None, actor, now)
+                    .await
+                    .map_err(|e| rid(e.into()))?;
+                outbox::enqueue(&mut tx, action_id, "dispatch", now, json!({}))
+                    .await
+                    .map_err(|e| rid(e.into()))?;
+            }
+            actions::get(&mut tx, action_id)
+                .await
+                .map_err(|e| rid(e.into()))?
+        }
+        ApprovalDecision::Rejected => actions::transition(
+            &mut tx,
+            action_id,
+            Transition::Reject,
+            Some("rejected_by_approver"),
+            actor,
+            now,
+        )
+        .await
+        .map_err(|e| rid(e.into()))?,
+    };
+    tx.commit().await.map_err(|e| rid(e.into()))?;
+    Ok(DecisionResponse {
+        approval,
+        result: result.to_result(None),
+    })
+}
+
+pub async fn approve(
+    State(st): State<AppState>,
+    p: Principal,
+    headers: HeaderMap,
+    Path(action_id): Path<ActionId>,
+    Json(body): Json<DecisionBody>,
+) -> Result<Json<DecisionResponse>, ApiError> {
+    decide(
+        &st,
+        &p,
+        &headers,
+        action_id,
+        ApprovalDecision::Approved,
+        body,
+    )
+    .await
+    .map(Json)
+}
+
+pub async fn reject(
+    State(st): State<AppState>,
+    p: Principal,
+    headers: HeaderMap,
+    Path(action_id): Path<ActionId>,
+    Json(body): Json<DecisionBody>,
+) -> Result<Json<DecisionResponse>, ApiError> {
+    decide(
+        &st,
+        &p,
+        &headers,
+        action_id,
+        ApprovalDecision::Rejected,
+        body,
+    )
+    .await
+    .map(Json)
+}
+
+#[derive(Debug, Serialize)]
+pub struct PendingItem {
+    pub result: ActionResult,
+    /// What the approver must see: the exact rendered text, redacted
+    /// destination, channel, purpose, evidence count, and expiry.
+    pub display: serde_json::Value,
+}
+
+/// `GET /internal/v1/approvals/pending`
+pub async fn pending(
+    State(st): State<AppState>,
+    p: Principal,
+    headers: HeaderMap,
+) -> Result<Json<Vec<PendingItem>>, ApiError> {
+    let rid = |e: ApiError| e.with_request_id(&headers);
+    let mut tx = st.store.begin(p.tenant).await.map_err(|e| rid(e.into()))?;
+    let ids = approvals::pending(&mut tx, 200)
+        .await
+        .map_err(|e| rid(e.into()))?;
+    let mut out = Vec::with_capacity(ids.len());
+    for id in ids {
+        let a = actions::get(&mut tx, id).await.map_err(|e| rid(e.into()))?;
+        let args = &a.request.arguments;
+        let display = json!({
+            "rendered_text": args.get("rendered_text"),
+            "destination_redacted": args.get("to").and_then(serde_json::Value::as_str).map(redact_destination),
+            "channel": a.channel,
+            "workflow": a.request.workflow,
+            "purpose": a.request.purpose,
+            "risk": a.request.risk,
+            "evidence_count": a.request.evidence.len(),
+            "expires_at": a.expires_at,
+            "action_digest": a.digest.to_string(),
+        });
+        out.push(PendingItem {
+            result: a.to_result(None),
+            display,
+        });
+    }
+    st.metrics
+        .approvals_pending
+        .set(i64::try_from(out.len()).unwrap_or(i64::MAX));
+    Ok(Json(out))
+}
+
+fn redact_destination(d: &str) -> String {
+    let n = d.chars().count();
+    if n <= 4 {
+        "****".into()
+    } else {
+        let tail: String = d.chars().skip(n - 4).collect();
+        format!("{}{tail}", "*".repeat(n - 4))
+    }
+}
+
+/// `POST /internal/v1/approvals/{approval_id}/revoke`
+pub async fn revoke(
+    State(st): State<AppState>,
+    p: Principal,
+    headers: HeaderMap,
+    Path(approval_id): Path<ApprovalId>,
+) -> Result<Json<ApprovalRecord>, ApiError> {
+    let rid = |e: ApiError| e.with_request_id(&headers);
+    if p.has_role("agent") && p.roles.len() == 1 {
+        return Err(rid(ApiError::new(
+            StatusCode::FORBIDDEN,
+            "AGENT_CANNOT_REVOKE",
+            "Revocation requires a human principal",
+        )));
+    }
+    let now = Utc::now();
+    let actor_id = p.user.to_string();
+    let actor = actor_of(&p, &actor_id);
+    let mut tx = st.store.begin(p.tenant).await.map_err(|e| rid(e.into()))?;
+    let rec = approvals::revoke(&mut tx, approval_id, p.user, actor, now)
+        .await
+        .map_err(|e| rid(e.into()))?;
+    // A queued action whose approval was revoked must not dispatch.
+    let a = actions::get_for_update(&mut tx, rec.action_id)
+        .await
+        .map_err(|e| rid(e.into()))?;
+    if a.state.is_cancellable() {
+        actions::transition(
+            &mut tx,
+            rec.action_id,
+            Transition::Cancel,
+            Some("approval_revoked"),
+            actor,
+            now,
+        )
+        .await
+        .map_err(|e| rid(e.into()))?;
+    }
+    tx.commit().await.map_err(|e| rid(e.into()))?;
+    Ok(Json(rec))
+}
+
+#[allow(dead_code)]
+fn _decision_type_check(_: Decision) {}

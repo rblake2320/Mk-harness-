@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.consultant-studio.invalid/action/v1/approval.schema.json",
+  "title": "MK approval v1",
+  "description": "Approval is bound to the exact canonical action digest and consumed once, atomically, immediately before dispatch. A copied approved=true flag has no authority.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "approval_id", "tenant_id", "action_id", "action_digest", "approver_id", "decision", "created_at", "expires_at"],
+  "properties": {
+    "schema_version": {"const": "mk.approval.v1"},
+    "approval_id": {"type": "string", "format": "uuid"},
+    "tenant_id": {"type": "string", "format": "uuid"},
+    "action_id": {"type": "string", "format": "uuid"},
+    "action_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "approver_id": {"type": "string", "format": "uuid"},
+    "approver_roles": {"type": "array", "maxItems": 16, "items": {"type": "string", "pattern": "^[a-z][a-z0-9_]{0,39}$"}},
+    "decision": {"enum": ["approved", "rejected"]},
+    "reason": {"type": "string", "maxLength": 1000},
+    "created_at": {"type": "string", "format": "date-time"},
+    "expires_at": {"type": "string", "format": "date-time"},
+    "consumed_at": {"type": ["string", "null"], "format": "date-time"},
+    "revoked_at": {"type": ["string", "null"], "format": "date-time"},
+    "session_id": {"type": "string", "maxLength": 128}
+  }
+}

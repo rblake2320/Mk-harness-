@@ -1,0 +1,82 @@
+//! Periodic maintenance run by the worker between batches.
+
+use chrono::{DateTime, Utc};
+use mk_audit::ActorType;
+use mk_domain::{ActionState, TenantId, Transition};
+use mk_policy::POLICY_VERSION;
+use mk_store::actions::{self, Actor};
+use mk_store::{Store, StoreError, adapters, outbox};
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct HousekeepingStats {
+    pub expired: usize,
+    pub leases_recovered: usize,
+    pub nonces_purged: u64,
+}
+
+/// Expire overdue actions for one tenant, recover expired leases (moving a
+/// stuck `Dispatching` action to reconciliation rather than guessing), and
+/// purge old nonces.
+pub async fn run_once(
+    store: &Store,
+    tenants: &[TenantId],
+    worker_id: &str,
+    now: DateTime<Utc>,
+) -> Result<HousekeepingStats, StoreError> {
+    let actor = Actor {
+        actor_type: ActorType::Worker,
+        actor_id: worker_id,
+        trace_id: None,
+        policy_version: POLICY_VERSION.0,
+    };
+    let mut stats = HousekeepingStats::default();
+    for tenant in tenants {
+        let mut tx = store.begin(*tenant).await?;
+        for id in actions::expired_candidates(&mut tx, now, 200).await? {
+            if actions::transition(
+                &mut tx,
+                id,
+                Transition::Expire,
+                Some("action_expired"),
+                actor,
+                now,
+            )
+            .await
+            .is_ok()
+            {
+                stats.expired += 1;
+            }
+        }
+        tx.commit().await?;
+    }
+    for (tenant, action_id) in outbox::expired_leases(store.pool(), now, 200).await? {
+        let mut tx = store.begin(tenant).await?;
+        let a = actions::get_for_update(&mut tx, action_id).await?;
+        // Worker died mid-call or a callback never came: the effect may
+        // have happened. Never silently retry.
+        if a.state == ActionState::Dispatching {
+            actions::transition(
+                &mut tx,
+                action_id,
+                Transition::RequireReconciliation,
+                Some("lease_expired"),
+                actor,
+                now,
+            )
+            .await?;
+        }
+        // Drop the stale lease regardless of state.
+        sqlx_release(&mut tx, action_id).await?;
+        tx.commit().await?;
+        stats.leases_recovered += 1;
+    }
+    stats.nonces_purged = adapters::purge_nonces(store.pool(), now).await?;
+    Ok(stats)
+}
+
+async fn sqlx_release(
+    tx: &mut mk_store::TenantTx<'_>,
+    action_id: mk_domain::ActionId,
+) -> Result<(), StoreError> {
+    outbox::release_lease_any(tx, action_id).await
+}

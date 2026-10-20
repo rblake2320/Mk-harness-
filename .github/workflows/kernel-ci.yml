@@ -1,0 +1,85 @@
+name: Rust action kernel
+
+on:
+  push:
+    branches: [main]
+    paths: ["rust/**", "contracts/**", "migrations/**", "deploy/kernel/**", ".github/workflows/kernel-ci.yml"]
+  pull_request:
+    paths: ["rust/**", "contracts/**", "migrations/**", "deploy/kernel/**", ".github/workflows/kernel-ci.yml"]
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D warnings"
+
+jobs:
+  kernel:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: rust } }
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env: { POSTGRES_PASSWORD: kernel, POSTGRES_DB: mk_kernel_test }
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      # Actions pinned by immutable commit digest (same pins as ci.yml on the governed branch).
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.97.0"
+          components: rustfmt, clippy
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest,cargo-deny,cargo-audit,cargo-cyclonedx
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+      - run: cargo nextest run --workspace --no-fail-fast
+        env:
+          MK_TEST_DATABASE_URL: postgres://postgres:kernel@127.0.0.1:5432/mk_kernel_test
+          MK_TEST_REDIS_URL: redis://127.0.0.1:6379
+      - run: cargo test --doc --workspace
+      - run: cargo deny check
+      - run: cargo audit --ignore RUSTSEC-2023-0071  # sqlx-mysql never compiled; see deny.toml
+      - name: SBOM
+        run: cargo cyclonedx --format json --all
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kernel-sbom
+          path: rust/**/*.cdx.json
+          if-no-files-found: error
+
+  contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with: { python-version: "3.12" }
+      - run: pip install jsonschema==4.23.0
+      - name: JSON Schema fixtures + cross-language HMAC vectors (Python side)
+        run: python -I contracts/tests/test_contracts.py
+
+  kernel-image:
+    runs-on: ubuntu-latest
+    needs: [kernel, contracts]
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - run: docker build -f deploy/kernel/Dockerfile -t mk-action-kernel:ci .
+      - name: Scan image
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: mk-action-kernel:ci
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+          ignore-unfixed: true

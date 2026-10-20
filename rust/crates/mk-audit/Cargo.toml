@@ -1,0 +1,23 @@
+[package]
+name = "mk-audit"
+description = "Audit-event construction and per-tenant tamper-evident hash chain. Append-only API; verification over any ordered event source."
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+mk-domain = { workspace = true }
+mk-crypto = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+thiserror = { workspace = true }
+uuid = { workspace = true }
+schemars = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }

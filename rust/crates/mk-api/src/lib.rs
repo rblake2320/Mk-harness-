@@ -1,0 +1,88 @@
+//! Internal HTTP API. Listens on the private service network only.
+//!
+//! Every `/internal/v1/*` request carries a short-lived Ed25519 actor
+//! assertion minted by FastAPI; `/adapter/v1/*` callbacks carry the
+//! mobile-adapter HMAC headers instead. Handlers translate HTTP into store
+//! and policy calls and back; they contain no authorization logic of their
+//! own.
+
+pub mod auth;
+pub mod error;
+pub mod metrics;
+pub mod routes;
+pub mod state;
+
+use axum::Router;
+use axum::extract::DefaultBodyLimit;
+use axum::routing::{delete, get, post};
+use std::time::Duration;
+use tower_http::request_id::{MakeRequestUuid, PropagateRequestIdLayer, SetRequestIdLayer};
+use tower_http::timeout::TimeoutLayer;
+
+pub use state::AppState;
+
+pub const MAX_BODY_BYTES: usize = 256 * 1024;
+
+pub fn router(state: AppState) -> Router {
+    let internal = Router::new()
+        .route("/actions", post(routes::actions::propose))
+        .route("/actions/{action_id}", get(routes::actions::get))
+        .route("/actions/{action_id}/cancel", post(routes::actions::cancel))
+        .route("/actions/{action_id}/replay", post(routes::actions::replay))
+        .route(
+            "/actions/{action_id}/approve",
+            post(routes::approvals::approve),
+        )
+        .route(
+            "/actions/{action_id}/reject",
+            post(routes::approvals::reject),
+        )
+        .route("/approvals/pending", get(routes::approvals::pending))
+        .route(
+            "/approvals/{approval_id}/revoke",
+            post(routes::approvals::revoke),
+        )
+        .route(
+            "/contacts/{contact_id}/permissions",
+            post(routes::consent::grant_permission),
+        )
+        .route(
+            "/contacts/{contact_id}/permissions/{permission_id}/revoke",
+            post(routes::consent::revoke_permission),
+        )
+        .route("/suppressions", post(routes::consent::add_suppression))
+        .route(
+            "/suppressions/{suppression_id}",
+            delete(routes::consent::lift_suppression),
+        )
+        .route("/adapters", post(routes::adapters::register))
+        .route("/adapters/{adapter_id}", get(routes::adapters::get))
+        .route(
+            "/adapters/{adapter_id}/rotate",
+            post(routes::adapters::rotate),
+        )
+        .route(
+            "/adapters/{adapter_id}/revoke",
+            post(routes::adapters::revoke),
+        )
+        .route("/kill-switch/tenant", post(routes::ops::tenant_kill_switch))
+        .route("/kill-switch/global", post(routes::ops::global_kill_switch));
+
+    Router::new()
+        .nest("/internal/v1", internal)
+        .route(
+            "/adapter/v1/work-orders/{action_id}/callbacks",
+            post(routes::callbacks::callback),
+        )
+        .route("/health/live", get(routes::ops::live))
+        .route("/health/ready", get(routes::ops::ready))
+        .route("/metrics", get(routes::ops::metrics))
+        .layer(DefaultBodyLimit::max(MAX_BODY_BYTES))
+        .layer(TimeoutLayer::with_status_code(
+            axum::http::StatusCode::GATEWAY_TIMEOUT,
+            Duration::from_secs(20),
+        ))
+        .layer(PropagateRequestIdLayer::x_request_id())
+        .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid))
+        .with_state(state)
+}

@@ -1,0 +1,11 @@
+{
+  "reviewed_upstream": {
+    "repository": "https://github.com/rohanarun/phoneclaw",
+    "commit": "c59995b726a127da16275d2d8e0760408b988542",
+    "commit_time": "2026-04-21T05:43:27Z",
+    "review_scope": "Documented ClawScript helper surface only"
+  },
+  "concrete_mobile_adapter": null,
+  "real_device_evidence": false,
+  "note": "This lock records the upstream source reviewed while defining the adapter contract. It is not evidence that a concrete adapter or real device was exercised."
+}

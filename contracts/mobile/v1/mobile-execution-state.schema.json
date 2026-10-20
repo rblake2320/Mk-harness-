@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.consultant-studio.invalid/agent-ops/v1/mobile-execution-state.schema.json",
+  "title": "Consultant Studio mobile execution state v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "status", "result", "error_code"],
+  "properties": {
+    "schema": {"const": "consultant-studio.mobile-execution-state.v1"},
+    "status": {"const": "executing"},
+    "result": {"type": "object", "maxProperties": 100},
+    "error_code": {"const": ""}
+  }
+}

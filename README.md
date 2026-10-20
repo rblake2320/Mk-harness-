@@ -145,3 +145,14 @@ not do from the container: hit OpenAI/Gemini live endpoints (network
 egress), run an iOS/Android simulator (Expo client is code-complete and
 mirrors the tested web flows through the same SDK, but needs a device run),
 or deploy to your infrastructure. First-run checklist is in "Run it" above.
+
+
+## Rust action kernel
+
+Governed external actions (outreach, mobile work orders, contact updates,
+appointments) are authorized and executed only by the Rust action kernel in
+`rust/`. FastAPI remains the application and AI layer. See `rust/README.md`
+for the execution path, trust boundaries, test matrix, and the honest list of
+gaps versus the build specification. Contracts live in `contracts/`,
+migrations for the `kernel` schema in `migrations/kernel/`, deployment in
+`deploy/kernel/` and `docker-compose.kernel.yml`.
