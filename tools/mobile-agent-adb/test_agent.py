@@ -13,7 +13,8 @@ Proves:
   callbacks    executing → complete|failed, signed, bodies match the schemas,
                result carries digests only (no phone number / text leakage)
   evidence     bundle written atomically; hash chain verifies; tamper detected
-  adb          executor parses sent rows, finds Send button, refuses empty boot id
+  adb          executor parses sent rows (commas, newlines, delimiter-like text
+               in the body), finds Send button, refuses empty boot id
 """
 from __future__ import annotations
 
@@ -352,9 +353,9 @@ class AdbExecutorTests(unittest.TestCase):
             return subprocess.CompletedProcess(argv, 0, b"", b"")
         return A.AdbExecutor("adb", "ZX1G", runner=runner), calls
 
-    ROWS_BEFORE = b"Row: 0 _id=10, address=+15555550199, body=old, date=1\n"
+    ROWS_BEFORE = b"Row: 0 _id=10, address=+15555550199, date=1, body=old\n"
     ROWS_AFTER = ROWS_BEFORE + (
-        b"Row: 1 _id=11, address=+1 555-555-0100, body=" + TEXT.encode() + b", date=1700000000\n")
+        b"Row: 1 _id=11, address=+1 555-555-0100, date=1700000000, body=" + TEXT.encode() + b"\n")
     UI = (b'<node text="Send" bounds="[900,1800][1000,1900]" />')
 
     def test_sms_send_success_with_evidence(self):
@@ -394,6 +395,55 @@ class AdbExecutorTests(unittest.TestCase):
         tap = [c for c in calls if "tap" in c][0]
         self.assertEqual(tap[-2:], ["950", "1850"])
         self.assertTrue(any("android.intent.action.SENDTO" in c for c in calls))
+
+    def test_parse_rows_preserves_commas_newlines_and_delimiter_like_text(self):
+        """Codex P1 on PR #31: a comma in the body truncated the parsed message."""
+        body1 = "Hi, your order shipped. Reply STOP, or call us"
+        body2 = "Line one\nLine two, with comma\naddress=fake, date=0, body=nested"
+        body3 = "trailing comma, "
+        out = ("Row: 0 _id=1, address=+15555550100, date=10, body=" + body1 + "\n"
+               "Row: 1 _id=2, address=+1 (555) 555-0101, date=11, body=" + body2 + "\n"
+               "Row: 2 _id=3, address=+15555550102, date=, body=" + body3 + "\n"
+               "Row: 3 _id=4, address=+15555550103, date=12, body=\n")
+        rows = A.AdbExecutor.parse_rows(out)
+        self.assertEqual([r["_id"] for r in rows], ["1", "2", "3", "4"])
+        self.assertEqual(rows[0]["body"], body1)
+        self.assertEqual(rows[1]["body"], body2)
+        self.assertEqual(rows[1]["address"], "+1 (555) 555-0101")
+        self.assertEqual(rows[2]["body"], body3)
+        self.assertEqual(rows[2]["date"], "")
+        self.assertEqual(rows[3]["body"], "")
+        self.assertEqual(A.AdbExecutor.parse_rows(""), [])
+        self.assertEqual(A.AdbExecutor.parse_rows("No result found.\n"), [])
+
+    def test_sms_with_comma_is_confirmed_sent(self):
+        """End-to-end through the executor with a comma-bearing message."""
+        text = "Hi, your order shipped. Reply STOP to opt out."
+        before = b"Row: 0 _id=10, address=+15555550199, date=1, body=old\n"
+        after = before + b"Row: 1 _id=11, address=+15555550100, date=1700000000, body=" + text.encode() + b"\n"
+        state = {"n": 0}
+
+        def runner(argv):
+            key = " ".join(argv[2:])
+            if "content query" in key:
+                state["n"] += 1
+                return subprocess.CompletedProcess(argv, 0, before if state["n"] == 1 else after, b"")
+            table = [(r"getprop ro.serialno", b"S\n"), (r"boot_id", b"B\n"),
+                     (r"cat /sdcard/mk_ui.xml", self.UI), (r"^screencap", b"PNG")]
+            for pat, out in table:
+                if re.search(pat, key):
+                    return subprocess.CompletedProcess(argv, 0, out, b"")
+            return subprocess.CompletedProcess(argv, 0, b"", b"")
+        ex = A.AdbExecutor("adb", runner=runner)
+        A.time.sleep = lambda *_: None
+        o = order(); o["steps"][2]["value"] = text
+        d = Path(tempfile.mkdtemp())
+        try:
+            r = ex.run(o, d)
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+        self.assertTrue(r.sent, r)
+        self.assertEqual(r.evidence["sms_row_id_digest"], hashlib.sha256(b"11").hexdigest())
 
     def test_empty_boot_identity_is_refused(self):
         ex, _ = self.make([(r"getprop ro.serialno", (0, b"ZX1G\n")), (r"boot_id", (0, b"\n"))])

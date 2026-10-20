@@ -187,6 +187,9 @@ log "gate 7: identities are least-privilege (API cannot claim outbox; relay cann
 ! psql -q "$(url_for mk_readonly_login readonly)" -c "INSERT INTO kernel.kill_switches (scope,tenant_id,dispatch_enabled,changed_by) VALUES ('tenant','$TENANT',false,'x')" >/dev/null 2>&1 || die "readonly login can write"
 ! psql -q "$(url_for mk_api_login api)" -c "DELETE FROM kernel.audit_events WHERE false" >/dev/null 2>&1 || die "api login can delete audit"
 
+log "worker log clean under its restricted login (housekeeping under mk_kernel_worker is proven by mk-store::postgres::worker_role_can_discover_tenants_and_purge_nonces_across_tenants)"
+! grep -qE "tenant listing failed|housekeeping failed|permission denied" "$WORK/worker.log" || die "worker housekeeping failed under mk_worker_login"
+
 log "no PII in kernel/agent logs"
 ! grep -q "5555550100\|Your order shipped" "$WORK/api.log" "$WORK/worker.log" "$WORK/relay.log" "$WORK/agent.log" || die "PII leaked to logs"
 

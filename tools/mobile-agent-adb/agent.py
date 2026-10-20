@@ -318,16 +318,30 @@ class AdbExecutor(Executor):
         return {"serial_digest": sha256_hex(serial.encode()), "fingerprint": fp,
                 "boot_id_digest": sha256_hex(boot.encode())}
 
+    # `content query` prints `Row: N k=v, k=v, ...`. The body is free text and
+    # may itself contain ", ", "=", or newlines, so it is projected LAST and
+    # parsed as "everything after `body=`" up to the next `Row:` anchor; the
+    # fixed-shape fields before it (`_id`, `address`, `date`) are matched
+    # structurally, never by splitting on commas.
+    _ROW_RE = re.compile(
+        r"^Row: \d+ _id=(?P<_id>\d+), address=(?P<address>[^,\n]*), date=(?P<date>\d*), body=(?P<body>.*?)"
+        r"(?=^Row: \d+ |\Z)",
+        re.MULTILINE | re.DOTALL,
+    )
+
+    @classmethod
+    def parse_rows(cls, out: str) -> list[dict[str, str]]:
+        rows = []
+        for m in cls._ROW_RE.finditer(out):
+            d = m.groupdict()
+            d["body"] = d["body"].rstrip("\n")
+            rows.append(d)
+        return rows
+
     def _sent_rows(self) -> list[dict[str, str]]:
         out = self._sh("content", "query", "--uri", "content://sms/sent",
-                       "--projection", "_id:address:body:date")
-        rows = []
-        for line in out.splitlines():
-            if not line.startswith("Row:"):
-                continue
-            kv = dict(re.findall(r"(\w+)=([^,]*?)(?:, |$)", line.split(" ", 2)[2]))
-            rows.append(kv)
-        return rows
+                       "--projection", "_id:address:date:body")
+        return self.parse_rows(out)
 
     def _find_send_button(self) -> tuple[int, int] | None:
         self._sh("uiautomator", "dump", "/sdcard/mk_ui.xml")

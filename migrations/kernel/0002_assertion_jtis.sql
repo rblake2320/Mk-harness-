@@ -30,3 +30,19 @@ REVOKE UPDATE, TRUNCATE ON kernel.assertion_jtis FROM mk_kernel_worker;
 -- logins: only the relay claims/publishes outbox rows. The API and worker
 -- enqueue (INSERT) and never update.
 REVOKE UPDATE ON kernel.outbox_events FROM mk_kernel_api, mk_kernel_worker;
+
+-- Worker housekeeping runs two cross-tenant statements outside any tenant
+-- transaction: tenant discovery (SELECT tenant_id FROM audit_heads) and the
+-- global purge of expired adapter nonces. Under the per-process worker login
+-- the generic tenant_isolation policy hid every row, so no tenant was ever
+-- expired and no nonce purged (Codex review, PR #31). Narrow policies:
+-- read-only discovery, and deletion of rows that are already expired.
+CREATE POLICY worker_tenant_discovery ON kernel.audit_heads
+  FOR SELECT TO mk_kernel_worker USING (true);
+-- DELETE with a WHERE clause also needs a SELECT policy covering the rows
+-- (PostgreSQL applies SELECT policies to the existing-row reference), so the
+-- worker gets cross-tenant visibility of *expired* nonces only.
+CREATE POLICY worker_nonce_purge_select ON kernel.adapter_nonces
+  FOR SELECT TO mk_kernel_worker USING (expires_at < now());
+CREATE POLICY worker_nonce_purge ON kernel.adapter_nonces
+  FOR DELETE TO mk_kernel_worker USING (expires_at < now());

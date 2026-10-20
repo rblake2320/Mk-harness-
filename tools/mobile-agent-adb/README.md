@@ -21,7 +21,7 @@ nonce replay window persisted across restarts; `task_id` idempotency (same body
 the hash chain — only digests. Evidence: `<task_id>.json`, `<task_id>.png`,
 `evidence-ledger.jsonl` (hash-chained, `EvidenceChain.verify`), `ledger.json`.
 
-Tests (34, stdlib): `python -m unittest -v` in this directory. They prove the
+Tests (36, stdlib): `python -m unittest -v` in this directory. They prove the
 published HMAC vectors, every intake rejection path, replay across restart,
 idempotent redelivery, schema hygiene, callback shapes, PII discipline,
 evidence chain tamper detection, and the ADB executor against a scripted adb
