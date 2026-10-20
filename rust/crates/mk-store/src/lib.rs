@@ -14,6 +14,7 @@
 pub mod actions;
 pub mod adapters;
 pub mod approvals;
+pub mod assertions;
 pub mod audit;
 pub mod consent;
 pub mod error;
@@ -33,11 +34,18 @@ pub use tx::{Store, TenantTx};
 pub fn migrator() -> sqlx::migrate::Migrator {
     use sqlx::migrate::{Migration, MigrationType, Migrator};
     use std::borrow::Cow;
-    const FILES: &[(i64, &str, &str)] = &[(
-        1,
-        "kernel schema",
-        include_str!("../../../../migrations/kernel/0001_kernel_schema.sql"),
-    )];
+    const FILES: &[(i64, &str, &str)] = &[
+        (
+            1,
+            "kernel schema",
+            include_str!("../../../../migrations/kernel/0001_kernel_schema.sql"),
+        ),
+        (
+            2,
+            "assertion jtis",
+            include_str!("../../../../migrations/kernel/0002_assertion_jtis.sql"),
+        ),
+    ];
     let migrations: Vec<Migration> = FILES
         .iter()
         .map(|(version, description, sql)| {

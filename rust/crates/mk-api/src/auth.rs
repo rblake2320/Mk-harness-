@@ -3,17 +3,12 @@
 use axum::extract::FromRequestParts;
 use axum::http::StatusCode;
 use axum::http::request::Parts;
-use mk_crypto::{ActorAssertion, NonceWindow, ReplayGuard};
+use mk_crypto::ActorAssertion;
 use mk_domain::{TenantId, UserId};
+use mk_store::assertions::{JtiOutcome, consume_jti};
 
 use crate::error::ApiError;
 use crate::state::AppState;
-
-/// Process-local jti guard. Assertions live ≤ 60 s + skew, so a 130 s window
-/// is sufficient. In a multi-replica deployment pair this with sticky
-/// routing or a shared store; the assertion's short life bounds the exposure.
-pub type JtiGuard = ReplayGuard;
-pub const JTI_WINDOW: NonceWindow = NonceWindow { retain_secs: 130 };
 
 /// The verified principal for a request.
 #[derive(Debug, Clone)]
@@ -95,12 +90,25 @@ impl FromRequestParts<AppState> for Principal {
             )
             .with_request_id(&parts.headers)
         })?;
-        // Single-use jti for every non-GET request.
+        // Single-use jti for every non-GET request, recorded durably in
+        // Postgres so every API replica shares one view. A store failure is
+        // a refusal, never a pass: fail closed.
         if parts.method != axum::http::Method::GET {
-            let mut g = state.jti.lock().await;
-            if g.check_and_record("jti", &assertion.jti.to_string(), now, JTI_WINDOW)
-                .is_err()
-            {
+            let expires_at = chrono::DateTime::from_timestamp(
+                assertion.exp + mk_crypto::assertion::CLOCK_SKEW_SECS,
+                0,
+            )
+            .unwrap_or_else(chrono::Utc::now);
+            let outcome = consume_jti(
+                state.store.pool(),
+                assertion.jti,
+                assertion.tenant_id,
+                assertion.sub,
+                expires_at,
+            )
+            .await
+            .map_err(|e| ApiError::from(e).with_request_id(&parts.headers))?;
+            if outcome == JtiOutcome::Replayed {
                 state
                     .metrics
                     .assertion_failures

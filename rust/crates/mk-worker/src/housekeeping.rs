@@ -5,13 +5,14 @@ use mk_audit::ActorType;
 use mk_domain::{ActionState, TenantId, Transition};
 use mk_policy::POLICY_VERSION;
 use mk_store::actions::{self, Actor};
-use mk_store::{Store, StoreError, adapters, outbox};
+use mk_store::{Store, StoreError, adapters, assertions, outbox};
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct HousekeepingStats {
     pub expired: usize,
     pub leases_recovered: usize,
     pub nonces_purged: u64,
+    pub jtis_purged: u64,
 }
 
 /// Expire overdue actions for one tenant, recover expired leases (moving a
@@ -71,6 +72,7 @@ pub async fn run_once(
         stats.leases_recovered += 1;
     }
     stats.nonces_purged = adapters::purge_nonces(store.pool(), now).await?;
+    stats.jtis_purged = assertions::purge_jtis(store.pool(), now).await?;
     Ok(stats)
 }
 

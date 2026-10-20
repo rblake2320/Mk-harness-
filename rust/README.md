@@ -113,7 +113,7 @@ Deviations and gaps — read these before claiming anything is "done":
 
 | Item | Status |
 |---|---|
-| Python contract compatibility | `contracts/tests/test_contracts.py` reproduces digests and vectors; the FastAPI proxy endpoints and assertion minting in `backend/` are **not written yet** (Phase 2/3 Python side) |
+| Python contract compatibility | `contracts/tests/test_contracts.py` reproduces digests and vectors. FastAPI side delivered: `backend/app/kernel/` (Ed25519 assertion minting, kernel client) and `backend/app/routes/agent_ops.py` (`/api/agent-ops/*` proxy). **No Python fallback**: kernel unreachable or unconfigured → 503. The proxied body is validated against `contracts/action/v1` in `backend/tests/test_agent_ops.py`. |
 | TypeScript contract compatibility | **Not written**; schemas are checked in for the SDK to consume |
 | `sqlx prepare --check` | Deliberately not used. Queries are runtime-checked `sqlx::query` and every statement is exercised against real Postgres in CI; this keeps `sqlx-macros` (and the MySQL driver + `rsa` it drags in) out of the compiled graph. `RUSTSEC-2023-0071` is ignored for that reason with `cargo tree -i rsa` empty. |
 | HMAC timestamp tolerance | Kernel default 120 s per spec; the legacy Python path used 300 s. Configurable via `MK_CALLBACK_TOLERANCE_SECS`; vectors are tolerance-independent. **Doc/code divergence flagged**: `contracts/mobile/v1/README.md` still says 300 s. |
@@ -121,7 +121,9 @@ Deviations and gaps — read these before claiming anything is "done":
 | Temporal | Not adopted (per spec) |
 | External anchoring of audit roots | `ChainHead::root_commitment()` is the value to anchor; the anchoring job is **not written** |
 | Mobile adapter reconcile | v1 agents have no status query; `reconcile` returns `Unknown` and actions wait in `reconciliation_required` for an operator |
-| `jti` single-use | Process-local guard; multi-replica deployments need sticky routing or a shared store (assertion life bounds exposure to ≤ 65 s) |
-| `verified_on_device` | Always `false`. The simulator is not a device. No real-device evidence exists. |
+| `jti` single-use | Durable and shared: `kernel.assertion_jtis` (migration 0002), `INSERT … ON CONFLICT DO NOTHING` before the handler transaction, fail-closed on store error; proven across two API instances in `http_e2e.rs` and across pools in `postgres.rs`. Worker housekeeping purges expired rows. |
+| `verified_on_device` | Always `false` (schema const; code never sets it). `tools/mobile-agent-adb/` is a real-device agent (Android over ADB) with an evidence bundle + hash chain; `docs/real-device-acceptance.md` is the human procedure. **No real-device run has been performed yet**; `scripts/kernel-live-smoke.sh` proves the round trip with the agent in dry-run. |
+| Per-process DB identities | `deploy/kernel/roles.sql` creates one LOGIN per process type inheriting exactly one privilege role; compose uses them; the live smoke runs every process on its own login and checks least privilege (gate 7). Migration 0002 revokes outbox `UPDATE` from api/worker. |
+| Tenant kill switch on default policy | **Bug found by the live smoke, fixed in this PR**: `policy::load` returned defaults before reading `kill_switches`, so tenants without a `policy_versions` row could not be stopped. Regression test `tenant_kill_switch_applies_without_policy_row`. |
 | Load/chaos suites | Crash-recovery and race tests exist; sustained load, Postgres failover, Redis restart and noisy-neighbour tests are **not written** |
 | Legal compliance | Technical controls here (consent records, opt-out text, contact hours, suppression) do **not** by themselves establish legal compliance for outreach. |

@@ -26,7 +26,7 @@ JWT_SECRET=dev-secret-dev-secret-dev-secret-123 \
 MASTER_KEY=$(python3 -c "import os,base64;print(base64.b64encode(os.urandom(32)).decode())") \
 uvicorn app.main:app --reload --port 8000
 
-# Tests (123 tests, all in-process — no live endpoints required)
+# Tests (165 tests, all in-process — no live endpoints required)
 python -m pytest -v
 ```
 
@@ -108,7 +108,7 @@ a copied row will not decrypt in a different scope.
   always talks to real endpoints — never add `respx` outside `tests/`.
 - Every new route needs a test for: happy path, auth failure (401), and cross-tenant
   isolation (second user/tenant gets 404).
-- Run `python -m pytest -v` — all 123 must pass before any commit.
+- Run `python -m pytest -v` — all 165 must pass before any commit.
 
 ---
 
@@ -133,6 +133,24 @@ One entry in the `SKILLS` dict in `backend/app/skills.py`:
 No other changes required.
 
 ---
+
+## Governed actions — the Rust kernel is the only executor
+
+Outreach, approvals, consent/suppression, adapter enrollment and kill switches
+go through `backend/app/routes/agent_ops.py` → `backend/app/kernel/` → the Rust
+kernel (`rust/`). Rules:
+
+- Never add a Python code path that sends, approves, or suppresses. If the
+  kernel is down the answer is 503, not "do it locally".
+- Role vocabulary sent to the kernel is exactly `consultant | tenant_admin |
+  agent | platform_operator` (`backend/app/kernel/assertions.py::roles_for`).
+  `agent` alone = autonomous principal (cannot approve).
+- Anything the proxy forwards must validate against `contracts/action/v1`;
+  `backend/tests/test_agent_ops.py` enforces this. Wire names differ from Rust
+  field names (`origin.type`, `resource.type`).
+- `scripts/kernel-live-smoke.sh` is the end-to-end gate (real Postgres/Redis,
+  real binaries, FastAPI, device agent in dry-run). Run it before merging
+  anything that touches the kernel boundary.
 
 ## Skin analysis — compliance guardrails (do not weaken)
 
@@ -177,6 +195,10 @@ alembic upgrade head
 | `BILLING_TRIAL_DAYS` | No | Default 90 |
 | `BILLING_ENFORCED` | No | Default false; true → AI features require active sub (402) |
 | `REFERRAL_CREDIT_CENTS` | No | Default 500 ($5 per referred conversion) |
+| `RUST_ACTION_KERNEL_URL` | Agent ops | e.g. `http://kernel-api:8090`; empty → every `/api/agent-ops` route is 503 (no Python fallback) |
+| `KERNEL_ASSERTION_PRIVATE_KEY` | Agent ops | base64url 32-byte Ed25519 seed (`mk-devkeys gen` → `DEV_PRIVATE_KEY`); kernel holds the public key in `MK_ASSERTION_KEYS` |
+| `KERNEL_ASSERTION_KID` | No | Default `k1`; must match a kid in `MK_ASSERTION_KEYS` |
+| `KERNEL_PLATFORM_OPERATORS` | No | Comma-separated user ids allowed to flip the global kill switch |
 
 **Billing note:** Stripe is called over REST via httpx (no SDK). Create Products/Prices in
 the Stripe dashboard, then supply their price IDs via `STRIPE_PRICES`. Point a Stripe

@@ -41,6 +41,15 @@ class Settings(BaseSettings):
     # e.g. {"solo:month":"price_a","solo:year":"price_b","director:year":"price_c"}
     stripe_prices: str = ""
 
+    # Rust action kernel (sole authority for governed actions). Empty URL or key
+    # => every /api/agent-ops route answers 503. There is no Python fallback.
+    rust_action_kernel_url: str = ""            # e.g. http://kernel-api:8090 (private net)
+    kernel_assertion_private_key: str = ""      # base64url 32-byte Ed25519 seed
+    kernel_assertion_kid: str = "k1"            # must match a kid in MK_ASSERTION_KEYS
+    kernel_timeout_seconds: float = 10.0
+    # Only operators may flip the global kill switch; comma-separated user ids.
+    kernel_platform_operators: str = ""
+
     model_config = {"env_file": ".env", "extra": "ignore"}
 
     @property
@@ -65,6 +74,10 @@ class Settings(BaseSettings):
         if len(raw) != 32:
             raise RuntimeError("MASTER_KEY must decode to exactly 32 bytes.")
         return raw
+
+    @property
+    def platform_operator_ids(self) -> frozenset[str]:
+        return frozenset(x.strip() for x in self.kernel_platform_operators.split(",") if x.strip())
 
     @property
     def cors_origin_list(self) -> list[str]:

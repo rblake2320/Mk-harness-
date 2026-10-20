@@ -7,6 +7,7 @@ services:
     volumes: [redisdata:/data]
     healthcheck: { test: ["CMD", "redis-cli", "ping"], interval: 5s, retries: 10 }
 
+  # Migrations run as the schema owner (`mk`); runtime processes never do.
   kernel-migrate:
     build: { context: ., dockerfile: deploy/kernel/Dockerfile }
     environment:
@@ -17,11 +18,31 @@ services:
     depends_on: { db: { condition: service_healthy } }
     restart: "no"
 
+  # One LOGIN identity per process type (deploy/kernel/roles.sql). Each
+  # inherits exactly one privilege role; RLS is enforced for all of them.
+  kernel-roles:
+    image: postgres:16-alpine
+    entrypoint: ["sh", "-c"]
+    command:
+      - >-
+        psql "postgresql://mk:${POSTGRES_PASSWORD}@db:5432/mkharness" -v ON_ERROR_STOP=1
+        -v api_pw="$$MK_DB_API_PASSWORD" -v worker_pw="$$MK_DB_WORKER_PASSWORD"
+        -v relay_pw="$$MK_DB_RELAY_PASSWORD" -v readonly_pw="$$MK_DB_READONLY_PASSWORD"
+        -f /roles.sql
+    environment:
+      MK_DB_API_PASSWORD: ${MK_DB_API_PASSWORD:?>=16 chars}
+      MK_DB_WORKER_PASSWORD: ${MK_DB_WORKER_PASSWORD:?>=16 chars}
+      MK_DB_RELAY_PASSWORD: ${MK_DB_RELAY_PASSWORD:?>=16 chars}
+      MK_DB_READONLY_PASSWORD: ${MK_DB_READONLY_PASSWORD:?>=16 chars}
+    volumes: ["./deploy/kernel/roles.sql:/roles.sql:ro"]
+    depends_on: { kernel-migrate: { condition: service_completed_successfully } }
+    restart: "no"
+
   kernel-api:
     build: { context: ., dockerfile: deploy/kernel/Dockerfile }
     command: ["/usr/local/bin/mk-action-api"]
     environment:
-      MK_DATABASE_URL: postgresql://mk:${POSTGRES_PASSWORD}@db:5432/mkharness
+      MK_DATABASE_URL: postgresql://mk_api_login:${MK_DB_API_PASSWORD}@db:5432/mkharness
       MK_MASTER_KEY: ${MASTER_KEY:?set in .env}
       MK_ASSERTION_KEYS: ${MK_ASSERTION_KEYS:?kid=base64url-pubkey}
       MK_BIND: "0.0.0.0:8090"
@@ -32,27 +53,27 @@ services:
     mem_limit: 512m
     pids_limit: 256
     # Private network only: no `ports:` entry on purpose.
-    depends_on: { kernel-migrate: { condition: service_completed_successfully } }
+    depends_on: { kernel-roles: { condition: service_completed_successfully } }
 
   kernel-relay:
     build: { context: ., dockerfile: deploy/kernel/Dockerfile }
     command: ["/usr/local/bin/mk-outbox-relay"]
     environment:
-      MK_DATABASE_URL: postgresql://mk:${POSTGRES_PASSWORD}@db:5432/mkharness
+      MK_DATABASE_URL: postgresql://mk_relay_login:${MK_DB_RELAY_PASSWORD}@db:5432/mkharness
       MK_REDIS_URL: redis://redis:6379
       MK_MASTER_KEY: ${MASTER_KEY:?set in .env}
     read_only: true
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
     depends_on:
-      kernel-migrate: { condition: service_completed_successfully }
+      kernel-roles: { condition: service_completed_successfully }
       redis: { condition: service_healthy }
 
   kernel-worker:
     build: { context: ., dockerfile: deploy/kernel/Dockerfile }
     command: ["/usr/local/bin/mk-action-worker"]
     environment:
-      MK_DATABASE_URL: postgresql://mk:${POSTGRES_PASSWORD}@db:5432/mkharness
+      MK_DATABASE_URL: postgresql://mk_worker_login:${MK_DB_WORKER_PASSWORD}@db:5432/mkharness
       MK_REDIS_URL: redis://redis:6379
       MK_MASTER_KEY: ${MASTER_KEY:?set in .env}
       MK_MOBILE_INTAKE_URL: ${MK_MOBILE_INTAKE_URL:-}
@@ -61,8 +82,32 @@ services:
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
     depends_on:
-      kernel-migrate: { condition: service_completed_successfully }
+      kernel-roles: { condition: service_completed_successfully }
       redis: { condition: service_healthy }
+
+  # Daily audit-chain verification, read-only identity.
+  kernel-verifier:
+    build: { context: ., dockerfile: deploy/kernel/Dockerfile }
+    command: ["/usr/local/bin/mk-audit-verifier"]
+    environment:
+      MK_DATABASE_URL: postgresql://mk_readonly_login:${MK_DB_READONLY_PASSWORD}@db:5432/mkharness
+      MK_MASTER_KEY: ${MASTER_KEY:?set in .env}
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    depends_on: { kernel-roles: { condition: service_completed_successfully } }
+    restart: "no"
+    profiles: ["verify"]   # docker compose --profile verify run kernel-verifier
+
+  # FastAPI gets the kernel URL + its *private* assertion key; the kernel
+  # holds only the public half (MK_ASSERTION_KEYS).
+  api:
+    environment:
+      RUST_ACTION_KERNEL_URL: http://kernel-api:8090
+      KERNEL_ASSERTION_PRIVATE_KEY: ${KERNEL_ASSERTION_PRIVATE_KEY:?base64url 32-byte Ed25519 seed}
+      KERNEL_ASSERTION_KID: ${KERNEL_ASSERTION_KID:-k1}
+      KERNEL_PLATFORM_OPERATORS: ${KERNEL_PLATFORM_OPERATORS:-}
+    depends_on: { kernel-api: { condition: service_started } }
 
 volumes:
   redisdata:

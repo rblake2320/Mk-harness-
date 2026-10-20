@@ -826,3 +826,139 @@ async fn api_role_can_run_every_callback_statement() {
         }
     }
 }
+
+#[tokio::test]
+async fn assertion_jti_is_single_use_across_pools_and_purgeable() {
+    use mk_store::assertions::{JtiOutcome, consume_jti, purge_jtis};
+    let s = require_db!();
+    // A second, independent pool stands in for a second API replica.
+    let s2 = store().await.unwrap_or_else(|| panic!("db"));
+    let (jti, tenant, sub) = (
+        uuid::Uuid::now_v7(),
+        uuid::Uuid::now_v7(),
+        uuid::Uuid::now_v7(),
+    );
+    let exp = chrono::Utc::now() + Duration::seconds(65);
+    assert_eq!(
+        consume_jti(s.pool(), jti, tenant, sub, exp).await.unwrap(),
+        JtiOutcome::Fresh
+    );
+    // Replica B sees replica A's consumption.
+    assert_eq!(
+        consume_jti(s2.pool(), jti, tenant, sub, exp).await.unwrap(),
+        JtiOutcome::Replayed
+    );
+    // Even a different tenant cannot reuse the same jti.
+    assert_eq!(
+        consume_jti(s2.pool(), jti, uuid::Uuid::now_v7(), sub, exp)
+            .await
+            .unwrap(),
+        JtiOutcome::Replayed
+    );
+    // Concurrent first use from both pools: exactly one wins.
+    let j2 = uuid::Uuid::now_v7();
+    let (a, b) = tokio::join!(
+        consume_jti(s.pool(), j2, tenant, sub, exp),
+        consume_jti(s2.pool(), j2, tenant, sub, exp)
+    );
+    let outcomes = [a.unwrap(), b.unwrap()];
+    assert_eq!(
+        outcomes.iter().filter(|o| **o == JtiOutcome::Fresh).count(),
+        1
+    );
+    // Purge removes only expired rows; the live one stays single-use.
+    let stale = uuid::Uuid::now_v7();
+    consume_jti(
+        s.pool(),
+        stale,
+        tenant,
+        sub,
+        chrono::Utc::now() - Duration::seconds(1),
+    )
+    .await
+    .unwrap();
+    assert!(purge_jtis(s.pool(), chrono::Utc::now()).await.unwrap() >= 1);
+    assert_eq!(
+        consume_jti(s.pool(), jti, tenant, sub, exp).await.unwrap(),
+        JtiOutcome::Replayed
+    );
+    assert_eq!(
+        consume_jti(s.pool(), stale, tenant, sub, exp)
+            .await
+            .unwrap(),
+        JtiOutcome::Fresh,
+        "purged jti row is gone (its assertion is already unverifiable)"
+    );
+}
+
+#[tokio::test]
+async fn api_role_cannot_delete_or_update_jti_rows() {
+    use mk_store::assertions::consume_jti;
+    let s = require_db!();
+    let (jti, tenant, sub) = (
+        uuid::Uuid::now_v7(),
+        uuid::Uuid::now_v7(),
+        uuid::Uuid::now_v7(),
+    );
+    consume_jti(
+        s.pool(),
+        jti,
+        tenant,
+        sub,
+        chrono::Utc::now() + Duration::seconds(60),
+    )
+    .await
+    .unwrap();
+    let mut conn = s.pool().acquire().await.unwrap();
+    sqlx::query("GRANT mk_kernel_api TO CURRENT_USER")
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+    sqlx::query("BEGIN").execute(&mut *conn).await.unwrap();
+    sqlx::query("SET LOCAL ROLE mk_kernel_api")
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+    let del = sqlx::query("DELETE FROM kernel.assertion_jtis WHERE jti = $1")
+        .bind(jti)
+        .execute(&mut *conn)
+        .await;
+    assert!(del.is_err(), "api role must not delete jti evidence");
+    sqlx::query("ROLLBACK").execute(&mut *conn).await.unwrap();
+    sqlx::query("BEGIN").execute(&mut *conn).await.unwrap();
+    sqlx::query("SET LOCAL ROLE mk_kernel_api")
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+    let upd = sqlx::query("UPDATE kernel.assertion_jtis SET expires_at = now() WHERE jti = $1")
+        .bind(jti)
+        .execute(&mut *conn)
+        .await;
+    assert!(upd.is_err(), "api role must not edit jti evidence");
+    sqlx::query("ROLLBACK").execute(&mut *conn).await.unwrap();
+}
+
+#[tokio::test]
+async fn tenant_kill_switch_applies_without_policy_row() {
+    // Found by the live smoke: a tenant on default policy (no
+    // policy_versions row) had its kill switch silently ignored.
+    let s = require_db!();
+    let tenant = TenantId::new();
+    let mut tx = s.begin(tenant).await.unwrap();
+    let (p, _) = policy::load(&mut tx).await.unwrap();
+    assert!(p.dispatch_enabled, "defaults start enabled");
+    policy::set_tenant_dispatch(&mut tx, false, ACTOR, t0())
+        .await
+        .unwrap();
+    let (p, _) = policy::load(&mut tx).await.unwrap();
+    assert!(
+        !p.dispatch_enabled,
+        "kill switch must apply with no policy row"
+    );
+    policy::set_tenant_dispatch(&mut tx, true, ACTOR, t0())
+        .await
+        .unwrap();
+    let (p, _) = policy::load(&mut tx).await.unwrap();
+    assert!(p.dispatch_enabled);
+    tx.commit().await.unwrap();
+}
