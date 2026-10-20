@@ -8,8 +8,8 @@ from fastapi.responses import HTMLResponse
 from .config import get_settings, require_secret
 from .db import init_engine
 from .routes import (
-    account, agent_ops, auth, billing, chat, consent, customers, foundation, keys, profile,
-    skin, skindata, usage,
+    account, agent_ops, auth, billing, chat, commitments, consent, customers, foundation, keys,
+    profile, skin, skindata, usage,
 )
 
 _PRIVACY_HTML = """<!DOCTYPE html>
@@ -137,7 +137,7 @@ app.add_middleware(
 
 # foundation before customers: its /customers/import/* and /customers/export.csv paths
 # must win over customers' /customers/{cid}.
-for r in (auth.router, chat.router, skin.router, foundation.router, customers.router,
+for r in (auth.router, chat.router, skin.router, foundation.router, commitments.router, customers.router,
           keys.router, usage.router, profile.router, consent.router, skindata.router,
           billing.router, account.router, agent_ops.router):
     app.include_router(r, prefix="/api")

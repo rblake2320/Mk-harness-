@@ -408,6 +408,9 @@ class Commitment(Base):
     source_reference: Mapped[str] = mapped_column(String(64), default="")
     source_version: Mapped[str] = mapped_column(String(64), default="")
     source_evidence_reference: Mapped[str] = mapped_column(String(71), default="")  # sha256 digest
+    # kind: promise (consultant promised) | customer_request (explicit ask) |
+    #       unanswered_question | customer_date (customer supplied a follow-up date)
+    kind: Mapped[str] = mapped_column(String(24), default="promise")
     commitment_text: Mapped[str] = mapped_column(Text)
     due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     due_window_start: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
