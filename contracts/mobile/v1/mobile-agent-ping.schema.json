@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.consultant-studio.invalid/agent-ops/v1/mobile-agent-ping.schema.json",
+  "title": "Consultant Studio mobile agent ping v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "status"],
+  "properties": {
+    "schema": {"const": "consultant-studio.mobile-agent-ping.v1"},
+    "status": {"enum": ["online", "busy", "offline"]}
+  }
+}

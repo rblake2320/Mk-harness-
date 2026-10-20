@@ -1,0 +1,124 @@
+{
+  "description": "Public conformance vector only. The secret is not used by any deployment.",
+  "algorithm": "hmac-sha256-v1",
+  "canonical_payload": "METHOD\\nPATH\\nTIMESTAMP\\nNONCE\\nLOWERCASE_SHA256_BODY_HEX",
+  "vectors": [
+    {
+      "name": "execution-started-v1",
+      "secret": "not-a-real-secret-for-test-vector",
+      "method": "POST",
+      "path": "/api/agent-ops/tasks/00000000-0000-4000-8000-000000000001/result",
+      "timestamp": "1783728000",
+      "nonce": "test-nonce-0001",
+      "body_utf8": "{\"error_code\":\"\",\"result\":{},\"schema\":\"consultant-studio.mobile-execution-state.v1\",\"status\":\"executing\"}",
+      "body_sha256": "69d8c277719c163c249d2a6371fe39eafd4ae2e9720079bd3cca24d18087f430",
+      "signature_hex": "5c8ac10a0857250b58286cf0a72c74a9211a56d4c6bb232004da0cee4d37c09a"
+    },
+    {
+      "name": "completion-v1",
+      "secret": "not-a-real-secret-for-test-vector",
+      "method": "POST",
+      "path": "/api/agent-ops/tasks/00000000-0000-4000-8000-000000000001/result",
+      "timestamp": "1783728060",
+      "nonce": "test-nonce-0002",
+      "body_utf8": "{\"error_code\":\"\",\"result\":{\"sent\":true},\"schema\":\"consultant-studio.mobile-execution-completion.v1\",\"status\":\"complete\"}",
+      "body_sha256": "2ff2135100e3dffdde65895042171a91a535ea4ccddce13e4990ba7b5f1419f1",
+      "signature_hex": "47d33a34bb7afb4fcf3a3d75cd3f03ad5755381f108e31079ae3fbc59cb649ca"
+    },
+    {
+      "name": "failure-v1",
+      "secret": "not-a-real-secret-for-test-vector",
+      "method": "POST",
+      "path": "/api/agent-ops/tasks/00000000-0000-4000-8000-000000000001/result",
+      "timestamp": "1783728120",
+      "nonce": "test-nonce-0003",
+      "body_utf8": "{\"error_code\":\"device_unavailable\",\"result\":{},\"schema\":\"consultant-studio.mobile-execution-failure.v1\",\"status\":\"failed\"}",
+      "body_sha256": "317976cada4128304b7e2642b72e79bfbb654fa3209b48ac1aa3cb120d702261",
+      "signature_hex": "8013fcd979f5c8f58b1b0be08ca2c83c5b92e066756d04edac029423df364fba"
+    },
+    {
+      "name": "ping-v1",
+      "secret": "not-a-real-secret-for-test-vector",
+      "method": "POST",
+      "path": "/api/agent-ops/agents/simulator-1/ping",
+      "timestamp": "1783728180",
+      "nonce": "test-nonce-0004",
+      "body_utf8": "{\"schema\":\"consultant-studio.mobile-agent-ping.v1\",\"status\":\"online\"}",
+      "body_sha256": "a4d36249025f38a1dcec0a72f3cb45ee00851d5e6f4d96424145ac6f2f3775ff",
+      "signature_hex": "1f932c637162830a3219264462e1f9135e3d7699d911378ade28525a061e870c"
+    },
+    {
+      "name": "empty-body-v1",
+      "secret": "not-a-real-secret-for-test-vector",
+      "method": "GET",
+      "path": "/adapter/v1/health",
+      "timestamp": "1783728240",
+      "nonce": "test-nonce-0005",
+      "body_utf8": "",
+      "body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "signature_hex": "f6c5dabb1c2e66c32714720c59b87788588d2ed770dc5f97cc7f29bca615123b",
+      "note": "Empty body: body_sha256 is SHA-256 of zero bytes."
+    },
+    {
+      "name": "kernel-callback-v1",
+      "secret": "not-a-real-secret-for-test-vector",
+      "method": "POST",
+      "path": "/adapter/v1/work-orders/0191f6f0e2b47a2b9c5c3d1e2f3a4b5c/callbacks",
+      "timestamp": "1783728300",
+      "nonce": "kernel-nonce-0001",
+      "body_utf8": "{\"error_code\":\"\",\"result\":{},\"schema\":\"consultant-studio.mobile-execution-state.v1\",\"status\":\"executing\"}",
+      "body_sha256": "69d8c277719c163c249d2a6371fe39eafd4ae2e9720079bd3cca24d18087f430",
+      "signature_hex": "a28b0a776958dc3fdeaeb1fa9e82fafe32946980da10ed986e4484e6d301a003",
+      "note": "Kernel-native callback path; same algorithm."
+    }
+  ],
+  "negative_vectors": [
+    {
+      "name": "altered-body",
+      "base": "execution-started-v1",
+      "mutation": "body_utf8 changed to {\"status\":\"complete\"}",
+      "expect": "reject",
+      "reason": "body_digest_mismatch"
+    },
+    {
+      "name": "wrong-path",
+      "base": "execution-started-v1",
+      "mutation": "path suffix /result replaced with /callbacks",
+      "expect": "reject",
+      "reason": "signature_mismatch"
+    },
+    {
+      "name": "stale-timestamp",
+      "base": "execution-started-v1",
+      "mutation": "receiver now = timestamp + 121 (kernel default tolerance 120s)",
+      "expect": "reject",
+      "reason": "timestamp_out_of_window"
+    },
+    {
+      "name": "replayed-nonce",
+      "base": "execution-started-v1",
+      "mutation": "same request presented twice",
+      "expect": "reject second",
+      "reason": "nonce_replayed"
+    },
+    {
+      "name": "uppercase-signature",
+      "base": "execution-started-v1",
+      "mutation": "signature_hex uppercased",
+      "expect": "reject",
+      "reason": "signature must be lowercase hex; comparison is byte-exact"
+    }
+  ],
+  "timestamp_tolerance_seconds": {
+    "kernel_default": 120,
+    "legacy_python_agent_ops": 300,
+    "note": "Vectors are tolerance-independent. The Rust kernel defaults to 120s per the build spec; the legacy FastAPI agent_ops path used 300s. Kernel tolerance is configurable per deployment."
+  },
+  "headers": [
+    "X-Mobile-Agent",
+    "X-Mobile-Tenant",
+    "X-Mobile-Timestamp",
+    "X-Mobile-Nonce",
+    "X-Mobile-Signature"
+  ]
+}

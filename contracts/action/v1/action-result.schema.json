@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.consultant-studio.invalid/action/v1/action-result.schema.json",
+  "title": "MK action result v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "action_id", "tenant_id", "state", "action_digest", "attempt", "updated_at"],
+  "properties": {
+    "schema_version": {"const": "mk.action.v1"},
+    "action_id": {"type": "string", "format": "uuid"},
+    "tenant_id": {"type": "string", "format": "uuid"},
+    "state": {"enum": ["draft", "policy_pending", "denied", "approval_required", "approved", "queued", "dispatching", "completed", "failed_retryable", "failed_final", "cancelled", "expired", "suppressed", "reconciliation_required"]},
+    "action_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "attempt": {"type": "integer", "minimum": 0, "maximum": 1000},
+    "error_code": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_.-]{0,79}$"},
+    "receipt": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "adapter_id": {"type": "string", "maxLength": 128},
+        "external_ref": {"type": "string", "maxLength": 256},
+        "result_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    },
+    "replay_of": {"type": "string", "format": "uuid"},
+    "updated_at": {"type": "string", "format": "date-time"}
+  }
+}

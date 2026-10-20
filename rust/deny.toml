@@ -1,0 +1,37 @@
+[graph]
+all-features = true
+
+[advisories]
+version = 2
+ignore = [
+  # rsa 0.9 Marvin timing attack. `rsa` is reachable only through sqlx-mysql,
+  # which is never enabled (postgres-only feature set) and is not compiled;
+  # it appears in Cargo.lock because lockfiles are feature-independent.
+  # Verified with `cargo tree -i rsa` (nothing to print).
+  { id = "RUSTSEC-2023-0071", reason = "unused optional dependency (sqlx-mysql) never compiled" },
+]
+
+[licenses]
+version = 2
+allow = [
+  "MIT", "MIT-0", "Apache-2.0", "Apache-2.0 WITH LLVM-exception", "BSD-2-Clause", "BSD-3-Clause",
+  "ISC", "Unicode-3.0", "Zlib", "MPL-2.0", "CC0-1.0", "OpenSSL", "Unicode-DFS-2016", "BSL-1.0",
+  "CDLA-Permissive-2.0",
+]
+confidence-threshold = 0.9
+# Workspace crates are proprietary and unpublished.
+private = { ignore = true }
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+allow-wildcard-paths = true
+deny = [
+  { crate = "openssl", reason = "rustls only" },
+  { crate = "openssl-sys", reason = "rustls only" },
+  { crate = "native-tls", reason = "rustls only" },
+]
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"

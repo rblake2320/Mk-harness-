@@ -1,0 +1,66 @@
+//! `mk-action-api`: the internal HTTP API process.
+
+use std::sync::Arc;
+
+use mk_api::metrics::Metrics;
+use mk_api::{AppState, router};
+use mk_crypto::{AssertionVerifier, MasterKey, ReplayGuard};
+use mk_policy::ToolAllowlist;
+use mk_store::Store;
+use tokio::sync::Mutex;
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    use tracing_subscriber::EnvFilter;
+    let _ = tracing_subscriber::fmt()
+        .json()
+        .with_env_filter(
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
+        )
+        .try_init();
+
+    let db = std::env::var("MK_DATABASE_URL")?;
+    let master = MasterKey::from_base64(&std::env::var("MK_MASTER_KEY")?)
+        .map_err(|e| anyhow::anyhow!("MK_MASTER_KEY: {e}"))?;
+    // MK_ASSERTION_KEYS = "kid1=<b64url pubkey>,kid2=<b64url pubkey>"
+    let keys_env = std::env::var("MK_ASSERTION_KEYS")?;
+    let pairs: Vec<(&str, &str)> = keys_env
+        .split(',')
+        .filter_map(|p| p.split_once('='))
+        .collect();
+    let verifier = AssertionVerifier::from_pairs(pairs)
+        .map_err(|e| anyhow::anyhow!("MK_ASSERTION_KEYS: {e}"))?;
+    let store = Store::connect(&db, 16).await?;
+    if std::env::var("MK_RUN_MIGRATIONS").is_ok_and(|v| v == "1") {
+        store.migrate().await?;
+        tracing::info!("kernel migrations applied");
+    }
+    // One-shot migration container: migrate and exit 0 (compose init job).
+    if std::env::var("MK_MIGRATE_ONLY").is_ok_and(|v| v == "1") {
+        store.migrate().await?;
+        tracing::info!("migrate-only run complete; exiting");
+        return Ok(());
+    }
+    let state = AppState {
+        store,
+        verifier,
+        master,
+        tools: Arc::new(ToolAllowlist::v1()),
+        metrics: Arc::new(Metrics::new()),
+        jti: Arc::new(Mutex::new(ReplayGuard::new())),
+        callback_tolerance_secs: std::env::var("MK_CALLBACK_TOLERANCE_SECS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(120),
+        rust_kernel_enabled: std::env::var("RUST_ACTION_KERNEL_ENABLED").is_ok_and(|v| v == "1"),
+    };
+    let bind = std::env::var("MK_BIND").unwrap_or_else(|_| "127.0.0.1:8090".into());
+    let listener = tokio::net::TcpListener::bind(&bind).await?;
+    tracing::info!(%bind, enabled = state.rust_kernel_enabled, "mk-action-api listening (private network only)");
+    axum::serve(listener, router(state))
+        .with_graceful_shutdown(async {
+            let _ = tokio::signal::ctrl_c().await;
+        })
+        .await?;
+    Ok(())
+}

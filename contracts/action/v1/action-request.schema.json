@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.consultant-studio.invalid/action/v1/action-request.schema.json",
+  "title": "MK action request v1",
+  "description": "Versioned envelope for every consequential operation. tenant_id and requested_by are bound server-side to the verified actor assertion; body values never authorize anything on their own.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "tenant_id", "requested_by", "origin", "workflow",
+    "action_kind", "tool_id", "resource", "arguments", "purpose", "risk",
+    "requested_at", "expires_at", "idempotency_key", "evidence"
+  ],
+  "properties": {
+    "schema_version": {"const": "mk.action.v1"},
+    "action_id": {
+      "description": "Server-generated UUIDv7. Clients omit it; only explicitly trusted callers may supply one.",
+      "type": "string", "format": "uuid"
+    },
+    "tenant_id": {"type": "string", "format": "uuid"},
+    "requested_by": {"type": "string", "format": "uuid"},
+    "origin": {
+      "type": "object", "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": {"enum": ["agent", "human", "system", "mcp"]},
+        "session_id": {"type": "string", "maxLength": 128},
+        "model_call_id": {"type": "string", "maxLength": 128},
+        "mcp_server_id": {"type": "string", "maxLength": 128}
+      }
+    },
+    "workflow": {"enum": ["customer_follow_up", "follow_up", "appointment", "order_status", "recruit_outreach", "social_post"]},
+    "action_kind": {"enum": ["send_sms", "send_email", "send_dm", "create_appointment", "update_contact", "post_social", "mobile_work_order"]},
+    "tool_id": {"type": "string", "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*\\.v[0-9]+$", "maxLength": 120},
+    "resource": {
+      "type": "object", "additionalProperties": false,
+      "required": ["type", "id"],
+      "properties": {
+        "type": {"enum": ["contact", "appointment", "post", "tenant"]},
+        "id": {"type": "string", "minLength": 1, "maxLength": 128}
+      }
+    },
+    "arguments": {
+      "type": "object",
+      "maxProperties": 64,
+      "description": "Typed per tool_id; validated by the adapter descriptor. Never contains destination credentials or callback URLs.",
+      "propertyNames": {"pattern": "^[A-Za-z][A-Za-z0-9_]{0,79}$"},
+      "not": {
+        "anyOf": [
+          {"required": ["callback_url"]},
+          {"required": ["password"]},
+          {"required": ["api_key"]},
+          {"required": ["token"]},
+          {"required": ["secret"]}
+        ]
+      }
+    },
+    "purpose": {"type": "string", "pattern": "^[a-z][a-z0-9_]{0,59}$"},
+    "risk": {"enum": ["low", "medium", "high"]},
+    "requested_at": {"type": "string", "format": "date-time"},
+    "expires_at": {"type": "string", "format": "date-time"},
+    "idempotency_key": {"type": "string", "minLength": 8, "maxLength": 128, "pattern": "^[A-Za-z0-9_.:-]+$"},
+    "evidence": {
+      "type": "array", "maxItems": 32,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["type", "id", "digest"],
+        "properties": {
+          "type": {"enum": ["conversation", "document", "retrieval", "decision_score", "consent_record"]},
+          "id": {"type": "string", "minLength": 1, "maxLength": 128},
+          "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+        }
+      }
+    }
+  }
+}

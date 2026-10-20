@@ -1,0 +1,48 @@
+[package]
+name = "mk-api"
+description = "Axum internal HTTP API for the action kernel: proposals, human decisions, consent, adapters, authenticated callbacks, health and metrics. Handlers hold no domain rules."
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "mk-action-api"
+path = "src/bin/api.rs"
+
+[dependencies]
+mk-domain = { workspace = true }
+mk-crypto = { workspace = true }
+mk-contracts = { workspace = true }
+mk-policy = { workspace = true }
+mk-audit = { workspace = true }
+mk-store = { workspace = true }
+mk-queue = { workspace = true }
+mk-adapters = { workspace = true }
+axum = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
+http = "1"
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+anyhow = { workspace = true }
+secrecy = { workspace = true }
+prometheus-client = { workspace = true }
+hmac = { workspace = true }
+sha2 = { workspace = true }
+hex = { workspace = true }
+
+[dev-dependencies]
+mk-testkit = { workspace = true }
+http-body-util = "0.1"
+mk-worker = { workspace = true }
+async-trait = { workspace = true }

@@ -1,0 +1,13 @@
+# Two reviews required (branch protection) for cryptography, policy, audit,
+# adapter authentication, contracts, and workflow files.
+/contracts/                         @rblake2320
+/migrations/kernel/                 @rblake2320
+/rust/crates/mk-policy/             @rblake2320
+/rust/crates/mk-crypto/             @rblake2320
+/rust/crates/mk-audit/              @rblake2320
+/rust/crates/mk-adapters/           @rblake2320
+/rust/crates/mk-api/src/auth.rs     @rblake2320
+/rust/crates/mk-api/src/routes/callbacks.rs @rblake2320
+/rust/crates/mk-mcp/src/tools.rs    @rblake2320
+/.github/workflows/                 @rblake2320
+/deploy/kernel/                     @rblake2320

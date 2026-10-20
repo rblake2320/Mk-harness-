@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.consultant-studio.invalid/action/v1/error.schema.json",
+  "title": "MK problem details v1 (RFC 9457 profile)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["type", "title", "status", "code", "request_id"],
+  "properties": {
+    "type": {"type": "string", "pattern": "^urn:mk:error:[a-z0-9_.-]+$"},
+    "title": {"type": "string", "maxLength": 200},
+    "status": {"type": "integer", "minimum": 400, "maximum": 599},
+    "detail": {"type": "string", "maxLength": 2000, "description": "Redacted; never contains stack traces, secrets, or upstream bodies."},
+    "code": {"type": "string", "pattern": "^[A-Z][A-Z0-9_]{2,63}$"},
+    "request_id": {"type": "string", "maxLength": 128},
+    "trace_id": {"type": "string", "maxLength": 64},
+    "fields": {"type": "array", "maxItems": 64, "items": {"type": "string", "maxLength": 200}}
+  }
+}

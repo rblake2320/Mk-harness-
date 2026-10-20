@@ -1,0 +1,85 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+edition = "2024"
+version = "0.1.0"
+license = "LicenseRef-Proprietary"
+publish = false
+rust-version = "1.90"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_debug_implementations = "warn"
+unused_must_use = "deny"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+module_name_repetitions = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+must_use_candidate = "allow"
+doc_markdown = "allow"
+match_same_arms = "allow"
+many_single_char_names = "allow"
+unnecessary_wraps = "allow"
+too_many_lines = "allow"
+struct_excessive_bools = "allow"
+needless_pass_by_value = "allow"
+similar_names = "allow"
+struct_field_names = "allow"
+
+[workspace.dependencies]
+mk-domain = { path = "crates/mk-domain" }
+mk-contracts = { path = "crates/mk-contracts" }
+mk-policy = { path = "crates/mk-policy" }
+mk-crypto = { path = "crates/mk-crypto" }
+mk-audit = { path = "crates/mk-audit" }
+mk-store = { path = "crates/mk-store" }
+mk-queue = { path = "crates/mk-queue" }
+mk-adapters = { path = "crates/mk-adapters" }
+mk-worker = { path = "crates/mk-worker" }
+mk-mcp = { path = "crates/mk-mcp" }
+mk-api = { path = "crates/mk-api" }
+mk-testkit = { path = "crates/mk-testkit" }
+
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal", "time", "sync", "io-std", "io-util", "fs"] }
+axum = { version = "0.8", features = ["json", "macros"] }
+tower = { version = "0.5", features = ["timeout", "limit", "util"] }
+tower-http = { version = "0.6", features = ["trace", "request-id", "limit", "timeout", "set-header", "util"] }
+http = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
+schemars = { version = "1", features = ["uuid1", "chrono04"] }
+jsonschema = { version = "0.33", default-features = false }
+uuid = { version = "1", features = ["v7", "v4", "serde"] }
+chrono = { version = "0.4", features = ["serde", "clock"] }
+chrono-tz = "0.10"
+thiserror = "2"
+anyhow = "1"
+hmac = "0.12"
+sha2 = "0.10"
+subtle = "2"
+secrecy = { version = "0.10", features = ["serde"] }
+zeroize = { version = "1", features = ["derive"] }
+aes-gcm = "0.10"
+ed25519-dalek = { version = "2", features = ["rand_core", "pkcs8"] }
+rand = "0.8"
+hex = "0.4"
+base64 = "0.22"
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "tls-rustls", "postgres", "uuid", "chrono", "json", "migrate"] }
+redis = { version = "0.29", features = ["tokio-comp", "streams"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "http2"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json", "fmt"] }
+prometheus-client = "0.23"
+async-trait = "0.1"
+proptest = "1"
+tokio-test = "0.4"
+rmcp = { version = "3", features = ["server", "transport-io", "macros"] }
+url = "2"

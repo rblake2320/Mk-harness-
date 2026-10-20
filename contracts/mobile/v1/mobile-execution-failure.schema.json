@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.consultant-studio.invalid/agent-ops/v1/mobile-execution-failure.schema.json",
+  "title": "Consultant Studio mobile execution failure v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "status", "result", "error_code"],
+  "properties": {
+    "schema": {"const": "consultant-studio.mobile-execution-failure.v1"},
+    "status": {"const": "failed"},
+    "result": {"type": "object", "maxProperties": 100},
+    "error_code": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_.-]{0,79}$"}
+  }
+}
