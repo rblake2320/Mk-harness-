@@ -25,10 +25,14 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 
+from sqlalchemy.orm import Session
+
 from ..config import get_settings
+from ..db import get_db
+from ..foundation import require_dispatch_timezone
 from ..kernel import KernelClient, KernelUnavailable, get_kernel_client
 from ..kernel.assertions import ROLE_PLATFORM_OPERATOR, roles_for
-from ..models import User
+from ..models import Customer, User
 from ..ratelimit import check_rate
 from ..security import get_current_user
 
@@ -120,10 +124,32 @@ class ProposeIn(BaseModel):
     request: dict[str, Any]
 
 
+def _contact_customer(db: Session, p: Principal, req: dict) -> Customer | None:
+    """Resolve the action's contact to this consultant's customer, if it names one."""
+    res = req.get("resource") or {}
+    cid = (req.get("arguments") or {}).get("contact_id") or (res.get("id") if res.get("type") == "contact" else None)
+    if not cid:
+        return None
+    try:
+        hex_id = uuid.UUID(str(cid)).hex
+    except ValueError:
+        return None
+    c = db.get(Customer, hex_id)
+    if not c or c.tenant_id != p.tenant_id:
+        return None
+    return c
+
+
 @router.post("/actions")
 async def propose(body: ProposeIn, p: Principal = Depends(principal),
-                  client: KernelClient = Depends(get_kernel_client)):
+                  client: KernelClient = Depends(get_kernel_client), db: Session = Depends(get_db)):
     req = dict(body.request)
+    # F9: outreach to a customer whose destination timezone is unknown is blocked
+    # here, before the kernel ever sees it. Non-outreach kinds are unaffected.
+    if req.get("action_kind") in ("send_sms", "send_dm"):
+        c = _contact_customer(db, p, req)
+        if c is not None:
+            require_dispatch_timezone(db, c)
     # Identity is bound here AND again in the kernel; body values are discarded.
     req["schema_version"] = req.get("schema_version") or "mk.action.v1"
     req["tenant_id"] = str(uuid.UUID(p.tenant_id))

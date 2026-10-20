@@ -52,15 +52,15 @@ Rules:
 
 | ID | Acceptance condition | Verification | Gate | Status |
 |---|---|---|---|---|
-| F1 | Tenant-scoped records exist for customers, normalized destinations, preferences + timezone, consent events + evidence, suppression events, sender identities, conversations/messages, commitments, brief items, draft versions, action links, exceptions, outcomes, authorized knowledge sources; each carries opaque tenant id, version, created_at, audit reference | schema tests | Release | **Not demonstrated** |
-| F2 | Permission scoped to customer, destination, consultant business, channel, purpose, evidence source, effective time, revocation status; an imported number is not permission; an inbound message is not blanket marketing permission | policy tests at proposal and dispatch | Release | Kernel scope check (channel, purpose, expiry, revocation) **Independently verified**; business/destination/evidence-source dimensions **Not demonstrated** |
-| F3 | Editing a customer profile cannot erase suppression; suppression wins over permission everywhere | tests incl. profile-edit path | Release | Kernel precedence **Independently verified**; profile-edit path **Not demonstrated** |
+| F1 | Tenant-scoped records exist for customers, normalized destinations, preferences + timezone, consent events + evidence, suppression events, sender identities, conversations/messages, commitments, brief items, draft versions, action links, exceptions, outcomes, authorized knowledge sources; each carries opaque tenant id, version, created_at, audit reference | schema tests | Release | **Implemented** (`backend/app/models.py` WP03 section; 27 tables); conversations/messages reuse existing chat tables pending WP04 |
+| F2 | Permission scoped to customer, destination, consultant business, channel, purpose, evidence source, effective time, revocation status; an imported number is not permission; an inbound message is not blanket marketing permission | policy tests at proposal and dispatch | Release | Kernel scope check **Independently verified**; application `ConsentEvent` carries destination/business/evidence-source and grants the kernel permission atomically (fails closed) — **Implemented** (`test_foundation.py`); inbound-message rule **Not demonstrated** (WP07) |
+| F3 | Editing a customer profile cannot erase suppression; suppression wins over permission everywhere | tests incl. profile-edit path | Release | Kernel precedence **Independently verified**; profile-edit path (suppression keyed by destination fingerprint; suppressed destination refuses consent) **Implemented** |
 | F4 | Displayed permission is historical; current permission and suppression are re-checked at execution | dispatch recheck tests | Release | **Independently verified** (live smoke gates 2–4) |
-| F5 | CSV import: preview, field mapping, duplicate detection, row errors, provenance, import-job idempotency, tenant isolation, no consent assumed, formula escaping on export, rollback of unreferenced records | import test suite | Release | **Not demonstrated** |
+| F5 | CSV import: preview, field mapping, duplicate detection, row errors, provenance, import-job idempotency, tenant isolation, no consent assumed, formula escaping on export, rollback of unreferenced records | import test suite | Release | **Implemented** (`routes/foundation.py`, `test_foundation.py`: preview/commit/rollback, in-file + existing duplicates, row errors, source digest, idempotent key, masked + formula-escaped export, rollback keeps referenced) |
 | F6 | No InTouch scraping or automated login exists anywhere in the codebase | code search + review | Release | **Implemented** (none exists) — verifier to confirm |
-| F7 | Cross-tenant reads/writes fail via API, SQL, background jobs, exports, search, callbacks | isolation suite under runtime identities | Release | API/SQL/callbacks/jobs **Independently verified**; exports/search **Not demonstrated** (features absent) |
-| F8 | Duplicate imports create no duplicate contacts or work; revoked consent cannot be restored by import | tests | Release | **Not demonstrated** |
-| F9 | Unknown destination timezone prevents automated dispatch until corrected | policy test | Release | **Not demonstrated** (tenant tz only today) |
+| F7 | Cross-tenant reads/writes fail via API, SQL, background jobs, exports, search, callbacks | isolation suite under runtime identities | Release | Kernel API/SQL/callbacks/jobs **Independently verified**; new foundation routes incl. import jobs and export **Implemented** (404 + 401 on every route); search **Not demonstrated** (feature absent) |
+| F8 | Duplicate imports create no duplicate contacts or work; revoked consent cannot be restored by import | tests | Release | **Implemented** (fingerprint-keyed dedupe; mapping targets for consent/suppression refused; re-import of a revoked contact leaves it revoked) |
+| F9 | Unknown destination timezone prevents automated dispatch until corrected | policy test | Release | **Implemented** at proposal (`/api/agent-ops/actions` → 422 `TIMEZONE_UNKNOWN` for outreach kinds; IANA validation); kernel still evaluates contact hours in tenant tz — passing the contact tz to the kernel is WP07 |
 
 ## 3. Commitments and daily brief (W)
 
@@ -201,7 +201,7 @@ Rules:
 |---|---|---|
 | 01 Baseline | commit-pinned baseline; current contracts reconciled; current test results captured as *Implemented* only | evidence governance bootstrap |
 | 02 Decisions + threat model | D1–D7 records, legal/provider feasibility started | D1–D7, S1 |
-| 03 Customer foundation | preferences, consent, suppression, imports, timeline | F1–F9, S13 (design) |
+| 03 Customer foundation | preferences, consent, suppression, imports, timeline | F1–F9 (Implemented in PR wp03; verification pending), S13 (design) |
 | 04 Commitments + brief | lifecycle, deterministic brief, outcome model | W1–W7, X1 |
 | 05 Product drafting | authorized sources, claims registry, bounded generation | P1–P3, A1–A6 |
 | 06 Approval security | human-bound approval, separated signing authority, exact preview | D4, H1–H9 |
