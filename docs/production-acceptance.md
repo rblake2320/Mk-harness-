@@ -48,7 +48,7 @@ Sign-off: every row marked **Gate = Release** must be at least *Independently ve
 | C3 | Duplicate prevention: at-least-once delivery absorbed; exactly one customer message per approved action | e2e with forced duplicate stream entries and double callbacks; device sent-row count = 1 | `dispatch_e2e.rs` duplicate test; device run log | Kernel side **Implemented**; device side **Not demonstrated** | Release |
 | C4 | Opt-out: STOP honored before the next dispatch tick; suppression wins over permission everywhere | policy tests + inbound live run + timing measurement | tests; run record with timestamps | Policy **Independently verified**; inbound **Not demonstrated** | Release |
 | C5 | Honest state vocabulary: attempted / sent (device row) / delivered (carrier receipt) / read (recipient signal) distinguished in data, UI and reports; unknown shown as unknown | schema review; UI strings review | state enum + UI | Kernel `sent` only; delivered/read **Not demonstrated** (no source) | Release |
-| C6 | Reliability target: ≥ 99% of approved actions reach a terminal state within T minutes over N ≥ 200 real sends on controlled phones across ≥ 5 days, with 0 unapproved sends | Soak run on controlled devices | soak report with per-action audit ids | **Not demonstrated** | Release (proven) |
+| C6 | Reliability target over a soak of N ≥ 200 approved actions on controlled phones across ≥ 5 days: (a) ≥ 99% reach a terminal state within T minutes, (b) ≥ 98% of those not denied by policy end in `sent` (device sent-row confirmed; failure budget ≤ 2%), (c) 0 unapproved sends, (d) 0 duplicate customer messages, (e) every `sent` corroborated on the receiving test phone. A run that terminates in `failed_final` does not count toward (b) | Soak run on controlled devices with receiving-phone reconciliation | soak report with per-action audit ids and receive log | **Not demonstrated** | Release (proven) |
 | C7 | Device agent fitness: the Moto/ADB agent meets C1–C6 or is replaced | Decision after C1 and C6 | decision record | **Not demonstrated** | Release |
 
 ## 3. Security and privacy
@@ -71,11 +71,11 @@ Sign-off: every row marked **Gate = Release** must be at least *Independently ve
 | O1 | Availability and latency targets defined (API p95, proposal→queue, approval→dispatch) | SLO document | `docs/slo.md` | **Not demonstrated** | Release |
 | O2 | Load/soak: sustained N proposals/min for H hours with targets met, no leaks | k6/locust run + Rust metrics | load report | **Not demonstrated** | Release (proven) |
 | O3 | Dependency failure: Postgres down, Redis down, device agent down, FastAPI down — each fails closed, recovers, no duplicate sends | fault-injection suite | report | Fail-closed on DB **Implemented**; others **Not demonstrated** | Release |
-| O4 | Monitoring: metrics exported (decisions, failures, queue depth, lease age, callback latency), dashboards, OTLP traces | exporter + dashboard | Prometheus `/metrics` **Implemented**; OTLP/dashboards **Not demonstrated** | Release |
+| O4 | Monitoring: metrics exported (decisions, auth failures, approvals pending, callbacks applied/duplicate, queue depth, lease age, callback latency, dispatch outcomes), dashboards, OTLP traces | exporter + dashboard review against this list | `/metrics` output; dashboard | Exported today (`mk-api/src/metrics.rs`): requests, decisions, assertion/HMAC failures, approvals_pending, callbacks applied/duplicate — **Implemented**. Queue depth, lease age, callback latency, worker dispatch outcomes, OTLP, dashboards — **Not demonstrated** | Release |
 | O5 | Alerts: actionable alerts for kill-switch flips, audit chain break, dispatch stall, callback failures, assertion failures | alert rules tested by injection | rules + test log | **Not demonstrated** | Release |
 | O6 | Backup and tested restoration: Postgres restore drill with audit chain verifying after restore | drill record | drill log | **Not demonstrated** | Release |
 | O7 | Rollback and incident procedures exercised, not just written | game day | record | Runbook **Implemented**; exercised **Not demonstrated** | Release |
-| O8 | Change management: migrations additive or with tested down-path; pre-flight on every deploy | CI + deploy log | pre-flight in `live-smoke` **Independently verified** | Release |
+| O8 | Change management: migrations additive or with a tested down-path; pre-flight runs on every deploy and blocks on failure | deploy pipeline definition + deploy logs showing pre-flight per deploy | pipeline config; deploy log | Pre-flight tooling **Implemented** (`scripts/kernel-preflight.sh`; exercised by the live smoke, which PR #32 adds to CI — CI is not a deploy). No deploy pipeline exists, so every-deploy enforcement is **Not demonstrated** | Release |
 
 ## 5. AI quality
 
@@ -117,9 +117,9 @@ Sign-off: every row marked **Gate = Release** must be at least *Independently ve
 
 ## 9. Current position, honestly
 
-**Independently verified today:** tenant isolation, least-privilege identities, dispatch-time policy recheck (consent, suppression, kill switches, frequency, hours), exact-digest approval, single-use assertions across replicas, PII discipline, migration/pre-flight gating — all through the live smoke under production-faithful identities, plus two external review cycles.
+**Independently verified today:** tenant isolation, least-privilege identities, dispatch-time policy recheck (consent, suppression, kill switches, frequency, hours), exact-digest approval, single-use assertions across replicas, PII discipline — all through the live smoke under production-faithful identities, plus external review cycles.
 
-**Implemented, not independently verified:** crash semantics of store/queue, agent nonce/idempotency ledgers, Prometheus metrics, runbook, secrets generation.
+**Implemented, not independently verified:** crash semantics of store/queue, agent nonce/idempotency ledgers, the exported subset of Prometheus metrics, pre-flight tooling (not enforced per deploy), runbook, secrets generation.
 
 **Not demonstrated:** the entire consultant-facing workflow (commitments, brief, drafts UI, inbound, exceptions, outcomes), transport acceptance, reliability over a soak, threat model and external security review, retention/deletion, SLOs, load/fault injection, alerting, restore drill, all AI-quality evals, all consultant-experience and competitive evidence, all commercial items.
 
