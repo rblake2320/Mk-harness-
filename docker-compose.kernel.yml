@@ -13,8 +13,7 @@ services:
       MK_DATABASE_URL: postgresql://mk:${POSTGRES_PASSWORD}@db:5432/mkharness
       MK_MASTER_KEY: ${MASTER_KEY:?set in .env}
       MK_ASSERTION_KEYS: ${MK_ASSERTION_KEYS:?kid=base64url-pubkey}
-      MK_RUN_MIGRATIONS: "1"
-      MK_BIND: "127.0.0.1:0"
+      MK_MIGRATE_ONLY: "1"   # applies migrations/kernel and exits 0
     depends_on: { db: { condition: service_healthy } }
     restart: "no"
 

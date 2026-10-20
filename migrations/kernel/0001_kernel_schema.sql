@@ -362,7 +362,11 @@ GRANT SELECT, INSERT, UPDATE ON kernel.actions, kernel.approvals, kernel.contact
   kernel.adapter_registrations, kernel.adapter_credentials, kernel.idempotency_records, kernel.outbox_events,
   kernel.policy_versions, kernel.kill_switches, kernel.audit_heads TO mk_kernel_api;
 GRANT SELECT, INSERT ON kernel.audit_events, kernel.adapter_nonces, kernel.adapter_callbacks TO mk_kernel_api;
-GRANT SELECT ON kernel.action_attempts, kernel.execution_leases, kernel.dead_letters TO mk_kernel_api;
+-- Callbacks (API process) close out attempts, release the worker's lease and
+-- dead-letter device failures.
+GRANT SELECT, UPDATE ON kernel.action_attempts TO mk_kernel_api;
+GRANT SELECT, DELETE ON kernel.execution_leases TO mk_kernel_api;
+GRANT SELECT, INSERT ON kernel.dead_letters TO mk_kernel_api;
 
 GRANT SELECT, INSERT, UPDATE ON kernel.actions, kernel.action_attempts, kernel.approvals, kernel.execution_leases,
   kernel.idempotency_records, kernel.dead_letters, kernel.audit_heads, kernel.outbox_events TO mk_kernel_worker;

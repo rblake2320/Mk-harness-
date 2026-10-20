@@ -33,6 +33,13 @@ async fn main() -> anyhow::Result<()> {
     let store = Store::connect(&db, 16).await?;
     if std::env::var("MK_RUN_MIGRATIONS").is_ok_and(|v| v == "1") {
         store.migrate().await?;
+        tracing::info!("kernel migrations applied");
+    }
+    // One-shot migration container: migrate and exit 0 (compose init job).
+    if std::env::var("MK_MIGRATE_ONLY").is_ok_and(|v| v == "1") {
+        store.migrate().await?;
+        tracing::info!("migrate-only run complete; exiting");
+        return Ok(());
     }
     let state = AppState {
         store,

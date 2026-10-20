@@ -7,8 +7,7 @@ use mk_adapters::{ActionAdapter, AdapterRegistry, AuthorizedAction};
 use mk_audit::ActorType;
 use mk_domain::{ActionId, ActionState, Channel, ContactId, TenantId, Transition};
 use mk_policy::{
-    DenyCode, POLICY_VERSION, RecheckInput, ToolAllowlist, local_hour_with_offset,
-    recheck_at_dispatch,
+    DenyCode, POLICY_VERSION, RecheckInput, ToolAllowlist, local_hour_in_zone, recheck_at_dispatch,
 };
 use mk_queue::backoff::Next;
 use mk_queue::{DispatchMessage, RetryPolicy, classify};
@@ -104,16 +103,22 @@ pub async fn dispatch_one(
 
     let (tenant_policy, tz_offset) = policy::load(&mut tx).await?;
     let global = policy::global_dispatch_enabled(store.pool()).await?;
-    let (permissions, suppressions) = match (
+    let (permissions, suppressions, sends_last_24h) = match (
         action.channel,
         action.destination_hash.as_deref(),
         action.request.resource.id.parse::<ContactId>(),
     ) {
-        (Some(ch), Some(dest), Ok(contact)) if action.request.action_kind.is_outreach() => (
-            consent::permissions_for(&mut tx, contact, ch).await?,
-            consent::suppressions_for(&mut tx, ch, dest).await?,
-        ),
-        _ => (Vec::new(), Vec::new()),
+        (Some(ch), Some(dest), Ok(contact)) if action.request.action_kind.is_outreach() => {
+            // Serialize concurrent dispatches to the same contact+channel so
+            // the frequency count below is exact, not a racy snapshot.
+            actions::lock_contact_channel(&mut tx, &action.request.resource.id, ch).await?;
+            (
+                consent::permissions_for(&mut tx, contact, ch).await?,
+                consent::suppressions_for(&mut tx, ch, dest).await?,
+                actions::sends_last_24h(&mut tx, &action.request.resource.id, ch, now).await?,
+            )
+        }
+        _ => (Vec::new(), Vec::new(), 0),
     };
     let approval = approvals::live_for_action_locked(&mut tx, action_id).await?;
     // On a retry the live row is gone (consumed); load the consumed one.
@@ -135,7 +140,8 @@ pub async fn dispatch_one(
         destination_hash: action.destination_hash.as_deref().unwrap_or_default(),
         permissions: &permissions,
         suppressions: &suppressions,
-        local_hour: local_hour_with_offset(now, tz_offset),
+        local_hour: local_hour_in_zone(now, &tenant_policy.contact_tz, tz_offset),
+        sends_last_24h,
         attempt,
         now,
     };

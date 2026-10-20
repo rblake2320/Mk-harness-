@@ -260,6 +260,9 @@ pub struct RecheckInput<'a> {
     pub permissions: &'a [ContactPermissionFact],
     pub suppressions: &'a [SuppressionFact],
     pub local_hour: u8,
+    /// Outreach already committed to this contact+channel in the last 24h,
+    /// counted under a per-contact lock so concurrent workers serialize.
+    pub sends_last_24h: u32,
     /// Attempt number about to start (0 = first). On a retry the approval
     /// was already consumed by this same action's first attempt; that is
     /// the one case where a consumed approval still authorizes.
@@ -340,8 +343,25 @@ pub fn recheck_at_dispatch(input: &RecheckInput<'_>) -> Result<(), DenyCode> {
         if input.local_hour < start || input.local_hour >= end {
             return Err(DenyCode::OutsideContactHours);
         }
+        // A retry is the same send, not a new one; only first attempts count
+        // against the cap (the first attempt is already in the count once
+        // it reached Dispatching).
+        if input.attempt == 0 && input.sends_last_24h >= input.tenant_policy.max_per_contact_per_day
+        {
+            return Err(DenyCode::FrequencyLimitExceeded);
+        }
     }
     Ok(())
+}
+
+/// Hour of day in the tenant's IANA zone at `now`, honouring DST. Falls
+/// back to a fixed offset only when the zone name is unknown.
+#[must_use]
+pub fn local_hour_in_zone(now: DateTime<Utc>, tz: &str, fallback_offset_minutes: i32) -> u8 {
+    match tz.parse::<chrono_tz::Tz>() {
+        Ok(zone) => u8::try_from(now.with_timezone(&zone).hour()).unwrap_or(0),
+        Err(_) => local_hour_with_offset(now, fallback_offset_minutes),
+    }
 }
 
 /// Helper for callers that hold a UTC instant and a fixed offset: compute the
@@ -657,9 +677,73 @@ mod tests {
             permissions: &f.perms,
             suppressions: sups,
             local_hour: 10,
+            sends_last_24h: 0,
             attempt: 0,
             now,
         }
+    }
+
+    #[test]
+    fn dispatch_recheck_enforces_frequency_cap_on_first_attempt_only() {
+        let f = fx();
+        let digest = f.req.digest().unwrap_or_else(|_| Digest::of(b""));
+        let a = approval_for(&f, &digest);
+        let mut i = recheck(&f, &digest, Some(&a), &[], t(10));
+        i.sends_last_24h = 2; // default cap is 2
+        assert_eq!(
+            recheck_at_dispatch(&i),
+            Err(DenyCode::FrequencyLimitExceeded)
+        );
+        let mut consumed = a.clone();
+        consumed.consumed_at = Some(t(10));
+        let mut retry = recheck(&f, &digest, Some(&consumed), &[], t(10));
+        retry.sends_last_24h = 2;
+        retry.attempt = 1;
+        assert_eq!(
+            recheck_at_dispatch(&retry),
+            Ok(()),
+            "retry of the same send is not a new send"
+        );
+    }
+
+    #[test]
+    fn local_hour_honours_dst() {
+        // 2026-07-01 15:00Z is 10:00 CDT (UTC-5); 2026-01-15 15:00Z is 09:00 CST (UTC-6).
+        let summer = Utc
+            .with_ymd_and_hms(2026, 7, 1, 15, 0, 0)
+            .single()
+            .unwrap_or_default();
+        let winter = Utc
+            .with_ymd_and_hms(2026, 1, 15, 15, 0, 0)
+            .single()
+            .unwrap_or_default();
+        assert_eq!(local_hour_in_zone(summer, "America/Chicago", -300), 10);
+        assert_eq!(local_hour_in_zone(winter, "America/Chicago", -300), 9);
+        assert_eq!(
+            local_hour_in_zone(winter, "Not/AZone", -300),
+            10,
+            "fallback offset only when zone unknown"
+        );
+    }
+
+    #[test]
+    fn send_dm_resolves_channel_from_platform() {
+        let mut f = fx();
+        f.req.action_kind = ActionKind::SendDm;
+        f.req.tool_id = "mobile.dm.send.v1".into();
+        f.perms[0].channel = Channel::Instagram;
+        let tools = ToolAllowlist::v1();
+        let mut i = input(&f, &tools, &[]);
+        i.channel = Some(Channel::Instagram);
+        assert!(matches!(evaluate(&i), Decision::RequireApproval { .. }));
+        i.channel = Some(Channel::Dm);
+        assert_eq!(evaluate(&i).deny_code(), Some(DenyCode::ToolKindMismatch));
+        i.channel = None;
+        assert_eq!(
+            evaluate(&i).deny_code(),
+            Some(DenyCode::ToolKindMismatch),
+            "outreach without a channel is refused"
+        );
     }
 
     #[test]

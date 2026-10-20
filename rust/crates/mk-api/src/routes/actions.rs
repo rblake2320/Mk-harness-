@@ -5,8 +5,8 @@ use axum::extract::{Path, State};
 use axum::http::{HeaderMap, StatusCode};
 use chrono::Utc;
 use mk_contracts::{ActionRequest, ActionResult};
-use mk_domain::{ActionId, ActionState, Channel, ContactId, Transition};
-use mk_policy::{Decision, PolicyInput, evaluate, local_hour_with_offset};
+use mk_domain::{ActionId, ActionState, Channel, ContactId, OriginType, Transition};
+use mk_policy::{Decision, PolicyInput, evaluate, local_hour_in_zone};
 use mk_store::idempotency::IdempotencyOutcome;
 use mk_store::{actions, consent, idempotency, outbox, policy};
 use serde::Serialize;
@@ -39,12 +39,26 @@ pub async fn propose(
     // 2. Bind identity from the assertion; body values are discarded.
     let action_id = ActionId::new();
     let mut req = req.bound_to(p.tenant, p.user, action_id);
-    let channel = req.action_kind.channel().or_else(|| {
-        req.arguments
+    // The origin is derived from the authenticated principal, never from the
+    // body: an agent cannot claim to be a human to skip the approval rule
+    // for autonomous medium-risk actions, and a human cannot claim `system`.
+    req.origin.origin_type = bound_origin(&p, req.origin.origin_type);
+    // Platform-specific kinds (DMs) take their channel from `platform`;
+    // every other kind has a fixed channel or none.
+    let channel = match req.action_kind.channel() {
+        Some(c) => Some(c),
+        None => req
+            .arguments
             .get("platform")
             .and_then(Value::as_str)
             .and_then(|s| serde_json::from_value(Value::String(s.to_owned())).ok())
-    });
+            .filter(|c: &Channel| {
+                matches!(
+                    c,
+                    Channel::Instagram | Channel::Facebook | Channel::Tiktok | Channel::X
+                )
+            }),
+    };
     // Normalize the destination *before* the canonical digest is taken, so
     // the approver, the policy, and the adapter all see one value.
     if let (Some(ch), Some(raw)) = (
@@ -147,7 +161,7 @@ pub async fn propose(
         permissions: &permissions,
         suppressions: &suppressions,
         sends_last_24h: sends,
-        local_hour: local_hour_with_offset(now, tz),
+        local_hour: local_hour_in_zone(now, &tenant_policy.contact_tz, tz),
         now,
     });
     let (kind, code) = match &decision {
@@ -239,6 +253,19 @@ pub async fn propose(
             replayed: false,
         }),
     ))
+}
+
+/// Origin as the kernel will record it. Autonomous principals (role set is
+/// exactly `agent`) may be `agent` or `mcp`; everyone else is `human`.
+/// `system` is reserved for kernel-internal origins and is never accepted
+/// from a request.
+fn bound_origin(p: &Principal, claimed: OriginType) -> OriginType {
+    let autonomous = p.has_role("agent") && p.roles.len() == 1;
+    match (autonomous, claimed) {
+        (true, OriginType::Mcp) => OriginType::Mcp,
+        (true, _) => OriginType::Agent,
+        (false, _) => OriginType::Human,
+    }
 }
 
 /// Idempotency must be keyed on content, not on the server-assigned id.
@@ -349,5 +376,50 @@ pub async fn replay(
     Ok((StatusCode::CREATED, Json(new.to_result(None))))
 }
 
-#[allow(dead_code)]
-fn _channel_type_check(_: Channel) {}
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod tests {
+    use super::*;
+    use mk_crypto::ActorAssertion;
+    use mk_domain::{TenantId, UserId};
+
+    fn principal(roles: &[&str]) -> Principal {
+        let (t, u) = (TenantId::new(), UserId::new());
+        Principal {
+            tenant: t,
+            user: u,
+            roles: roles.iter().map(|r| (*r).to_owned()).collect(),
+            session_id: "s".into(),
+            request_id: "r".into(),
+            assertion: ActorAssertion {
+                iss: "mk-fastapi".into(),
+                aud: "mk-action-kernel".into(),
+                sub: u.0,
+                tenant_id: t.0,
+                roles: roles.iter().map(|r| (*r).to_owned()).collect(),
+                session_id: "s".into(),
+                request_id: "r".into(),
+                iat: 0,
+                exp: 60,
+                jti: uuid::Uuid::now_v7(),
+            },
+        }
+    }
+
+    #[test]
+    fn agent_cannot_claim_human_or_system_origin() {
+        let agent = principal(&["agent"]);
+        assert_eq!(bound_origin(&agent, OriginType::Human), OriginType::Agent);
+        assert_eq!(bound_origin(&agent, OriginType::System), OriginType::Agent);
+        assert_eq!(bound_origin(&agent, OriginType::Mcp), OriginType::Mcp);
+        let human = principal(&["consultant"]);
+        assert_eq!(bound_origin(&human, OriginType::Agent), OriginType::Human);
+        assert_eq!(bound_origin(&human, OriginType::System), OriginType::Human);
+        let mixed = principal(&["agent", "consultant"]);
+        assert_eq!(
+            bound_origin(&mixed, OriginType::Agent),
+            OriginType::Human,
+            "a human session that also carries agent is a human"
+        );
+    }
+}

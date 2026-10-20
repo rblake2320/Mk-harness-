@@ -780,3 +780,49 @@ async fn revocation_finds_pending_actions_and_policy_roundtrip() {
     let mut tx = s.begin(tenant).await.unwrap_or_else(|e| panic!("{e:?}"));
     assert!(audit::verify_tenant(&mut tx).await.unwrap_or(0) >= 7);
 }
+
+/// Every statement the API's callback handler runs must be permitted for the
+/// API role; the e2e suites run as superuser and would not notice a missing
+/// grant.
+#[tokio::test]
+async fn api_role_can_run_every_callback_statement() {
+    let s = require_db!();
+    let needed = [
+        ("kernel.actions", "UPDATE"),
+        ("kernel.action_attempts", "UPDATE"),
+        ("kernel.execution_leases", "DELETE"),
+        ("kernel.dead_letters", "INSERT"),
+        ("kernel.adapter_nonces", "INSERT"),
+        ("kernel.adapter_callbacks", "INSERT"),
+        ("kernel.audit_events", "INSERT"),
+        ("kernel.audit_heads", "UPDATE"),
+        ("kernel.adapter_registrations", "UPDATE"),
+    ];
+    for (table, privilege) in needed {
+        let ok: bool = sqlx::query_scalar("SELECT has_table_privilege('mk_kernel_api', $1, $2)")
+            .bind(table)
+            .bind(privilege)
+            .fetch_one(s.pool())
+            .await
+            .unwrap_or(false);
+        assert!(ok, "mk_kernel_api lacks {privilege} on {table}");
+    }
+    // And the runtime roles can never rewrite audit history.
+    for role in [
+        "mk_kernel_api",
+        "mk_kernel_worker",
+        "mk_kernel_relay",
+        "mk_kernel_readonly",
+    ] {
+        for privilege in ["UPDATE", "DELETE", "TRUNCATE"] {
+            let ok: bool =
+                sqlx::query_scalar("SELECT has_table_privilege($1, 'kernel.audit_events', $2)")
+                    .bind(role)
+                    .bind(privilege)
+                    .fetch_one(s.pool())
+                    .await
+                    .unwrap_or(true);
+            assert!(!ok, "{role} must not have {privilege} on audit_events");
+        }
+    }
+}

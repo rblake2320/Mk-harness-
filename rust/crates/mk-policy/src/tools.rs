@@ -33,7 +33,7 @@ impl ToolAllowlist {
             entries: vec![
                 ToolEntry {
                     tool_id: "mobile.sms.send.v1",
-                    kinds: &[ActionKind::SendSms, ActionKind::MobileWorkOrder],
+                    kinds: &[ActionKind::SendSms],
                     channels: &[Channel::Sms],
                     floor_risk: Risk::High,
                     adapter_kind: "mobile-adapter-v1",
@@ -41,7 +41,7 @@ impl ToolAllowlist {
                 },
                 ToolEntry {
                     tool_id: "mobile.dm.send.v1",
-                    kinds: &[ActionKind::SendDm, ActionKind::MobileWorkOrder],
+                    kinds: &[ActionKind::SendDm],
                     channels: &[
                         Channel::Instagram,
                         Channel::Facebook,
@@ -54,7 +54,7 @@ impl ToolAllowlist {
                 },
                 ToolEntry {
                     tool_id: "mobile.social.post.v1",
-                    kinds: &[ActionKind::PostSocial, ActionKind::MobileWorkOrder],
+                    kinds: &[ActionKind::PostSocial],
                     channels: &[
                         Channel::Social,
                         Channel::Instagram,
@@ -149,6 +149,38 @@ mod tests {
             Some(Channel::Sms)
         ));
         assert!(!l.permits("", ActionKind::SendSms, None));
+    }
+
+    #[test]
+    fn every_allowlisted_kind_has_an_adapter_implementation() {
+        // `mobile_work_order` is a transport kind with no adapter builder; it
+        // must never be proposable, or it would consume a human approval and
+        // then dead-letter.
+        let l = ToolAllowlist::v1();
+        for e in &l.entries {
+            assert!(
+                !e.kinds.contains(&ActionKind::MobileWorkOrder),
+                "{}",
+                e.tool_id
+            );
+        }
+        assert!(!l.permits(
+            "mobile.sms.send.v1",
+            ActionKind::MobileWorkOrder,
+            Some(Channel::Sms)
+        ));
+    }
+
+    #[test]
+    fn dm_tool_binds_to_platform_channels() {
+        let l = ToolAllowlist::v1();
+        assert!(l.permits(
+            "mobile.dm.send.v1",
+            ActionKind::SendDm,
+            Some(Channel::Instagram)
+        ));
+        assert!(!l.permits("mobile.dm.send.v1", ActionKind::SendDm, Some(Channel::Dm)));
+        assert!(!l.permits("mobile.dm.send.v1", ActionKind::SendDm, Some(Channel::Sms)));
     }
 
     #[test]

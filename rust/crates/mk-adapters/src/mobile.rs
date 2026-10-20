@@ -251,7 +251,6 @@ impl ActionAdapter for MobileAdapter {
                 ActionKind::SendSms,
                 ActionKind::SendDm,
                 ActionKind::PostSocial,
-                ActionKind::MobileWorkOrder,
             ],
             callback_based: true,
             pii_fields: &["to", "rendered_text"],

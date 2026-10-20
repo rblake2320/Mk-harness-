@@ -506,3 +506,53 @@ async fn pin_contact_hours(w: &World) {
 fn tx_conn<'a>(tx: &'a mut mk_store::TenantTx<'_>) -> &'a mut sqlx::PgConnection {
     tx.raw_conn()
 }
+
+#[tokio::test]
+async fn frequency_cap_is_enforced_at_dispatch_not_only_at_proposal() {
+    let Some(mut w) = world(SimMode::Accept).await else {
+        eprintln!("skipping");
+        return;
+    };
+    // cap = 1 per contact per day, wide contact hours
+    let mut tx = w
+        .store
+        .begin(w.tenant)
+        .await
+        .unwrap_or_else(|e| panic!("{e:?}"));
+    let (mut p, _) = mk_store::policy::load(&mut tx)
+        .await
+        .unwrap_or_else(|e| panic!("{e:?}"));
+    p.contact_hours = (0, 24);
+    p.max_per_contact_per_day = 1;
+    mk_store::policy::write(&mut tx, "cap1", &p, 0)
+        .await
+        .unwrap_or_else(|e| panic!("{e:?}"));
+    tx.commit().await.unwrap_or_else(|e| panic!("{e:?}"));
+    // Both proposals were approved while the count was 0.
+    let first = queued_outreach(&w).await;
+    let second = queued_outreach(&w).await;
+    let a = dispatch_one(&w.ctx, &msg(&w, first), now_in_hours())
+        .await
+        .unwrap_or_else(|e| panic!("{e:?}"));
+    assert_eq!(
+        a,
+        DispatchOutcome::Dispatched {
+            pending_callback: true
+        }
+    );
+    let _ = w.sim.received.recv().await;
+    let b = dispatch_one(&w.ctx, &msg(&w, second), now_in_hours())
+        .await
+        .unwrap_or_else(|e| panic!("{e:?}"));
+    assert_eq!(
+        b,
+        DispatchOutcome::Blocked {
+            code: DenyCode::FrequencyLimitExceeded,
+            state: ActionState::Cancelled
+        }
+    );
+    assert!(
+        w.sim.received.try_recv().is_err(),
+        "second send never reaches the device"
+    );
+}

@@ -74,9 +74,12 @@ impl ActionKind {
         match self {
             Self::SendSms => Some(Channel::Sms),
             Self::SendEmail => Some(Channel::Email),
-            Self::SendDm => Some(Channel::Dm),
             Self::PostSocial => Some(Channel::Social),
-            Self::MobileWorkOrder => None, // channel comes from the work order target
+            // Platform-specific: the channel is the `platform` argument
+            // (instagram/facebook/tiktok/x), resolved by the API before policy.
+            Self::SendDm => None,
+            // Channel comes from the work order target.
+            Self::MobileWorkOrder => None,
             Self::CreateAppointment | Self::UpdateContact => None,
         }
     }

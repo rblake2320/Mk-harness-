@@ -59,6 +59,7 @@ schemars = { version = "1", features = ["uuid1", "chrono04"] }
 jsonschema = { version = "0.33", default-features = false }
 uuid = { version = "1", features = ["v7", "v4", "serde"] }
 chrono = { version = "0.4", features = ["serde", "clock"] }
+chrono-tz = "0.10"
 thiserror = "2"
 anyhow = "1"
 hmac = "0.12"

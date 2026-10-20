@@ -237,6 +237,25 @@ pub async fn transition(
     get(tx, action_id).await
 }
 
+/// Transaction-scoped advisory lock on `(tenant, contact, channel)`. Held
+/// until commit/rollback; makes the frequency count + `StartDispatch` of
+/// concurrent workers serialize for one contact without blocking others.
+pub async fn lock_contact_channel(
+    tx: &mut TenantTx<'_>,
+    resource_id: &str,
+    channel: Channel,
+) -> Result<(), StoreError> {
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
+        .bind(format!(
+            "{}|{resource_id}|{}",
+            tx.tenant().0,
+            channel.as_str()
+        ))
+        .execute(tx.conn())
+        .await?;
+    Ok(())
+}
+
 /// Count outreach actions dispatched to a contact over a channel in the last
 /// 24h (frequency limit input).
 pub async fn sends_last_24h(
