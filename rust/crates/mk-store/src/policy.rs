@@ -26,15 +26,20 @@ pub async fn load(tx: &mut TenantTx<'_>) -> Result<(TenantPolicy, i32), StoreErr
     .bind(tenant.0)
     .fetch_optional(tx.conn())
     .await?;
-    let Some(r) = r else {
-        return Ok((TenantPolicy::defaults(tenant), -300));
-    };
+    // The tenant kill switch applies whether or not a policy version has
+    // ever been written: a brand-new tenant on defaults must still be
+    // stoppable. (Regression: `tenant_kill_switch_applies_without_policy_row`.)
     let tenant_switch: Option<bool> = sqlx::query("SELECT dispatch_enabled FROM kernel.kill_switches WHERE scope = 'tenant' AND tenant_id = $1")
         .bind(tenant.0)
         .fetch_optional(tx.conn())
         .await?
         .map(|k| k.try_get("dispatch_enabled"))
         .transpose()?;
+    let Some(r) = r else {
+        let mut p = TenantPolicy::defaults(tenant);
+        p.dispatch_enabled = p.dispatch_enabled && tenant_switch.unwrap_or(true);
+        return Ok((p, -300));
+    };
     let p = TenantPolicy {
         tenant_id: tenant,
         dispatch_enabled: r.try_get::<bool, _>("dispatch_enabled")?

@@ -42,6 +42,24 @@ macro_rules! require_db {
     };
 }
 
+/// `GRANT role TO CURRENT_USER`, tolerant of a concurrent test doing the same
+/// (nextest runs tests in separate processes; two simultaneous grants of one
+/// membership can race on pg_auth_members). Membership is asserted afterwards.
+async fn ensure_member<'e, E>(exec: E, role: &str)
+where
+    E: sqlx::PgExecutor<'e> + Copy,
+{
+    let _ = sqlx::query(&format!("GRANT {role} TO CURRENT_USER"))
+        .execute(exec)
+        .await;
+    let ok: bool = sqlx::query_scalar("SELECT pg_has_role(current_user, $1, 'MEMBER')")
+        .bind(role)
+        .fetch_one(exec)
+        .await
+        .unwrap_or(false);
+    assert!(ok, "current user must be a member of {role}");
+}
+
 const ACTOR: Actor<'static> = Actor {
     actor_type: ActorType::System,
     actor_id: "test",
@@ -338,10 +356,7 @@ async fn cross_tenant_access_is_invisible_even_with_raw_sql() {
         .execute(pool)
         .await
         .unwrap_or_else(|e| panic!("{e:?}"));
-    sqlx::query("GRANT mk_rls_probe TO CURRENT_USER")
-        .execute(pool)
-        .await
-        .unwrap_or_else(|e| panic!("{e:?}"));
+    ensure_member(pool, "mk_rls_probe").await;
     let mut raw = pool.begin().await.unwrap_or_else(|e| panic!("{e:?}"));
     sqlx::query("SET LOCAL ROLE mk_rls_probe")
         .execute(&mut *raw)
@@ -825,4 +840,250 @@ async fn api_role_can_run_every_callback_statement() {
             assert!(!ok, "{role} must not have {privilege} on audit_events");
         }
     }
+}
+
+#[tokio::test]
+async fn assertion_jti_is_single_use_across_pools_and_purgeable() {
+    use mk_store::assertions::{JtiOutcome, consume_jti, purge_jtis};
+    let s = require_db!();
+    // A second, independent pool stands in for a second API replica.
+    let s2 = store().await.unwrap_or_else(|| panic!("db"));
+    let (jti, tenant, sub) = (
+        uuid::Uuid::now_v7(),
+        uuid::Uuid::now_v7(),
+        uuid::Uuid::now_v7(),
+    );
+    let exp = chrono::Utc::now() + Duration::seconds(65);
+    assert_eq!(
+        consume_jti(s.pool(), jti, tenant, sub, exp).await.unwrap(),
+        JtiOutcome::Fresh
+    );
+    // Replica B sees replica A's consumption.
+    assert_eq!(
+        consume_jti(s2.pool(), jti, tenant, sub, exp).await.unwrap(),
+        JtiOutcome::Replayed
+    );
+    // Even a different tenant cannot reuse the same jti.
+    assert_eq!(
+        consume_jti(s2.pool(), jti, uuid::Uuid::now_v7(), sub, exp)
+            .await
+            .unwrap(),
+        JtiOutcome::Replayed
+    );
+    // Concurrent first use from both pools: exactly one wins.
+    let j2 = uuid::Uuid::now_v7();
+    let (a, b) = tokio::join!(
+        consume_jti(s.pool(), j2, tenant, sub, exp),
+        consume_jti(s2.pool(), j2, tenant, sub, exp)
+    );
+    let outcomes = [a.unwrap(), b.unwrap()];
+    assert_eq!(
+        outcomes.iter().filter(|o| **o == JtiOutcome::Fresh).count(),
+        1
+    );
+    // Purge removes only expired rows; the live one stays single-use.
+    let stale = uuid::Uuid::now_v7();
+    consume_jti(
+        s.pool(),
+        stale,
+        tenant,
+        sub,
+        chrono::Utc::now() - Duration::seconds(1),
+    )
+    .await
+    .unwrap();
+    assert!(purge_jtis(s.pool(), chrono::Utc::now()).await.unwrap() >= 1);
+    assert_eq!(
+        consume_jti(s.pool(), jti, tenant, sub, exp).await.unwrap(),
+        JtiOutcome::Replayed
+    );
+    assert_eq!(
+        consume_jti(s.pool(), stale, tenant, sub, exp)
+            .await
+            .unwrap(),
+        JtiOutcome::Fresh,
+        "purged jti row is gone (its assertion is already unverifiable)"
+    );
+}
+
+#[tokio::test]
+async fn api_role_cannot_delete_or_update_jti_rows() {
+    use mk_store::assertions::consume_jti;
+    let s = require_db!();
+    let (jti, tenant, sub) = (
+        uuid::Uuid::now_v7(),
+        uuid::Uuid::now_v7(),
+        uuid::Uuid::now_v7(),
+    );
+    consume_jti(
+        s.pool(),
+        jti,
+        tenant,
+        sub,
+        chrono::Utc::now() + Duration::seconds(60),
+    )
+    .await
+    .unwrap();
+    ensure_member(s.pool(), "mk_kernel_api").await;
+    let mut conn = s.pool().acquire().await.unwrap();
+    sqlx::query("BEGIN").execute(&mut *conn).await.unwrap();
+    sqlx::query("SET LOCAL ROLE mk_kernel_api")
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+    let del = sqlx::query("DELETE FROM kernel.assertion_jtis WHERE jti = $1")
+        .bind(jti)
+        .execute(&mut *conn)
+        .await;
+    assert!(del.is_err(), "api role must not delete jti evidence");
+    sqlx::query("ROLLBACK").execute(&mut *conn).await.unwrap();
+    sqlx::query("BEGIN").execute(&mut *conn).await.unwrap();
+    sqlx::query("SET LOCAL ROLE mk_kernel_api")
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+    let upd = sqlx::query("UPDATE kernel.assertion_jtis SET expires_at = now() WHERE jti = $1")
+        .bind(jti)
+        .execute(&mut *conn)
+        .await;
+    assert!(upd.is_err(), "api role must not edit jti evidence");
+    sqlx::query("ROLLBACK").execute(&mut *conn).await.unwrap();
+}
+
+#[tokio::test]
+async fn tenant_kill_switch_applies_without_policy_row() {
+    // Found by the live smoke: a tenant on default policy (no
+    // policy_versions row) had its kill switch silently ignored.
+    let s = require_db!();
+    let tenant = TenantId::new();
+    let mut tx = s.begin(tenant).await.unwrap();
+    let (p, _) = policy::load(&mut tx).await.unwrap();
+    assert!(p.dispatch_enabled, "defaults start enabled");
+    policy::set_tenant_dispatch(&mut tx, false, ACTOR, t0())
+        .await
+        .unwrap();
+    let (p, _) = policy::load(&mut tx).await.unwrap();
+    assert!(
+        !p.dispatch_enabled,
+        "kill switch must apply with no policy row"
+    );
+    policy::set_tenant_dispatch(&mut tx, true, ACTOR, t0())
+        .await
+        .unwrap();
+    let (p, _) = policy::load(&mut tx).await.unwrap();
+    assert!(p.dispatch_enabled);
+    tx.commit().await.unwrap();
+}
+
+/// A pool whose every connection runs as the given NOLOGIN privilege role,
+/// so the production functions are exercised under the production identity
+/// (RLS enforced), not as the test superuser.
+async fn role_pool(url: &str, role: &'static str) -> sqlx::PgPool {
+    let admin = sqlx::PgPool::connect(url).await.unwrap();
+    ensure_member(&admin, role).await;
+    sqlx::postgres::PgPoolOptions::new()
+        .max_connections(4)
+        .after_connect(move |conn, _| {
+            Box::pin(async move {
+                sqlx::query(&format!("SET ROLE {role}"))
+                    .execute(conn)
+                    .await?;
+                Ok(())
+            })
+        })
+        .connect(url)
+        .await
+        .unwrap()
+}
+
+#[tokio::test]
+async fn worker_role_can_discover_tenants_and_purge_nonces_across_tenants() {
+    // Codex finding on PR #31: under mk_kernel_worker, tenant discovery and
+    // the nonce purge saw zero rows. Exercise the real functions as that role.
+    let s = require_db!();
+    let url = mk_testkit::test_database_url().unwrap();
+    let master = MasterKey::generate();
+    let tenants = [TenantId::new(), TenantId::new()];
+    let now = t0();
+    for t in tenants {
+        let mut tx = s.begin(t).await.unwrap();
+        // Any audited write creates the tenant's audit head.
+        policy::set_tenant_dispatch(&mut tx, true, ACTOR, now)
+            .await
+            .unwrap();
+        let (reg, _) = adapters::register(
+            &mut tx,
+            &master,
+            "agent-x",
+            "X",
+            "android",
+            "1",
+            &["open".into()],
+            &[],
+            "kernel.internal",
+            ACTOR,
+            now,
+        )
+        .await
+        .unwrap();
+        // retain = window after `now` the nonce stays unusable; an expired
+        // one is recorded as seen an hour ago with a 1 s window.
+        adapters::record_nonce(
+            &mut tx,
+            reg.adapter_id,
+            "expired-nonce",
+            Duration::seconds(1),
+            now - Duration::hours(1),
+        )
+        .await
+        .unwrap();
+        adapters::record_nonce(
+            &mut tx,
+            reg.adapter_id,
+            "live-nonce",
+            Duration::hours(1),
+            now,
+        )
+        .await
+        .unwrap();
+        tx.commit().await.unwrap();
+    }
+    let worker = role_pool(&url, "mk_kernel_worker").await;
+    let seen = audit::all_tenants(&worker).await.unwrap();
+    for t in tenants {
+        assert!(seen.contains(&t), "worker must discover every tenant");
+    }
+    let purged = adapters::purge_nonces(&worker, now).await.unwrap();
+    assert!(
+        purged >= 2,
+        "worker must purge expired nonces in every tenant, purged={purged}"
+    );
+    // Live nonces untouched: a replay of the live nonce is still a conflict.
+    for t in tenants {
+        let mut tx = s.begin(t).await.unwrap();
+        let reg = adapters::get_by_agent(&mut tx, "agent-x").await.unwrap();
+        let again = adapters::record_nonce(
+            &mut tx,
+            reg.adapter_id,
+            "live-nonce",
+            Duration::hours(1),
+            now,
+        )
+        .await;
+        assert!(
+            matches!(again, Err(StoreError::Conflict(_))),
+            "live nonce must survive purge"
+        );
+        tx.rollback().await.unwrap();
+    }
+    // The worker can see expired leases across tenants too (existing policy).
+    let _ = outbox::expired_leases(&worker, now, 10).await.unwrap();
+    // But it cannot write audit heads for a tenant it is not inside.
+    let bad = sqlx::query(
+        "INSERT INTO kernel.audit_heads (tenant_id, last_hash, count) VALUES ($1, 'x', 0)",
+    )
+    .bind(uuid::Uuid::now_v7())
+    .execute(&worker)
+    .await;
+    assert!(bad.is_err(), "discovery policy must be SELECT-only");
 }

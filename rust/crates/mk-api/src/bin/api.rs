@@ -4,10 +4,9 @@ use std::sync::Arc;
 
 use mk_api::metrics::Metrics;
 use mk_api::{AppState, router};
-use mk_crypto::{AssertionVerifier, MasterKey, ReplayGuard};
+use mk_crypto::{AssertionVerifier, MasterKey};
 use mk_policy::ToolAllowlist;
 use mk_store::Store;
-use tokio::sync::Mutex;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -47,7 +46,6 @@ async fn main() -> anyhow::Result<()> {
         master,
         tools: Arc::new(ToolAllowlist::v1()),
         metrics: Arc::new(Metrics::new()),
-        jti: Arc::new(Mutex::new(ReplayGuard::new())),
         callback_tolerance_secs: std::env::var("MK_CALLBACK_TOLERANCE_SECS")
             .ok()
             .and_then(|v| v.parse().ok())

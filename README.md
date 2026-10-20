@@ -14,7 +14,7 @@ required.
 mk-harness/
 ├── backend/          FastAPI · Postgres · multi-tenant · JWT auth
 │   ├── app/providers/   The harness core: 4 adapters + router + failover
-│   └── tests/           123 tests (auth, crypto, isolation, adapters, e2e, red team)
+│   └── tests/           165 tests (auth, crypto, isolation, adapters, e2e, red team)
 ├── packages/sdk/     Shared TypeScript SDK (web + mobile)
 ├── web/              React + Vite web client (dark "vanity mirror" UI)
 ├── mobile/           Expo React Native client (camera skin analysis)
@@ -96,7 +96,7 @@ npx expo start
 ## Tests
 
 ```bash
-cd backend && python -m pytest -v    # 123 tests
+cd backend && python -m pytest -v    # 165 tests
 ```
 
 Provider adapters are tested against each vendor's documented wire format
@@ -139,7 +139,7 @@ EXIF stripping, and skin-compliance rejection.
 
 ## Honest constraints
 
-Built and verified in a sandboxed container: backend test suite (123/123),
+Built and verified in a sandboxed container: backend test suite (165/165),
 live server smoke test, and web production build all pass here. What I could
 not do from the container: hit OpenAI/Gemini live endpoints (network
 egress), run an iOS/Android simulator (Expo client is code-complete and

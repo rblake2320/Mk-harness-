@@ -27,8 +27,7 @@ use mk_adapters::{AdapterRegistry, InternalRecordAdapter};
 use mk_api::metrics::Metrics;
 use mk_api::{AppState, router};
 use mk_crypto::{
-    ActorAssertion, AdapterSecret, AssertionSigner, AssertionVerifier, MasterKey, ReplayGuard,
-    sign_hmac,
+    ActorAssertion, AdapterSecret, AssertionSigner, AssertionVerifier, MasterKey, sign_hmac,
 };
 use mk_domain::{ActionState, ContactId, TenantId, UserId};
 use mk_policy::ToolAllowlist;
@@ -185,7 +184,6 @@ async fn harness() -> Option<Harness> {
         master: MasterKey::generate(),
         tools: Arc::new(ToolAllowlist::v1()),
         metrics: Arc::new(Metrics::new()),
-        jti: Arc::new(Mutex::new(ReplayGuard::new())),
         callback_tolerance_secs: 120,
         rust_kernel_enabled: true,
     };
@@ -300,9 +298,38 @@ async fn full_governed_path_over_http() {
         .to_owned();
     assert_eq!(enrollment.len(), 43);
     assert_eq!(reg["adapter"]["verified_on_device"], json!(false));
-    // Re-using the same assertion (jti) for a second write is refused.
+    // Re-using the same assertion (jti) for a second write is refused — and
+    // refused by a *different* API instance over the same database, which
+    // is what a replica behind a load balancer looks like.
     let (s, _) = h.call("POST", "/internal/v1/adapters", Some(&admin_tok), Some(json!({"agent_id": "simulator-2", "name": "Sim", "platform": "android", "version": "1", "capabilities": [], "allowed_actions": [], "callback_authority": "kernel.internal"}))).await;
-    assert_eq!(s, StatusCode::UNAUTHORIZED, "jti replay");
+    assert_eq!(s, StatusCode::UNAUTHORIZED, "jti replay (same instance)");
+    let replica = router(h.state.clone());
+    let req = Request::builder()
+        .method("POST")
+        .uri("/internal/v1/adapters")
+        .header("content-type", "application/json")
+        .header("authorization", format!("Bearer {admin_tok}"))
+        .body(Body::from(json!({"agent_id": "simulator-3", "name": "Sim", "platform": "android", "version": "1", "capabilities": [], "allowed_actions": [], "callback_authority": "kernel.internal"}).to_string()))
+        .unwrap_or_default();
+    let resp = replica
+        .oneshot(req)
+        .await
+        .unwrap_or_else(|e| panic!("{e:?}"));
+    assert_eq!(
+        resp.status(),
+        StatusCode::UNAUTHORIZED,
+        "jti replay (second instance)"
+    );
+    // A GET with that jti still works: reads are not single-use.
+    let (s, _) = h
+        .call(
+            "GET",
+            "/internal/v1/approvals/pending",
+            Some(&admin_tok),
+            None,
+        )
+        .await;
+    assert_eq!(s, StatusCode::OK);
 
     // Propose without consent → denied, nothing queued.
     let (s, v) = h

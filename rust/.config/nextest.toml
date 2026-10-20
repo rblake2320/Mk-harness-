@@ -1,0 +1,12 @@
+# Integration tests share one Postgres and one Redis. nextest runs every test
+# in its own process, so an in-process mutex cannot serialize them: a relay in
+# one test can claim another test's outbox row, and a consumer in one test can
+# read another test's stream entries (seen as a flaky
+# `crash_after_publish_before_mark_yields_duplicate_not_loss`). Run the
+# integration binaries one test at a time; unit tests stay fully parallel.
+[test-groups]
+shared-infra = { max-threads = 1 }
+
+[[profile.default.overrides]]
+filter = 'kind(test) & (package(mk-store) | package(mk-queue) | package(mk-worker) | package(mk-api) | package(mk-adapters) | package(mk-mcp))'
+test-group = 'shared-infra'
