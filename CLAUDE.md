@@ -149,8 +149,13 @@ kernel (`rust/`). Rules:
   `backend/tests/test_agent_ops.py` enforces this. Wire names differ from Rust
   field names (`origin.type`, `resource.type`).
 - `scripts/kernel-live-smoke.sh` is the end-to-end gate (real Postgres/Redis,
-  real binaries, FastAPI, device agent in dry-run). Run it before merging
-  anything that touches the kernel boundary.
+  real binaries, FastAPI, device agent in dry-run, per-process DB logins,
+  production pre-flight). CI runs it (`live-smoke` job) on every kernel PR.
+- Production: `scripts/kernel-secrets.ps1` → `docker compose … up` →
+  `scripts/kernel-preflight.sh` (27 checks). `RUST_ACTION_KERNEL_ENABLED=1`
+  only after `kernel-preflight.sh --for-enable` passes, which requires a
+  reviewed `deploy/kernel/ACCEPTANCE.md` (real-device run). Runbook:
+  `deploy/kernel/README.md`.
 
 ## Skin analysis — compliance guardrails (do not weaken)
 

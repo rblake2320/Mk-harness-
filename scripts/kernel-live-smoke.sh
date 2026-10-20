@@ -25,7 +25,7 @@
 # produce real-device evidence (see docs/real-device-acceptance.md).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-WORK="${WORK:-$(mktemp -d)}"
+WORK="${WORK:-$(mktemp -d)}"; mkdir -p "$WORK"
 PGURL="${PGURL:-postgres://postgres:kernel@127.0.0.1:5433/mk_kernel_smoke}"
 REDIS_URL="${REDIS_URL:-redis://127.0.0.1:6380}"
 API=http://127.0.0.1:8090
@@ -69,7 +69,7 @@ MK_DATABASE_URL="$(url_for mk_relay_login relay)" MK_RELAY_ID=relay-smoke \
   "$BIN/mk-outbox-relay" >"$WORK/relay.log" 2>&1 & PIDS+=($!)
 MK_DATABASE_URL="$(url_for mk_worker_login worker)" MK_WORKER_ID=worker-smoke MK_LEASE_SECS=60 MK_ALLOW_LOOPBACK_HTTP=1 \
   MK_MOBILE_INTAKE_URL="$AGENT/work-orders" MK_EGRESS_AUTHORITIES=127.0.0.1:8787 \
-  "$BIN/mk-action-worker" >"$WORK/worker.log" 2>&1 & PIDS+=($!)
+  "$BIN/mk-action-worker" >"$WORK/worker.log" 2>&1 & WORKER_PID=$!; PIDS+=($WORKER_PID)
 for i in $(seq 1 30); do curl -fsS "$API/health/ready" >/dev/null 2>&1 && break; sleep 1; done
 curl -fsS "$API/health/ready" >/dev/null || die "kernel api not ready"
 
@@ -137,9 +137,13 @@ c2=$(curl -sS -o /dev/null -w '%{http_code}' -X POST "$API/internal/v1/kill-swit
 log "gate 3: revoked approval is never dispatched"
 [ "$(propose "$CONTACT" "+15555550100" "smoke-revoked-1")" = 201 ] || die "propose rev"
 A2=$(j 'd["result"]["action_id"]'); D2=$(j 'd["result"]["action_digest"]')
+# Freeze the worker so approve→revoke is not racing a sub-second dispatch;
+# the kernel must then refuse the queued action at dispatch time.
+kill -STOP "$WORKER_PID"
 [ "$(approve "$A2" "$D2")" = 200 ] || die "approve rev: $(cat "$WORK/out.json")"
 AP2=$(j 'd["approval"]["approval_id"]')
 [ "$(ops -X POST "$APP/api/agent-ops/approvals/$AP2/revoke")" = 200 ] || die "revoke: $(cat "$WORK/out.json")"
+kill -CONT "$WORKER_PID"
 sleep 6; s=$(state "$A2"); case "$s" in dispatching|completed) die "revoked action dispatched: $s";; esac
 grep -q "$A2" "$WORK/agent.log" && die "revoked action reached the device agent"
 log "  state after revoke: $s"
@@ -192,5 +196,17 @@ log "worker log clean under its restricted login (housekeeping under mk_kernel_w
 
 log "no PII in kernel/agent logs"
 ! grep -q "5555550100\|Your order shipped" "$WORK/api.log" "$WORK/worker.log" "$WORK/relay.log" "$WORK/agent.log" || die "PII leaked to logs"
+
+log "gate 8: production pre-flight passes against this stack (and refuses --for-enable without an acceptance record)"
+export KERNEL_URL="$API" APP_URL="$APP" PG_HOST="${HOSTDB%/*}" PG_DB="${HOSTDB##*/}" PG_ADMIN_URL="$PGURL" \
+  MK_DB_API_PASSWORD="api-$PW" MK_DB_WORKER_PASSWORD="worker-$PW" MK_DB_RELAY_PASSWORD="relay-$PW" MK_DB_READONLY_PASSWORD="readonly-$PW" \
+  MK_PREFLIGHT_EMAIL=admin@smoke.example.com MK_PREFLIGHT_PASSWORD='superSecret123!' \
+  MK_AUDIT_VERIFIER="$BIN/mk-audit-verifier" MK_EGRESS_AUTHORITIES=127.0.0.1:8787 MK_MOBILE_INTAKE_URL="https://127.0.0.1:8787/work-orders"
+bash "$ROOT/scripts/kernel-preflight.sh" > "$WORK/preflight.log" 2>&1 || { cat "$WORK/preflight.log"; die "pre-flight failed"; }
+grep -E "passed, 0 failed" "$WORK/preflight.log" >/dev/null || { cat "$WORK/preflight.log"; die "pre-flight"; }
+if MK_ACCEPTANCE_RECORD="$WORK/no-such-record.md" bash "$ROOT/scripts/kernel-preflight.sh" --for-enable > "$WORK/preflight-enable.log" 2>&1; then
+  die "pre-flight --for-enable must fail without an acceptance record"; fi
+grep -q "no real-device acceptance record" "$WORK/preflight-enable.log" || die "pre-flight --for-enable gave the wrong reason"
+log "  $(grep -E 'passed, . failed' "$WORK/preflight.log")"
 
 log "ALL GATES PASSED — artifacts in $WORK"
