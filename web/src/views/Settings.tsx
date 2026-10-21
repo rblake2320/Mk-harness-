@@ -73,11 +73,11 @@ export default function SettingsView({ role }: { role: string }) {
 
         <div style={{ marginTop: 16, display: 'grid', gap: 10 }}>
           <div className="row">
-            <select value={provider} onChange={e => setProvider(e.target.value)} style={{ width: 160 }}>
+            <select aria-label="Provider" value={provider} onChange={e => setProvider(e.target.value)} style={{ width: 160 }}>
               {PROVIDERS.map(p => <option key={p} value={p}>{p}</option>)}
             </select>
             {role === 'admin' && (
-              <select value={scope} onChange={e => setScope(e.target.value as any)} style={{ width: 200 }}>
+              <select aria-label="Key scope" value={scope} onChange={e => setScope(e.target.value as any)} style={{ width: 200 }}>
                 <option value="mine">My personal key</option>
                 <option value="tenant">Team key (everyone)</option>
               </select>

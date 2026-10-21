@@ -303,22 +303,14 @@ def test_skin_data_isolation_between_users(client):
     assert len(client.get("/api/me/skin-data/export", headers=auth_headers(ta)).json()["skin_analyses"]) == 1
 
 
-@respx.mock
-def test_customer_follow_up_uses_notes(client):
+def test_legacy_free_text_follow_up_is_retired(client):
+    """P1/P3: the unbounded follow-up generator (notes quoted to the model, no claims
+    registry) is gone. Drafting goes through /api/drafts."""
     t = _setup_user_with_anthropic_key(client)
     h = auth_headers(t)
-    cid = client.post("/api/customers", headers=h, json={
-        "name": "Brenda", "notes": "Loves the satin hands set; reorders quarterly"}).json()["id"]
-    route = respx.post("https://api.anthropic.com/v1/messages").mock(
-        return_value=httpx.Response(200, json={
-            "model": "claude-sonnet-4-6",
-            "content": [{"type": "text", "text": "Draft 1... Draft 2..."}],
-            "usage": {"input_tokens": 80, "output_tokens": 60}}))
-    r = client.post(f"/api/customers/{cid}/follow-up", headers=h,
-                    json={"goal": "quarterly reorder", "provider": "anthropic"})
-    assert r.status_code == 200 and "Draft" in r.json()["drafts"]
-    sent = json.loads(route.calls[0].request.content)
-    assert "satin hands" in sent["messages"][0]["content"]
+    cid = client.post("/api/customers", headers=h, json={"name": "Brenda", "notes": "private"}).json()["id"]
+    r = client.post(f"/api/customers/{cid}/follow-up", headers=h, json={"goal": "quarterly reorder"})
+    assert r.status_code == 410 and r.json()["detail"]["code"] == "RETIRED"
 
 
 def test_health(client):
@@ -443,94 +435,14 @@ def test_get_skills_returns_all_six_skills():
 # ---------------------------------------------------------------------------
 # Daily suggestions endpoint (Power Hour)
 # ---------------------------------------------------------------------------
-def test_daily_suggestions_empty(client):
-    t = signup(client, email=_email())
+def test_daily_suggestions_is_retired(client):
+    """W4: no purchase-age / days-since-contact 'overdue' list. The brief is the only
+    source of follow-ups and every item carries its rule and permission state."""
+    t = signup(client, org="Sugg", email="sugg@example.com")
     r = client.get("/api/customers/suggestions", headers=auth_headers(t))
-    assert r.status_code == 200
-    assert r.json() == []
+    assert r.status_code == 410 and r.json()["detail"]["code"] == "RETIRED"
+    assert client.get("/api/customers/suggestions").status_code == 401
 
-
-def test_daily_suggestions_order(client):
-    """Never-contacted customers come first, oldest-contacted second."""
-    import time
-    t = signup(client, email=_email())
-    h = auth_headers(t)
-
-    # Create 3 customers: never contacted, recently contacted, old contact
-    never_id  = client.post("/api/customers", headers=h,
-                             json={"name": "Never"}).json()["id"]
-    recent_id = client.post("/api/customers", headers=h,
-                             json={"name": "Recent"}).json()["id"]
-    old_id    = client.post("/api/customers", headers=h,
-                             json={"name": "OldContact"}).json()["id"]
-
-    # Touch recent first (so old gets an earlier timestamp)
-    client.post(f"/api/customers/{old_id}/touch", headers=h)
-    time.sleep(0.05)
-    client.post(f"/api/customers/{recent_id}/touch", headers=h)
-
-    r = client.get("/api/customers/suggestions", headers=auth_headers(t))
-    assert r.status_code == 200
-    names = [s["name"] for s in r.json()]
-    assert names[0] == "Never"      # never contacted first
-    assert names[1] == "OldContact" # oldest contact second
-    assert names[2] == "Recent"
-
-
-def test_daily_suggestions_max_five(client):
-    t = signup(client, email=_email())
-    h = auth_headers(t)
-    for i in range(8):
-        client.post("/api/customers", headers=h, json={"name": f"Customer{i}"})
-    r = client.get("/api/customers/suggestions", headers=auth_headers(t))
-    assert r.status_code == 200
-    assert len(r.json()) <= 5
-
-
-def test_daily_suggestions_cross_tenant_isolation(client):
-    """User A cannot see User B's customers in suggestions."""
-    t1 = signup(client, email=_email())
-    t2 = signup(client, email=_email(), org="Other Org")
-    client.post("/api/customers", headers=auth_headers(t1), json={"name": "Alice"})
-    r = client.get("/api/customers/suggestions", headers=auth_headers(t2))
-    assert r.status_code == 200
-    assert r.json() == []
-
-
-# ---------------------------------------------------------------------------
-# Consultant profile tracking
-# ---------------------------------------------------------------------------
-@respx.mock
-def test_profile_tracks_skill_usage(client):
-    t = _setup_user_with_anthropic_key(client)
-    h = auth_headers(t)
-    respx.post("https://api.anthropic.com/v1/messages").mock(
-        return_value=httpx.Response(200, content=_anthropic_sse().encode(),
-                                    headers={"content-type": "text/event-stream"}))
-    with client.stream("POST", "/api/chat/stream", headers=h,
-                       json={"message": "Help me", "skill": "social",
-                             "provider": "anthropic"}) as r:
-        list(r.iter_lines())  # drain
-    prof = client.get("/api/profile/me", headers=h).json()
-    assert prof["total_conversations"] == 1
-    assert prof["skill_usage"].get("social", 0) == 1
-    assert prof["top_skill"] == "social"
-
-
-@respx.mock
-def test_profile_tracks_compliance_flags(client):
-    t = _setup_user_with_anthropic_key(client)
-    h = auth_headers(t)
-    respx.post("https://api.anthropic.com/v1/messages").mock(
-        return_value=httpx.Response(200,
-            content=_anthropic_sse("join now and make passive income guaranteed").encode(),
-            headers={"content-type": "text/event-stream"}))
-    with client.stream("POST", "/api/chat/stream", headers=h,
-                       json={"message": "tell me about earnings",
-                             "skill": "sales_coach", "provider": "anthropic"}) as r:
-        list(r.iter_lines())
-    prof = client.get("/api/profile/me", headers=h).json()
-    assert prof["compliance_flags"] >= 1
 
 
 def test_profile_update_business_context(client):

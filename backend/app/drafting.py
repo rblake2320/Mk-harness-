@@ -195,6 +195,7 @@ def assemble(db: Session, *, tenant_id: str, user_id: str, customer: Customer, c
                  {"customer_id": customer.id, "claims_used": sorted(set(placeholders)),
                   "text_digest": _digest(text), "generated_by": generated_by})
     dv = DraftVersion(tenant_id=tenant_id, customer_id=customer.id, brief_item_id=brief_item_id,
+                      commitment_id=commitment.id if commitment else None,
                       text_enc=seal(tenant_id, "draft", text), text_digest=_digest(text),
                       relationship_spans_json=json.dumps({"relationship_text": rel}),
                       claim_ids_json=json.dumps(sorted(set(placeholders))),
@@ -226,6 +227,7 @@ def consultant_edit(db: Session, *, tenant_id: str, user_id: str, prior: DraftVe
     used = sorted(c.claim_id for c in candidates if c.approved_text in new_text)
     aref = audit(db, tenant_id, user_id, "draft.edit", {"prior_version_id": prior.id, "text_digest": _digest(new_text)})
     dv = DraftVersion(tenant_id=tenant_id, customer_id=prior.customer_id, brief_item_id=prior.brief_item_id,
+                      commitment_id=prior.commitment_id,
                       text_enc=seal(tenant_id, "draft", new_text), text_digest=_digest(new_text),
                       relationship_spans_json=json.dumps({"edited_from": prior.id}),
                       claim_ids_json=json.dumps(used),

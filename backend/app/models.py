@@ -458,12 +458,13 @@ class DraftVersion(Base):
     tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), index=True)
     customer_id: Mapped[str] = mapped_column(ForeignKey("customers.id"), index=True)
     brief_item_id: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    commitment_id: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
     text_enc: Mapped[str] = mapped_column(Text)
     text_digest: Mapped[str] = mapped_column(String(71))
     relationship_spans_json: Mapped[str] = mapped_column(Text, default="[]")
     claim_ids_json: Mapped[str] = mapped_column(Text, default="[]")
     source_versions_json: Mapped[str] = mapped_column(Text, default="{}")
-    generated_by: Mapped[str] = mapped_column(String(32))           # ai:<model> | user id
+    generated_by: Mapped[str] = mapped_column(String(120))          # ai:<provider>:<model> | user id
     version: Mapped[int] = mapped_column(Integer, default=1)
     audit_ref: Mapped[str] = mapped_column(String(32), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
