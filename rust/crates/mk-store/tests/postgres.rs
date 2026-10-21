@@ -1618,3 +1618,100 @@ async fn fingerprint_rekey_rejects_inconsistent_raw_destination() {
         "still blocks key removal"
     );
 }
+
+/// Review findings: a bare hash of unknown key version is tagged under every kid
+/// and marked unverified (status blocks key removal), re-filing it with the raw
+/// destination lets rekey verify it; a row written by a pre-0008 binary (empty
+/// tags) is defaulted to `m0:` by trigger; status counts tenants it scanned.
+#[tokio::test]
+async fn hash_only_suppressions_are_unverified_until_rekey_and_old_binaries_are_tagged() {
+    use mk_store::fingerprint::{self, FingerprintKeys, UNVERIFIED};
+    let s = require_db!();
+    let tenant = TenantId::new();
+    let now = t0();
+    let master = MasterKey::generate();
+    let ring = mk_crypto::Keyring::legacy(&master);
+    let keys = FingerprintKeys::from_master(&master);
+    let raw = "+15555550444";
+    let fp = keys.compute(tenant, Channel::Sms, raw);
+    let mut tx = s.begin(tenant).await.unwrap_or_else(|e| panic!("{e:?}"));
+    // Hash-only, no stored row knows it.
+    assert!(
+        fingerprint::tags_for_hash(&mut tx, &keys, &fp.primary)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    let unverified = keys.tag_unverified(&fp.primary);
+    assert!(unverified.tagged.contains(&UNVERIFIED.to_owned()));
+    consent::add_suppression(
+        &mut tx,
+        Some(Channel::Sms),
+        Some(&unverified),
+        None,
+        "destination",
+        "operator",
+        true,
+        "operator",
+        ACTOR,
+        now,
+    )
+    .await
+    .unwrap_or_else(|e| panic!("{e:?}"));
+    // It still blocks the destination it names.
+    assert_eq!(
+        consent::suppressions_for(&mut tx, Channel::Sms, &fp)
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
+    tx.commit().await.unwrap_or_else(|e| panic!("{e:?}"));
+    // A pre-0008 binary's insert (no tag columns) is defaulted to m0.
+    sqlx::query("INSERT INTO kernel.suppressions (suppression_id, tenant_id, normalized_destination_hash, channel, scope, reason, permanent, created_at, source)
+                 VALUES (gen_random_uuid(), $1, 'legacyhash', 'sms', 'destination', 'opt_out', true, now(), 'old-binary')")
+        .bind(tenant.0).execute(s.pool()).await.unwrap();
+    let tags: Vec<String> = sqlx::query_scalar("SELECT destination_fingerprints FROM kernel.suppressions WHERE tenant_id = $1 AND normalized_destination_hash = 'legacyhash'")
+        .bind(tenant.0).fetch_one(s.pool()).await.unwrap();
+    assert_eq!(tags, vec!["m0:legacyhash".to_owned()]);
+    sqlx::query("DELETE FROM kernel.suppressions WHERE tenant_id = $1 AND normalized_destination_hash = 'legacyhash'")
+        .bind(tenant.0).execute(s.pool()).await.ok();
+    let st = fingerprint::status(s.pool(), &keys, Some(tenant))
+        .await
+        .unwrap();
+    assert!(
+        st.iter().any(|t| t.unverified == 1 && t.blocking() >= 1),
+        "{st:?}"
+    );
+    assert!(st.iter().all(|t| t.tenants == 1), "{st:?}");
+    // Rekey cannot verify it (no raw anywhere): still unresolved.
+    let rep = fingerprint::rekey(s.pool(), &ring, &keys, Some(tenant))
+        .await
+        .unwrap();
+    assert_eq!(rep.unresolved, 1, "{rep:?}");
+    // Re-file with the raw destination; rekey learns it and verifies the hash-only row.
+    let mut tx = s.begin(tenant).await.unwrap_or_else(|e| panic!("{e:?}"));
+    consent::add_suppression(
+        &mut tx,
+        Some(Channel::Sms),
+        Some(&fp),
+        Some((&ring, raw)),
+        "destination",
+        "operator",
+        true,
+        "operator",
+        ACTOR,
+        now,
+    )
+    .await
+    .unwrap_or_else(|e| panic!("{e:?}"));
+    tx.commit().await.unwrap_or_else(|e| panic!("{e:?}"));
+    let rep = fingerprint::rekey(s.pool(), &ring, &keys, Some(tenant))
+        .await
+        .unwrap();
+    assert_eq!((rep.updated, rep.unresolved), (1, 0), "{rep:?}");
+    let st = fingerprint::status(s.pool(), &keys, Some(tenant))
+        .await
+        .unwrap();
+    assert!(st.iter().all(|t| t.blocking() == 0), "{st:?}");
+}

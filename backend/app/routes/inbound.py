@@ -151,7 +151,17 @@ async def process_inbound(body: ProcessIn, p: Principal = Depends(principal), us
                                              "source": "inbound_rules"})
                 hold = hr.status_code
             except KernelUnavailable as e:
+                db.rollback()
                 raise HTTPException(503, {"code": e.code, "detail": e.detail})
+            if hold != 201:
+                # The hold did not land: discard this event's application objects and
+                # leave it unprocessed so the next run applies it again. Recording it
+                # as done would let sales follow-up continue after a concern (C7).
+                db.rollback()
+                results.append({"event_id": event_id, "class": label, "customer_id": customer.id if customer else None,
+                                "matches": len(customers), "created": [], "hold": hold, "marked_processed": None,
+                                "retry": True})
+                continue
         db.add(InboundApplication(tenant_id=user.tenant_id, source_reference=source_ref, kernel_event_id=event_id,
                                   label=label, customer_id=customer.id if customer else None,
                                   created_json=json.dumps(created), hold_status=hold))

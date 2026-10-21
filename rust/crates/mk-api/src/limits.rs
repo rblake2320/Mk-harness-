@@ -107,8 +107,17 @@ struct Bucket {
 #[derive(Debug, Clone)]
 pub struct Limiter {
     cfg: LimitConfig,
-    buckets: Arc<Mutex<HashMap<(Uuid, Class), Bucket>>>,
+    buckets: Arc<Mutex<Buckets>>,
     inflight: Arc<Semaphore>,
+    /// Per-tenant share of the in-flight capacity, so one tenant's slow
+    /// requests cannot occupy every replica permit.
+    tenant_inflight: Arc<Mutex<HashMap<Uuid, Arc<Semaphore>>>>,
+}
+
+#[derive(Debug, Default)]
+struct Buckets {
+    map: HashMap<(Uuid, Class), Bucket>,
+    last_sweep: Option<Instant>,
 }
 
 /// Bound on remembered buckets; idle (full) buckets are dropped beyond it.
@@ -119,8 +128,9 @@ impl Limiter {
     pub fn new(cfg: LimitConfig) -> Self {
         Self {
             cfg,
-            buckets: Arc::new(Mutex::new(HashMap::new())),
+            buckets: Arc::new(Mutex::new(Buckets::default())),
             inflight: Arc::new(Semaphore::new(cfg.max_inflight)),
+            tenant_inflight: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -137,14 +147,25 @@ impl Limiter {
         };
         // A poisoned lock only means another request panicked mid-update;
         // the map is still structurally valid. Never fail open or closed on it.
-        let mut map = self
+        let mut guard = self
             .buckets
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        if map.len() >= MAX_BUCKETS {
-            map.retain(|_, b| {
+        let cfg = self.cfg;
+        let Buckets { map, last_sweep } = &mut *guard;
+        // Evict full (idle) buckets, each judged by ITS OWN class's rate and burst,
+        // at most once per second so a full map never costs O(n) per request.
+        if map.len() >= MAX_BUCKETS
+            && last_sweep.is_none_or(|t| now.saturating_duration_since(t).as_secs() >= 1)
+        {
+            *last_sweep = Some(now);
+            map.retain(|(_, cls), b| {
+                let (r, bu) = match cls {
+                    Class::Read => (cfg.read_rps, cfg.read_burst),
+                    Class::Write => (cfg.write_rps, cfg.write_burst),
+                };
                 let refill = now.saturating_duration_since(b.at).as_secs_f64();
-                b.tokens + refill * rate < burst
+                b.tokens + refill * r < bu
             });
         }
         let b = map.entry((tenant, class)).or_insert(Bucket {
@@ -170,10 +191,53 @@ impl Limiter {
         Arc::clone(&self.inflight).try_acquire_owned().ok()
     }
 
+    /// Try to take one of `tenant`'s in-flight permits (a quarter of the replica
+    /// cap, at least 1); `None` = this tenant is at its share.
+    #[must_use]
+    pub fn try_enter_tenant(&self, tenant: Uuid) -> Option<tokio::sync::OwnedSemaphorePermit> {
+        let share = (self.cfg.max_inflight / 4).max(1);
+        let sem = {
+            let mut m = self
+                .tenant_inflight
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            if m.len() >= MAX_BUCKETS {
+                m.retain(|_, s| s.available_permits() < share);
+            }
+            Arc::clone(
+                m.entry(tenant)
+                    .or_insert_with(|| Arc::new(Semaphore::new(share))),
+            )
+        };
+        sem.try_acquire_owned().ok()
+    }
+
     #[must_use]
     pub fn inflight_available(&self) -> usize {
         self.inflight.available_permits()
     }
+}
+
+/// Stop and revoke controls are never shed and never rate-limited: stopping
+/// must always be possible, under overload and when a tenant (or an attacker
+/// holding its proxy) has exhausted its own budget. Matched on the path with or
+/// without the `/internal/v1` prefix (nested routers see the stripped path).
+#[must_use]
+pub fn is_safety_control(method: &axum::http::Method, path: &str) -> bool {
+    if method != axum::http::Method::POST && method != axum::http::Method::DELETE {
+        return false;
+    }
+    let p = path.strip_prefix("/internal/v1").unwrap_or(path);
+    let segs: Vec<&str> = p.trim_matches('/').split('/').collect();
+    matches!(
+        segs.as_slice(),
+        ["kill-switch", "global" | "tenant"]
+            | ["suppressions" | "revocations"]
+            | ["inbound", "pause"]
+            | ["actions", _, "cancel"]
+            | ["approvals" | "approval-credentials", _, "revoke"]
+            | ["contacts", _, "permissions", _, "revoke"]
+    ) && method == axum::http::Method::POST
 }
 
 /// `503 OVER_CAPACITY` (problem+json) with `Retry-After: 1`.
@@ -290,7 +354,74 @@ mod tests {
         }
         let later = now + Duration::from_secs(1);
         let _ = l.charge(Uuid::new_v4(), Class::Read, later);
-        assert!(l.buckets.lock().unwrap().len() < MAX_BUCKETS);
+        assert!(l.buckets.lock().unwrap().map.len() < MAX_BUCKETS);
+    }
+
+    #[test]
+    fn eviction_judges_each_bucket_by_its_own_class() {
+        // Reads: burst 40 at 20/s; writes: burst 2 at 1/s. A read bucket holding
+        // 30 tokens is NOT full and must survive a sweep triggered by a write.
+        let l = Limiter::new(LimitConfig {
+            read_rps: 20.0,
+            read_burst: 40.0,
+            write_rps: 1.0,
+            write_burst: 2.0,
+            max_inflight: 8,
+        });
+        let now = Instant::now();
+        let reader = Uuid::new_v4();
+        for _ in 0..10 {
+            l.charge(reader, Class::Read, now).unwrap();
+        }
+        for _ in 0..MAX_BUCKETS {
+            let _ = l.charge(Uuid::new_v4(), Class::Write, now);
+        }
+        let _ = l.charge(Uuid::new_v4(), Class::Write, now);
+        let g = l.buckets.lock().unwrap();
+        assert!(
+            (g.map[&(reader, Class::Read)].tokens - 30.0).abs() < 1e-6,
+            "partially used read bucket kept"
+        );
+    }
+
+    #[test]
+    fn a_tenant_cannot_hold_more_than_its_share_of_inflight_permits() {
+        let l = lim(1.0, 1.0); // max_inflight 2 → share 1
+        let (a, b) = (Uuid::new_v4(), Uuid::new_v4());
+        let pa = l.try_enter_tenant(a).unwrap();
+        assert!(l.try_enter_tenant(a).is_none(), "a is at its share");
+        assert!(l.try_enter_tenant(b).is_some(), "b still gets a permit");
+        drop(pa);
+        assert!(l.try_enter_tenant(a).is_some());
+    }
+
+    #[test]
+    fn safety_controls_are_recognised_only_for_their_exact_shapes() {
+        use axum::http::Method;
+        for p in [
+            "/internal/v1/kill-switch/global",
+            "/kill-switch/tenant",
+            "/internal/v1/suppressions",
+            "/revocations",
+            "/inbound/pause",
+            "/actions/abc/cancel",
+            "/approvals/abc/revoke",
+            "/approval-credentials/abc/revoke",
+            "/contacts/c/permissions/p/revoke",
+        ] {
+            assert!(is_safety_control(&Method::POST, p), "{p}");
+        }
+        for (m, p) in [
+            (Method::GET, "/kill-switch/global"),
+            (Method::POST, "/actions"),
+            (Method::POST, "/actions/abc/approve"),
+            (Method::POST, "/inbound/resume"),
+            (Method::POST, "/contacts/c/permissions"),
+            (Method::POST, "/suppressions/extra"),
+            (Method::DELETE, "/suppressions/abc"),
+        ] {
+            assert!(!is_safety_control(&m, p), "{m} {p}");
+        }
     }
 
     #[test]

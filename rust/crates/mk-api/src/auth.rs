@@ -90,36 +90,12 @@ impl FromRequestParts<AppState> for Principal {
             )
             .with_request_id(&parts.headers)
         })?;
-        // O2: charge the tenant's bucket only after the signature verified (no
-        // one else can spend it) and before the jti write (a refusal costs no
-        // database round trip).
-        let class = if parts.method == axum::http::Method::GET {
-            crate::limits::Class::Read
-        } else {
-            crate::limits::Class::Write
-        };
-        if let Err(retry_after) =
-            state
-                .limiter
-                .charge(assertion.tenant_id, class, std::time::Instant::now())
-        {
-            state
-                .metrics
-                .rejected
-                .get_or_create(&crate::metrics::AuthFailLabels {
-                    code: match class {
-                        crate::limits::Class::Read => "tenant_read".into(),
-                        crate::limits::Class::Write => "tenant_write".into(),
-                    },
-                })
-                .inc();
-            return Err(ApiError::new(
-                StatusCode::TOO_MANY_REQUESTS,
-                "TENANT_RATE_LIMITED",
-                "Tenant request rate exceeded; retry later",
-            )
-            .with_request_id(&parts.headers)
-            .with_retry_after(retry_after));
+        // O2: the tenant's bucket is charged only after the signature verified (no
+        // one else can spend it). Reads are charged here; writes are charged after
+        // the single-use jti is consumed, so a replayed captured assertion is
+        // refused as a replay and never drains the tenant's write budget.
+        if parts.method == axum::http::Method::GET {
+            charge(state, parts, &assertion)?;
         }
         // Single-use jti for every non-GET request, recorded durably in
         // Postgres so every API replica shares one view. A store failure is
@@ -155,6 +131,9 @@ impl FromRequestParts<AppState> for Principal {
                 .with_request_id(&parts.headers));
             }
         }
+        if parts.method != axum::http::Method::GET {
+            charge(state, parts, &assertion)?;
+        }
         // Row H9: a revoked session or user is refused before any handler
         // runs, for reads and writes alike. Store failure → refusal.
         let revoked = mk_store::human_approval::is_revoked(
@@ -189,4 +168,64 @@ impl FromRequestParts<AppState> for Principal {
             assertion,
         })
     }
+}
+
+/// Per-tenant rate limit (O2). Stop/revoke controls are exempt.
+fn charge(state: &AppState, parts: &mut Parts, assertion: &ActorAssertion) -> Result<(), ApiError> {
+    let class = if parts.method == axum::http::Method::GET {
+        crate::limits::Class::Read
+    } else {
+        crate::limits::Class::Write
+    };
+    let path = parts
+        .extensions
+        .get::<axum::extract::OriginalUri>()
+        .map_or_else(|| parts.uri.path().to_owned(), |u| u.0.path().to_owned());
+    if crate::limits::is_safety_control(&parts.method, &path) {
+        return Ok(());
+    }
+    // Per-tenant share of in-flight capacity; the permit lives in the request's
+    // extensions and is released when the request completes.
+    if let Some(permit) = state.limiter.try_enter_tenant(assertion.tenant_id) {
+        parts.extensions.insert(std::sync::Arc::new(permit));
+    } else {
+        state
+            .metrics
+            .rejected
+            .get_or_create(&crate::metrics::AuthFailLabels {
+                code: "tenant_inflight".into(),
+            })
+            .inc();
+        return Err(ApiError::new(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "OVER_CAPACITY",
+            "Tenant has too many requests in flight; retry shortly",
+        )
+        .with_request_id(&parts.headers)
+        .with_retry_after(1));
+    }
+    if let Err(retry_after) =
+        state
+            .limiter
+            .charge(assertion.tenant_id, class, std::time::Instant::now())
+    {
+        state
+            .metrics
+            .rejected
+            .get_or_create(&crate::metrics::AuthFailLabels {
+                code: match class {
+                    crate::limits::Class::Read => "tenant_read".into(),
+                    crate::limits::Class::Write => "tenant_write".into(),
+                },
+            })
+            .inc();
+        return Err(ApiError::new(
+            StatusCode::TOO_MANY_REQUESTS,
+            "TENANT_RATE_LIMITED",
+            "Tenant request rate exceeded; retry later",
+        )
+        .with_request_id(&parts.headers)
+        .with_retry_after(retry_after));
+    }
+    Ok(())
 }

@@ -76,6 +76,7 @@ p256 = { version = "0.13", default-features = false, features = ["ecdsa", "std"]
 rsa = { version = "0.9", default-features = false, features = ["std", "sha2"] }
 ciborium = "0.2"
 rand = "0.8"
+unicode-normalization = "0.1.26"
 hex = "0.4"
 base64 = "0.22"
 sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "tls-rustls", "postgres", "uuid", "chrono", "json", "migrate"] }

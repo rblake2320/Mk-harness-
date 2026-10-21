@@ -62,7 +62,7 @@ and pinned by tests —
   granted; permission=active`) passed into a customer draft.
 
 The kernel test `mk-adapters::twilio::tests::kernel_detector_agrees_with_the_a4_synthetic_set`
-reads the same A4 file, so the application classifier and the kernel detector cannot drift.
+reads the same A4 file, so the application classifier and the kernel detector agree on every case in it. Agreement outside the set is not proven; both normalise identically (NFKC, typographic apostrophes, every non-alphanumeric character a word break) to keep it that way, and new findings are added to the set.
 
 ## Case format
 

@@ -235,3 +235,29 @@ def test_classifier_findings_from_the_synthetic_set():
     assert classify_inbound("bus stop was late").label == "ambiguous_opt_out", "a bare 'stop' still holds"
     for t in ("blisters on my cheek", "rashes everywhere", "my lips swelled up"):
         assert classify_inbound(t).label == "product_concern", t
+
+
+def test_failed_hold_leaves_the_event_unprocessed_and_records_nothing(client, kernel_env):
+    """C7: if the kernel does not confirm the hold (any non-201), the concern is not
+    recorded as handled — no ledger row, no exception, not marked processed — so the
+    next run applies it again instead of letting sales follow-up continue."""
+    tok = _signup(client, uuid.uuid4().hex[:6])
+    h = auth_headers(tok)
+    _customer(client, h, phone="+15555557301")
+    _, _, fp = _customer(client, h, name="Cara", phone="+15555557302")
+    ev = _event(fp, "this gave me a rash", sid="SMholdfail")
+    marked = []
+    for status, expect_marked in ((503, False), (201, True)):
+        with respx.mock(assert_all_called=False) as m:
+            m.get(f"{KERNEL}/internal/v1/inbound/pending?limit=50").mock(return_value=_pending([ev]))
+            m.post(f"{KERNEL}/internal/v1/suppressions").mock(return_value=httpx.Response(
+                status, json={"suppression_id": str(uuid.uuid4()), "suppressed_actions": 0} if status == 201 else {"code": "OVER_CAPACITY"}))
+            m.post(url__regex=rf"{KERNEL}/internal/v1/inbound/[0-9a-f-]+/processed$").mock(
+                side_effect=lambda req: (marked.append(1), httpx.Response(204))[1])
+            r = client.post("/api/inbound/process", json={"limit": 50}, headers=h)
+        assert r.status_code == 200, r.text
+        e = r.json()["events"][0]
+        assert (e["marked_processed"] is not None) == expect_marked, e
+        ex = client.get("/api/exceptions", headers=h).json()
+        assert (len([x for x in ex if x["kind"] == "product_concern"]) == 1) == expect_marked, ex
+    assert len(marked) == 1

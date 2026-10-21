@@ -23,6 +23,7 @@ rule verdict for opt-out and concern classes is never downgraded by a model.
 from __future__ import annotations
 
 import re
+import unicodedata
 from dataclasses import dataclass
 
 CLASSES = ("opt_out", "ambiguous_opt_out", "product_concern", "complaint", "wrong_number",
@@ -60,14 +61,38 @@ _PUNCT = re.compile(r"[.!?,\"'“”]")
 # ("STOP. this gave me a rash", "Stop! who is this", "STOP\nsent from my phone"):
 # the customer said STOP; what follows does not soften it. Mirrored in the kernel
 # (`mk_adapters::twilio::detect_opt_out`).
-# "stop" as a word (also "stopp", "stooop"); not "stopped", "nonstop", "bus stop" is
-# still a hold — over-holding is safe, a missed stop is not.
-_STOP_WORD = re.compile(r"\bsto+p+\b")
+# "stop" as a word (also "stopp", "stooop", "stopping", "stops"); not "stopped" or
+# "nonstop". "bus stop" is still a hold — over-holding is safe, a missed stop is not.
+_STOP_WORD = re.compile(r"\b(sto+p+|stopping|stops)\b")
 _KEYWORD_THEN_BREAK = re.compile(r"^\s*(stop|stopall|unsubscribe|optout|opt[- ]out|revoke)\s*([.!,;:\n]|-\s|–|—)", re.I)
 
 
+def _canon(text: str) -> str:
+    """NFKC (fullwidth/compatibility forms fold: 'ＳＴＯＰ' → 'STOP', '…' → '...') and
+    typographic apostrophes/quotes mapped to ASCII (iOS types ’ by default)."""
+    t = unicodedata.normalize("NFKC", text)
+    return t.translate({0x2019: "'", 0x2018: "'", 0x02BC: "'", 0x201C: '"', 0x201D: '"'})
+
+
 def _norm(text: str) -> str:
-    return " ".join(_PUNCT.sub("", text.strip().lower()).split())
+    """Canonical word sequence: lowercase, apostrophes deleted ("don't" → "dont"),
+    every other non-alphanumeric character (punctuation, symbols, emoji) a word
+    break. Mirrored exactly by the kernel's `detect_opt_out`."""
+    t = _canon(text).lower().replace("'", "")
+    t = "".join(c if c.isalnum() or c.isspace() else " " for c in t)
+    return " ".join(t.split())
+
+
+def _explicit_phrase(norm: str) -> bool:
+    """An explicit stop phrase, also when its words are run together ("stoptexting").
+    "please stop" never counts when followed by "by" ("please stop by Friday")."""
+    collapsed = norm.replace(" ", "")
+    for p in _PHRASES_N:
+        if p == "please stop" and "stop by" in norm:
+            continue
+        if p in norm or p.replace(" ", "") in collapsed:
+            return True
+    return False
 
 
 def _is_keyword(word: str) -> bool:
@@ -85,6 +110,7 @@ def classify_inbound(text: str) -> InboundClass:
     """Deterministic classification. Order encodes the contract's priorities:
     safety (opt-out, concern) before business (complaint, date) before ordinary."""
     norm = _norm(text)
+    text = _canon(text)
     if not norm:
         return InboundClass("ordinary", "")
     if norm in _EXPLICIT:
@@ -103,9 +129,9 @@ def classify_inbound(text: str) -> InboundClass:
     # not "this customer opted out".
     if _WRONG_NUMBER.search(text):
         return InboundClass("wrong_number", _WRONG_NUMBER.search(text).group(0))
-    if any(p in norm for p in _EXPLICIT_PHRASES):
+    if _explicit_phrase(norm):
         return InboundClass("opt_out", text.strip())
-    if any(p in norm for p in _POSSIBLE) or (_STOP_WORD.search(norm) and "stop by" not in norm and "non-stop" not in norm):
+    if any(p in norm for p in _POSSIBLE_N) or (_STOP_WORD.search(norm) and "stop by" not in norm and "non stop" not in norm):
         return InboundClass("ambiguous_opt_out", text.strip())
     m = _CONCERN.search(text)
     if m:
@@ -124,3 +150,7 @@ STOPS_SALES_FOLLOW_UP = {"opt_out", "ambiguous_opt_out", "product_concern", "wro
 # Classes that surface as visible exceptions.
 EXCEPTION_KIND = {"product_concern": "product_concern", "complaint": "complaint", "wrong_number": "wrong_number",
                   "ambiguous_opt_out": "ambiguous_opt_out"}
+
+
+_PHRASES_N = tuple(dict.fromkeys(_norm(p) for p in _EXPLICIT_PHRASES))
+_POSSIBLE_N = tuple(dict.fromkeys(_norm(p) for p in _POSSIBLE))

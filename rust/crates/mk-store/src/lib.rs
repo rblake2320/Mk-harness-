@@ -140,6 +140,11 @@ pub fn migrator() -> sqlx::migrate::Migrator {
             "versioned destination fingerprints",
             include_str!("../../../../migrations/kernel/0008_fingerprint_versions.sql"),
         ),
+        (
+            9,
+            "tenant directory",
+            include_str!("../../../../migrations/kernel/0009_tenant_directory.sql"),
+        ),
     ];
     let migrations: Vec<Migration> = FILES
         .iter()

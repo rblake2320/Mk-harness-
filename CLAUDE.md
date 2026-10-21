@@ -152,7 +152,7 @@ kernel (`rust/`). Rules:
   real binaries, FastAPI, device agent in dry-run, per-process DB logins,
   production pre-flight). CI runs it (`live-smoke` job) on every kernel PR.
 - Production: `scripts/kernel-secrets.ps1` → `docker compose … up` →
-  `scripts/kernel-preflight.sh` (27 base checks; `--for-enable` adds production key/approval/TLS/fingerprint/restore-gate checks). `RUST_ACTION_KERNEL_ENABLED=1`
+  `scripts/kernel-preflight.sh` (28 base checks; `--for-enable` adds production key/approval/TLS/fingerprint/restore-gate checks). `RUST_ACTION_KERNEL_ENABLED=1`
   only after `kernel-preflight.sh --for-enable` passes, which requires a
   reviewed `deploy/kernel/ACCEPTANCE.md` (real-device run). Runbook:
   `deploy/kernel/README.md`.

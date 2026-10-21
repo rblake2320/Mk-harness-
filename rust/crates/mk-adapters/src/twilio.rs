@@ -602,29 +602,62 @@ const POSSIBLE: &[&str] = &[
     "no thank you",
 ];
 
-#[must_use]
-pub fn detect_opt_out(body: &str) -> OptOutSignal {
-    let norm: String = body
-        .trim()
+/// NFKC (fullwidth and compatibility forms fold: `ＳＴＯＰ` → `STOP`, `…` → `...`)
+/// with typographic apostrophes and quotes mapped to ASCII (iOS types `’`).
+fn canon(body: &str) -> String {
+    use unicode_normalization::UnicodeNormalization as _;
+    body.nfkc()
+        .map(|c| match c {
+            '\u{2019}' | '\u{2018}' | '\u{02BC}' => '\'',
+            '\u{201C}' | '\u{201D}' => '"',
+            c => c,
+        })
+        .collect()
+}
+
+/// Canonical word sequence: lowercase, apostrophes deleted (`don't` → `dont`),
+/// every other non-alphanumeric character (punctuation, symbols, emoji) a word
+/// break. Mirrors `backend/app/inbound.py::_norm` exactly.
+fn norm(body: &str) -> String {
+    let t: String = canon(body)
         .to_lowercase()
         .chars()
-        .filter(|c| {
-            !matches!(
-                c,
-                '.' | '!' | '?' | ',' | '"' | '\'' | '\u{201c}' | '\u{201d}'
-            )
+        .filter(|c| *c != '\'')
+        .map(|c| {
+            if c.is_alphanumeric() || c.is_whitespace() {
+                c
+            } else {
+                ' '
+            }
         })
         .collect();
-    let norm = norm.split_whitespace().collect::<Vec<_>>().join(" ");
-    if norm.is_empty() {
+    t.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// An explicit stop phrase, also when its words are run together
+/// (`stoptexting`); "please stop" never counts before "by".
+fn explicit_phrase(n: &str) -> bool {
+    let collapsed: String = n.chars().filter(|c| *c != ' ').collect();
+    EXPLICIT_PHRASES.iter().any(|p| {
+        let pn = norm(p);
+        if pn == "please stop" && n.contains("stop by") {
+            return false;
+        }
+        n.contains(&pn) || collapsed.contains(&pn.replace(' ', ""))
+    })
+}
+
+#[must_use]
+pub fn detect_opt_out(body: &str) -> OptOutSignal {
+    let n = norm(body);
+    if n.is_empty() {
         return OptOutSignal::None;
     }
-    if EXPLICIT.contains(&norm.as_str()) {
+    if EXPLICIT.contains(&n.as_str()) {
         return OptOutSignal::Explicit;
     }
-    let words: Vec<&str> = norm.split(' ').collect();
-    let first = words[0];
-    if is_keyword(first) && words.len() <= 2 && !norm.starts_with("stop by") {
+    let words: Vec<&str> = n.split(' ').collect();
+    if is_keyword(words[0]) && words.len() <= 2 && !n.starts_with("stop by") {
         return OptOutSignal::Explicit;
     }
     // "STOP STOP STOP"
@@ -633,16 +666,18 @@ pub fn detect_opt_out(body: &str) -> OptOutSignal {
     }
     // "STOP. this gave me a rash", "Stop! who is this", "STOP\nsent from my phone":
     // a stop keyword opening the message, then a sentence break.
-    if keyword_then_break(body) {
+    if keyword_then_break(&canon(body)) {
         return OptOutSignal::Explicit;
     }
-    if EXPLICIT_PHRASES.iter().any(|p| norm.contains(p)) {
+    if explicit_phrase(&n) {
         return OptOutSignal::Explicit;
     }
-    if POSSIBLE.iter().any(|p| norm.contains(p))
-        || (words.iter().any(|w| is_stop_word(w))
-            && !norm.contains("stop by")
-            && !norm.contains("non-stop"))
+    if POSSIBLE.iter().any(|p| n.contains(&norm(p)))
+        || (words
+            .iter()
+            .any(|w| is_stop_word(w) || *w == "stopping" || *w == "stops")
+            && !n.contains("stop by")
+            && !n.contains("non stop"))
     {
         return OptOutSignal::Possible;
     }
@@ -652,8 +687,7 @@ pub fn detect_opt_out(body: &str) -> OptOutSignal {
 /// "stop" with emphatic repeats ("stopp", "stooop") — not "stopped" or "nonstop".
 fn is_stop_word(w: &str) -> bool {
     let b = w.as_bytes();
-    let s_t = b.len() >= 4 && b[0] == b's' && b[1] == b't';
-    if !s_t {
+    if b.len() < 4 || b[0] != b's' || b[1] != b't' {
         return false;
     }
     let rest = &b[2..];
@@ -666,8 +700,8 @@ fn is_keyword(w: &str) -> bool {
     EXPLICIT.contains(&w) || is_stop_word(w)
 }
 
-/// A stop keyword that opens the raw message, followed by `. ! , ; :`, a
-/// newline, or a dash. Mirrors `backend/app/inbound.py::_KEYWORD_THEN_BREAK`.
+/// A stop keyword that opens the (canonicalized) message, followed by
+/// `. ! , ; :`, a newline, or a dash. Mirrors `_KEYWORD_THEN_BREAK`.
 fn keyword_then_break(body: &str) -> bool {
     let t = body.trim_start().to_lowercase();
     for kw in [

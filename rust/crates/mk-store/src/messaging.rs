@@ -350,6 +350,10 @@ pub async fn record_provider_accepted(
     Ok(())
 }
 
+/// Reason recorded when housekeeping completes a provider-accepted action whose
+/// status callbacks outlived the lease.
+pub const ACCEPTED_CALLBACK_PENDING: &str = "provider_accepted_callback_pending";
+
 /// True when the provider has accepted this attempt (a provider message id was
 /// recorded). Such an attempt is not ambiguous: the message exists exactly
 /// once at the provider; only its delivery outcome is still pending.

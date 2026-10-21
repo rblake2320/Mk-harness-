@@ -87,6 +87,16 @@ def a4() -> list[dict]:
     for w, e in itertools.product(["who is this?", "wrong number."], ["please stop texting me", "remove me from your list"]):
         add(f"{w} {e}", "escalation", "explicit-with-wrong-number")
         out[-1]["kernel_expected"] = "explicit"
+    # Review findings: typographic/Unicode forms phones actually send, symbols
+    # glued to the keyword, and run-together phrases.
+    for t in ("STOP…", "STOP🛑", "Stop😡", "STOP)", "(stop)", "STOP-", "stop-texting", "stoptexting",
+              "Please don’t text me", "please don’t message me again", "ＳＴＯＰ", "Ｓｔｏｐ ｔｅｘｔｉｎｇ ｍｅ",
+              "STOP\u00a0", "\u00a0stop", "UNSUBSCRIBE!!!🙏", "remove-me", "takemeoff your list"):
+        add(t, "opt_out", "unicode-punctuation")
+    for t in ("Stopping these texts now", "stops?", "bus stop was late"):
+        add(t, "ambiguous_opt_out", "stop-word-hold")
+    for t in ("please stop by friday", "non-stop fun all week", "Stopped by the store yesterday"):
+        add(t, "ordinary" if "friday" not in t else "date_request", "stop-false-positive")
     for core in POSSIBLE:
         for t in rng.sample(_wrap(core), 4):
             add(t, "ambiguous_opt_out", "possible")

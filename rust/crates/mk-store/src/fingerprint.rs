@@ -192,16 +192,6 @@ impl FingerprintKeys {
         let primary = hmac_hex(&self.keys[0].1, &normalized);
         Fingerprints { primary, tagged }
     }
-
-    /// Tag a bare hash supplied by a caller (hash-only suppression input) as
-    /// the current key's value. Used only when no stored row identifies it.
-    #[must_use]
-    pub fn tag_current(&self, hash: &str) -> Fingerprints {
-        Fingerprints {
-            primary: hash.to_owned(),
-            tagged: vec![format!("{}:{hash}", self.current_kid())],
-        }
-    }
 }
 
 fn hmac_hex(key: &[u8], msg: &str) -> String {
@@ -230,36 +220,60 @@ pub fn destination_aad(table: &str, tenant: TenantId, id: uuid::Uuid) -> String 
     format!("destination:{table}:{}:{id}", tenant.0)
 }
 
+/// Marker tag on a row created from a bare hash whose key could not be
+/// established (hash-only operator input matching no stored row). No lookup
+/// ever produces it; `status` counts such rows as `unverified` and blocks key
+/// removal until `rekey` recovers the raw destination (or an operator re-files
+/// the suppression with the destination itself). `!` is not a valid kid char.
+pub const UNVERIFIED: &str = "!unverified";
+
+impl FingerprintKeys {
+    /// Bare hash of unknown key version: tag it under EVERY configured kid (so it
+    /// keeps matching whichever key produced it while that key is listed) and mark
+    /// the row unverified so it can never silently survive the removal of its key.
+    #[must_use]
+    pub fn tag_unverified(&self, hash: &str) -> Fingerprints {
+        let mut tagged: Vec<String> = self.kids().iter().map(|k| format!("{k}:{hash}")).collect();
+        tagged.push(UNVERIFIED.to_owned());
+        Fingerprints {
+            primary: hash.to_owned(),
+            tagged,
+        }
+    }
+}
+
 /// Every tag already stored for a bare hash (operator hash-only input): the
-/// union of fingerprint sets of rows whose hash column, or any tag, equals it.
+/// union of fingerprint sets of rows whose hash column equals it or that carry
+/// it under any configured kid (array overlap — uses the GIN indexes).
 /// Empty when nothing in the tenant refers to it.
 pub async fn tags_for_hash(
     tx: &mut crate::tx::TenantTx<'_>,
+    keys: &FingerprintKeys,
     hash: &str,
 ) -> Result<Vec<String>, StoreError> {
     let t = tx.tenant().0;
+    let cands: Vec<String> = keys.kids().iter().map(|k| format!("{k}:{hash}")).collect();
     let rows: Vec<Vec<String>> = sqlx::query_scalar(
-        "WITH m AS (
-           SELECT destination_fingerprints f, source_destination_hash h FROM kernel.inbound_events WHERE tenant_id = $1
-           UNION ALL SELECT destination_fingerprints, destination_hash FROM kernel.actions WHERE tenant_id = $1 AND channel IS NOT NULL
-           UNION ALL SELECT destination_fingerprints, normalized_destination_hash FROM kernel.suppressions WHERE tenant_id = $1
-           UNION ALL SELECT destination_fingerprints, destination_hash FROM kernel.contact_permissions WHERE tenant_id = $1)
-         SELECT f FROM m WHERE h = $2 OR EXISTS (SELECT 1 FROM unnest(f) x WHERE split_part(x, ':', 2) = $2)",
+        "SELECT destination_fingerprints FROM kernel.inbound_events WHERE tenant_id = $1 AND (source_destination_hash = $2 OR destination_fingerprints && $3)
+         UNION ALL SELECT destination_fingerprints FROM kernel.actions WHERE tenant_id = $1 AND channel IS NOT NULL AND (destination_hash = $2 OR destination_fingerprints && $3)
+         UNION ALL SELECT destination_fingerprints FROM kernel.suppressions WHERE tenant_id = $1 AND (normalized_destination_hash = $2 OR destination_fingerprints && $3)
+         UNION ALL SELECT destination_fingerprints FROM kernel.contact_permissions WHERE tenant_id = $1 AND (destination_hash = $2 OR destination_fingerprints && $3)",
     )
     .bind(t)
     .bind(hash)
+    .bind(&cands)
     .fetch_all(tx.conn())
     .await?;
     let mut out: Vec<String> = Vec::new();
     for f in rows.into_iter().flatten() {
-        if !out.contains(&f) {
+        if f != UNVERIFIED && !out.contains(&f) {
             out.push(f);
         }
     }
     Ok(out)
 }
 
-/// Tables holding destination fingerprints: (table, pk, primary-hash column, has sealed raw).
+/// Tables holding destination fingerprints: (table, pk, primary-hash column).
 pub const FINGERPRINT_TABLES: &[(&str, &str, &str)] = &[
     ("actions", "action_id", "destination_hash"),
     ("inbound_events", "event_id", "source_destination_hash"),
@@ -271,7 +285,7 @@ pub const FINGERPRINT_TABLES: &[(&str, &str, &str)] = &[
     ("contact_permissions", "permission_id", "destination_hash"),
 ];
 
-/// Per-table rotation status.
+/// Per-table rotation status (summed over the tenants scanned).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct TableStatus {
     pub table: &'static str,
@@ -281,10 +295,17 @@ pub struct TableStatus {
     /// match any lookup. Must be 0; a non-zero value means a key was removed
     /// before rekey finished (restore it to `MK_FINGERPRINT_KEYS`).
     pub orphaned: u64,
+    /// Rows created from a bare hash of unknown key version (`UNVERIFIED`).
+    pub unverified: u64,
+    /// Tenants scanned (from `kernel.tenant_directory`); 0 means nothing was checked.
+    pub tenants: u64,
 }
 
-fn tenant_filter(tenant: Option<TenantId>) -> String {
-    tenant.map_or(String::new(), |t| format!(" AND tenant_id = '{}'", t.0))
+impl TableStatus {
+    #[must_use]
+    pub fn blocking(&self) -> u64 {
+        self.lacking_current + self.orphaned + self.unverified
+    }
 }
 
 fn dest_filter(table: &str, hash_col: &str) -> String {
@@ -294,33 +315,78 @@ fn dest_filter(table: &str, hash_col: &str) -> String {
     }
 }
 
-/// Operator (owner role, all tenants): rotation status per table.
+/// Tenants to operate on: one, or every tenant in the directory.
+async fn tenants_for(
+    pool: &sqlx::PgPool,
+    tenant: Option<TenantId>,
+) -> Result<Vec<TenantId>, StoreError> {
+    match tenant {
+        Some(t) => Ok(vec![t]),
+        None => crate::audit::all_tenants(pool).await,
+    }
+}
+
+async fn status_in(
+    tx: &mut crate::tx::TenantTx<'_>,
+    keys: &FingerprintKeys,
+) -> Result<Vec<TableStatus>, StoreError> {
+    let kids: Vec<String> = keys.kids().iter().map(|k| (*k).to_owned()).collect();
+    let t = tx.tenant().0;
+    let mut out = Vec::new();
+    for (table, _, hash_col) in FINGERPRINT_TABLES {
+        let filter = dest_filter(table, hash_col);
+        let (lacking, orphaned, unverified): (i64, i64, i64) =
+            sqlx::query_as(sqlx::AssertSqlSafe(format!(
+                "SELECT
+               count(*) FILTER (WHERE NOT EXISTS (SELECT 1 FROM unnest(destination_fingerprints) x WHERE split_part(x, ':', 1) = $1)),
+               count(*) FILTER (WHERE NOT EXISTS (SELECT 1 FROM unnest(destination_fingerprints) x WHERE split_part(x, ':', 1) = ANY($2))),
+               count(*) FILTER (WHERE $4 = ANY(destination_fingerprints))
+             FROM kernel.{table} WHERE tenant_id = $3 AND {filter}"
+            )))
+            .bind(keys.current_kid())
+            .bind(&kids)
+            .bind(t)
+            .bind(UNVERIFIED)
+            .fetch_one(tx.conn())
+            .await?;
+        out.push(TableStatus {
+            table,
+            lacking_current: u64::try_from(lacking).unwrap_or(0),
+            orphaned: u64::try_from(orphaned).unwrap_or(0),
+            unverified: u64::try_from(unverified).unwrap_or(0),
+            tenants: 1,
+        });
+    }
+    Ok(out)
+}
+
+/// Operator: rotation status per table, summed over tenants. Each tenant is
+/// read inside its own tenant transaction, so row-level security is satisfied
+/// for any login with the table grants — no BYPASSRLS, never a vacuous count.
 pub async fn status(
     pool: &sqlx::PgPool,
     keys: &FingerprintKeys,
     tenant: Option<TenantId>,
 ) -> Result<Vec<TableStatus>, StoreError> {
-    let kids: Vec<String> = keys.kids().iter().map(|k| (*k).to_owned()).collect();
-    let mut out = Vec::new();
-    for (table, _, hash_col) in FINGERPRINT_TABLES {
-        let filter = dest_filter(table, hash_col) + &tenant_filter(tenant);
-        let (lacking, orphaned): (i64, i64) = sqlx::query_as(sqlx::AssertSqlSafe(format!(
-            "SELECT
-               count(*) FILTER (WHERE NOT EXISTS (SELECT 1 FROM unnest(destination_fingerprints) x WHERE split_part(x, ':', 1) = $1)),
-               count(*) FILTER (WHERE NOT EXISTS (SELECT 1 FROM unnest(destination_fingerprints) x WHERE split_part(x, ':', 1) = ANY($2)))
-             FROM kernel.{table} WHERE {filter}"
-        )))
-        .bind(keys.current_kid())
-        .bind(&kids)
-        .fetch_one(pool)
-        .await?;
-        out.push(TableStatus {
-            table,
-            lacking_current: u64::try_from(lacking).unwrap_or(0),
-            orphaned: u64::try_from(orphaned).unwrap_or(0),
-        });
+    let store = crate::Store::from_pool(pool.clone());
+    let mut sum: Vec<TableStatus> = FINGERPRINT_TABLES
+        .iter()
+        .map(|(t, _, _)| TableStatus {
+            table: t,
+            ..TableStatus::default()
+        })
+        .collect();
+    for t in tenants_for(pool, tenant).await? {
+        let mut tx = store.begin(t).await?;
+        for (acc, row) in sum.iter_mut().zip(status_in(&mut tx, keys).await?) {
+            acc.lacking_current += row.lacking_current;
+            acc.orphaned += row.orphaned;
+            acc.unverified += row.unverified;
+            acc.tenants += 1;
+        }
+        tx.commit().await?;
     }
-    Ok(out)
+    Ok(sum)
 }
 
 /// Result of a rekey pass.
@@ -332,41 +398,65 @@ pub struct RekeyReport {
     /// value does not reproduce any stored tag. Left untouched; they keep
     /// blocking retirement via `status`.
     pub unresolved: u64,
+    pub tenants: u64,
 }
 
-/// Operator (owner role, all tenants): add every configured key's tag to
-/// every destination row. Idempotent and resumable; never removes a tag.
-/// The recovered raw destination is accepted only if it reproduces a tag the
-/// row already holds, so a wrong match can never re-point a row.
+/// Operator: add every configured key's tag to every destination row, one
+/// tenant transaction per tenant. Idempotent and resumable; never removes a
+/// valid tag. The recovered raw destination is accepted only if it reproduces
+/// a tag the row already holds, so a wrong match can never re-point a row;
+/// an `UNVERIFIED` row whose raw destination is recovered and verified is
+/// rewritten to the verified tags (its guessed tags dropped).
 pub async fn rekey(
     pool: &sqlx::PgPool,
     keyring: &mk_crypto::Keyring,
     keys: &FingerprintKeys,
     tenant: Option<TenantId>,
 ) -> Result<RekeyReport, StoreError> {
+    let store = crate::Store::from_pool(pool.clone());
+    let mut rep = RekeyReport::default();
+    for t in tenants_for(pool, tenant).await? {
+        let mut tx = store.begin(t).await?;
+        rekey_tenant(&mut tx, keyring, keys, &mut rep).await?;
+        tx.commit().await?;
+        rep.tenants += 1;
+    }
+    Ok(rep)
+}
+
+async fn rekey_tenant(
+    tx: &mut crate::tx::TenantTx<'_>,
+    keyring: &mk_crypto::Keyring,
+    keys: &FingerprintKeys,
+    rep: &mut RekeyReport,
+) -> Result<(), StoreError> {
     use secrecy::ExposeSecret as _;
     use sqlx::Row as _;
     use std::collections::HashMap;
-    let tf = tenant_filter(tenant);
-
-    let mut rep = RekeyReport::default();
+    let tenant = tx.tenant();
     // tag → raw destination, learned from actions (canonical `to`) and inbound
     // (sealed `From`); used for suppression/permission rows without a sealed copy.
-    let mut known: HashMap<(uuid::Uuid, String, String), String> = HashMap::new();
-
+    let mut known: HashMap<(String, String), String> = HashMap::new();
     let channel_of = |s: &str| -> Option<Channel> {
         serde_json::from_value(serde_json::Value::String(s.to_owned())).ok()
     };
+    let unseal = |table: &str, id: uuid::Uuid, b: Vec<u8>| {
+        keyring
+            .unseal(&destination_aad(table, tenant, id), &b)
+            .ok()
+            .map(|s| s.expose_secret().to_owned())
+    };
 
     // Pass 1: actions.
-    let rows = sqlx::query(sqlx::AssertSqlSafe(format!(
-        "SELECT tenant_id, action_id, channel, canonical_request, destination_fingerprints FROM kernel.actions
-         WHERE destination_hash IS NOT NULL AND channel IS NOT NULL{tf}"
-    )))
-    .fetch_all(pool)
+    let rows = sqlx::query(
+        "SELECT action_id, channel, canonical_request, destination_fingerprints FROM kernel.actions
+         WHERE tenant_id = $1 AND destination_hash IS NOT NULL AND channel IS NOT NULL",
+    )
+    .bind(tenant.0)
+    .fetch_all(tx.conn())
     .await?;
     for r in rows {
-        let (t, id): (uuid::Uuid, uuid::Uuid) = (r.try_get("tenant_id")?, r.try_get("action_id")?);
+        let id: uuid::Uuid = r.try_get("action_id")?;
         let ch_s: String = r.try_get("channel")?;
         let tags: Vec<String> = r.try_get("destination_fingerprints")?;
         let canonical: Vec<u8> = r.try_get("canonical_request")?;
@@ -374,14 +464,13 @@ pub async fn rekey(
             .ok()
             .and_then(|v| v.get("arguments")?.get("to")?.as_str().map(str::to_owned));
         let (Some(ch), Some(raw)) = (channel_of(&ch_s), raw) else {
-            rep.unresolved += 1;
+            rep.unresolved += u64::from(!complete(&tags, keys));
             continue;
         };
         apply(
-            pool,
+            tx,
             "actions",
             "action_id",
-            t,
             id,
             ch,
             &ch_s,
@@ -389,39 +478,30 @@ pub async fn rekey(
             &tags,
             keys,
             &mut known,
-            &mut rep,
+            rep,
         )
         .await?;
     }
     // Pass 2: inbound events (sms).
-    let rows = sqlx::query(sqlx::AssertSqlSafe(format!(
-        "SELECT tenant_id, event_id, destination_sealed, destination_fingerprints FROM kernel.inbound_events
-         WHERE source_destination_hash IS NOT NULL{tf}"
-    )))
-    .fetch_all(pool)
+    let rows = sqlx::query(
+        "SELECT event_id, destination_sealed, destination_fingerprints FROM kernel.inbound_events
+         WHERE tenant_id = $1 AND source_destination_hash IS NOT NULL",
+    )
+    .bind(tenant.0)
+    .fetch_all(tx.conn())
     .await?;
     for r in rows {
-        let (t, id): (uuid::Uuid, uuid::Uuid) = (r.try_get("tenant_id")?, r.try_get("event_id")?);
+        let id: uuid::Uuid = r.try_get("event_id")?;
         let tags: Vec<String> = r.try_get("destination_fingerprints")?;
         let sealed: Option<Vec<u8>> = r.try_get("destination_sealed")?;
-        let raw = sealed.and_then(|b| {
-            keyring
-                .unseal(
-                    &destination_aad("inbound_events", TenantId::from_uuid(t), id),
-                    &b,
-                )
-                .ok()
-                .map(|s| s.expose_secret().to_owned())
-        });
-        let Some(raw) = raw else {
-            rep.unresolved += u64::from(!has_all(&tags, keys));
+        let Some(raw) = sealed.and_then(|b| unseal("inbound_events", id, b)) else {
+            rep.unresolved += u64::from(!complete(&tags, keys));
             continue;
         };
         apply(
-            pool,
+            tx,
             "inbound_events",
             "event_id",
-            t,
             id,
             Channel::Sms,
             "sms",
@@ -429,7 +509,7 @@ pub async fn rekey(
             &tags,
             keys,
             &mut known,
-            &mut rep,
+            rep,
         )
         .await?;
     }
@@ -443,45 +523,43 @@ pub async fn rekey(
         ("contact_permissions", "permission_id", "destination_hash"),
     ] {
         let rows = sqlx::query(sqlx::AssertSqlSafe(format!(
-            "SELECT tenant_id, {pk} AS id, channel, destination_sealed, destination_fingerprints FROM kernel.{table}
-             WHERE {hash_col} IS NOT NULL AND channel IS NOT NULL{tf}"
+            "SELECT {pk} AS id, channel, destination_sealed, destination_fingerprints FROM kernel.{table}
+             WHERE tenant_id = $1 AND {hash_col} IS NOT NULL AND channel IS NOT NULL
+             ORDER BY (destination_sealed IS NULL)" // sealed rows first: they teach unsealed ones
         )))
-        .fetch_all(pool)
+        .bind(tenant.0)
+        .fetch_all(tx.conn())
         .await?;
         for r in rows {
-            let (t, id): (uuid::Uuid, uuid::Uuid) = (r.try_get("tenant_id")?, r.try_get("id")?);
+            let id: uuid::Uuid = r.try_get("id")?;
             let ch_s: String = r.try_get("channel")?;
             let tags: Vec<String> = r.try_get("destination_fingerprints")?;
             let sealed: Option<Vec<u8>> = r.try_get("destination_sealed")?;
-            let raw = sealed
-                .and_then(|b| {
-                    keyring
-                        .unseal(&destination_aad(table, TenantId::from_uuid(t), id), &b)
-                        .ok()
-                        .map(|s| s.expose_secret().to_owned())
-                })
-                .or_else(|| {
-                    tags.iter()
-                        .find_map(|tag| known.get(&(t, ch_s.clone(), tag.clone())).cloned())
-                });
+            let raw = sealed.and_then(|b| unseal(table, id, b)).or_else(|| {
+                tags.iter()
+                    .filter(|t| *t != UNVERIFIED)
+                    .find_map(|tag| known.get(&(ch_s.clone(), tag.clone())).cloned())
+            });
             let (Some(ch), Some(raw)) = (channel_of(&ch_s), raw) else {
-                rep.unresolved += u64::from(!has_all(&tags, keys));
+                rep.unresolved += u64::from(!complete(&tags, keys));
                 continue;
             };
             apply(
-                pool, table, pk, t, id, ch, &ch_s, &raw, &tags, keys, &mut known, &mut rep,
+                tx, table, pk, id, ch, &ch_s, &raw, &tags, keys, &mut known, rep,
             )
             .await?;
         }
     }
-    Ok(rep)
+    Ok(())
 }
 
-/// Operator (owner role): after the old key has been removed from
-/// `MK_FINGERPRINT_KEYS`, strip its tags and rewrite each row's hash column to
-/// the current key's value — so a compromised key's HMACs no longer sit in
-/// the database. Refused while any row lacks the current kid or is orphaned,
-/// or if `kid` is still configured. Returns rows changed.
+/// Operator: after the old key has been removed from `MK_FINGERPRINT_KEYS`,
+/// strip its tags and rewrite each row's hash column to the current key's
+/// value — so a compromised key's HMACs no longer sit in the database.
+/// Refused while any tenant has a row lacking the current kid, orphaned, or
+/// unverified, or if `kid` is still configured. Per tenant, the check and the
+/// update run in ONE transaction, and the update only touches rows that carry
+/// a current-kid tag (a row without one is never blanked). Returns rows changed.
 pub async fn prune(
     pool: &sqlx::PgPool,
     keys: &FingerprintKeys,
@@ -493,28 +571,47 @@ pub async fn prune(
             "kid is still configured; remove it from MK_FINGERPRINT_KEYS first",
         ));
     }
-    let st = status(pool, keys, tenant).await?;
-    if st.iter().any(|t| t.lacking_current > 0 || t.orphaned > 0) {
+    if status(pool, keys, tenant)
+        .await?
+        .iter()
+        .any(|t| t.blocking() > 0)
+    {
         return Err(StoreError::Conflict(
-            "rows lack the current kid; run fingerprint-rekey first",
+            "rows lack the current kid or are unverified; run fingerprint-rekey first",
         ));
     }
+    let store = crate::Store::from_pool(pool.clone());
     let mut n = 0;
-    for (table, _, hash_col) in FINGERPRINT_TABLES {
-        let filter = dest_filter(table, hash_col) + &tenant_filter(tenant);
-        n += sqlx::query(sqlx::AssertSqlSafe(format!(
-            "UPDATE kernel.{table} SET
-               destination_fingerprints = ARRAY(SELECT x FROM unnest(destination_fingerprints) x WHERE split_part(x, ':', 1) <> $1),
-               {hash_col} = (SELECT split_part(x, ':', 2) FROM unnest(destination_fingerprints) x WHERE split_part(x, ':', 1) = $2 LIMIT 1)
-             WHERE {filter} AND (
-               EXISTS (SELECT 1 FROM unnest(destination_fingerprints) x WHERE split_part(x, ':', 1) = $1)
-               OR {hash_col} IS DISTINCT FROM (SELECT split_part(x, ':', 2) FROM unnest(destination_fingerprints) x WHERE split_part(x, ':', 1) = $2 LIMIT 1))"
-        )))
-        .bind(kid)
-        .bind(keys.current_kid())
-        .execute(pool)
-        .await?
-        .rows_affected();
+    for t in tenants_for(pool, tenant).await? {
+        let mut tx = store.begin(t).await?;
+        if status_in(&mut tx, keys)
+            .await?
+            .iter()
+            .any(|s| s.blocking() > 0)
+        {
+            return Err(StoreError::Conflict(
+                "a row lost its current-kid tag during prune; nothing changed for this tenant",
+            ));
+        }
+        for (table, _, hash_col) in FINGERPRINT_TABLES {
+            let filter = dest_filter(table, hash_col);
+            n += sqlx::query(sqlx::AssertSqlSafe(format!(
+                "UPDATE kernel.{table} SET
+                   destination_fingerprints = ARRAY(SELECT x FROM unnest(destination_fingerprints) x WHERE split_part(x, ':', 1) <> $1),
+                   {hash_col} = (SELECT split_part(x, ':', 2) FROM unnest(destination_fingerprints) x WHERE split_part(x, ':', 1) = $2 LIMIT 1)
+                 WHERE tenant_id = $3 AND {filter}
+                   AND EXISTS (SELECT 1 FROM unnest(destination_fingerprints) x WHERE split_part(x, ':', 1) = $2)
+                   AND (EXISTS (SELECT 1 FROM unnest(destination_fingerprints) x WHERE split_part(x, ':', 1) = $1)
+                        OR {hash_col} IS DISTINCT FROM (SELECT split_part(x, ':', 2) FROM unnest(destination_fingerprints) x WHERE split_part(x, ':', 1) = $2 LIMIT 1))"
+            )))
+            .bind(kid)
+            .bind(keys.current_kid())
+            .bind(t.0)
+            .execute(tx.conn())
+            .await?
+            .rows_affected();
+        }
+        tx.commit().await?;
     }
     Ok(n)
 }
@@ -525,48 +622,67 @@ fn has_all(tags: &[String], keys: &FingerprintKeys) -> bool {
         .all(|k| tags.iter().any(|t| t.split(':').next() == Some(*k)))
 }
 
+/// Nothing for rekey to do: every kid tagged and no unverified marker.
+fn complete(tags: &[String], keys: &FingerprintKeys) -> bool {
+    has_all(tags, keys) && !tags.iter().any(|t| t == UNVERIFIED)
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn apply(
-    pool: &sqlx::PgPool,
+    tx: &mut crate::tx::TenantTx<'_>,
     table: &str,
     pk: &str,
-    tenant: uuid::Uuid,
     id: uuid::Uuid,
     channel: Channel,
     channel_s: &str,
     raw: &str,
     tags: &[String],
     keys: &FingerprintKeys,
-    known: &mut std::collections::HashMap<(uuid::Uuid, String, String), String>,
+    known: &mut std::collections::HashMap<(String, String), String>,
     rep: &mut RekeyReport,
 ) -> Result<(), StoreError> {
-    let complete = has_all(tags, keys);
-    let fresh = keys.compute(TenantId::from_uuid(tenant), channel, raw);
+    let done = complete(tags, keys);
+    let fresh = keys.compute(tx.tenant(), channel, raw);
+    let real: Vec<String> = tags.iter().filter(|t| *t != UNVERIFIED).cloned().collect();
     // The recovered raw value must reproduce a stored tag (or the row has none yet).
-    if !tags.is_empty() && !fresh.tagged.iter().any(|f| tags.contains(f)) {
+    if !real.is_empty() && !fresh.tagged.iter().any(|f| real.contains(f)) {
         // A complete row needs nothing; never count or touch it.
-        rep.unresolved += u64::from(!complete);
+        rep.unresolved += u64::from(!done);
         return Ok(());
     }
-    for tag in tags.iter().chain(fresh.tagged.iter()) {
-        known.insert((tenant, channel_s.to_owned(), tag.clone()), raw.to_owned());
+    for tag in real.iter().chain(fresh.tagged.iter()) {
+        known.insert((channel_s.to_owned(), tag.clone()), raw.to_owned());
     }
-    if complete {
+    if done {
         return Ok(());
     }
-    let merged = Fingerprints {
-        primary: fresh.primary.clone(),
-        tagged: tags.to_vec(),
-    }
-    .union(&fresh.tagged);
-    if merged.len() != tags.len() {
+    let merged: Vec<String> = if tags.iter().any(|t| t == UNVERIFIED) {
+        // Verified now: keep only tags the raw value reproduces, plus tags of kids
+        // no longer configured (they are pruned separately).
+        let kids = keys.kids();
+        let mut m = fresh.tagged.clone();
+        for t in &real {
+            let kid = t.split(':').next().unwrap_or("");
+            if !kids.contains(&kid) && !m.contains(t) {
+                m.push(t.clone());
+            }
+        }
+        m
+    } else {
+        Fingerprints {
+            primary: fresh.primary.clone(),
+            tagged: real.clone(),
+        }
+        .union(&fresh.tagged)
+    };
+    if merged != tags {
         sqlx::query(sqlx::AssertSqlSafe(format!(
             "UPDATE kernel.{table} SET destination_fingerprints = $3 WHERE tenant_id = $1 AND {pk} = $2"
         )))
-        .bind(tenant)
+        .bind(tx.tenant().0)
         .bind(id)
         .bind(&merged)
-        .execute(pool)
+        .execute(tx.conn())
         .await?;
         rep.updated += 1;
     }

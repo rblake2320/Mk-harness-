@@ -74,6 +74,9 @@ impl From<StoreError> for ApiError {
             StoreError::Transition(_) => (StatusCode::CONFLICT, "Illegal state transition"),
             StoreError::Contract(_) => (StatusCode::UNPROCESSABLE_ENTITY, "Contract violation"),
             StoreError::Unavailable(_) => (StatusCode::SERVICE_UNAVAILABLE, "Store unavailable"),
+            StoreError::Transient(_) => {
+                (StatusCode::SERVICE_UNAVAILABLE, "Transient conflict; retry")
+            }
             _ => (StatusCode::INTERNAL_SERVER_ERROR, "Internal error"),
         };
         tracing::error!(code = e.code(), error = %e, "store error");

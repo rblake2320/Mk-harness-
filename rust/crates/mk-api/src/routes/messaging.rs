@@ -292,6 +292,41 @@ pub async fn twilio_status(
                 }
                 _ => {}
             }
+        } else if action.state == ActionState::Completed
+            && action.error_code.as_deref() == Some(mk_store::messaging::ACCEPTED_CALLBACK_PENDING)
+            && folded == DeliveryState::Failed
+        {
+            // Completed at lease expiry on the provider's acceptance; the provider
+            // now reports the message failed. The action stays completed (it was
+            // executed exactly once) but the failure is NOT hidden: the attempt is
+            // closed as failed and a dead letter raises the alert (C3/C4).
+            let code = error_code
+                .clone()
+                .map_or_else(|| "provider_failed".to_owned(), |c| format!("provider_{c}"));
+            outbox::record_attempt_end(
+                &mut tx,
+                delivery.action_id,
+                action.attempt,
+                "failed_final",
+                Some(&code),
+                Some(sender_identity_id),
+                Some(&message_sid),
+                Some(&raw_digest.to_string()),
+                now,
+            )
+            .await
+            .map_err(|e| rid(e.into()))?;
+            outbox::dead_letter(
+                &mut tx,
+                delivery.action_id,
+                "completed_delivery_failed",
+                action.attempt,
+                Some(&code),
+                json!({"source": "twilio_status", "status": status, "after": "lease_expiry_completion"}),
+                now,
+            )
+            .await
+            .map_err(|e| rid(e.into()))?;
         }
         mk_store::audit::append_event(
             &mut tx,
@@ -377,38 +412,88 @@ pub async fn twilio_inbound(
         OptOutSignal::Possible => ("possible", "held"),
         OptOutSignal::None => ("none", "queued_for_meaning"),
     };
+    // Record, suppress and cancel in one transaction; a transient rollback
+    // (deadlock / serialization / lock timeout) is retried, because the provider
+    // does not redeliver inbound messages — a lost STOP is unacceptable.
+    let mut attempt: u64 = 0;
+    loop {
+        attempt += 1;
+        match inbound_tx(
+            &st,
+            &sender,
+            sender_identity_id,
+            &dest,
+            &from,
+            &text,
+            &message_sid,
+            &raw_digest,
+            signal,
+            signal_s,
+            disposition,
+            now,
+        )
+        .await
+        {
+            Err(e) if e.code == "STORE_TRANSIENT" && attempt < 4 => {
+                tracing::warn!(
+                    attempt,
+                    "inbound transaction rolled back (transient); retrying"
+                );
+                tokio::time::sleep(std::time::Duration::from_millis(25 * attempt)).await;
+            }
+            other => return other.map_err(rid),
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn inbound_tx(
+    st: &AppState,
+    sender: &ms::SenderIdentitySecret,
+    sender_identity_id: Uuid,
+    dest: &mk_store::fingerprint::Fingerprints,
+    from: &str,
+    text: &str,
+    message_sid: &str,
+    raw_digest: &Digest,
+    signal: OptOutSignal,
+    signal_s: &str,
+    disposition: &str,
+    now: chrono::DateTime<Utc>,
+) -> Result<Response, ApiError> {
+    let ident = |e: ApiError| e;
     let mut tx = st
         .store
         .begin(sender.tenant_id)
         .await
-        .map_err(|e| rid(e.into()))?;
+        .map_err(|e| ident(e.into()))?;
     ms::inbound_ok(&mut tx, now)
         .await
-        .map_err(|e| rid(e.into()))?;
+        .map_err(|e| ident(e.into()))?;
     // C6: the same control path dispatch authorization takes.
-    ms::lock_control_path(&mut tx, Channel::Sms.as_str(), &dest)
+    ms::lock_control_path(&mut tx, Channel::Sms.as_str(), dest)
         .await
-        .map_err(|e| rid(e.into()))?;
+        .map_err(|e| ident(e.into()))?;
     let rec = ms::record_inbound(
         &mut tx,
         &st.keyring,
-        &message_sid,
+        message_sid,
         sender_identity_id,
-        &dest,
-        &from,
+        dest,
+        from,
         None,
-        &SecretString::from(text.clone()),
-        &raw_digest,
+        &SecretString::from(text.to_owned()),
+        raw_digest,
         signal_s,
         disposition,
         now,
     )
     .await
-    .map_err(|e| rid(e.into()))?;
+    .map_err(|e| ident(e.into()))?;
     let event_id = match rec {
         InboundOutcome::Duplicate(id) => {
             // Redelivery: no new suppression, no new hold, no new task.
-            tx.commit().await.map_err(|e| rid(e.into()))?;
+            tx.commit().await.map_err(|e| ident(e.into()))?;
             let _ = id;
             st.metrics
                 .inbound_events
@@ -437,8 +522,8 @@ pub async fn twilio_inbound(
             consent::add_suppression(
                 &mut tx,
                 Some(Channel::Sms),
-                Some(&dest),
-                Some((&st.keyring, from.as_str())),
+                Some(dest),
+                Some((&st.keyring, from)),
                 "destination",
                 "sms_opt_out",
                 true,
@@ -447,10 +532,10 @@ pub async fn twilio_inbound(
                 now,
             )
             .await
-            .map_err(|e| rid(e.into()))?;
-            cancel_pending(&mut tx, &dest, "opt_out", actor, now)
+            .map_err(|e| ident(e.into()))?;
+            cancel_pending(&mut tx, dest, "opt_out", actor, now)
                 .await
-                .map_err(rid)?;
+                .map_err(ident)?;
             audit_inbound(
                 &mut tx,
                 sender.tenant_id,
@@ -460,7 +545,7 @@ pub async fn twilio_inbound(
                 now,
             )
             .await
-            .map_err(rid)?;
+            .map_err(ident)?;
         }
         OptOutSignal::Possible => {
             // A hold is a non-permanent suppression a human must lift; it blocks
@@ -468,8 +553,8 @@ pub async fn twilio_inbound(
             consent::add_suppression(
                 &mut tx,
                 Some(Channel::Sms),
-                Some(&dest),
-                Some((&st.keyring, from.as_str())),
+                Some(dest),
+                Some((&st.keyring, from)),
                 "destination",
                 "possible_opt_out_hold",
                 false,
@@ -478,10 +563,10 @@ pub async fn twilio_inbound(
                 now,
             )
             .await
-            .map_err(|e| rid(e.into()))?;
-            cancel_pending(&mut tx, &dest, "possible_opt_out_hold", actor, now)
+            .map_err(|e| ident(e.into()))?;
+            cancel_pending(&mut tx, dest, "possible_opt_out_hold", actor, now)
                 .await
-                .map_err(rid)?;
+                .map_err(ident)?;
             audit_inbound(
                 &mut tx,
                 sender.tenant_id,
@@ -491,14 +576,14 @@ pub async fn twilio_inbound(
                 now,
             )
             .await
-            .map_err(rid)?;
+            .map_err(ident)?;
         }
         OptOutSignal::None => {}
     }
     ms::mark_inbound_acknowledged(&mut tx, event_id, now)
         .await
-        .map_err(|e| rid(e.into()))?;
-    tx.commit().await.map_err(|e| rid(e.into()))?;
+        .map_err(|e| ident(e.into()))?;
+    tx.commit().await.map_err(|e| ident(e.into()))?;
     Ok(twiml_ok())
 }
 

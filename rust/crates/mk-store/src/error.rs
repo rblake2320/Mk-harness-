@@ -9,6 +9,10 @@ pub enum StoreError {
     Unavailable(#[source] sqlx::Error),
     #[error("database error")]
     Db(#[source] sqlx::Error),
+    /// Deadlock, serialization failure or lock timeout: safe to retry the whole
+    /// transaction (it was rolled back).
+    #[error("transient database conflict")]
+    Transient(#[source] sqlx::Error),
     #[error("not found")]
     NotFound,
     #[error("conflict: {0}")]
@@ -32,6 +36,11 @@ impl From<sqlx::Error> for StoreError {
             sqlx::Error::Database(db) if db.is_unique_violation() => {
                 Self::Conflict("unique violation")
             }
+            sqlx::Error::Database(db)
+                if matches!(db.code().as_deref(), Some("40P01" | "40001" | "55P03")) =>
+            {
+                Self::Transient(e)
+            }
             sqlx::Error::PoolTimedOut | sqlx::Error::PoolClosed | sqlx::Error::Io(_) => {
                 Self::Unavailable(e)
             }
@@ -41,12 +50,19 @@ impl From<sqlx::Error> for StoreError {
 }
 
 impl StoreError {
+    /// The transaction was rolled back for a reason a retry can clear.
+    #[must_use]
+    pub fn is_transient(&self) -> bool {
+        matches!(self, Self::Transient(_))
+    }
+
     /// Stable code for problem details / metrics.
     #[must_use]
     pub fn code(&self) -> &'static str {
         match self {
             Self::Unavailable(_) => "STORE_UNAVAILABLE",
             Self::Db(_) => "STORE_ERROR",
+            Self::Transient(_) => "STORE_TRANSIENT",
             Self::NotFound => "NOT_FOUND",
             Self::Conflict(_) => "CONFLICT",
             Self::Transition(_) => "ILLEGAL_TRANSITION",

@@ -76,8 +76,20 @@ pub async fn run_once(
                 &mut tx,
                 action_id,
                 Transition::Complete,
-                Some("provider_accepted_callback_pending"),
+                Some(mk_store::messaging::ACCEPTED_CALLBACK_PENDING),
                 actor,
+                now,
+            )
+            .await?;
+            outbox::record_attempt_end(
+                &mut tx,
+                action_id,
+                a.attempt,
+                "completed",
+                Some(mk_store::messaging::ACCEPTED_CALLBACK_PENDING),
+                None,
+                None,
+                None,
                 now,
             )
             .await?;

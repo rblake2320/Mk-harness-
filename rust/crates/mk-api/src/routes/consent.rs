@@ -213,13 +213,15 @@ pub async fn add_suppression(
     let dest_hash = match (&b.channel, &b.destination, &b.destination_hash) {
         (Some(c), Some(d), _) => Some(st.fingerprints.compute(p.tenant, *c, d)),
         // Hash-only input: adopt every tag already stored for that hash so the
-        // suppression matches across key versions; otherwise tag it current.
+        // suppression matches across key versions; otherwise tag it under every kid, unverified.
         (Some(_), None, Some(h)) => {
-            let tags = mk_store::fingerprint::tags_for_hash(&mut tx, h)
+            let tags = mk_store::fingerprint::tags_for_hash(&mut tx, &st.fingerprints, h)
                 .await
                 .map_err(|e| ApiError::from(e).with_request_id(&headers))?;
             Some(if tags.is_empty() {
-                st.fingerprints.tag_current(h)
+                // Unknown key version: match under every kid, and mark the row so
+                // `fingerprint-status` blocks removing a key until it is verified.
+                st.fingerprints.tag_unverified(h)
             } else {
                 mk_store::fingerprint::Fingerprints {
                     primary: h.clone(),

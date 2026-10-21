@@ -154,6 +154,9 @@ async fn shed(
     req: axum::extract::Request,
     next: axum::middleware::Next,
 ) -> axum::response::Response {
+    if limits::is_safety_control(req.method(), req.uri().path()) {
+        return next.run(req).await;
+    }
     let Some(permit) = st.limiter.try_enter() else {
         st.metrics
             .rejected

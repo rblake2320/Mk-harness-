@@ -68,7 +68,7 @@ for i in $(seq 1 30); do curl -fsS "$API/health/ready" >/dev/null 2>&1 && break;
 log "starting FastAPI"
 export RUST_ACTION_KERNEL_URL="$API" KERNEL_ASSERTION_PRIVATE_KEY="$DEV_PRIVATE_KEY" KERNEL_ASSERTION_KID=k1
 export DATABASE_URL="sqlite:///$WORK/app.db" JWT_SECRET=dev-secret-dev-secret-dev-secret-123 MASTER_KEY="$MK_MASTER_KEY" MK_ALLOW_DEV_SECRETS=1 RATE_LIMIT_PER_MINUTE=10000
-(cd "$ROOT/backend" && python3 -m uvicorn app.main:app --port 8000 >"$WORK/app.log" 2>&1) & PIDS+=($!)
+(cd "$ROOT/backend" && exec python3 -m uvicorn app.main:app --port 8000 >"$WORK/app.log" 2>&1) & PIDS+=($!)
 for i in $(seq 1 30); do [ "$(curl -s -o /dev/null -w '%{http_code}' "$APP/docs" || true)" != 000 ] && break; sleep 1; done
 TOK=$(curl -fsS "$APP/api/auth/signup" -H 'content-type: application/json' -d '{"org_name":"Drill Org","email":"admin@drill.example.com","password":"superSecret123!","key_policy":"both"}' | python3 -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')
 H=(-H "authorization: Bearer $TOK" -H 'content-type: application/json')

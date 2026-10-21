@@ -34,8 +34,9 @@ Properties (tested — `crates/mk-api/src/limits.rs` unit tests (7),
 
 * The tenant bucket is charged only after the actor assertion's signature
   verifies: an unauthenticated or forged caller gets 401 and spends nothing.
-* A refused request costs no database write (charged before jti consumption).
-* Tenants and read/write classes are isolated; one noisy tenant never starves another.
+* Reads are charged before any database work; writes are charged after the single-use jti is consumed, so a replayed captured assertion is refused as a replay and never drains the tenant's budget.
+* Tenants and read/write classes have separate rate buckets, and each tenant may hold at most a quarter of the replica's in-flight permits (`OVER_CAPACITY` with `code tenant_inflight` in metrics), so one tenant's slow requests cannot take every permit. Other tenants can still be refused when the replica as a whole is full.
+* **Never limited or shed**: stop and revoke controls — global/tenant kill switch, suppressions, revocations, inbound pause, action cancel, approval/credential/permission revoke (`limits::is_safety_control`).
 * **Never shed**: provider webhooks (an inbound STOP must always be recorded),
   adapter callbacks (they settle sends already made), health and metrics.
 * FastAPI forwards 429/503 and a numeric `Retry-After` unchanged and never retries a write.

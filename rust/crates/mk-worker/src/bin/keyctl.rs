@@ -112,10 +112,10 @@ async fn main() -> anyhow::Result<()> {
             let mut blocking = 0u64;
             for t in mk_store::fingerprint::status(pool, &fk, None).await? {
                 println!(
-                    "{}: lacking_current={} orphaned={}",
-                    t.table, t.lacking_current, t.orphaned
+                    "{}: lacking_current={} orphaned={} unverified={} tenants={}",
+                    t.table, t.lacking_current, t.orphaned, t.unverified, t.tenants
                 );
-                blocking += t.lacking_current + t.orphaned;
+                blocking += t.blocking();
             }
             if blocking > 0 {
                 println!(
@@ -135,8 +135,8 @@ async fn main() -> anyhow::Result<()> {
             );
             for t in mk_store::fingerprint::status(pool, &fk, None).await? {
                 println!(
-                    "{}: lacking_current={} orphaned={}",
-                    t.table, t.lacking_current, t.orphaned
+                    "{}: lacking_current={} orphaned={} unverified={} tenants={}",
+                    t.table, t.lacking_current, t.orphaned, t.unverified, t.tenants
                 );
             }
         }

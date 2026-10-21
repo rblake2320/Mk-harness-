@@ -21,6 +21,24 @@ pub struct Ready {
     pub database: bool,
     pub dispatch_enabled: bool,
     pub rust_kernel_enabled: bool,
+    /// Effective security configuration of THIS process (no secrets), so the
+    /// enable pre-flight checks what the running kernel enforces rather than
+    /// what an operator's shell claims.
+    pub effective: Effective,
+}
+
+#[derive(Debug, Serialize)]
+pub struct Effective {
+    /// `webauthn` (approvals need a kernel-verified passkey) or `unbound`.
+    pub approval_binding: &'static str,
+    pub approval_require_uv: bool,
+    /// Keyring versions loaded; `0` present = legacy master-key seal still accepted.
+    pub key_versions: Vec<u32>,
+    pub current_key_version: u32,
+    pub legacy_seal_accepted: bool,
+    /// Destination-fingerprint kids, current first.
+    pub fingerprint_kids: Vec<String>,
+    pub public_webhook_base_https: bool,
 }
 
 /// Readiness fails when PostgreSQL is unreachable: no DB, no authority.
@@ -40,6 +58,27 @@ pub async fn ready(State(st): State<AppState>) -> (StatusCode, Json<Ready>) {
             database,
             dispatch_enabled,
             rust_kernel_enabled: st.rust_kernel_enabled,
+            effective: Effective {
+                approval_binding: if st.approval_rp.is_some() {
+                    "webauthn"
+                } else {
+                    "unbound"
+                },
+                approval_require_uv: st.approval_rp.as_ref().is_some_and(|r| r.require_uv),
+                key_versions: st.keyring.versions(),
+                current_key_version: st.keyring.current_version(),
+                legacy_seal_accepted: st.keyring.versions().contains(&mk_crypto::LEGACY_VERSION),
+                fingerprint_kids: st
+                    .fingerprints
+                    .kids()
+                    .iter()
+                    .map(|k| (*k).to_owned())
+                    .collect(),
+                public_webhook_base_https: st
+                    .public_webhook_base
+                    .as_deref()
+                    .is_some_and(|b| b.starts_with("https://")),
+            },
         }),
     )
 }

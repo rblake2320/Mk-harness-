@@ -1,0 +1,206 @@
+{
+  "tool": "mk-loadgen",
+  "at": "2026-10-21T21:30:54.960689550+00:00",
+  "run": {
+    "duration_secs": 1804,
+    "tenants": 100,
+    "proposals_per_sec": 40.0,
+    "reads_per_sec": 200.0,
+    "inbound_per_sec": 4.0,
+    "envelope_run": false
+  },
+  "counts": {
+    "proposals_ok": 49946,
+    "proposals_rejected": 0,
+    "proposals_error": 0,
+    "approvals_ok": 39685,
+    "approvals_error": 0,
+    "delivered": 39680,
+    "not_delivered_in_time": 5,
+    "consent_cancelled_before_dispatch": 0,
+    "approvals_refused_4xx": 2669,
+    "reads_ok": 186422,
+    "reads_error": 0,
+    "inbound_ok": 7200,
+    "inbound_error": 0,
+    "optout_blocked": 66,
+    "optout_not_blocked": 0,
+    "duplicate_provider_message_ids": 0,
+    "capacity_rejected": 227460,
+    "other_5xx": 0
+  },
+  "latency_secs": {
+    "propose": {
+      "count": 49946,
+      "p50": 1.188943111,
+      "p95": 1.899740538,
+      "p99": 2.226588834,
+      "max": 2.925506509
+    },
+    "approve": {
+      "count": 42354,
+      "p50": 3.013949009,
+      "p95": 4.457758554,
+      "p99": 5.107321756,
+      "max": 5.770729913
+    },
+    "approved_to_dispatch_start": {
+      "count": 39680,
+      "p50": 1.062827689,
+      "p95": 2.9571517590000003,
+      "p99": 4.364564913,
+      "max": 10.348578453
+    },
+    "approved_to_delivered": {
+      "count": 39680,
+      "p50": 2.816388255,
+      "p95": 5.097906827,
+      "p99": 6.649392832,
+      "max": 11.156255338
+    },
+    "read_pending_approvals": {
+      "count": 186422,
+      "p50": 0.730879991,
+      "p95": 1.278169442,
+      "p99": 1.553598754,
+      "max": 2.198114042
+    },
+    "inbound_webhook": {
+      "count": 7200,
+      "p50": 0.811679217,
+      "p95": 1.31285177,
+      "p99": 1.5649520799999999,
+      "max": 1.9553303899999999
+    },
+    "optout_to_block": {
+      "count": 66,
+      "p50": 1.795651568,
+      "p95": 2.891978119,
+      "p99": 2.927754859,
+      "max": 3.202025793
+    }
+  },
+  "slo": [
+    {
+      "id": "O3-api-p95",
+      "requirement": "non-AI API p95 ≤ 500 ms",
+      "target": "0.5",
+      "measured": {
+        "propose_p95": 1.899740538,
+        "approve_p95": 4.457758554,
+        "read_p95": 1.278169442
+      },
+      "pass": false,
+      "note": "propose, approve (incl. passkey challenge round-trip) and pending-approvals read"
+    },
+    {
+      "id": "O3-api-p99",
+      "requirement": "non-AI API p99 ≤ 1.5 s",
+      "target": "1.5",
+      "measured": {
+        "propose_p99": 2.226588834,
+        "approve_p99": 5.107321756,
+        "read_p99": 1.553598754
+      },
+      "pass": false,
+      "note": ""
+    },
+    {
+      "id": "O3-dispatch-start",
+      "requirement": "approved eligible action → dispatch start p95 ≤ 10 s / p99 ≤ 60 s",
+      "target": "10 / 60",
+      "measured": {
+        "p95": 2.9571517590000003,
+        "p99": 4.364564913,
+        "count": 39680
+      },
+      "pass": true,
+      "note": "observed by polling at 250 ms (1 s after a capacity refusal); includes outbox relay + stream + worker lease"
+    },
+    {
+      "id": "O3-delivered",
+      "requirement": "approved → delivered via signed callbacks (informational)",
+      "target": "—",
+      "measured": {
+        "p95": 5.097906827,
+        "p99": 6.649392832,
+        "count": 39680
+      },
+      "pass": null,
+      "note": "simulator callbacks; real provider latency is not represented"
+    },
+    {
+      "id": "O3-inbound-persist",
+      "requirement": "inbound persistence p99 ≤ 2 s",
+      "target": "2",
+      "measured": {
+        "p99": 1.5649520799999999,
+        "count": 7200
+      },
+      "pass": true,
+      "note": "signed webhook → 200 (recorded, deduped, sealed)"
+    },
+    {
+      "id": "O3-optout",
+      "requirement": "opt-out recorded → new dispatch blocked immediately at the authorization boundary",
+      "target": "every probe",
+      "measured": {
+        "blocked": 66,
+        "not_blocked": 0,
+        "p99_secs": 2.927754859
+      },
+      "pass": true,
+      "note": "STOP then an immediate proposal to the same destination must be 403 suppressed"
+    },
+    {
+      "id": "O4-no-dup",
+      "requirement": "no unauthorized or duplicate execution",
+      "target": "0",
+      "measured": {
+        "duplicate_provider_message_ids": 0,
+        "not_delivered_in_time": 5
+      },
+      "pass": true,
+      "note": "duplicate detection is by provider message id across the whole run"
+    },
+    {
+      "id": "O4-errors",
+      "requirement": "error rate under load",
+      "target": "< 5% transport/5xx",
+      "measured": {
+        "ratio": 0.0,
+        "errors": 0
+      },
+      "pass": true,
+      "note": ""
+    },
+    {
+      "id": "O2-graceful-rejection",
+      "requirement": "above capacity the kernel refuses with 429/503 + Retry-After, never fails",
+      "target": "0 other 5xx",
+      "measured": {
+        "capacity_rejected": 227460,
+        "other_5xx": 0
+      },
+      "pass": true,
+      "note": "capacity refusals are excluded from O4-errors; a run that never reaches a limit reports capacity_rejected = 0"
+    },
+    {
+      "id": "O4-envelope",
+      "requirement": "8 h at envelope (20 proposal/s, 100 read/s, 10 dispatch/s), 30 min at 2×, 24 h at ½",
+      "target": "run length and rates",
+      "measured": {
+        "duration_secs": 1804,
+        "proposals_per_sec": 40.0,
+        "reads_per_sec": 200.0
+      },
+      "pass": false,
+      "note": "NOT an envelope run — this report is a functional load check, not qualification evidence"
+    }
+  ],
+  "verdict": {
+    "all_measured_slos_pass": false,
+    "qualification_evidence": false,
+    "status_vocabulary": "author-run → Implemented at most; Independently verified requires a second person to run and record this"
+  }
+}

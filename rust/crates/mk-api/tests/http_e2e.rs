@@ -2282,6 +2282,36 @@ async fn per_tenant_limits_and_graceful_rejection_above_capacity() {
         StatusCode::SERVICE_UNAVAILABLE,
         "webhooks are never shed"
     );
+    // Stop/revoke controls are never shed or rate-limited: with the replica full
+    // and well past the write budget, suppressions and the tenant kill switch
+    // still reach their handlers.
+    let admin = UserId::new();
+    for _ in 0..5 {
+        let (s, v) = h
+            .call(
+                "POST",
+                "/internal/v1/suppressions",
+                Some(&h.token(admin, &["tenant_admin"])),
+                Some(json!({"channel": "sms", "destination": "+15555550808", "reason": "STOP", "permanent": true, "source": "operator"})),
+            )
+            .await;
+        assert!(
+            s != StatusCode::SERVICE_UNAVAILABLE && s != StatusCode::TOO_MANY_REQUESTS,
+            "suppression shed/limited: {s} {v}"
+        );
+    }
+    let (s, v) = h
+        .call(
+            "POST",
+            "/internal/v1/kill-switch/tenant",
+            Some(&h.token(admin, &["tenant_admin"])),
+            Some(json!({"dispatch_enabled": false})),
+        )
+        .await;
+    assert!(
+        s != StatusCode::SERVICE_UNAVAILABLE && s != StatusCode::TOO_MANY_REQUESTS,
+        "kill switch shed/limited: {s} {v}"
+    );
     drop(held);
     let (s, _) = h
         .call(

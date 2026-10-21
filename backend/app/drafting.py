@@ -41,17 +41,21 @@ CLAIM_MARKERS = re.compile(
     r"results? in \d+|instantly|permanent(ly)?|miracle|detox|collagen|"
     r"acne|eczema|rosacea|psoriasis|melasma|hyperpigmentation|spf\s?\d+|sunscreen|"
     # Regulatory / testing / certification claims.
-    r"fda|approved|certified|(doctor|lab|derm[a-z]*|clinically)[- ]tested|tested|hypoallergenic|"
+    r"fda|(derm[a-z]*|doctor|clinically|lab)[- ]?(approved|cleared|recommended|tested)|recommended by|"
+    r"certified|tested|hypoallergenic|"
     r"non-?comedogenic|"
     # Safety / suitability / composition claims.
-    r"safe (for|on)|all skin types|sensitive skin|gentle enough|natural|organic|vegan|cruelty-?free|"
+    r"safe (for|on|during)|pregnan[a-z]*|all skin types|sensitive skin|gentle enough|"
+    r"(all|100%?|completely|totally)[- ]natural|natural ingredients|is natural|organic|vegan|cruelty-?free|"
     r"(paraben|sulfate|chemical|toxin|fragrance)-?free|non-?toxic|"
     # Comparative / superlative claims.
-    r"better than|(?<!all the )best(?! wishes| regards)|number one|top-?rated|leading|most effective|"
+    r"better than|(?<!all the )best(?!\s*(wishes|regards|,|!|\.|$))|number one|top-?rated|"
+    r"(industry|market)[- ]leading|leading (brand|cream|product|serum)|most effective|"
     r"outperforms?|beats|botox|fillers?|"
     # Efficacy verbs and outcomes.
     r"reduc(e|es|ed|ing)|minimi[sz](e|es|ed|ing)|visibl[ey]|prevent(s|ed|ing)?|protect(s|ed|ing|ion)?|"
-    r"repair(s|ed|ing)?|restor(e|es|ed|ing)|firm(s|ing)?|lift(s|ing)?|tighten(s|ing)?|brighten(s|ing)?|"
+    r"repair(s|ed|ing)?|restor(e|es|ed|ing)|firm(s|ing)?|lifts|lifting|tighten(s|ing)?|brighten(s|ing)?|"
+    r"clears?( up)? (breakouts?|skin|pores|acne)|breakouts?|"
     r"wrinkles?|fine lines|pores|dark spots|sun damage|aging|ageing|younger|overnight|results?)\b"
     r"|#\s?1\b"     # "#1 cream": '#' is not a word char, so outside the \b group
     r"|\d+\s?%",   # percentages are results claims; '%' is not a word char so no trailing \b
@@ -61,9 +65,10 @@ CLAIM_MARKERS = re.compile(
 # prompt injection the model followed, and it misstates who authorised the message
 # (approval and permission live only in the kernel). Refused, review task created.
 CONTROL_LANGUAGE = re.compile(
-    r"\b(pre-?approved|approval (granted|given|confirmed)|approved by|no review|without review|"
+    r"\b(pre-?approved|approval (granted|given|confirmed)|approved by (your|the|an?) (consultant|admin|system|manager)|"
+    r"no review|without review|"
     r"permission\s*[=:]|consent\s*[=:]|system\s*:|assistant\s*:|ignore (all )?(previous|prior|above) instructions|"
-    r"as instructed|instructions? (say|said)|override|admin mode|developer mode)",
+    r"instructions? (say|said)|override|admin mode|developer mode)",
     re.IGNORECASE,
 )
 # Destination-like strings (phone numbers, e-mail addresses, URLs) never belong in relationship text:
@@ -75,6 +80,26 @@ FORBIDDEN_ANYWHERE = re.compile(
     re.IGNORECASE,
 )
 MAX_SMS_CHARS = 480
+
+# Common Cyrillic/Greek letters that render like Latin ones ("FDА" with a Cyrillic А).
+_CONFUSABLES = str.maketrans({
+    "а": "a", "е": "e", "о": "o", "р": "p", "с": "c", "у": "y", "х": "x", "і": "i", "ј": "j", "ѕ": "s",
+    "А": "A", "В": "B", "Е": "E", "К": "K", "М": "M", "Н": "H", "О": "O", "Р": "P", "С": "C", "Т": "T",
+    "Х": "X", "І": "I", "Ј": "J", "Ѕ": "S", "α": "a", "ο": "o", "Α": "A", "Β": "B", "Ε": "E", "Ζ": "Z",
+    "Η": "H", "Ι": "I", "Κ": "K", "Μ": "M", "Ν": "N", "Ο": "O", "Ρ": "P", "Τ": "T", "Υ": "Y", "Χ": "X",
+})
+_SPACED_LETTERS = re.compile(r"\b(?:[A-Za-z][\s.]){2,}[A-Za-z]\b")
+
+
+def screen_view(text: str) -> str:
+    """The text the claim/control/forbidden screens read: NFKC (fullwidth 'ＦＤＡ' → 'FDA'),
+    confusable Cyrillic/Greek letters folded to Latin, zero-width characters removed, and
+    letter-by-letter spellings joined ('F D A', 'F.D.A.' → 'FDA'). The customer still
+    receives the original text; only the screen sees this view."""
+    import unicodedata
+    t = unicodedata.normalize("NFKC", text).translate(_CONFUSABLES)
+    t = re.sub(r"[\u200b-\u200f\u2060\ufeff\u00ad]", "", t)
+    return _SPACED_LETTERS.sub(lambda m: re.sub(r"[\s.]", "", m.group(0)), t)
 
 
 @dataclass
@@ -192,13 +217,14 @@ def assemble(db: Session, *, tenant_id: str, user_id: str, customer: Customer, c
         return refuse("claims_used does not match placeholders in the text")
     # Relationship text (placeholders removed) may not contain claim-like language.
     rel_only = PLACEHOLDER.sub("", rel)
-    if CLAIM_MARKERS.search(rel_only):
-        m = CLAIM_MARKERS.search(rel_only).group(0)
+    view = screen_view(rel_only)
+    if CLAIM_MARKERS.search(view):
+        m = CLAIM_MARKERS.search(view).group(0)
         return refuse(f"relationship text contains product-claim language ('{m}') outside an approved claim")
-    if FORBIDDEN_ANYWHERE.search(rel):
-        return refuse(f"forbidden language: '{FORBIDDEN_ANYWHERE.search(rel).group(0)}'", "forbidden_language")
-    if CONTROL_LANGUAGE.search(rel):
-        return refuse(f"control-plane language in a customer message: '{CONTROL_LANGUAGE.search(rel).group(0)}'",
+    if FORBIDDEN_ANYWHERE.search(screen_view(rel)):
+        return refuse(f"forbidden language: '{FORBIDDEN_ANYWHERE.search(screen_view(rel)).group(0)}'", "forbidden_language")
+    if CONTROL_LANGUAGE.search(screen_view(rel)):
+        return refuse(f"control-plane language in a customer message: '{CONTROL_LANGUAGE.search(screen_view(rel)).group(0)}'",
                       "control_language")
     if DESTINATION_LIKE.search(rel_only):
         return refuse("relationship text contains a phone number, address or link; destinations are never chosen in text",
@@ -240,7 +266,10 @@ def consultant_edit(db: Session, *, tenant_id: str, user_id: str, prior: DraftVe
     stripped = new_text
     for c in candidates:
         stripped = stripped.replace(c.approved_text, "")
-    if CLAIM_MARKERS.search(stripped) or FORBIDDEN_ANYWHERE.search(new_text) or CONTROL_LANGUAGE.search(stripped):
+    if CONTROL_LANGUAGE.search(screen_view(stripped)):
+        raise HTTPException(422, {"code": "CONTROL_LANGUAGE",
+                                  "detail": "edited text contains approval/permission/system language that does not belong in a customer message"})
+    if CLAIM_MARKERS.search(screen_view(stripped)) or FORBIDDEN_ANYWHERE.search(screen_view(new_text)):
         raise HTTPException(422, {"code": "UNAPPROVED_CLAIM_LANGUAGE",
                                   "detail": "edited text contains product-claim or forbidden language that is not an approved claim"})
     if len(new_text) > MAX_SMS_CHARS:

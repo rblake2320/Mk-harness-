@@ -75,6 +75,45 @@ pub async fn dispatch_one(
 
     // ---- Phase 1: lock, lease, recheck, consume, mark dispatching. --------
     let mut tx = store.begin(tenant).await?;
+    // Lock order (deadlock freedom, C6): contact+channel lock, then the control
+    // path, THEN the action row — the same order an inbound STOP and a recorded
+    // suppression use (control path, then action rows). Read the immutable
+    // routing facts unlocked first, take the advisory locks, then lock the row.
+    let pre = match actions::get(&mut tx, action_id).await {
+        Ok(a) => a,
+        Err(StoreError::NotFound) => {
+            return Ok(DispatchOutcome::Skipped {
+                ack: true,
+                reason: "unknown_action",
+            });
+        }
+        Err(e) => return Err(e.into()),
+    };
+    if pre.state != ActionState::Queued {
+        return Ok(DispatchOutcome::Skipped {
+            ack: true,
+            reason: "not_queued",
+        });
+    }
+    let pre_fps = pre.destination_fingerprints_set();
+    let outreach_path = match (pre.channel, pre_fps.as_ref()) {
+        (Some(ch), Some(dest))
+            if pre.request.action_kind.is_outreach()
+                && pre.request.resource.id.parse::<ContactId>().is_ok() =>
+        {
+            // Serialize concurrent dispatches to the same contact+channel so
+            // the frequency count below is exact, not a racy snapshot.
+            actions::lock_contact_channel(&mut tx, &pre.request.resource.id, ch).await?;
+            // C6: the one control path shared with suppression recording. An
+            // opt-out committed before this lock is granted is visible below;
+            // one that arrives after waits for this transaction to finish and
+            // then finds the action already past authorization (non-retractable
+            // once submitted) or still cancellable (queued) — never both.
+            messaging::lock_control_path(&mut tx, ch.as_str(), dest).await?;
+            true
+        }
+        _ => false,
+    };
     let action = match actions::get_for_update(&mut tx, action_id).await {
         Ok(a) => a,
         Err(StoreError::NotFound) => {
@@ -112,15 +151,13 @@ pub async fn dispatch_one(
         action.request.resource.id.parse::<ContactId>(),
     ) {
         (Some(ch), Some(dest), Ok(contact)) if action.request.action_kind.is_outreach() => {
-            // Serialize concurrent dispatches to the same contact+channel so
-            // the frequency count below is exact, not a racy snapshot.
-            actions::lock_contact_channel(&mut tx, &action.request.resource.id, ch).await?;
-            // C6: the one control path shared with suppression recording. An
-            // opt-out committed before this lock is granted is visible below;
-            // one that arrives after waits for this transaction to finish and
-            // then finds the action already past authorization (non-retractable
-            // once submitted) or still cancellable (queued) — never both.
-            messaging::lock_control_path(&mut tx, ch.as_str(), dest).await?;
+            // Locks taken above, before the row lock; routing facts are immutable.
+            debug_assert!(outreach_path);
+            if !outreach_path || action.destination_fingerprints != pre.destination_fingerprints {
+                return Err(DispatchError::Store(StoreError::Conflict(
+                    "action routing changed between read and lock",
+                )));
+            }
             (
                 consent::permissions_for(&mut tx, contact, ch, Some(dest)).await?,
                 consent::suppressions_for(&mut tx, ch, dest).await?,
