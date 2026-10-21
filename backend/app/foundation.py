@@ -62,9 +62,16 @@ def normalize(channel: str, raw: str) -> str:
 
 
 def fingerprint(tenant_id: str, channel: str, normalized: str) -> str:
-    key = get_settings().master_key_bytes
+    """Fingerprint under the CURRENT key (first of FINGERPRINT_KEYS; default the master key)."""
+    return fingerprints_all(tenant_id, channel, normalized)[0]
+
+
+def fingerprints_all(tenant_id: str, channel: str, normalized: str) -> list[str]:
+    """Fingerprints under every configured key, current first. Lookups match any of
+    them, so rows written before a key rotation keep matching until re-keyed
+    (`python -m app.tools.refingerprint`)."""
     msg = f"{tenant_uuid(tenant_id)}|{channel}|{normalized}".encode()
-    return hmac.new(key, msg, hashlib.sha256).hexdigest()
+    return [hmac.new(key, msg, hashlib.sha256).hexdigest() for _, key in get_settings().fingerprint_key_list]
 
 
 def _aad(tenant_id: str, kind: str) -> str:
@@ -103,12 +110,13 @@ def add_destination(db: Session, tenant_id: str, user_id: str, customer: Custome
                     raw: str, *, source: str, source_ref: str = "", label: str = "",
                     is_primary: bool = True) -> CustomerDestination:
     norm = normalize(channel, raw)
-    fp = fingerprint(tenant_id, channel, norm)
+    fps = fingerprints_all(tenant_id, channel, norm)
+    fp = fps[0]
     existing = db.scalar(select(CustomerDestination).where(
         CustomerDestination.tenant_id == tenant_id,
         CustomerDestination.customer_id == customer.id,
         CustomerDestination.channel == channel,
-        CustomerDestination.fingerprint == fp,
+        CustomerDestination.fingerprint.in_(fps),
         CustomerDestination.retired_at.is_(None)))
     if existing:
         return existing

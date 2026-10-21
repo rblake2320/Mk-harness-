@@ -10,6 +10,10 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./mkharness.db"
     jwt_secret: str = ""
     master_key: str = ""  # base64-encoded 32 bytes for AES-256-GCM envelope encryption
+    # Destination-fingerprint keys, `kid=base64(32 bytes)[,kid=...]`, FIRST = current.
+    # Must equal the kernel's MK_FINGERPRINT_KEYS so inbound tags match. Empty = the
+    # master key as `m0` (pre-rotation behaviour). `m0=master` names the master key.
+    fingerprint_keys: str = ""
     cors_origins: str = "http://localhost:5173"
 
     anthropic_api_key: str = ""
@@ -62,6 +66,24 @@ class Settings(BaseSettings):
             return {str(k): str(v) for k, v in data.items()}
         except (ValueError, AttributeError):
             return {}
+
+    @property
+    def fingerprint_key_list(self) -> list[tuple[str, bytes]]:
+        import re
+        spec = self.fingerprint_keys.strip()
+        if not spec:
+            return [("m0", self.master_key_bytes)]
+        out: list[tuple[str, bytes]] = []
+        for part in (p.strip() for p in spec.split(",") if p.strip()):
+            kid, sep, val = part.partition("=")
+            kid = kid.strip()
+            if not sep or not re.fullmatch(r"[a-z0-9_-]{1,16}", kid) or any(k == kid for k, _ in out):
+                raise RuntimeError("FINGERPRINT_KEYS entries must be unique kid=base64 with kid [a-z0-9_-]{1,16}")
+            raw = self.master_key_bytes if val.strip() == "master" else base64.b64decode(val.strip(), validate=True)
+            if len(raw) != 32:
+                raise RuntimeError("FINGERPRINT_KEYS keys must decode to exactly 32 bytes")
+            out.append((kid, raw))
+        return out
 
     @property
     def master_key_bytes(self) -> bytes:

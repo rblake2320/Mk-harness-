@@ -28,7 +28,7 @@ from sqlalchemy.orm import Session
 from ..db import get_db
 from ..foundation import (
     CHANNELS, CONSENT_SOURCES, EVIDENCE_TYPES, PURPOSES, active_suppressions, add_destination,
-    audit, csv_cell, destination_value, fingerprint, normalize, own_customer, preference_for,
+    audit, csv_cell, destination_value, fingerprints_all, normalize, own_customer, preference_for,
     seal, utcnow, validate_timezone,
 )
 from ..kernel import KernelClient, KernelUnavailable, get_kernel_client
@@ -341,16 +341,18 @@ def import_preview(body: ImportPreviewIn, user: User = Depends(check_rate), db: 
                 raise HTTPException(422, "name is required")
             if phone_raw:
                 norm = normalize("sms", phone_raw)
-                fp = fingerprint(user.tenant_id, "sms", norm)
+                fps = fingerprints_all(user.tenant_id, "sms", norm)
+                fp = fps[0]
                 row.phone_enc, row.phone_fingerprint = seal(user.tenant_id, "destination", norm), fp
-                if fp in known_fps or fp in seen_in_file:
+                if known_fps.intersection(fps) or fp in seen_in_file:
                     row.status = "duplicate"
                 seen_in_file.add(fp)
             if email_raw:
                 enorm = normalize("email", email_raw)
-                efp = fingerprint(user.tenant_id, "email", enorm)
+                efps = fingerprints_all(user.tenant_id, "email", enorm)
+                efp = efps[0]
                 row.email_enc, row.email_fingerprint = seal(user.tenant_id, "destination", enorm), efp
-                if efp in known_fps or efp in seen_in_file:
+                if known_fps.intersection(efps) or efp in seen_in_file:
                     row.status = "duplicate"
                 seen_in_file.add(efp)
             if not phone_raw and not email_raw:

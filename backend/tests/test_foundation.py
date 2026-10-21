@@ -393,3 +393,64 @@ def test_import_keeps_notes_and_dedupes_email_only_rows(client, kernel_env):
     assert customers["A"]["notes"] == "likes matte"
     assert "A again" not in customers and "E" not in customers
     assert set(customers) == {"Existing", "A", "B"}
+
+
+def test_app_fingerprint_key_rotation_never_orphans_suppressions(client, kernel_env, monkeypatch):
+    """S10 (application side): a suppression recorded under the master-key fingerprint
+    keeps blocking after FINGERPRINT_KEYS makes a new key current; removing the old key
+    before re-keying is detected by `status`; after `rekey` the new key alone matches;
+    re-adding the number never creates a second, unsuppressed destination."""
+    import base64
+    from app.config import get_settings
+    from app.db import get_db
+    from app.tools import refingerprint as rf
+    h = _user(client)
+    cid, did, fp0 = _customer(client, h, phone="+15555550177")
+    with kernel_ok():
+        s = client.post("/api/suppressions", json={"destination_id": did, "reason": "STOP", "source": "sms_reply"}, headers=h)
+        assert s.status_code == 201
+    k2 = base64.b64encode(bytes([7]) * 32).decode()
+    # Phase 2: k2 current, m0 still listed.
+    monkeypatch.setenv("FINGERPRINT_KEYS", f"k2={k2},m0=master"); get_settings.cache_clear()
+    again = client.post(f"/api/customers/{cid}/destinations", json={"channel": "sms", "value": "(555) 555-0177"}, headers=h)
+    assert again.json()["id"] == did, "old-key row still found: no duplicate destination"
+    dests = client.get(f"/api/customers/{cid}/destinations", headers=h).json()
+    assert dests[0]["suppressed"] is True
+    db = next(get_db())
+    st = rf.status(db)
+    assert st.destinations_stale >= 1 and st.suppressions_stale >= 1 and not st.clean()
+    # Removing m0 before re-keying would let the same number be re-added as a NEW,
+    # unsuppressed destination (dedupe would no longer find the old-key row): status
+    # must refuse to call that state clean.
+    monkeypatch.setenv("FINGERPRINT_KEYS", f"k2={k2}"); get_settings.cache_clear()
+    db = next(get_db())
+    st = rf.status(db)
+    assert not st.clean() and any("matches no configured key" in n for n in st.notes), st
+    # Re-key with both keys listed, then k2 alone.
+    monkeypatch.setenv("FINGERPRINT_KEYS", f"k2={k2},m0=master"); get_settings.cache_clear()
+    db = next(get_db())
+    rep = rf.rekey(db)
+    assert rep.updated >= 2 and rep.suppressions_unmapped == 0, rep
+    monkeypatch.setenv("FINGERPRINT_KEYS", f"k2={k2}"); get_settings.cache_clear()
+    db = next(get_db())
+    assert rf.status(db).clean(), rf.status(db)
+    dests = client.get(f"/api/customers/{cid}/destinations", headers=h).json()
+    assert dests[0]["suppressed"] is True and dests[0]["fingerprint"] != fp0, dests
+    again = client.post(f"/api/customers/{cid}/destinations", json={"channel": "sms", "value": "555-555-0177"}, headers=h)
+    assert again.json()["id"] == did, "after rekey the new key alone finds the row"
+    with kernel_ok():
+        c = client.post(f"/api/customers/{cid}/consent", json={**CONSENT, "destination_id": did}, headers=h)
+    assert c.status_code == 409 and c.json()["detail"]["code"] == "SUPPRESSED"
+    monkeypatch.delenv("FINGERPRINT_KEYS"); get_settings.cache_clear()
+
+
+def test_fingerprint_keys_config_rejects_nonsense(monkeypatch):
+    from app.config import get_settings
+    for bad in ("k2", "K2=master", "k2=master,k2=master", "k2=AAAA", "k2=!!!"):
+        monkeypatch.setenv("FINGERPRINT_KEYS", bad); get_settings.cache_clear()
+        try:
+            get_settings().fingerprint_key_list
+        except Exception:  # noqa: BLE001
+            continue
+        raise AssertionError(f"accepted {bad!r}")
+    monkeypatch.delenv("FINGERPRINT_KEYS"); get_settings.cache_clear()
