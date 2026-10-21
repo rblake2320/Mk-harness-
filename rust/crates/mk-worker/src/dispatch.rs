@@ -105,9 +105,10 @@ pub async fn dispatch_one(
 
     let (tenant_policy, tz_offset) = policy::load(&mut tx).await?;
     let global = policy::global_dispatch_enabled(store.pool()).await?;
+    let action_fps = action.destination_fingerprints_set();
     let (permissions, suppressions, sends_last_24h) = match (
         action.channel,
-        action.destination_hash.as_deref(),
+        action_fps.as_ref(),
         action.request.resource.id.parse::<ContactId>(),
     ) {
         (Some(ch), Some(dest), Ok(contact)) if action.request.action_kind.is_outreach() => {
@@ -121,7 +122,7 @@ pub async fn dispatch_one(
             // once submitted) or still cancellable (queued) — never both.
             messaging::lock_control_path(&mut tx, ch.as_str(), dest).await?;
             (
-                consent::permissions_for(&mut tx, contact, ch).await?,
+                consent::permissions_for(&mut tx, contact, ch, Some(dest)).await?,
                 consent::suppressions_for(&mut tx, ch, dest).await?,
                 actions::sends_last_24h(&mut tx, &action.request.resource.id, ch, now).await?,
             )
@@ -374,13 +375,18 @@ pub async fn dispatch_one(
             // carrier to stop. Record the suppression here, under the control
             // path, so no further proposal to this destination is authorized.
             if e.code == "provider_opt_out"
-                && let (Some(ch), Some(dest)) = (action.channel, action.destination_hash.as_deref())
+                && let (Some(ch), Some(dest)) =
+                    (action.channel, action.destination_fingerprints_set())
             {
-                messaging::lock_control_path(&mut tx, ch.as_str(), dest).await?;
+                messaging::lock_control_path(&mut tx, ch.as_str(), &dest).await?;
+                // No raw destination is sealed here: `fingerprint-rekey`
+                // re-derives this row's new tag from the action's canonical
+                // `to`, which shares its fingerprints.
                 consent::add_suppression(
                     &mut tx,
                     Some(ch),
-                    Some(dest),
+                    Some(&dest),
+                    None,
                     "destination",
                     "provider_opt_out",
                     true,

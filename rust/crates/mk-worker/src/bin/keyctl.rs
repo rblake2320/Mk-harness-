@@ -5,10 +5,15 @@
 //!   mk-keyctl rotate [note]               new DEK version wrapped by MK_KEK → active; previous → retiring
 //!   mk-keyctl reencrypt                   re-seal every row under the current version (resumable)
 //!   mk-keyctl retire <version>            retire a version once no row uses it
+//!   mk-keyctl fingerprint-status          per table: rows lacking the current fingerprint kid / orphaned
+//!                                         (exit 1 if any — do not remove an old MK_FINGERPRINT_KEYS entry)
+//!   mk-keyctl fingerprint-rekey           add every configured fingerprint key's tag to every row
+//!   mk-keyctl fingerprint-prune <kid>     strip a removed kid's tags; hash columns → current kid
 //!
 //! Env: MK_DATABASE_URL (owner), MK_MASTER_KEY (fingerprint key / legacy v0),
 //! MK_KEK (base64 32 bytes), MK_KEK_ID (default kek-1), MK_LEGACY_SEAL_RETIRED=1
-//! once version 0 has no rows (status reports it).
+//! once version 0 has no rows (status reports it). MK_FINGERPRINT_KEYS
+//! (`kid=base64,...`, first = current; default `m0` = MK_MASTER_KEY).
 use mk_crypto::{LEGACY_VERSION, MasterKey};
 use mk_store::{Store, keys};
 
@@ -97,8 +102,59 @@ async fn main() -> anyhow::Result<()> {
             keys::retire(pool, &ring, v, chrono::Utc::now()).await?;
             println!("retired version {v}");
         }
+        Some("fingerprint-status") => {
+            let fk = mk_store::fingerprint::FingerprintKeys::from_env(&master)?;
+            println!(
+                "fingerprint current_kid={} configured={:?}",
+                fk.current_kid(),
+                fk.kids()
+            );
+            let mut blocking = 0u64;
+            for t in mk_store::fingerprint::status(pool, &fk, None).await? {
+                println!(
+                    "{}: lacking_current={} orphaned={}",
+                    t.table, t.lacking_current, t.orphaned
+                );
+                blocking += t.lacking_current + t.orphaned;
+            }
+            if blocking > 0 {
+                println!(
+                    "NOT SAFE to remove any fingerprint key: run `fingerprint-rekey`; orphaned rows mean a key was removed early — restore it"
+                );
+                std::process::exit(1);
+            }
+            println!("all destination rows carry the current kid; older kids may be removed");
+        }
+        Some("fingerprint-rekey") => {
+            let fk = mk_store::fingerprint::FingerprintKeys::from_env(&master)?;
+            let ring = keys::keyring_from_env(pool, &master).await?;
+            let rep = mk_store::fingerprint::rekey(pool, &ring, &fk, None).await?;
+            println!(
+                "fingerprint rekey: updated={} unresolved={} (unresolved rows keep blocking key removal)",
+                rep.updated, rep.unresolved
+            );
+            for t in mk_store::fingerprint::status(pool, &fk, None).await? {
+                println!(
+                    "{}: lacking_current={} orphaned={}",
+                    t.table, t.lacking_current, t.orphaned
+                );
+            }
+        }
+        Some("fingerprint-prune") => {
+            let kid = args
+                .get(2)
+                .ok_or_else(|| anyhow::anyhow!("usage: fingerprint-prune <kid>"))?;
+            let fk = mk_store::fingerprint::FingerprintKeys::from_env(&master)?;
+            let n = mk_store::fingerprint::prune(pool, &fk, kid, None).await?;
+            println!(
+                "pruned kid {kid}: {n} rows rewritten under {}",
+                fk.current_kid()
+            );
+        }
         _ => {
-            eprintln!("usage: mk-keyctl status | rotate [note] | reencrypt | retire <version>");
+            eprintln!(
+                "usage: mk-keyctl status | rotate [note] | reencrypt | retire <version> | fingerprint-status | fingerprint-rekey | fingerprint-prune <kid>"
+            );
             std::process::exit(2);
         }
     }

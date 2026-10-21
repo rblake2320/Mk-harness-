@@ -131,7 +131,8 @@ async fn queued_outreach(w: &World) -> mk_domain::ActionId {
         now - chrono::Duration::hours(1),
         now + chrono::Duration::days(1),
         w.user,
-        "dest-hash",
+        &mk_store::fingerprint::Fingerprints::legacy("dest-hash"),
+        None,
         ACTOR,
         now,
     )
@@ -141,7 +142,7 @@ async fn queued_outreach(w: &World) -> mk_domain::ActionId {
         &mut tx,
         &req,
         Some(Channel::Sms),
-        Some("dest-hash"),
+        Some(&mk_store::fingerprint::Fingerprints::legacy("dest-hash")),
         ACTOR,
         now,
     )
@@ -285,7 +286,7 @@ async fn revocation_after_queue_suppresses_before_dispatch() {
         .begin(w.tenant)
         .await
         .unwrap_or_else(|e| panic!("{e:?}"));
-    let perms = consent::permissions_for(&mut tx, w.contact, Channel::Sms)
+    let perms = consent::permissions_for(&mut tx, w.contact, Channel::Sms, None)
         .await
         .unwrap_or_default();
     assert_eq!(perms.len(), 1);
@@ -339,7 +340,8 @@ async fn suppression_after_approval_and_kill_switch_block_dispatch() {
     consent::add_suppression(
         &mut tx,
         Some(Channel::Sms),
-        Some("dest-hash"),
+        Some(&mk_store::fingerprint::Fingerprints::legacy("dest-hash")),
+        None,
         "destination",
         "opt_out",
         true,

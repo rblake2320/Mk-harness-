@@ -12,7 +12,7 @@ use uuid::Uuid;
 
 use crate::auth::Principal;
 use crate::error::ApiError;
-use crate::routes::{actor_of, destination_hash};
+use crate::routes::actor_of;
 use crate::state::AppState;
 
 fn human_only(p: &Principal, headers: &HeaderMap) -> Result<(), ApiError> {
@@ -86,7 +86,8 @@ pub async fn grant_permission(
         b.granted_at,
         b.expires_at,
         p.user,
-        &destination_hash(&st.master, p.tenant, b.channel, &b.destination),
+        &st.fingerprints.compute(p.tenant, b.channel, &b.destination),
+        Some((&st.keyring, b.destination.as_str())),
         actor,
         now,
     )
@@ -204,16 +205,34 @@ pub async fn add_suppression(
     let now = Utc::now();
     let actor_id = p.user.to_string();
     let actor = actor_of(&p, &actor_id);
-    let dest_hash = match (&b.channel, &b.destination, &b.destination_hash) {
-        (Some(c), Some(d), _) => Some(destination_hash(&st.master, p.tenant, *c, d)),
-        (Some(_), None, Some(h)) => Some(h.clone()),
-        _ => None,
-    };
     let mut tx = st
         .store
         .begin(p.tenant)
         .await
         .map_err(|e| ApiError::from(e).with_request_id(&headers))?;
+    let dest_hash = match (&b.channel, &b.destination, &b.destination_hash) {
+        (Some(c), Some(d), _) => Some(st.fingerprints.compute(p.tenant, *c, d)),
+        // Hash-only input: adopt every tag already stored for that hash so the
+        // suppression matches across key versions; otherwise tag it current.
+        (Some(_), None, Some(h)) => {
+            let tags = mk_store::fingerprint::tags_for_hash(&mut tx, h)
+                .await
+                .map_err(|e| ApiError::from(e).with_request_id(&headers))?;
+            Some(if tags.is_empty() {
+                st.fingerprints.tag_current(h)
+            } else {
+                mk_store::fingerprint::Fingerprints {
+                    primary: h.clone(),
+                    tagged: tags,
+                }
+            })
+        }
+        _ => None,
+    };
+    let seal_raw = match (&dest_hash, &b.destination) {
+        (Some(_), Some(d)) => Some((&st.keyring, d.as_str())),
+        _ => None,
+    };
     let scope = if dest_hash.is_some() {
         "destination"
     } else if b.channel.is_some() {
@@ -224,7 +243,8 @@ pub async fn add_suppression(
     consent::add_suppression(
         &mut tx,
         b.channel,
-        dest_hash.as_deref(),
+        dest_hash.as_ref(),
+        seal_raw,
         scope,
         &b.reason,
         b.permanent,
@@ -235,7 +255,7 @@ pub async fn add_suppression(
     .await
     .map_err(|e| ApiError::from(e).with_request_id(&headers))?;
     let mut n = 0;
-    for id in actions::pending_for_destination(&mut tx, b.channel, dest_hash.as_deref())
+    for id in actions::pending_for_destination(&mut tx, b.channel, dest_hash.as_ref())
         .await
         .map_err(|e| ApiError::from(e).with_request_id(&headers))?
     {

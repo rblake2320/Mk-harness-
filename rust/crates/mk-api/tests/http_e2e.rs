@@ -185,6 +185,7 @@ async fn harness() -> Option<Harness> {
         store,
         verifier,
         keyring: mk_crypto::Keyring::legacy(&master),
+        fingerprints: Arc::new(mk_store::fingerprint::FingerprintKeys::from_master(&master)),
         master,
         tools: Arc::new(ToolAllowlist::v1()),
         metrics: Arc::new(Metrics::new()),
@@ -1910,12 +1911,10 @@ async fn inbound_stop_suppresses_cancels_and_dedupes_and_the_control_path_is_ser
         "+15555550199",
     )
     .await;
-    let dest = mk_api::routes::destination_hash(
-        &h.state.master,
-        h.tenant,
-        mk_domain::Channel::Sms,
-        "+15555550199",
-    );
+    let dest = h
+        .state
+        .fingerprints
+        .compute(h.tenant, mk_domain::Channel::Sms, "+15555550199");
     // Hold the control path in an outside transaction (as a dispatch in phase 1 would),
     // fire the inbound STOP concurrently (it must block), then release.
     let store = h.state.store.clone();

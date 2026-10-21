@@ -13,13 +13,41 @@ use uuid::Uuid;
 use crate::actions::Actor;
 use crate::audit::append_event;
 use crate::error::StoreError;
+use crate::fingerprint::{Fingerprints, destination_aad};
 use crate::tx::TenantTx;
+use mk_crypto::Keyring;
+use secrecy::SecretString;
+
+/// Raw destination plus the keyring that seals it into the row, so a later
+/// fingerprint-key rotation can re-derive the new key's tag in the kernel.
+pub type SealWith<'a> = Option<(&'a Keyring, &'a str)>;
+
+fn seal_destination(
+    seal: SealWith<'_>,
+    table: &str,
+    tenant: mk_domain::TenantId,
+    id: Uuid,
+) -> Result<Option<Vec<u8>>, StoreError> {
+    seal.map(|(ring, raw)| {
+        ring.seal(
+            &destination_aad(table, tenant, id),
+            &SecretString::from(raw.to_owned()),
+        )
+        .map_err(|_| StoreError::Crypto)
+    })
+    .transpose()
+}
+
+fn overlaps(row: &[String], fps: &Fingerprints) -> bool {
+    row.iter().any(|t| fps.tagged.contains(t))
+}
 
 fn channel_from(s: &str) -> Result<Channel, StoreError> {
     serde_json::from_value(serde_json::Value::String(s.to_owned()))
         .map_err(|_| StoreError::Corrupt("channel"))
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn grant_permission(
     tx: &mut TenantTx<'_>,
     contact_id: ContactId,
@@ -30,14 +58,17 @@ pub async fn grant_permission(
     granted_at: DateTime<Utc>,
     expires_at: DateTime<Utc>,
     recorded_by: UserId,
-    destination_hash: &str,
+    destination: &Fingerprints,
+    seal: SealWith<'_>,
     actor: Actor<'_>,
     now: DateTime<Utc>,
 ) -> Result<Uuid, StoreError> {
     let id = Uuid::now_v7();
+    let sealed = seal_destination(seal, "contact_permissions", tx.tenant(), id)?;
     sqlx::query(
         "INSERT INTO kernel.contact_permissions (permission_id, tenant_id, contact_id, channel, status, scope, source,
-           proof_digest, granted_at, expires_at, recorded_by, destination_hash) VALUES ($1,$2,$3,$4,'granted',$5,$6,$7,$8,$9,$10,$11)",
+           proof_digest, granted_at, expires_at, recorded_by, destination_hash, destination_fingerprints, destination_sealed)
+         VALUES ($1,$2,$3,$4,'granted',$5,$6,$7,$8,$9,$10,$11,$12,$13)",
     )
     .bind(id)
     .bind(tx.tenant().0)
@@ -49,7 +80,9 @@ pub async fn grant_permission(
     .bind(granted_at)
     .bind(expires_at)
     .bind(recorded_by.0)
-    .bind(destination_hash)
+    .bind(&destination.primary)
+    .bind(&destination.tagged)
+    .bind(sealed)
     .execute(tx.conn())
     .await?;
     append_event(
@@ -106,14 +139,19 @@ pub async fn revoke_permission(
     Ok((contact, channel))
 }
 
+/// Permissions for (contact, channel). A row whose fingerprints overlap
+/// `destination` is reported with `destination.primary` as its hash, so the
+/// policy's equality check is key-version independent; any other row keeps
+/// its stored hash (and therefore fails the destination match — fail closed).
 pub async fn permissions_for(
     tx: &mut TenantTx<'_>,
     contact_id: ContactId,
     channel: Channel,
+    destination: Option<&Fingerprints>,
 ) -> Result<Vec<ContactPermissionFact>, StoreError> {
     let tenant = tx.tenant();
     let rows = sqlx::query(
-        "SELECT status, scope, granted_at, expires_at, revoked_at, destination_hash FROM kernel.contact_permissions
+        "SELECT status, scope, granted_at, expires_at, revoked_at, destination_hash, destination_fingerprints FROM kernel.contact_permissions
          WHERE tenant_id = $1 AND contact_id = $2 AND channel = $3",
     )
     .bind(tenant.0)
@@ -138,7 +176,16 @@ pub async fn permissions_for(
                 granted_at: r.try_get("granted_at")?,
                 expires_at: r.try_get("expires_at")?,
                 revoked_at: r.try_get("revoked_at")?,
-                destination_hash: r.try_get("destination_hash")?,
+                destination_hash: {
+                    let stored: Option<String> = r.try_get("destination_hash")?;
+                    let tags: Vec<String> = r.try_get("destination_fingerprints")?;
+                    match destination {
+                        Some(fps) if stored.is_some() && overlaps(&tags, fps) => {
+                            Some(fps.primary.clone())
+                        }
+                        _ => stored,
+                    }
+                },
             })
         })
         .collect()
@@ -147,7 +194,8 @@ pub async fn permissions_for(
 pub async fn add_suppression(
     tx: &mut TenantTx<'_>,
     channel: Option<Channel>,
-    destination_hash: Option<&str>,
+    destination: Option<&Fingerprints>,
+    seal: SealWith<'_>,
     scope: &str,
     reason: &str,
     permanent: bool,
@@ -157,23 +205,31 @@ pub async fn add_suppression(
 ) -> Result<Uuid, StoreError> {
     // C6: suppression and dispatch authorization share one serialized control
     // path per (tenant, channel, destination). Re-entrant within a session.
-    if let (Some(ch), Some(d)) = (channel, destination_hash) {
+    if let (Some(ch), Some(d)) = (channel, destination) {
         crate::messaging::lock_control_path(tx, ch.as_str(), d).await?;
     }
     let id = Uuid::now_v7();
+    let sealed = if destination.is_some() {
+        seal_destination(seal, "suppressions", tx.tenant(), id)?
+    } else {
+        None
+    };
     sqlx::query(
-        "INSERT INTO kernel.suppressions (suppression_id, tenant_id, normalized_destination_hash, channel, scope, reason, permanent, created_at, source)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)",
+        "INSERT INTO kernel.suppressions (suppression_id, tenant_id, normalized_destination_hash, channel, scope, reason, permanent, created_at, source,
+           destination_fingerprints, destination_sealed)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)",
     )
     .bind(id)
     .bind(tx.tenant().0)
-    .bind(destination_hash)
+    .bind(destination.map(|d| d.primary.as_str()))
     .bind(channel.map(Channel::as_str))
     .bind(scope)
     .bind(reason)
     .bind(permanent)
     .bind(now)
     .bind(source)
+    .bind(destination.map_or_else(Vec::new, |d| d.tagged.clone()))
+    .bind(sealed)
     .execute(tx.conn())
     .await?;
     append_event(
@@ -185,7 +241,7 @@ pub async fn add_suppression(
             actor_id: actor.actor_id,
             action_id: None,
             event_type: EventType::SuppressionAdded,
-            payload_redacted: json!({"suppression_id": id, "channel": channel, "destination_scoped": destination_hash.is_some(), "permanent": permanent, "reason": reason}),
+            payload_redacted: json!({"suppression_id": id, "channel": channel, "destination_scoped": destination.is_some(), "permanent": permanent, "reason": reason}),
             trace_id: actor.trace_id,
             policy_version: actor.policy_version,
         },
@@ -242,21 +298,24 @@ pub async fn lift_suppression(
     Ok(())
 }
 
-/// Active suppressions that could apply to a channel/destination.
+/// Suppressions that could apply to a channel/destination: channel-wide rows
+/// and rows whose fingerprints overlap the caller's set under any key. A
+/// destination-scoped match is reported with `destination.primary` as its
+/// hash so the policy's equality check holds across key versions.
 pub async fn suppressions_for(
     tx: &mut TenantTx<'_>,
     channel: Channel,
-    destination_hash: &str,
+    destination: &Fingerprints,
 ) -> Result<Vec<SuppressionFact>, StoreError> {
     let tenant = tx.tenant();
     let rows = sqlx::query(
         "SELECT channel, normalized_destination_hash, permanent, created_at, lifted_at FROM kernel.suppressions
          WHERE tenant_id = $1 AND (channel IS NULL OR channel = $2)
-           AND (normalized_destination_hash IS NULL OR normalized_destination_hash = $3)",
+           AND (normalized_destination_hash IS NULL OR destination_fingerprints && $3::text[])",
     )
     .bind(tenant.0)
     .bind(channel.as_str())
-    .bind(destination_hash)
+    .bind(&destination.tagged)
     .fetch_all(tx.conn())
     .await?;
     rows.into_iter()
@@ -267,7 +326,9 @@ pub async fn suppressions_for(
                     .try_get::<Option<String>, _>("channel")?
                     .map(|c| channel_from(&c))
                     .transpose()?,
-                destination_hash: r.try_get("normalized_destination_hash")?,
+                destination_hash: r
+                    .try_get::<Option<String>, _>("normalized_destination_hash")?
+                    .map(|_| destination.primary.clone()),
                 permanent: r.try_get("permanent")?,
                 created_at: r.try_get("created_at")?,
                 lifted_at: r.try_get("lifted_at")?,

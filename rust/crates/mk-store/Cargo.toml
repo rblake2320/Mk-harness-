@@ -27,6 +27,9 @@ thiserror = { workspace = true }
 secrecy = { workspace = true }
 zeroize = { workspace = true }
 tracing = { workspace = true }
+hmac = { workspace = true }
+sha2 = { workspace = true }
+hex = { workspace = true }
 
 [dev-dependencies]
 mk-testkit = { workspace = true }

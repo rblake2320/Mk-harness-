@@ -25,7 +25,6 @@ use uuid::Uuid;
 
 use crate::auth::Principal;
 use crate::error::ApiError;
-use crate::routes::destination_hash;
 use crate::state::AppState;
 
 const TWIML_EMPTY: &str = r#"<?xml version="1.0" encoding="UTF-8"?><Response></Response>"#;
@@ -369,7 +368,9 @@ pub async fn twilio_inbound(
     }
     let now = Utc::now();
     let raw_digest = Digest::of(&body);
-    let dest = destination_hash(&st.master, sender.tenant_id, Channel::Sms, &from);
+    let dest = st
+        .fingerprints
+        .compute(sender.tenant_id, Channel::Sms, &from);
     let signal = detect_opt_out(&text);
     let (signal_s, disposition) = match signal {
         OptOutSignal::Explicit => ("explicit", "suppressed"),
@@ -394,6 +395,7 @@ pub async fn twilio_inbound(
         &message_sid,
         sender_identity_id,
         &dest,
+        &from,
         None,
         &SecretString::from(text.clone()),
         &raw_digest,
@@ -436,6 +438,7 @@ pub async fn twilio_inbound(
                 &mut tx,
                 Some(Channel::Sms),
                 Some(&dest),
+                Some((&st.keyring, from.as_str())),
                 "destination",
                 "sms_opt_out",
                 true,
@@ -466,6 +469,7 @@ pub async fn twilio_inbound(
                 &mut tx,
                 Some(Channel::Sms),
                 Some(&dest),
+                Some((&st.keyring, from.as_str())),
                 "destination",
                 "possible_opt_out_hold",
                 false,
@@ -500,7 +504,7 @@ pub async fn twilio_inbound(
 
 async fn cancel_pending(
     tx: &mut mk_store::TenantTx<'_>,
-    dest: &str,
+    dest: &mk_store::fingerprint::Fingerprints,
     reason: &str,
     actor: actions::Actor<'_>,
     now: DateTime<Utc>,

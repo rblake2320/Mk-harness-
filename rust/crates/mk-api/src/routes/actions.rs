@@ -15,7 +15,7 @@ use serde_json::{Value, json};
 use crate::auth::Principal;
 use crate::error::ApiError;
 use crate::metrics::{DecisionKind, DecisionLabels};
-use crate::routes::{actor_of, destination_hash};
+use crate::routes::actor_of;
 use crate::state::AppState;
 
 #[derive(Debug, Serialize)]
@@ -74,9 +74,13 @@ pub async fn propose(
         );
     }
     let dest = req.arguments.get("to").and_then(Value::as_str).map(|d| {
-        channel.map_or(d.to_owned(), |c| {
-            destination_hash(&st.master, p.tenant, c, d)
-        })
+        channel.map_or_else(
+            || mk_store::fingerprint::Fingerprints {
+                primary: d.to_owned(),
+                tagged: Vec::new(),
+            },
+            |c| st.fingerprints.compute(p.tenant, c, d),
+        )
     });
     let now = Utc::now();
     let actor_id = p.user.to_string();
@@ -111,7 +115,7 @@ pub async fn propose(
         IdempotencyOutcome::Fresh => {}
     }
     // 4. Persist the draft and the canonical bytes the approval will bind to.
-    actions::insert_draft(&mut tx, &req, channel, dest.as_deref(), actor, now)
+    actions::insert_draft(&mut tx, &req, channel, dest.as_ref(), actor, now)
         .await
         .map_err(|e| rid(e.into()))?;
     actions::transition(
@@ -130,24 +134,21 @@ pub async fn propose(
     let global = policy::global_dispatch_enabled(st.store.pool())
         .await
         .map_err(|e| rid(e.into()))?;
-    let (permissions, suppressions, sends) = match (
-        channel,
-        dest.as_deref(),
-        req.resource.id.parse::<ContactId>(),
-    ) {
-        (Some(ch), Some(d), Ok(c)) if req.action_kind.is_outreach() => (
-            consent::permissions_for(&mut tx, c, ch)
-                .await
-                .map_err(|e| rid(e.into()))?,
-            consent::suppressions_for(&mut tx, ch, d)
-                .await
-                .map_err(|e| rid(e.into()))?,
-            actions::sends_last_24h(&mut tx, &req.resource.id, ch, now)
-                .await
-                .map_err(|e| rid(e.into()))?,
-        ),
-        _ => (Vec::new(), Vec::new(), 0),
-    };
+    let (permissions, suppressions, sends) =
+        match (channel, dest.as_ref(), req.resource.id.parse::<ContactId>()) {
+            (Some(ch), Some(d), Ok(c)) if req.action_kind.is_outreach() => (
+                consent::permissions_for(&mut tx, c, ch, Some(d))
+                    .await
+                    .map_err(|e| rid(e.into()))?,
+                consent::suppressions_for(&mut tx, ch, d)
+                    .await
+                    .map_err(|e| rid(e.into()))?,
+                actions::sends_last_24h(&mut tx, &req.resource.id, ch, now)
+                    .await
+                    .map_err(|e| rid(e.into()))?,
+            ),
+            _ => (Vec::new(), Vec::new(), 0),
+        };
     // Contact hours run in the customer's zone when the application supplied
     // one; an unparseable zone is refused rather than silently falling back.
     let contact_tz = match mk_policy::contact_zone(&req.arguments, &tenant_policy.contact_tz) {
@@ -169,7 +170,7 @@ pub async fn propose(
         tools: &st.tools,
         global_dispatch_enabled: global,
         channel,
-        destination_hash: dest.as_deref().unwrap_or_default(),
+        destination_hash: dest.as_ref().map_or("", |d| d.primary.as_str()),
         permissions: &permissions,
         suppressions: &suppressions,
         sends_last_24h: sends,

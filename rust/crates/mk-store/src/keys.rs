@@ -129,6 +129,17 @@ pub const SEALED_COLUMNS: &[(&str, &str, &str)] = &[
         "auth_token_sealed",
     ),
     ("kernel.inbound_events", "event_id", "content_sealed"),
+    ("kernel.inbound_events", "event_id", "destination_sealed"),
+    (
+        "kernel.suppressions",
+        "suppression_id",
+        "destination_sealed",
+    ),
+    (
+        "kernel.contact_permissions",
+        "permission_id",
+        "destination_sealed",
+    ),
 ];
 
 /// Operator: count rows still sealed under versions other than the current one.
@@ -138,10 +149,10 @@ pub async fn stale_counts(
     tenant: Option<mk_domain::TenantId>,
 ) -> Result<Vec<(String, u64)>, StoreError> {
     let mut out = Vec::new();
-    let filter = tenant.map_or(String::new(), |t| format!(" WHERE tenant_id = '{}'", t.0));
+    let filter = tenant.map_or(String::new(), |t| format!(" AND tenant_id = '{}'", t.0));
     for (table, pk, col) in SEALED_COLUMNS {
         let rows = sqlx::query(&format!(
-            "SELECT {pk}::text AS id, {col} AS sealed FROM {table}{filter}"
+            "SELECT {pk}::text AS id, {col} AS sealed FROM {table} WHERE {col} IS NOT NULL{filter}"
         ))
         .fetch_all(pool)
         .await?;
@@ -154,7 +165,7 @@ pub async fn stale_counts(
             })
             .count();
         out.push((
-            (*table).to_owned(),
+            format!("{table}.{col}"),
             u64::try_from(stale).unwrap_or(u64::MAX),
         ));
     }
@@ -174,7 +185,7 @@ pub async fn retire(
     }
     for (table, pk, col) in SEALED_COLUMNS {
         let rows = sqlx::query(&format!(
-            "SELECT {pk}::text AS id, {col} AS sealed FROM {table}"
+            "SELECT {pk}::text AS id, {col} AS sealed FROM {table} WHERE {col} IS NOT NULL"
         ))
         .fetch_all(pool)
         .await?;
@@ -295,6 +306,40 @@ pub async fn reencrypt(
             }
             Ok(None) => {}
             Err(_) => rep.unreadable += 1,
+        }
+    }
+    // Sealed raw destinations (0008): AAD = destination:table:tenant:id.
+    for (table, pk) in [
+        ("inbound_events", "event_id"),
+        ("suppressions", "suppression_id"),
+        ("contact_permissions", "permission_id"),
+    ] {
+        let tf = tenant.map_or(String::new(), |t| format!(" AND tenant_id = '{}'", t.0));
+        let rows = sqlx::query(&format!(
+            "SELECT tenant_id, {pk} AS id, destination_sealed FROM kernel.{table} WHERE destination_sealed IS NOT NULL{tf}"
+        ))
+        .fetch_all(pool)
+        .await?;
+        for r in rows {
+            let (t, id): (uuid::Uuid, uuid::Uuid) = (r.try_get("tenant_id")?, r.try_get("id")?);
+            let sealed: Vec<u8> = r.try_get("destination_sealed")?;
+            let aad =
+                crate::fingerprint::destination_aad(table, mk_domain::TenantId::from_uuid(t), id);
+            match keyring.reseal(&aad, &sealed) {
+                Ok(Some(new)) => {
+                    sqlx::query(&format!(
+                        "UPDATE kernel.{table} SET destination_sealed = $3 WHERE tenant_id = $1 AND {pk} = $2"
+                    ))
+                    .bind(t)
+                    .bind(id)
+                    .bind(new)
+                    .execute(pool)
+                    .await?;
+                    rep.resealed += 1;
+                }
+                Ok(None) => {}
+                Err(_) => rep.unreadable += 1,
+            }
         }
     }
     Ok(rep)

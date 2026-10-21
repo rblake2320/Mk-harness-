@@ -21,6 +21,9 @@ pub struct StoredAction {
     pub digest: Digest,
     pub channel: Option<Channel>,
     pub destination_hash: Option<String>,
+    /// `kid:hex` fingerprints of the destination under every key configured
+    /// at proposal (plus any added by `fingerprint-rekey`).
+    pub destination_fingerprints: Vec<String>,
     pub attempt: i32,
     pub error_code: Option<String>,
     pub replay_of: Option<ActionId>,
@@ -29,6 +32,21 @@ pub struct StoredAction {
 }
 
 impl StoredAction {
+    /// The destination's fingerprint set as stored at proposal (and extended
+    /// by rekey). `None` when the action carries no destination.
+    #[must_use]
+    pub fn destination_fingerprints_set(&self) -> Option<crate::fingerprint::Fingerprints> {
+        let primary = self.destination_hash.as_deref()?;
+        Some(if self.channel.is_some() {
+            crate::fingerprint::Fingerprints::stored(primary, self.destination_fingerprints.clone())
+        } else {
+            crate::fingerprint::Fingerprints {
+                primary: primary.to_owned(),
+                tagged: self.destination_fingerprints.clone(),
+            }
+        })
+    }
+
     #[must_use]
     pub fn to_result(&self, receipt: Option<Receipt>) -> ActionResult {
         ActionResult {
@@ -74,7 +92,7 @@ pub async fn insert_draft(
     tx: &mut TenantTx<'_>,
     req: &ActionRequest,
     channel: Option<Channel>,
-    destination_hash: Option<&str>,
+    destination: Option<&crate::fingerprint::Fingerprints>,
     actor: Actor<'_>,
     now: DateTime<Utc>,
 ) -> Result<StoredAction, StoreError> {
@@ -87,8 +105,8 @@ pub async fn insert_draft(
     sqlx::query(
         "INSERT INTO kernel.actions (action_id, tenant_id, requested_by, origin_type, workflow, action_kind, tool_id,
            resource_type, resource_id, channel, purpose, risk, state, canonical_request, action_digest, destination_hash,
-           idempotency_key, requested_at, expires_at, created_at, updated_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$20)",
+           idempotency_key, requested_at, expires_at, created_at, updated_at, destination_fingerprints)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$20,$21)",
     )
     .bind(action_id.0)
     .bind(req.tenant_id.0)
@@ -105,11 +123,12 @@ pub async fn insert_draft(
     .bind(ActionState::Draft.as_str())
     .bind(&canonical)
     .bind(digest.to_string())
-    .bind(destination_hash)
+    .bind(destination.map(|d| d.primary.as_str()))
     .bind(&req.idempotency_key)
     .bind(req.requested_at)
     .bind(req.expires_at)
     .bind(now)
+    .bind(destination.map_or_else(Vec::new, |d| d.tagged.clone()))
     .execute(tx.conn())
     .await?;
     append_event(
@@ -163,6 +182,7 @@ fn row_to_action(tenant: TenantId, r: &sqlx::postgres::PgRow) -> Result<StoredAc
         digest,
         channel,
         destination_hash: r.try_get("destination_hash")?,
+        destination_fingerprints: r.try_get("destination_fingerprints")?,
         attempt: r.try_get("attempt")?,
         error_code: r.try_get("error_code")?,
         replay_of: r
@@ -173,7 +193,7 @@ fn row_to_action(tenant: TenantId, r: &sqlx::postgres::PgRow) -> Result<StoredAc
     })
 }
 
-const SELECT: &str = "SELECT action_id, state, canonical_request, action_digest, channel, destination_hash, attempt,
+const SELECT: &str = "SELECT action_id, state, canonical_request, action_digest, channel, destination_hash, destination_fingerprints, attempt,
     error_code, replay_of, expires_at, updated_at FROM kernel.actions WHERE tenant_id = $1 AND action_id = $2";
 
 pub async fn get(tx: &mut TenantTx<'_>, action_id: ActionId) -> Result<StoredAction, StoreError> {
@@ -312,7 +332,7 @@ pub async fn insert_replay(
         tx,
         &req,
         original.channel,
-        original.destination_hash.as_deref(),
+        original.destination_fingerprints_set().as_ref(),
         actor,
         now,
     )
@@ -366,16 +386,16 @@ pub async fn expired_candidates(
 pub async fn pending_for_destination(
     tx: &mut TenantTx<'_>,
     channel: Option<Channel>,
-    destination_hash: Option<&str>,
+    destination: Option<&crate::fingerprint::Fingerprints>,
 ) -> Result<Vec<ActionId>, StoreError> {
     let rows = sqlx::query(
         "SELECT action_id FROM kernel.actions WHERE tenant_id = $1
-         AND ($2::text IS NULL OR channel = $2) AND ($3::text IS NULL OR destination_hash = $3)
+         AND ($2::text IS NULL OR channel = $2) AND ($3::text[] IS NULL OR destination_fingerprints && $3)
          AND state IN ('policy_pending','approval_required','approved','queued','failed_retryable')",
     )
     .bind(tx.tenant().0)
     .bind(channel.map(Channel::as_str))
-    .bind(destination_hash)
+    .bind(destination.map(|d| d.tagged.clone()))
     .fetch_all(tx.conn())
     .await?;
     rows.into_iter()

@@ -14,6 +14,8 @@ pub struct AppState {
     pub master: MasterKey,
     /// Versioned envelope keys for data at rest (S6).
     pub keyring: Keyring,
+    /// Destination fingerprint keys (first = current); see `mk_store::fingerprint`.
+    pub fingerprints: Arc<mk_store::fingerprint::FingerprintKeys>,
     pub tools: Arc<ToolAllowlist>,
     pub metrics: Arc<Metrics>,
     /// HMAC timestamp tolerance for adapter callbacks (seconds).

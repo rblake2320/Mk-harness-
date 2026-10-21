@@ -51,6 +51,10 @@ async fn main() -> anyhow::Result<()> {
     let state = AppState {
         store,
         verifier,
+        fingerprints: std::sync::Arc::new(
+            mk_store::fingerprint::FingerprintKeys::from_env(&master)
+                .map_err(|e| anyhow::anyhow!("MK_FINGERPRINT_KEYS: {e}"))?,
+        ),
         master,
         keyring,
         tools: Arc::new(ToolAllowlist::v1()),

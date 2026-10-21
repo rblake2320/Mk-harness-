@@ -28,14 +28,18 @@ pub const INBOUND_STALE_SECS: i64 = 60;
 pub async fn lock_control_path(
     tx: &mut TenantTx<'_>,
     channel: &str,
-    destination_hash: &str,
+    destination: &crate::fingerprint::Fingerprints,
 ) -> Result<(), StoreError> {
     // hashtext() → int4; two int4 keys keep tenant and destination separate.
-    sqlx::query("SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))")
-        .bind(tx.tenant().0.to_string())
-        .bind(format!("{channel}|{destination_hash}"))
-        .execute(tx.conn())
-        .await?;
+    // One lock per key-version tag, in sorted order: any two transactions
+    // sharing a fingerprint serialize; sorted acquisition cannot deadlock.
+    for key in destination.lock_keys() {
+        sqlx::query("SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))")
+            .bind(tx.tenant().0.to_string())
+            .bind(format!("{channel}|{key}"))
+            .execute(tx.conn())
+            .await?;
+    }
     Ok(())
 }
 
@@ -503,7 +507,8 @@ pub async fn record_inbound(
     keyring: &Keyring,
     provider_event_id: &str,
     sender_identity_id: Uuid,
-    source_destination_hash: &str,
+    source: &crate::fingerprint::Fingerprints,
+    raw_source: &str,
     provider_timestamp: Option<DateTime<Utc>>,
     body: &SecretString,
     raw_digest: &Digest,
@@ -515,17 +520,24 @@ pub async fn record_inbound(
     let sealed = keyring
         .seal(&format!("inbound:{}:{}", tx.tenant().0, id), body)
         .map_err(|_| StoreError::Crypto)?;
+    let dest_sealed = keyring
+        .seal(
+            &crate::fingerprint::destination_aad("inbound_events", tx.tenant(), id),
+            &SecretString::from(raw_source.to_owned()),
+        )
+        .map_err(|_| StoreError::Crypto)?;
     let inserted: Option<Uuid> = sqlx::query_scalar(
         "INSERT INTO kernel.inbound_events (event_id, tenant_id, provider, provider_event_id, sender_identity_id, source_destination_hash,
-           received_at, provider_timestamp, content_sealed, content_reference, authentication_result, raw_event_digest, opt_out_signal, disposition)
-         VALUES ($1,$2,'twilio',$3,$4,$5,$6,$7,$8,$9,'verified',$10,$11,$12)
+           received_at, provider_timestamp, content_sealed, content_reference, authentication_result, raw_event_digest, opt_out_signal, disposition,
+           destination_fingerprints, destination_sealed)
+         VALUES ($1,$2,'twilio',$3,$4,$5,$6,$7,$8,$9,'verified',$10,$11,$12,$13,$14)
          ON CONFLICT (tenant_id, provider, provider_event_id) DO NOTHING RETURNING event_id",
     )
     .bind(id)
     .bind(tx.tenant().0)
     .bind(provider_event_id)
     .bind(sender_identity_id)
-    .bind(source_destination_hash)
+    .bind(&source.primary)
     .bind(now)
     .bind(provider_timestamp)
     .bind(sealed)
@@ -533,6 +545,8 @@ pub async fn record_inbound(
     .bind(raw_digest.to_string())
     .bind(opt_out_signal)
     .bind(disposition)
+    .bind(&source.tagged)
+    .bind(dest_sealed)
     .fetch_optional(tx.conn())
     .await?;
     let Some(e) = inserted else {
@@ -582,6 +596,10 @@ pub struct InboundView {
     pub provider_event_id: String,
     pub sender_identity_id: Uuid,
     pub source_destination_hash: String,
+    /// `kid:hex` under every key configured when received (+ rekey). The
+    /// application matches its own fingerprint against any of these, so a
+    /// kernel key rotation does not break customer matching.
+    pub destination_fingerprints: Vec<String>,
     pub received_at: DateTime<Utc>,
     pub provider_timestamp: Option<DateTime<Utc>>,
     pub opt_out_signal: String,
@@ -597,7 +615,7 @@ pub async fn pending_inbound(
     limit: i64,
 ) -> Result<Vec<InboundView>, StoreError> {
     let rows = sqlx::query(
-        "SELECT event_id, provider_event_id, sender_identity_id, source_destination_hash, received_at, provider_timestamp,
+        "SELECT event_id, provider_event_id, sender_identity_id, source_destination_hash, destination_fingerprints, received_at, provider_timestamp,
                 content_sealed, opt_out_signal, disposition
          FROM kernel.inbound_events WHERE tenant_id = $1 AND processed_at IS NULL ORDER BY received_at LIMIT $2",
     )
@@ -618,6 +636,7 @@ pub async fn pending_inbound(
                 provider_event_id: r.try_get("provider_event_id")?,
                 sender_identity_id: r.try_get("sender_identity_id")?,
                 source_destination_hash: r.try_get("source_destination_hash")?,
+                destination_fingerprints: r.try_get("destination_fingerprints")?,
                 received_at: r.try_get("received_at")?,
                 provider_timestamp: r.try_get("provider_timestamp")?,
                 opt_out_signal: r.try_get("opt_out_signal")?,
