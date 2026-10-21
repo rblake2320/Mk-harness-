@@ -1,4 +1,10 @@
-# Real-device acceptance — MK action kernel
+# Real-device acceptance — MK action kernel (test equipment procedure)
+
+> **Scope note (2026-10-20):** per `docs/transport-decision.md` the Moto/ADB agent is
+> **engineering test equipment**, not a production transport. This procedure
+> produces evidence that the kernel's work-order/callback contract works on real
+> hardware; it does not close any production-transport row (C1–C10), which are
+> met only by the provider path.
 
 `verified_on_device` is `false` everywhere in this repository and the work-order
 schema pins it to `false`. Nothing in code flips it. This document is the only

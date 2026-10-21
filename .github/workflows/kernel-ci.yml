@@ -3,9 +3,9 @@ name: Rust action kernel
 on:
   push:
     branches: [main]
-    paths: ["rust/**", "contracts/**", "migrations/**", "deploy/kernel/**", "scripts/**", "tools/**", "backend/app/kernel/**", "backend/app/routes/agent_ops.py", "docker-compose.kernel.yml", ".github/workflows/kernel-ci.yml"]
+    paths: ["rust/**", "contracts/**", "migrations/**", "deploy/kernel/**", "evidence/**", "scripts/**", "tools/**", "backend/app/kernel/**", "backend/app/routes/agent_ops.py", "docker-compose.kernel.yml", ".github/workflows/kernel-ci.yml"]
   pull_request:
-    paths: ["rust/**", "contracts/**", "migrations/**", "deploy/kernel/**", "scripts/**", "tools/**", "backend/app/kernel/**", "backend/app/routes/agent_ops.py", "docker-compose.kernel.yml", ".github/workflows/kernel-ci.yml"]
+    paths: ["rust/**", "contracts/**", "migrations/**", "deploy/kernel/**", "evidence/**", "scripts/**", "tools/**", "backend/app/kernel/**", "backend/app/routes/agent_ops.py", "docker-compose.kernel.yml", ".github/workflows/kernel-ci.yml"]
 
 permissions:
   contents: read
@@ -72,6 +72,9 @@ jobs:
       - name: Real-device agent suite (stdlib, no device)
         run: python -m unittest -v
         working-directory: tools/mobile-agent-adb
+      - run: pip install pyyaml==6.0.2
+      - name: Evidence records validate (schema + checksums)
+        run: python -I tools/evidence/check.py
 
   # End-to-end through the application: real binaries, Postgres, Redis, FastAPI,
   # the device agent in dry-run, per-process DB logins, and the production

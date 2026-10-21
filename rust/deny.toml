@@ -11,8 +11,7 @@ ignore = [
   { id = "RUSTSEC-2023-0071", reason = "unused optional dependency (sqlx-mysql) never compiled" },
   # webpki-roots 0.26 via sqlx-core 0.8 `tls-rustls`; the fixed line needs sqlx 0.9 (tracked).
   # Mitigation (PR #34): production composes the DB URL with sslmode=verify-full and an explicit
-  # RDS root cert (MK_DB_SSLROOTCERT), so the bundled roots are never consulted; pre-flight
-  # --for-enable refuses a missing MK_DB_SSLROOTCERT.
+  # RDS root cert (MK_DB_SSLROOTCERT), so the bundled roots are never consulted.
   { id = "RUSTSEC-2026-0381", reason = "sqlx-core 0.8 pin; production uses an explicit DB root cert" },
 ]
 

@@ -157,6 +157,31 @@ kernel (`rust/`). Rules:
   reviewed `deploy/kernel/ACCEPTANCE.md` (real-device run). Runbook:
   `deploy/kernel/README.md`.
 
+## Release standard — the completion contract
+
+`docs/production-completion-contract.md` is the binding release contract;
+`docs/production-acceptance.md` is its evidence matrix; `evidence/releases/`
+holds the records that close rows (validated by `tools/evidence/check.py`).
+
+- Every status uses exactly: **Not demonstrated / Implemented / Independently
+  verified / Production-proven**. A parent row takes the lowest child state.
+  An unknown critical control blocks sign-off.
+- Nothing is closed by a PR description, green CI, a passing unrelated test, a
+  signed callback, a single device run, a named technology, or an assertion.
+  Author-run tests are *Implemented* evidence only.
+- Wording is "NOT READY" until the release owner can answer yes to every item
+  of the contract's final checklist; never "production-ready" or any
+  market-superiority claim without the corresponding evidence rows.
+- Fixed decisions (do not relitigate in code): production messaging = Twilio
+  Programmable Messaging behind the kernel adapter, dedicated registered number
+  per consultant business, authenticated provider webhooks for inbound; Moto/ADB
+  = test equipment only; human approval via separated authority with
+  transaction-bound WebAuthn; no silent transport failover; no InTouch
+  scraping; AI has no authority to grant permission, approve, dispatch or clear
+  suppression.
+- Work proceeds in the contract's work-package order (WP01–WP12). New defects
+  are corrected against the contract; they never lower the standard.
+
 ## Skin analysis — compliance guardrails (do not weaken)
 
 - `SKIN_FORBIDDEN_TERMS` in `skills.py` must never be removed or shortened.

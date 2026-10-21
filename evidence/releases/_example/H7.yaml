@@ -1,0 +1,24 @@
+# Example only. Not a closed row: status is implemented because no independent
+# verifier has yet reproduced it; it exists to exercise tools/evidence/check.py.
+requirement_id: H7
+acceptance_condition: "Assertion replay across two API replicas succeeds at most once"
+owner: "unassigned (engineering owner)"
+source_commit: "3cf1dee215645d7f2bcfc5edf4b7ec0a92845d72"
+image_digests:
+  mk-action-kernel: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+environment: "ci ubuntu-latest, postgres:16-alpine, redis:7-alpine"
+configuration: ".github/workflows/kernel-ci.yml"
+test_procedure: "rust/crates/mk-api/tests/http_e2e.rs::full_governed_loop (second-instance replay)"
+test_version: "3cf1dee215645d7f2bcfc5edf4b7ec0a92845d72"
+expected_result: "second POST with the same jti on a second router instance returns 401 ASSERTION_REPLAYED"
+actual_result: "401 on second instance; GET with same jti 200"
+evidence:
+  - location: "rust/crates/mk-api/tests/http_e2e.rs"
+    sha256: "f334a2ae626b2e55e9c7cfdb6011f8f51df79e2f04f66bbd3fad98198cbf3b92"
+verifier: "author (not independent)"
+verifier_independent_of_author: false
+verification_date: "2026-10-20T17:30:00Z"
+status: implemented
+invalidation_triggers:
+  - "change to rust/crates/mk-api/src/auth.rs or migrations/kernel/0002"
+remaining_findings: []
