@@ -71,7 +71,7 @@ except the last one, which requires the platform operator's passkey.
    "initial"` (owner login, `MK_KEK` set). `mk-keyctl status` must show
    `current_version=1`; without this step processes seal under the legacy
    single master key (version 0), which pre-flight refuses for production.
-4. Run the pre-flight (`scripts/kernel-preflight.sh --for-enable`, PR #32): RLS
+4. Run the pre-flight (`scripts/kernel-preflight.sh --for-enable`, PR #32). **Gap, Not demonstrated:** the checks for `MK_APPROVAL_*`, `MK_ALLOW_UNBOUND_APPROVAL`, `MK_KEK`/`MK_LEGACY_SEAL_RETIRED`, `MK_DB_SSLROOTCERT`, `MK_TWILIO_API_BASE` and the restore-gate report are written (commit 39515f9) but not yet in pre-flight — they are added when #32 and this branch are joined; until then verify these items by hand. Required: RLS
    on every `kernel.*` table, per-process logins in place, `MK_APPROVAL_RP_ID`
    and `MK_APPROVAL_ORIGINS` set, `MK_ALLOW_UNBOUND_APPROVAL` unset, `MK_KEK` set,
    `MK_PUBLIC_WEBHOOK_BASE` set and equal to the URL configured at the provider.
