@@ -49,7 +49,7 @@ async fn main() -> anyhow::Result<()> {
     let apply = args.iter().any(|a| a == "--apply");
     let master = MasterKey::from_base64(&std::env::var("MK_MASTER_KEY")?)
         .map_err(|e| anyhow::anyhow!("MK_MASTER_KEY: {e}"))?;
-    let store = Store::connect(&std::env::var("MK_DATABASE_URL")?, 4).await?;
+    let store = Store::connect(&mk_store::database_url_from_env()?, 4).await?;
     let pool = store.pool();
     let now = Utc::now();
     let mut all_ok = true;

@@ -18,7 +18,7 @@ async fn main() -> anyhow::Result<()> {
         )
         .try_init();
 
-    let db = std::env::var("MK_DATABASE_URL")?;
+    let db = mk_store::database_url_from_env()?;
     let master = MasterKey::from_base64(&std::env::var("MK_MASTER_KEY")?)
         .map_err(|e| anyhow::anyhow!("MK_MASTER_KEY: {e}"))?;
     // MK_ASSERTION_KEYS = "kid1=<b64url pubkey>,kid2=<b64url pubkey>"

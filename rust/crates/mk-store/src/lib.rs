@@ -29,6 +29,53 @@ pub mod tx;
 pub use error::StoreError;
 pub use tx::{Store, TenantTx};
 
+/// Database URL for a process: `MK_DATABASE_URL` verbatim, or — the shape the
+/// orchestrator injects (`infra/terraform`): `MK_DB_HOST`, `MK_DB_USER`,
+/// `MK_DB_PASSWORD` (secret), optional `MK_DB_NAME` (default `mkharness`) and
+/// `MK_DB_PORT` (5432) — composed here with the password percent-encoded and
+/// `sslmode=require`, so no URL containing a secret is ever written into a
+/// task definition or environment file.
+pub fn database_url_from_env() -> Result<String, StoreError> {
+    database_url_from(|k| std::env::var(k).ok())
+}
+
+/// Pure form of [`database_url_from_env`] over any variable lookup.
+pub fn database_url_from(lookup: impl Fn(&str) -> Option<String>) -> Result<String, StoreError> {
+    let get = |k: &str| lookup(k).filter(|v| !v.trim().is_empty());
+    if let Some(u) = get("MK_DATABASE_URL") {
+        return Ok(u);
+    }
+    let (Some(host), Some(user), Some(pw)) =
+        (get("MK_DB_HOST"), get("MK_DB_USER"), get("MK_DB_PASSWORD"))
+    else {
+        return Err(StoreError::Corrupt(
+            "MK_DATABASE_URL or MK_DB_HOST/MK_DB_USER/MK_DB_PASSWORD required",
+        ));
+    };
+    let name = get("MK_DB_NAME").unwrap_or_else(|| "mkharness".into());
+    let port = get("MK_DB_PORT").unwrap_or_else(|| "5432".into());
+    let enc = |s: &str| {
+        let mut out = String::with_capacity(s.len());
+        for b in s.bytes() {
+            match b {
+                b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                    out.push(char::from(b));
+                }
+                _ => {
+                    use std::fmt::Write as _;
+                    let _ = write!(out, "%{b:02X}");
+                }
+            }
+        }
+        out
+    };
+    Ok(format!(
+        "postgres://{}:{}@{host}:{port}/{name}?sslmode=require",
+        enc(&user),
+        enc(&pw)
+    ))
+}
+
 /// Embedded migrations for the `kernel` schema. Built by hand (no
 /// `sqlx::migrate!` proc-macro) so the `sqlx-macros` dependency, and the
 /// MySQL driver it drags into the lockfile, stay out of the supply chain.
@@ -110,6 +157,55 @@ mod tests {
             files.len(),
             registered,
             "every migration file must be embedded: {files:?}"
+        );
+    }
+}
+
+#[cfg(test)]
+mod database_url_tests {
+    use super::database_url_from;
+    use std::collections::HashMap;
+
+    fn env(pairs: &[(&str, &str)]) -> impl Fn(&str) -> Option<String> {
+        let m: HashMap<String, String> = pairs
+            .iter()
+            .map(|(k, v)| ((*k).to_owned(), (*v).to_owned()))
+            .collect();
+        move |k| m.get(k).cloned()
+    }
+
+    #[test]
+    fn verbatim_url_wins() {
+        let u = database_url_from(env(&[
+            ("MK_DATABASE_URL", "postgres://a:b@h/db"),
+            ("MK_DB_HOST", "x"),
+        ]));
+        assert_eq!(u.unwrap_or_default(), "postgres://a:b@h/db");
+    }
+
+    #[test]
+    fn composed_url_percent_encodes_the_password_and_requires_tls() {
+        let u = database_url_from(env(&[
+            ("MK_DB_HOST", "pg.internal"),
+            ("MK_DB_USER", "mk_api_login"),
+            ("MK_DB_PASSWORD", "p@ss/w:rd#1 é"),
+        ]));
+        assert_eq!(
+            u.unwrap_or_default(),
+            "postgres://mk_api_login:p%40ss%2Fw%3Ard%231%20%C3%A9@pg.internal:5432/mkharness?sslmode=require"
+        );
+    }
+
+    #[test]
+    fn empty_url_falls_through_and_missing_parts_is_an_error() {
+        assert!(database_url_from(env(&[("MK_DATABASE_URL", "  "), ("MK_DB_HOST", "h")])).is_err());
+        assert!(
+            database_url_from(env(&[
+                ("MK_DB_HOST", "h"),
+                ("MK_DB_USER", "u"),
+                ("MK_DB_PASSWORD", "")
+            ]))
+            .is_err()
         );
     }
 }

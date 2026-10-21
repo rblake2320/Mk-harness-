@@ -29,7 +29,7 @@ impl Config {
     pub fn from_env() -> anyhow::Result<Self> {
         let get = |k: &str| std::env::var(k).map_err(|_| anyhow::anyhow!("missing env {k}"));
         Ok(Self {
-            database_url: SecretString::from(get("MK_DATABASE_URL")?),
+            database_url: SecretString::from(mk_store::database_url_from_env()?),
             redis_url: SecretString::from(get("MK_REDIS_URL")?),
             master_key: MasterKey::from_base64(&get("MK_MASTER_KEY")?)
                 .map_err(|e| anyhow::anyhow!("MK_MASTER_KEY: {e}"))?,

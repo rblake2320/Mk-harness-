@@ -145,7 +145,47 @@ for r in (auth.router, chat.router, skin.router, foundation.router, commitments.
 
 @app.get("/api/health")
 def health():
+    """Liveness only (load-balancer target health). Never touches dependencies."""
     return {"status": "ok"}
+
+
+@app.get("/api/health/ready")
+async def ready():
+    """Readiness of the core workflow path: database reachable and, when the
+    governed-action kernel is configured, the kernel's own readiness. External
+    uptime checks (contract O3 availability) point here, not at `/api/health`,
+    so a dead database or kernel counts as downtime. Unauthenticated by design;
+    the body carries no tenant data."""
+    from fastapi.responses import JSONResponse
+    from sqlalchemy import text
+
+    from .db import get_db
+    from .kernel.client import KernelUnavailable, get_kernel_client
+
+    checks: dict[str, str] = {}
+    ok = True
+    try:
+        db = next(get_db())
+        try:
+            db.execute(text("SELECT 1"))
+        finally:
+            db.close()
+        checks["database"] = "ok"
+    except Exception:  # noqa: BLE001 — any failure is "not ready"; detail stays in logs
+        checks["database"] = "unavailable"
+        ok = False
+    client = get_kernel_client()
+    if client.configured:
+        try:
+            r = await client.health_ready()
+            checks["kernel"] = "ok" if r.status_code == 200 else "not_ready"
+            ok = ok and r.status_code == 200
+        except KernelUnavailable:
+            checks["kernel"] = "unavailable"
+            ok = False
+    else:
+        checks["kernel"] = "not_configured"
+    return JSONResponse(status_code=200 if ok else 503, content={"status": "ready" if ok else "not_ready", "checks": checks})
 
 
 @app.get("/privacy", response_class=HTMLResponse, include_in_schema=False)

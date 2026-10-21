@@ -13,7 +13,7 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/src/rust/target \
     cargo build --release --locked --bins \
  && mkdir -p /out \
- && cp target/release/mk-action-api target/release/mk-outbox-relay target/release/mk-action-worker target/release/mk-audit-verifier target/release/mk-mcp-server target/release/mk-keyctl target/release/mk-restore-gate /out/
+ && cp target/release/mk-action-api target/release/mk-outbox-relay target/release/mk-action-worker target/release/mk-audit-verifier target/release/mk-mcp-server target/release/mk-keyctl target/release/mk-restore-gate target/release/mk-healthcheck /out/
 
 # Minimal runtime: CA certs only, non-root numeric UID, no shell.
 FROM gcr.io/distroless/cc-debian12:nonroot

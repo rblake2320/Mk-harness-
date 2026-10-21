@@ -158,6 +158,23 @@ def test_health_requires_live_kernel(client, kernel_env):
     assert r.status_code == 503 and r.json()["kernel_status"] == 503
 
 
+def test_app_readiness_reflects_kernel_and_needs_no_token(client, kernel_env):
+    with respx.mock() as m:
+        m.get(f"{KERNEL}/health/ready").mock(return_value=httpx.Response(200, json={"ok": 1}))
+        r = client.get("/api/health/ready")
+    assert r.status_code == 200 and r.json()["checks"] == {"database": "ok", "kernel": "ok"}
+    with respx.mock() as m:
+        m.get(f"{KERNEL}/health/ready").mock(return_value=httpx.Response(503, json={"db": "down"}))
+        r = client.get("/api/health/ready")
+    assert r.status_code == 503 and r.json()["checks"]["kernel"] == "not_ready"
+    with respx.mock() as m:
+        m.get(f"{KERNEL}/health/ready").mock(side_effect=httpx.ConnectError("down"))
+        r = client.get("/api/health/ready")
+    assert r.status_code == 503 and r.json()["checks"]["kernel"] == "unavailable"
+    # Liveness stays independent of the kernel.
+    assert client.get("/api/health").status_code == 200
+
+
 # --------------------------------------------------------------------------- #
 # Auth: 401 on every route without a token
 # --------------------------------------------------------------------------- #

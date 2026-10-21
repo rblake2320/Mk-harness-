@@ -57,3 +57,7 @@ path = "src/bin/keyctl.rs"
 [[bin]]
 name = "mk-restore-gate"
 path = "src/bin/restore_gate.rs"
+
+[[bin]]
+name = "mk-healthcheck"
+path = "src/bin/healthcheck.rs"
