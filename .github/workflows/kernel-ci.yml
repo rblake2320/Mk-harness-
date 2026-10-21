@@ -3,9 +3,9 @@ name: Rust action kernel
 on:
   push:
     branches: [main]
-    paths: ["rust/**", "contracts/**", "migrations/**", "deploy/kernel/**", "evidence/**", "tools/**", ".github/workflows/kernel-ci.yml"]
+    paths: ["rust/**", "contracts/**", "migrations/**", "deploy/kernel/**", "evidence/**", "scripts/**", "tools/**", "backend/app/kernel/**", "backend/app/routes/agent_ops.py", "docker-compose.kernel.yml", ".github/workflows/kernel-ci.yml"]
   pull_request:
-    paths: ["rust/**", "contracts/**", "migrations/**", "deploy/kernel/**", "evidence/**", "tools/**", ".github/workflows/kernel-ci.yml"]
+    paths: ["rust/**", "contracts/**", "migrations/**", "deploy/kernel/**", "evidence/**", "scripts/**", "tools/**", "backend/app/kernel/**", "backend/app/routes/agent_ops.py", "docker-compose.kernel.yml", ".github/workflows/kernel-ci.yml"]
 
 permissions:
   contents: read
@@ -75,6 +75,52 @@ jobs:
       - run: pip install pyyaml==6.0.2
       - name: Evidence records validate (schema + checksums)
         run: python -I tools/evidence/check.py
+
+  # End-to-end through the application: real binaries, Postgres, Redis, FastAPI,
+  # the device agent in dry-run, per-process DB logins, and the production
+  # pre-flight. This is the gate that found the kill-switch bypass, the wire-name
+  # mismatch and the role-vocabulary mismatch that unit tests could not see.
+  live-smoke:
+    runs-on: ubuntu-latest
+    needs: [kernel]
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env: { POSTGRES_PASSWORD: kernel, POSTGRES_DB: postgres }
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1 (master, 2026-10)
+        with:
+          toolchain: "1.97.0"
+      - uses: Swatinem/rust-cache@f13886b937689c021905a6b90929199931d60db1 # v2.8.1
+        with:
+          workspaces: rust
+          key: live-smoke-release
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with: { python-version: "3.12", cache: pip, cache-dependency-path: backend/requirements.txt }
+      - run: pip install -r backend/requirements.txt pyyaml
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client redis-tools
+      - name: Live smoke (8 gates) + production pre-flight
+        env:
+          PGURL: postgres://postgres:kernel@127.0.0.1:5432/mk_kernel_smoke
+          REDIS_URL: redis://127.0.0.1:6379
+          RUSTFLAGS: ""
+        run: WORK="$RUNNER_TEMP/smoke" bash scripts/kernel-live-smoke.sh
+      - name: Keep smoke artifacts (logs, agent evidence chain, pre-flight report)
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: live-smoke
+          path: ${{ runner.temp }}/smoke/*.log
+          if-no-files-found: ignore
 
   kernel-image:
     runs-on: ubuntu-latest
