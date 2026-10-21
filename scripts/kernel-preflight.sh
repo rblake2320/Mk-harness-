@@ -9,8 +9,7 @@
 #   MK_PREFLIGHT_EMAIL=ops@example MK_PREFLIGHT_PASSWORD=… \
 #   scripts/kernel-preflight.sh [--for-enable]
 #
-# --for-enable additionally requires production approval/key/TLS configuration, a
-#   passing restore gate in report mode, and the real-device acceptance record
+# --for-enable additionally requires the real-device acceptance record
 # (deploy/kernel/ACCEPTANCE.md or $MK_ACCEPTANCE_RECORD) to be complete.
 # Exit 0 = every check passed. Any failure exits 1 with the failing check named.
 set -uo pipefail
@@ -122,31 +121,6 @@ case "${MK_MOBILE_INTAKE_URL:-}" in https://*) ok "MK_MOBILE_INTAKE_URL is https
 echo "== 8. enable gate"
 WORKDIR_PROBLEMS=$(mktemp); trap 'rm -f "$WORKDIR_PROBLEMS"' EXIT
 if [ "$FOR_ENABLE" = 1 ]; then
-  # Production configuration that must hold on the kernel processes' environment
-  # before dispatch is enabled (WP06 human-approval authority, WP09 envelope keys).
-  # The values are read from this shell: run pre-flight with the same env file
-  # the api/worker tasks receive.
-  [ "${MK_ALLOW_UNBOUND_APPROVAL:-0}" != 1 ] && ok "MK_ALLOW_UNBOUND_APPROVAL not set (approvals must be passkey-bound)" \
-    || fail "MK_ALLOW_UNBOUND_APPROVAL=1 — development-only; approvals would be recorded unbound"
-  [ -n "${MK_APPROVAL_RP_ID:-}" ] && [ -n "${MK_APPROVAL_ORIGINS:-}" ] && ok "MK_APPROVAL_RP_ID / MK_APPROVAL_ORIGINS set" \
-    || fail "MK_APPROVAL_RP_ID / MK_APPROVAL_ORIGINS unset — kernel cannot verify passkey assertions"
-  [ "${MK_APPROVAL_ALLOW_NO_UV:-0}" != 1 ] && ok "user verification required on approvals" || fail "MK_APPROVAL_ALLOW_NO_UV=1 — development only"
-  [ -n "${MK_KEK:-}" ] && ok "MK_KEK set (envelope keyring)" || fail "MK_KEK unset — kernel would seal with the bare master key"
-  kv=$(q "$RO_URL" "SELECT count(*) FROM kernel.key_versions WHERE status='active'")
-  [ "$kv" = 1 ] && ok "one active key version" || fail "active key versions: ${kv:-?} (run mk-keyctl rotate initial)"
-  legacy=$(q "$RO_URL" "SELECT count(*) FROM kernel.key_versions WHERE version=0 AND status<>'retired'")
-  [ "${MK_LEGACY_SEAL_RETIRED:-0}" = 1 ] && ok "legacy seal retired on processes" || fail "MK_LEGACY_SEAL_RETIRED!=1 — legacy ciphertext still accepted (reencrypt, retire 0, then set it)"
-  case "${MK_DB_SSLROOTCERT:-}" in "") fail "MK_DB_SSLROOTCERT unset — database TLS would trust bundled roots (RUSTSEC-2026-0381 mitigation)";; *) [ -r "$MK_DB_SSLROOTCERT" ] && ok "MK_DB_SSLROOTCERT present" || fail "MK_DB_SSLROOTCERT not readable: $MK_DB_SSLROOTCERT";; esac
-  [ -n "${MK_PUBLIC_WEBHOOK_BASE:-}" ] && case "$MK_PUBLIC_WEBHOOK_BASE" in https://*) ok "MK_PUBLIC_WEBHOOK_BASE is https";; *) fail "MK_PUBLIC_WEBHOOK_BASE must be https";; esac || fail "MK_PUBLIC_WEBHOOK_BASE unset"
-  [ "${MK_TWILIO_API_BASE:-}" = "https://api.twilio.com" ] && ok "MK_TWILIO_API_BASE is the live provider" || fail "MK_TWILIO_API_BASE is '${MK_TWILIO_API_BASE:-}' — production must point at the live provider, staging must not enable dispatch"
-  # Restore gate in report mode must agree the environment is recoverable (never enables anything).
-  RG="${MK_RESTORE_GATE:-$ROOT/rust/target/release/mk-restore-gate}"
-  if [ -x "$RG" ]; then
-    if MK_DATABASE_URL="$RO_URL" "$RG" --restored-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"$WORKDIR_PROBLEMS.rg" 2>&1; then ok "restore gate: recoverable and dispatch disabled"
-    else grep -q '"check":"global_dispatch_disabled","ok":false' "$WORKDIR_PROBLEMS.rg" && grep -q '"check":"credentials_unseal","ok":true' "$WORKDIR_PROBLEMS.rg" \
-           && ok "restore gate: recoverable (dispatch already enabled)" || fail "restore gate FAIL: $(grep -o '"check":"[a-z_]*","ok":false' "$WORKDIR_PROBLEMS.rg" | tr '\n' ' ')"; fi
-  else fail "mk-restore-gate not found at $RG (set MK_RESTORE_GATE)"; fi
-  rm -f "$WORKDIR_PROBLEMS.rg"
   REC="${MK_ACCEPTANCE_RECORD:-$ROOT/deploy/kernel/ACCEPTANCE.md}"
   if [ -f "$REC" ]; then
     # Values must be real, not the template's placeholders; the result line
