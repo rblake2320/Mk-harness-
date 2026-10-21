@@ -164,6 +164,11 @@ def require_dispatch_timezone(db: Session, customer: Customer) -> str:
     return pref.timezone
 
 
+def preference_for_tz(db: Session, customer: Customer) -> str | None:
+    pref = preference_for(db, customer)
+    return pref.timezone if pref and pref.timezone else None
+
+
 def csv_cell(value: str) -> str:
     """Spreadsheet-formula escaping on export (F5)."""
     if value and value[0] in ("=", "+", "-", "@", "\t", "\r"):

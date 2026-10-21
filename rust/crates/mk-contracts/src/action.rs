@@ -183,6 +183,13 @@ pub struct ActionResult {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub replay_of: Option<ActionId>,
     pub updated_at: DateTime<Utc>,
+    /// Contract C3 vocabulary; present for customer-message actions.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message_state: Option<crate::message_state::MessageState>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub read_status: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider_message_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]

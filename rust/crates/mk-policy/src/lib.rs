@@ -23,7 +23,7 @@ pub use approval::{ApprovalBindingError, ApproverContext, check_approver};
 pub use consent::{ConsentError, ContactPermissionFact, SuppressionFact};
 pub use decision::{Decision, DenyCode, Obligation, PolicyVersion};
 pub use engine::{
-    PolicyInput, RecheckInput, TenantPolicy, evaluate, local_hour_in_zone, local_hour_with_offset,
+    PolicyInput, RecheckInput, TenantPolicy, contact_zone, evaluate, local_hour_in_zone, local_hour_with_offset,
     recheck_at_dispatch,
 };
 pub use tools::{ToolAllowlist, ToolEntry};

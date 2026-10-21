@@ -12,7 +12,8 @@ use mk_policy::ToolAllowlist;
 use mk_queue::{RetryPolicy, StreamClient};
 use mk_store::Store;
 use mk_worker::config::{Config, init_tracing};
-use mk_worker::resolver::StoreResolver;
+use mk_worker::resolver::{StoreResolver, StoreSenderResolver};
+use mk_adapters::twilio::TwilioAdapter;
 use mk_worker::{DispatchOutcome, WorkerContext, dispatch_one, housekeeping};
 use secrecy::ExposeSecret;
 
@@ -40,11 +41,28 @@ async fn main() -> anyhow::Result<()> {
             "phoneclaw@c59995b726a127da16275d2d8e0760408b988542",
         )?)
     };
+    let twilio = if cfg.twilio_api_base.is_empty() {
+        None
+    } else {
+        if cfg.public_webhook_base.is_empty() {
+            anyhow::bail!("MK_PUBLIC_WEBHOOK_BASE is required when MK_TWILIO_API_BASE is set");
+        }
+        Some(TwilioAdapter::new(
+            EgressAllowlist::new(cfg.egress_authorities.iter().map(String::as_str), cfg.allow_loopback_http),
+            &cfg.twilio_api_base,
+            Box::new(StoreSenderResolver {
+                store: store.clone(),
+                master: cfg.master_key.clone(),
+                public_webhook_base: cfg.public_webhook_base.clone(),
+            }),
+        )?)
+    };
     let ctx = WorkerContext {
         store: store.clone(),
         registry: AdapterRegistry {
             internal: InternalRecordAdapter,
             mobile,
+            twilio,
         },
         tools: ToolAllowlist::v1(),
         worker_id: cfg.worker_id.clone(),

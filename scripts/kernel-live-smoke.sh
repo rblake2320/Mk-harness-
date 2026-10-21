@@ -40,7 +40,7 @@ trap cleanup EXIT
 
 log "building release binaries"
 (cd "$ROOT/rust" && cargo build --release -q --bin mk-action-api --bin mk-outbox-relay \
-   --bin mk-action-worker --bin mk-audit-verifier --bin mk-devkeys --bin mk-softauthn)
+   --bin mk-action-worker --bin mk-audit-verifier --bin mk-devkeys --bin mk-softauthn --bin mk-twilio-sim)
 BIN="$ROOT/rust/target/release"
 
 log "fresh database"
@@ -66,14 +66,20 @@ log "starting kernel api / relay / worker (each as its own DB login)"
 # Human-approval authority configured as in production: approvals require a
 # kernel-verified WebAuthn assertion (rp id = the approval UI's domain).
 RP_ID=localhost; ORIGIN=http://localhost:8000
+# Provider webhooks are signed over this public base (what the provider is configured with).
+WEBHOOK_BASE=http://127.0.0.1:8090
 MK_DATABASE_URL="$(url_for mk_api_login api)" MK_BIND=127.0.0.1:8090 RUST_ACTION_KERNEL_ENABLED=1 \
-  MK_APPROVAL_RP_ID="$RP_ID" MK_APPROVAL_ORIGINS="$ORIGIN" \
+  MK_APPROVAL_RP_ID="$RP_ID" MK_APPROVAL_ORIGINS="$ORIGIN" MK_PUBLIC_WEBHOOK_BASE="$WEBHOOK_BASE" \
   "$BIN/mk-action-api" >"$WORK/api.log" 2>&1 & PIDS+=($!)
 MK_DATABASE_URL="$(url_for mk_relay_login relay)" MK_RELAY_ID=relay-smoke \
   "$BIN/mk-outbox-relay" >"$WORK/relay.log" 2>&1 & PIDS+=($!)
+TWSIM=http://127.0.0.1:8790; TW_ACCOUNT=ACaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; TW_TOKEN=smoke-auth-token-$(python3 -c 'import secrets;print(secrets.token_hex(8))')
 MK_DATABASE_URL="$(url_for mk_worker_login worker)" MK_WORKER_ID=worker-smoke MK_LEASE_SECS=60 MK_ALLOW_LOOPBACK_HTTP=1 \
-  MK_MOBILE_INTAKE_URL="$AGENT/work-orders" MK_EGRESS_AUTHORITIES=127.0.0.1:8787 \
+  MK_MOBILE_INTAKE_URL="$AGENT/work-orders" MK_EGRESS_AUTHORITIES=127.0.0.1:8787,127.0.0.1:8790 \
+  MK_TWILIO_API_BASE="$TWSIM" MK_PUBLIC_WEBHOOK_BASE="$WEBHOOK_BASE" \
   "$BIN/mk-action-worker" >"$WORK/worker.log" 2>&1 & PIDS+=($!)
+MK_TWSIM_ACCOUNT_SID="$TW_ACCOUNT" MK_TWSIM_AUTH_TOKEN="$TW_TOKEN" MK_TWSIM_BIND=127.0.0.1:8790 MK_TWSIM_CALLBACK_BASE="$WEBHOOK_BASE" \
+  "$BIN/mk-twilio-sim" >"$WORK/twsim.log" 2>&1 & PIDS+=($!)
 for i in $(seq 1 30); do curl -fsS "$API/health/ready" >/dev/null 2>&1 && break; sleep 1; done
 curl -fsS "$API/health/ready" >/dev/null || die "kernel api not ready"
 
@@ -156,9 +162,14 @@ c2=$(curl -sS -o /dev/null -w '%{http_code}' -X POST "$API/internal/v1/kill-swit
 log "gate 3: revoked approval is never dispatched"
 [ "$(propose "$CONTACT" "+15555550100" "smoke-revoked-1")" = 201 ] || die "propose rev"
 A2=$(j 'd["result"]["action_id"]'); D2=$(j 'd["result"]["action_digest"]')
+# Pause the worker so the approval is still live when it is revoked (the race
+# between a human revoking and the worker consuming is what this gate tests;
+# whichever side commits first must win cleanly — here we force "revoke first").
+kill -STOP "${PIDS[2]}" 2>/dev/null || true
 [ "$(approve "$A2" "$D2")" = 200 ] || die "approve rev: $(cat "$WORK/out.json")"
 AP2=$(j 'd["approval"]["approval_id"]')
 [ "$(ops -X POST "$APP/api/agent-ops/approvals/$AP2/revoke")" = 200 ] || die "revoke: $(cat "$WORK/out.json")"
+kill -CONT "${PIDS[2]}" 2>/dev/null || true
 sleep 6; s=$(state "$A2"); case "$s" in dispatching|completed) die "revoked action dispatched: $s";; esac
 grep -q "$A2" "$WORK/agent.log" && die "revoked action reached the device agent"
 log "  state after revoke: $s"
@@ -238,7 +249,62 @@ sleep 3; s=$(state "$A4"); case "$s" in cancelled) ;; *) die "approval by revoke
 grep -q "$A4" "$WORK/agent.log" && die "revoked-approver action reached the device agent"
 log "  revoked session → 401 PRINCIPAL_REVOKED; its live approval → cancelled"
 
+log "gate 10: production SMS path — registered sender, provider submission, authenticated status callbacks, inbound STOP"
+[ "$(ops -X POST "$APP/api/agent-ops/senders" -d "{\"owner_user_id\":\"$(python3 -c "import jwt,uuid;print(uuid.UUID(jwt.decode('$TOK',options={'verify_signature':False})['sub']))")\",\"display_name\":\"Smoke Business\",\"account_sid\":\"$TW_ACCOUNT\",\"auth_token\":\"$TW_TOKEN\",\"from_number\":\"+15005550006\"}")" = 201 ] || die "register sender: $(cat "$WORK/out.json")"
+SENDER=$(j 'd["sender_identity_id"]')
+# Secrets never reach FastAPI storage; the kernel sealed the token.
+! grep -q "$TW_TOKEN" "$WORK/app.db" 2>/dev/null || die "provider token found in the application database"
+! grep -q "$TW_TOKEN" "$WORK/api.log" "$WORK/worker.log" "$WORK/app.log" || die "provider token leaked to logs"
+# Third approver (the earlier one's session is revoked): register a passkey.
+curl -fsS "$APP/api/auth/members" "${H[@]}" -d '{"email":"approver3@smoke.example.com","password":"superSecret123!","role":"consultant"}' >/dev/null
+TOK3=$(curl -fsS "$APP/api/auth/login" -H 'content-type: application/json' -d '{"email":"approver3@smoke.example.com","password":"superSecret123!"}' | python3 -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')
+H2=(-H "authorization: Bearer $TOK3" -H 'content-type: application/json')
+SA="$WORK/softauthn3.json"; "$BIN/mk-softauthn" new "$SA" es256 >/dev/null
+[ "$(ops2 -X POST "$APP/api/agent-ops/approval-credentials/register/begin")" = 200 ] || die "register/begin 3"
+REG=$("$BIN/mk-softauthn" register "$SA" "$(j 'd["challenge"]')" "$RP_ID" "$ORIGIN")
+[ "$(ops2 -X POST "$APP/api/agent-ops/approval-credentials/register/finish" -d "$REG")" = 201 ] || die "register/finish 3"
+# C8: dispatch is deferred until the inbound path has a successful check.
+[ "$(ops -X POST "$APP/api/agent-ops/inbound/health" -d '{"ok":true}')" = 204 ] || die "inbound health"
+CONTACT3=$(python3 -c 'import uuid;print(uuid.uuid4())')
+# The application customer record (timezone known → F9 passes; contact tz travels to the kernel).
+CUST=$(curl -fsS "$APP/api/customers" "${H[@]}" -d '{"name":"Smoke Customer","phone":"+15555550123"}' | python3 -c 'import sys,json;print(json.load(sys.stdin)["id"])')
+curl -fsS "$APP/api/customers/$CUST/destinations" "${H[@]}" -d '{"channel":"sms","value":"+15555550123"}' >/dev/null
+curl -fsS -X PUT "$APP/api/customers/$CUST/preferences" "${H[@]}" -d '{"timezone":"America/Chicago"}' >/dev/null
+CONTACT3=$(python3 -c "import uuid;print(uuid.UUID('$CUST'))")
+[ "$(grant "$CONTACT3")" = 201 ] || die "grant3"
+propose_provider() { ops -X POST "$APP/api/agent-ops/actions" -d "{\"origin\":\"agent\",\"request\":{\"workflow\":\"customer_follow_up\",\"action_kind\":\"send_sms\",\"tool_id\":\"sms.provider.send.v1\",\"resource\":{\"type\":\"contact\",\"id\":\"$CONTACT3\"},\"arguments\":{\"contact_id\":\"$CONTACT3\",\"to\":\"+15555550123\",\"template_id\":\"reorder_followup.v1\",\"rendered_text\":\"$1 Reply STOP to opt out.\"},\"purpose\":\"customer_requested_follow_up\",\"risk\":\"high\",\"requested_at\":\"$NOW\",\"expires_at\":\"$LATER\",\"idempotency_key\":\"$2\",\"evidence\":[]}}"; }
+c=$(propose_provider "Hi! Your order shipped." "smoke-provider-1"); [ "$c" = 202 ] || die "propose provider ($c): $(cat "$WORK/out.json")"
+A5=$(j 'd["result"]["action_id"]'); D5=$(j 'd["result"]["action_digest"]')
+[ "$(j 'd["result"]["message_state"]')" = awaiting_approval ] || die "message_state at proposal"
+[ "$(approve "$A5" "$D5")" = 200 ] || die "approve provider: $(cat "$WORK/out.json")"
+for i in $(seq 1 40); do ops "$APP/api/agent-ops/actions/$A5" >/dev/null; ms=$(j 'd.get("message_state")'); [ "$ms" = delivered ] && break; sleep 1; done
+[ "$ms" = delivered ] || die "provider path did not reach delivered via authenticated callbacks: $(cat "$WORK/out.json")"
+[ "$(j 'd["state"]')" = completed ] && [ "$(j 'd["read_status"]')" = unknown ] || die "state/read_status"
+[ "$(j 'd["provider_message_id"]')" != None ] || die "no provider message id"
+grep -q "callback sent for .* → 200" "$WORK/twsim.log" && grep -q "callback delivered for .* → 200" "$WORK/twsim.log" || die "simulator callbacks not accepted"
+# Forged status callback (bad signature, hostile forwarding headers) → 403.
+c=$(curl -sS -o /dev/null -w '%{http_code}' -X POST "$API/webhooks/twilio/status/$SENDER" -H 'x-twilio-signature: AAAA' -H 'x-forwarded-host: attacker.example' -d "MessageSid=SMforged&MessageStatus=delivered&AccountSid=$TW_ACCOUNT")
+[ "$c" = 403 ] || die "forged callback accepted ($c)"
+# Inbound STOP, signed exactly as Twilio would over the configured public URL → suppression; next proposal refused.
+python3 - "$TW_TOKEN" "$WEBHOOK_BASE/webhooks/twilio/inbound/$SENDER" "$API/webhooks/twilio/inbound/$SENDER" "$TW_ACCOUNT" <<'EOF2'
+import sys,hmac,hashlib,base64,urllib.request,urllib.parse
+token,public,deliver,acct=sys.argv[1:]
+form=[("MessageSid","SMsmokestop1"),("AccountSid",acct),("From","+15555550123"),("To","+15005550006"),("Body","STOP"),("NumMedia","0")]
+data=public+"".join(k+v for k,v in sorted(form))
+sig=base64.b64encode(hmac.new(token.encode(),data.encode(),hashlib.sha1).digest()).decode()
+req=urllib.request.Request(deliver,data=urllib.parse.urlencode(form).encode(),headers={"X-Twilio-Signature":sig,"Content-Type":"application/x-www-form-urlencoded"})
+r=urllib.request.urlopen(req); assert r.status==200, r.status
+# duplicate delivery
+r=urllib.request.urlopen(req); assert r.status==200
+EOF2
+c=$(propose_provider "One more." "smoke-provider-2"); [ "$c" = 403 ] && [ "$(j 'd["decision"]["code"]')" = suppressed ] || die "opted-out customer still proposable ($c)"
+# Application-side meaning processing records the opt-out outcome exactly once.
+[ "$(ops -X POST "$APP/api/inbound/process" -d '{"limit":50}')" = 200 ] || die "inbound process: $(cat "$WORK/out.json")"
+[ "$(j 'd["processed"]')" = 1 ] && [ "$(j 'd["events"][0]["class"]')" = opt_out ] || die "inbound processing: $(cat "$WORK/out.json")"
+[ "$(ops -X POST "$APP/api/inbound/process" -d '{"limit":50}')" = 200 ] && [ "$(j 'd["processed"]')" = 0 ] || die "inbound event processed twice"
+log "  provider_accepted → sent → delivered via signed callbacks; forged → 403; STOP → suppressed, proposal refused, processed once"
+
 log "no PII in kernel/agent logs"
-! grep -q "5555550100\|Your order shipped" "$WORK/api.log" "$WORK/worker.log" "$WORK/relay.log" "$WORK/agent.log" || die "PII leaked to logs"
+! grep -q "5555550100\|5555550123\|Your order shipped" "$WORK/api.log" "$WORK/worker.log" "$WORK/relay.log" "$WORK/agent.log" || die "PII leaked to logs"
 
 log "ALL GATES PASSED — artifacts in $WORK"

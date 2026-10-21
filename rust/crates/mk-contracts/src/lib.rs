@@ -8,6 +8,7 @@
 //! Nothing here decides whether an action is allowed.
 
 pub mod action;
+pub mod message_state;
 pub mod mobile;
 pub mod problem;
 pub mod schema;
@@ -19,5 +20,6 @@ pub use action::{
 pub use mobile::{
     MOBILE_WORK_ORDER_SCHEMA, MobileCallback, MobilePing, MobileWorkOrder, WorkOrderStep,
 };
+pub use message_state::MessageState;
 pub use problem::ProblemDetails;
 pub use schema::{ContractError, SchemaId, validate};

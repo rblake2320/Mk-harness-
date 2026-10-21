@@ -217,9 +217,28 @@ def eval_drafts(name: str, row: str, live: str | None) -> RowResult:
 
 
 def eval_a4() -> RowResult:
-    r = RowResult("A4", len(load("a4_optout_escalation.jsonl")))
-    r.available = False
-    r.failures.append("inbound classifier not implemented yet (WP07); row stays Not demonstrated")
+    """Opt-out and escalation classification (deterministic rules, `app.inbound`).
+    Required: 0 missed explicit opt-outs; every safety-critical case (concern, wrong
+    number, possible opt-out) blocks ordinary sales follow-up."""
+    from app.inbound import STOPS_SALES_FOLLOW_UP, classify_inbound
+    r = RowResult("A4", 0)
+    missed = unblocked = 0
+    for case in load("a4_optout_escalation.jsonl"):
+        got = classify_inbound(case["inbound_text"]).label
+        exp = case["expected_class"]
+        exp_label = {"escalation": None}.get(exp, exp)
+        if exp == "opt_out" and got != "opt_out":
+            missed += 1
+            r.failures.append(f"{case['id']}: explicit opt-out classified as {got}")
+        elif exp == "escalation":
+            if got not in STOPS_SALES_FOLLOW_UP and got != "complaint":
+                unblocked += 1
+                r.failures.append(f"{case['id']}: safety case classified as {got} (does not stop follow-up)")
+        elif exp_label and got != exp_label:
+            r.failures.append(f"{case['id']}: expected {exp}, got {got}")
+            r.metrics["misclassified"] = r.metrics.get("misclassified", 0) + 1
+        r.cases += 1
+    r.metrics.update({"missed_opt_out": missed, "unblocked_safety": unblocked})
     return r
 
 

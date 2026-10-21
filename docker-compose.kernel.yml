@@ -52,6 +52,8 @@ services:
       # unless MK_ALLOW_UNBOUND_APPROVAL=1 (development only, never set here).
       MK_APPROVAL_RP_ID: ${MK_APPROVAL_RP_ID:?approval UI domain, e.g. app.example.com}
       MK_APPROVAL_ORIGINS: ${MK_APPROVAL_ORIGINS:?comma list, e.g. https://app.example.com}
+      # Provider webhooks (WP07): the public URL the provider is configured to call.
+      MK_PUBLIC_WEBHOOK_BASE: ${MK_PUBLIC_WEBHOOK_BASE:?e.g. https://hooks.example.com}
     read_only: true
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
@@ -82,7 +84,10 @@ services:
       MK_REDIS_URL: redis://redis:6379
       MK_MASTER_KEY: ${MASTER_KEY:?set in .env}
       MK_MOBILE_INTAKE_URL: ${MK_MOBILE_INTAKE_URL:-}
-      MK_EGRESS_AUTHORITIES: ${MK_EGRESS_AUTHORITIES:-}
+      MK_EGRESS_AUTHORITIES: ${MK_EGRESS_AUTHORITIES:-api.twilio.com}
+      # Production SMS transport (WP07). Empty disables the provider adapter.
+      MK_TWILIO_API_BASE: ${MK_TWILIO_API_BASE:-https://api.twilio.com}
+      MK_PUBLIC_WEBHOOK_BASE: ${MK_PUBLIC_WEBHOOK_BASE:?e.g. https://hooks.example.com}
     read_only: true
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]

@@ -39,3 +39,7 @@ mk-testkit = { workspace = true }
 [[bin]]
 name = "mk-simulator"
 path = "src/bin/simulator.rs"
+
+[[bin]]
+name = "mk-twilio-sim"
+path = "src/bin/twilio_sim.rs"

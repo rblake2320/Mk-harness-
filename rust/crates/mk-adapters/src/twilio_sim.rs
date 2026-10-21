@@ -89,7 +89,7 @@ async fn create_message(
     let to = form.get("To").cloned().unwrap_or_default();
     let from = form.get("From").cloned().or_else(|| form.get("MessagingServiceSid").cloned()).unwrap_or_default();
     let text = form.get("Body").cloned().unwrap_or_default();
-    if form.get("StatusCallback").is_none() {
+    if !form.contains_key("StatusCallback") {
         return (StatusCode::BAD_REQUEST, axum::Json(json!({"code": 21609, "message": "StatusCallback required by simulator", "status": 400}))).into_response();
     }
     let reject = |code: i64, msg: &str| (StatusCode::BAD_REQUEST, axum::Json(json!({"code": code, "message": msg, "status": 400}))).into_response();
@@ -103,6 +103,7 @@ async fn create_message(
     let sid = format!("SM{}", uuid::Uuid::now_v7().simple());
     let msg = json!({
         "sid": sid, "status": "queued", "to": to, "from": from, "body": text,
+        "status_callback": form.get("StatusCallback").cloned().unwrap_or_default(),
         "date_created": chrono::Utc::now().to_rfc2822(), "error_code": null, "num_segments": "1",
         "account_sid": st.account_sid,
     });
@@ -147,6 +148,10 @@ async fn list_messages(
 
 impl TwilioSimulator {
     pub async fn start(account_sid: &str, auth_token: AdapterSecret, mode: TwilioSimMode) -> std::io::Result<Self> {
+        Self::start_on("127.0.0.1:0", account_sid, auth_token, mode).await
+    }
+
+    pub async fn start_on(bind: &str, account_sid: &str, auth_token: AdapterSecret, mode: TwilioSimMode) -> std::io::Result<Self> {
         let state = Arc::new(SimState {
             account_sid: account_sid.to_owned(),
             auth_token,
@@ -157,7 +162,7 @@ impl TwilioSimulator {
         let app = Router::new()
             .route("/2010-04-01/Accounts/{account}/Messages.json", post(create_message).get(list_messages))
             .with_state(state.clone());
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+        let listener = tokio::net::TcpListener::bind(bind).await?;
         let addr = listener.local_addr()?;
         let handle = tokio::spawn(async move {
             let _ = axum::serve(listener, app).await;
@@ -177,6 +182,37 @@ impl TwilioSimulator {
 
     pub async fn created_messages(&self) -> Vec<Value> {
         self.state.messages.lock().await.clone()
+    }
+
+    /// Mark a created message as having had its callbacks posted (standalone binary bookkeeping).
+    pub async fn take_uncalled(&self) -> Vec<Value> {
+        let mut msgs = self.state.messages.lock().await;
+        let mut out = Vec::new();
+        for m in msgs.iter_mut() {
+            if m.get("callbacks_posted").is_none() {
+                m["callbacks_posted"] = json!(true);
+                out.push(m.clone());
+            }
+        }
+        out
+    }
+
+    /// Status-callback post for a message created through this simulator,
+    /// using the `StatusCallback` URL the kernel supplied on submission as the
+    /// public URL (what Twilio signs over) and `deliver_base` to reach it.
+    pub async fn post_status_for(&self, msg: &Value, deliver_base: &str, status: &str) -> Result<(u16, String), String> {
+        let public = msg["status_callback"].as_str().unwrap_or_default().to_owned();
+        let path = url::Url::parse(&public).map(|u| u.path().to_owned()).unwrap_or_default();
+        let deliver = format!("{}{}", deliver_base.trim_end_matches('/'), path);
+        let form: Vec<(String, String)> = vec![
+            ("MessageSid".into(), msg["sid"].as_str().unwrap_or_default().into()),
+            ("MessageStatus".into(), status.into()),
+            ("AccountSid".into(), self.state.account_sid.clone()),
+            ("From".into(), msg["from"].as_str().unwrap_or_default().into()),
+            ("To".into(), msg["to"].as_str().unwrap_or_default().into()),
+            ("ApiVersion".into(), "2010-04-01".into()),
+        ];
+        self.post_signed(&public, &deliver, form, false).await
     }
 
     #[must_use]

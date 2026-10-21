@@ -25,6 +25,9 @@ Environment:
 | `MK_APPROVAL_ORIGINS` | api | comma list of exact origins allowed in `clientDataJSON` (`https://app.example.com`); each must be within `MK_APPROVAL_RP_ID` |
 | `MK_ALLOW_UNBOUND_APPROVAL` | api | **development only.** `1` lets the API start without an RP id; approvals are then recorded with `human_binding=unbound`. Never set in staging or production; pre-flight refuses it |
 | `MK_APPROVAL_ALLOW_NO_UV` | api | development only; accept assertions without the user-verified flag |
+| `MK_PUBLIC_WEBHOOK_BASE` | api, worker | public base URL the messaging provider calls (`https://hooks.example.com`). Webhook signatures are verified over this URL — never over `Host`/`X-Forwarded-*`. The worker uses it to build each message's `StatusCallback` |
+| `MK_TWILIO_API_BASE` | worker | `https://api.twilio.com` in production; the simulator's address in staging/smoke. Empty = provider adapter disabled |
+| `MK_EGRESS_AUTHORITIES` | worker | must include `api.twilio.com` for the provider adapter (the tool allowlist pins it) |
 | `MK_RUN_MIGRATIONS` | api | `1` to run `migrations/kernel` on boot (migrator role) |
 | `MK_MOBILE_INTAKE_URL` | worker | template, e.g. `https://adapters.internal/agents/{agent_id}/work-orders` |
 | `MK_EGRESS_AUTHORITIES` | worker | comma list of `host[:port]` the worker may call |

@@ -12,7 +12,7 @@ use mk_policy::{
 use mk_queue::backoff::Next;
 use mk_queue::{DispatchMessage, RetryPolicy, classify};
 use mk_store::actions::{self, Actor};
-use mk_store::{Store, StoreError, approvals, consent, human_approval, outbox, policy};
+use mk_store::{Store, StoreError, approvals, consent, human_approval, messaging, outbox, policy};
 use serde_json::json;
 
 #[derive(Debug)]
@@ -31,6 +31,8 @@ pub enum DispatchOutcome {
     Dispatched { pending_callback: bool },
     /// Rechecks failed; action moved to a terminal/suppressed state. Ack.
     Blocked { code: DenyCode, state: ActionState },
+    /// Inbound path unhealthy (C8): left queued, re-delivered later. Ack.
+    Deferred { reason: &'static str },
     /// Adapter failed; retry scheduled through the outbox. Ack.
     RetryScheduled { delay: Duration, attempt: u32 },
     /// Adapter failed permanently or exhausted retries. Ack.
@@ -112,6 +114,12 @@ pub async fn dispatch_one(
             // Serialize concurrent dispatches to the same contact+channel so
             // the frequency count below is exact, not a racy snapshot.
             actions::lock_contact_channel(&mut tx, &action.request.resource.id, ch).await?;
+            // C6: the one control path shared with suppression recording. An
+            // opt-out committed before this lock is granted is visible below;
+            // one that arrives after waits for this transaction to finish and
+            // then finds the action already past authorization (non-retractable
+            // once submitted) or still cancellable (queued) — never both.
+            messaging::lock_control_path(&mut tx, ch.as_str(), dest).await?;
             (
                 consent::permissions_for(&mut tx, contact, ch).await?,
                 consent::suppressions_for(&mut tx, ch, dest).await?,
@@ -149,6 +157,17 @@ pub async fn dispatch_one(
             state: t.state,
         });
     }
+    // C8: a stale or paused inbound path defers provider dispatch for this
+    // tenant. The action stays queued; it is re-delivered later.
+    let adapter_kind_early = ctx.tools.get(&action.request.tool_id).map_or("", |t| t.adapter_kind);
+    if adapter_kind_early == mk_adapters::twilio::ADAPTER_KIND
+        && let Some(reason) = messaging::inbound_dispatch_block(&mut tx, now).await?
+    {
+        outbox::enqueue(&mut tx, action_id, "retry", now + chrono::Duration::seconds(30), json!({"deferred": reason})).await?;
+        outbox::release_lease(&mut tx, action_id, lease).await?;
+        tx.commit().await?;
+        return Ok(DispatchOutcome::Deferred { reason });
+    }
     let attempt = u32::try_from(action.attempt).unwrap_or(0);
     let recheck = RecheckInput {
         action_id,
@@ -162,7 +181,11 @@ pub async fn dispatch_one(
         destination_hash: action.destination_hash.as_deref().unwrap_or_default(),
         permissions: &permissions,
         suppressions: &suppressions,
-        local_hour: local_hour_in_zone(now, &tenant_policy.contact_tz, tz_offset),
+        local_hour: local_hour_in_zone(
+            now,
+            mk_policy::contact_zone(&action.request.arguments, &tenant_policy.contact_tz).unwrap_or(&tenant_policy.contact_tz),
+            tz_offset,
+        ),
         sends_last_24h,
         attempt,
         now,
@@ -214,6 +237,21 @@ pub async fn dispatch_one(
     )
     .await?;
     outbox::record_attempt_start(&mut tx, action_id, a.attempt, &ctx.worker_id, now).await?;
+    // C4 step 3: record that submission is starting, durably, before the
+    // provider request. Only for provider-backed message kinds.
+    let sender_identity_id = (adapter_kind_early == mk_adapters::twilio::ADAPTER_KIND)
+        .then(|| {
+            action
+                .request
+                .arguments
+                .get("sender_identity_id")
+                .and_then(serde_json::Value::as_str)
+                .and_then(|v| v.parse::<uuid::Uuid>().ok())
+        })
+        .flatten();
+    if let Some(sid) = sender_identity_id {
+        messaging::record_submission_started(&mut tx, action_id, a.attempt, sid, now).await?;
+    }
     tx.commit().await?;
     let attempt_no = a.attempt;
 
@@ -243,6 +281,11 @@ pub async fn dispatch_one(
     let mut tx = store.begin(tenant).await?;
     let outcome = match result {
         Ok(receipt) => {
+            if sender_identity_id.is_some()
+                && let Some(pmid) = receipt.external_ref.as_deref()
+            {
+                messaging::record_provider_accepted(&mut tx, action_id, attempt_no, pmid, now2).await?;
+            }
             let st = if receipt.pending_callback {
                 "started"
             } else {
@@ -293,6 +336,19 @@ pub async fn dispatch_one(
             }
         }
         Err(e) => {
+            if sender_identity_id.is_some() {
+                let st = if e.class == mk_queue::RetryClass::Ambiguous { "submission_unknown" } else { "failed" };
+                messaging::record_submission_outcome(&mut tx, action_id, attempt_no, st, Some(e.code), now2).await?;
+            }
+            // Provider-side opt-out (e.g. Twilio 21610): the recipient told the
+            // carrier to stop. Record the suppression here, under the control
+            // path, so no further proposal to this destination is authorized.
+            if e.code == "provider_opt_out"
+                && let (Some(ch), Some(dest)) = (action.channel, action.destination_hash.as_deref())
+            {
+                messaging::lock_control_path(&mut tx, ch.as_str(), dest).await?;
+                consent::add_suppression(&mut tx, Some(ch), Some(dest), "destination", "provider_opt_out", true, "provider", worker_actor, now2).await?;
+            }
             let jitter: f64 = rand::random();
             match classify(
                 e.class,

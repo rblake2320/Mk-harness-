@@ -54,3 +54,20 @@ not keep talking.
 
 Opt-out persistence p99 ≤ 2 s from receipt at the application; inbound persistence
 p99 ≤ 2 s; inbound → inbox visible p95 ≤ 5 s (O3).
+
+
+## Implementation status (WP07, 2026-10-20)
+
+| Contract step | Implementation |
+|---|---|
+| Authenticate | `X-Twilio-Signature` over `MK_PUBLIC_WEBHOOK_BASE` + path (+ query), verified with the sender identity's own token; `Host`/`X-Forwarded-*` never read; unknown sender id answers like a bad signature |
+| Bind sender → tenant | sender identity id in the URL path; `AccountSid` echo and `To` number checked against the identity |
+| Durable dedupe | `kernel.inbound_events UNIQUE (provider, provider_event_id)`; a redelivery returns 200 and creates nothing |
+| Detect opt-out / possible opt-out | `mk-adapters::twilio::detect_opt_out` (vocabulary mirrored in `backend/app/inbound.py`) |
+| Suppress or hold | explicit → permanent suppression + queued outreach suppressed; possible → non-permanent hold a human must lift; both under the serialized control path |
+| Acknowledge | empty TwiML after commit |
+| Async meaning | `GET /internal/v1/inbound/pending` (body unsealed only for a human principal) → `POST /api/inbound/process` → `POST /internal/v1/inbound/{id}/processed` (single-shot) |
+| Health → pause | `kernel.inbound_health`; worker defers provider dispatch when stale (>60 s after a failure), paused, or unverified; resume requires a fresh ok and zero pending events |
+
+Not yet: the public-URL probe job (WP09), delivery-uncertainty exceptions in the app view
+(WP08), and any real-provider run.

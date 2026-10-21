@@ -152,6 +152,11 @@ pub async fn add_suppression(
     actor: Actor<'_>,
     now: DateTime<Utc>,
 ) -> Result<Uuid, StoreError> {
+    // C6: suppression and dispatch authorization share one serialized control
+    // path per (tenant, channel, destination). Re-entrant within a session.
+    if let (Some(ch), Some(d)) = (channel, destination_hash) {
+        crate::messaging::lock_control_path(tx, ch.as_str(), d).await?;
+    }
     let id = Uuid::now_v7();
     sqlx::query(
         "INSERT INTO kernel.suppressions (suppression_id, tenant_id, normalized_destination_hash, channel, scope, reason, permanent, created_at, source)

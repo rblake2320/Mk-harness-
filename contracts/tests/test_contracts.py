@@ -155,3 +155,28 @@ def test_commitment_and_outcome_schemas_compile_and_separate_transport_from_busi
     ov = Draft202012Validator(o)
     ov.validate({"id": "a" * 32, "kind": "consultant_confirmed_order", "customer_id": "b" * 32, "commitment_id": None})
     assert list(ov.iter_errors({"id": "a" * 32, "kind": "delivered", "customer_id": "b" * 32, "commitment_id": None}))
+
+
+def test_inbound_event_schema_matches_contract_fields_and_message_state_vocabulary():
+    """C5: the inbound event carries exactly the contract-mandated fields; C3: the
+    message-state vocabulary in action-result is the contract's list, in order."""
+    inbound = _load("inbound/v1/inbound-event.schema.json")
+    required = {"event_id", "provider", "provider_event_id", "tenant_id", "sender_identity_id", "source_destination",
+                "received_at", "provider_timestamp", "content_reference", "authentication_result", "raw_event_digest"}
+    assert required <= set(inbound["required"]), set(inbound["required"]) ^ required
+    assert inbound["additionalProperties"] is False
+    assert "body" not in inbound["properties"], "the body is sealed and referenced, never a field"
+    result = _load("action/v1/action-result.schema.json")
+    assert result["properties"]["message_state"]["enum"] == [
+        "proposed", "awaiting_approval", "approved", "queued", "dispatch_authorized", "submission_started",
+        "provider_accepted", "sent", "delivered", "failed", "delivery_unknown", "submission_unknown",
+        "cancelled", "denied", "expired"]
+    assert result["properties"]["read_status"]["enum"] == ["unknown", "read"]
+    sample = {"event_id": "01a15bcc-6dd9-7335-a12a-536eabc1fa21", "provider": "twilio", "provider_event_id": "SM1",
+              "tenant_id": "01a15bcc-6dd9-7335-a12a-536eabc1fa21", "sender_identity_id": "01a15bcc-6dd9-7335-a12a-536eabc1fa21",
+              "source_destination": "a" * 64, "received_at": "2026-10-20T00:00:00Z", "provider_timestamp": None,
+              "content_reference": "sealed:01a15bcc-6dd9-7335-a12a-536eabc1fa21", "authentication_result": "verified",
+              "raw_event_digest": "sha256:" + "0" * 64, "opt_out_signal": "explicit", "disposition": "suppressed"}
+    Draft202012Validator(inbound).validate(sample)
+    bad = dict(sample, authentication_result="failed")
+    assert list(Draft202012Validator(inbound).iter_errors(bad)), "unverified events must not validate"

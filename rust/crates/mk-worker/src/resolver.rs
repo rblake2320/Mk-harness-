@@ -3,6 +3,9 @@
 
 use async_trait::async_trait;
 use mk_adapters::mobile::{AgentResolver, AgentTarget};
+use mk_adapters::twilio::{SenderResolver, TwilioSender};
+use mk_crypto::AdapterSecret;
+use secrecy::ExposeSecret as _;
 use mk_crypto::MasterKey;
 use mk_domain::TenantId;
 use mk_store::{Store, adapters};
@@ -40,6 +43,33 @@ impl AgentResolver for StoreResolver {
             secret,
             callback_authority: reg.callback_authority,
             capabilities: reg.capabilities,
+        })
+    }
+}
+
+/// Store-backed [`SenderResolver`] for the Twilio adapter: unseals the
+/// tenant's sender credentials for one submission. The status-callback URL is
+/// kernel-owned: `{public_base}/webhooks/twilio/status/{sender_identity_id}`.
+#[derive(Debug)]
+pub struct StoreSenderResolver {
+    pub store: Store,
+    pub master: MasterKey,
+    pub public_webhook_base: String,
+}
+
+#[async_trait]
+impl SenderResolver for StoreSenderResolver {
+    async fn resolve(&self, tenant: TenantId, sender_identity_id: uuid::Uuid) -> Option<TwilioSender> {
+        let mut tx = self.store.begin(tenant).await.ok()?;
+        let s = mk_store::messaging::sender_secret(&mut tx, &self.master, sender_identity_id).await.ok()?;
+        tx.commit().await.ok()?;
+        Some(TwilioSender {
+            sender_identity_id,
+            account_sid: s.account_sid,
+            auth_token: AdapterSecret::new(s.auth_token.expose_secret()),
+            from_number: s.from_number,
+            messaging_service_sid: s.messaging_service_sid,
+            status_callback_url: format!("{}/webhooks/twilio/status/{sender_identity_id}", self.public_webhook_base.trim_end_matches('/')),
         })
     }
 }

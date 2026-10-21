@@ -222,4 +222,4 @@ def test_evaluation_harness_replay_passes_on_seed_sets():
         rc = ev.main([])
     assert rc == 0, buf.getvalue()
     out = buf.getvalue()
-    assert "A4 N/A" in out and "NOT acceptance evidence" in out
+    assert "A4 PASS" in out and "NOT acceptance evidence" in out

@@ -4,6 +4,7 @@ pub mod approvals;
 pub mod callbacks;
 pub mod consent;
 pub mod human_approval;
+pub mod messaging;
 pub mod ops;
 
 use hmac::{Hmac, Mac};

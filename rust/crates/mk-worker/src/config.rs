@@ -11,6 +11,10 @@ pub struct Config {
     pub master_key: MasterKey,
     pub worker_id: String,
     pub adapter_intake_template: String,
+    /// Twilio API base (empty = adapter disabled). Production: https://api.twilio.com
+    pub twilio_api_base: String,
+    /// Public base URL the provider calls back (kernel webhook ingress).
+    pub public_webhook_base: String,
     pub egress_authorities: Vec<String>,
     pub allow_loopback_http: bool,
     pub batch: usize,
@@ -28,6 +32,8 @@ impl Config {
             worker_id: std::env::var("MK_WORKER_ID")
                 .unwrap_or_else(|_| format!("worker-{}", uuid::Uuid::now_v7().simple())),
             adapter_intake_template: std::env::var("MK_MOBILE_INTAKE_URL").unwrap_or_default(),
+            twilio_api_base: std::env::var("MK_TWILIO_API_BASE").unwrap_or_default(),
+            public_webhook_base: std::env::var("MK_PUBLIC_WEBHOOK_BASE").unwrap_or_default(),
             egress_authorities: std::env::var("MK_EGRESS_AUTHORITIES")
                 .unwrap_or_default()
                 .split(',')

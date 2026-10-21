@@ -87,6 +87,7 @@ async fn world(mode: SimMode) -> Option<World> {
         registry: AdapterRegistry {
             internal: InternalRecordAdapter,
             mobile: Some(mobile),
+            twilio: None,
         },
         tools: ToolAllowlist::v1(),
         worker_id: "worker-e2e".into(),

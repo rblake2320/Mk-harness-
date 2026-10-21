@@ -88,7 +88,14 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/kill-switch/global/challenge",
             post(routes::human_approval::global_enable_challenge),
-        );
+        )
+        .route("/senders", post(routes::messaging::register_sender).get(routes::messaging::list_senders))
+        .route("/senders/{id}/registration", post(routes::messaging::set_registration))
+        .route("/inbound/pending", get(routes::messaging::inbound_pending))
+        .route("/inbound/{event_id}/processed", post(routes::messaging::inbound_processed))
+        .route("/inbound/health", get(routes::messaging::inbound_health).post(routes::messaging::inbound_health_report))
+        .route("/inbound/pause", post(routes::messaging::inbound_pause))
+        .route("/inbound/resume", post(routes::messaging::inbound_resume));
 
     Router::new()
         .nest("/internal/v1", internal)
@@ -96,6 +103,9 @@ pub fn router(state: AppState) -> Router {
             "/adapter/v1/work-orders/{action_id}/callbacks",
             post(routes::callbacks::callback),
         )
+        // Provider webhooks: public ingress, authenticated by provider signature.
+        .route("/webhooks/twilio/status/{sender_identity_id}", post(routes::messaging::twilio_status))
+        .route("/webhooks/twilio/inbound/{sender_identity_id}", post(routes::messaging::twilio_inbound))
         .route("/health/live", get(routes::ops::live))
         .route("/health/ready", get(routes::ops::ready))
         .route("/metrics", get(routes::ops::metrics))

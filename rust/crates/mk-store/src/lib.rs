@@ -20,6 +20,7 @@ pub mod consent;
 pub mod error;
 pub mod human_approval;
 pub mod idempotency;
+pub mod messaging;
 pub mod outbox;
 pub mod policy;
 pub mod tx;
@@ -50,6 +51,11 @@ pub fn migrator() -> sqlx::migrate::Migrator {
             3,
             "human approval authority",
             include_str!("../../../../migrations/kernel/0003_human_approval_authority.sql"),
+        ),
+        (
+            4,
+            "provider messaging",
+            include_str!("../../../../migrations/kernel/0004_provider_messaging.sql"),
         ),
     ];
     let migrations: Vec<Migration> = FILES

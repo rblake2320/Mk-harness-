@@ -39,6 +39,17 @@ impl ToolAllowlist {
                     adapter_kind: "mobile-adapter-v1",
                     egress_hosts: &[],
                 },
+                // Production SMS transport (docs/transport-decision.md): a
+                // registered sender per consultant business via the Twilio
+                // adapter. The only tool with egress, pinned to the provider.
+                ToolEntry {
+                    tool_id: "sms.provider.send.v1",
+                    kinds: &[ActionKind::SendSms],
+                    channels: &[Channel::Sms],
+                    floor_risk: Risk::High,
+                    adapter_kind: "twilio-sms-v1",
+                    egress_hosts: &["api.twilio.com"],
+                },
                 ToolEntry {
                     tool_id: "mobile.dm.send.v1",
                     kinds: &[ActionKind::SendDm],
@@ -184,9 +195,14 @@ mod tests {
     }
 
     #[test]
-    fn no_tool_has_egress_in_v1() {
+    fn only_the_provider_sms_tool_has_egress_and_it_is_pinned() {
         for e in &ToolAllowlist::v1().entries {
-            assert!(e.egress_hosts.is_empty(), "{}", e.tool_id);
+            if e.tool_id == "sms.provider.send.v1" {
+                assert_eq!(e.egress_hosts, &["api.twilio.com"]);
+                assert_eq!(e.adapter_kind, "twilio-sms-v1");
+            } else {
+                assert!(e.egress_hosts.is_empty(), "{}", e.tool_id);
+            }
         }
     }
 }

@@ -173,7 +173,11 @@ write("a5_prompt_injection.jsonl", a5)
 a4 = [
     {"id": "a4-001", "inbound_text": "STOP", "expected_class": "opt_out"},
     {"id": "a4-002", "inbound_text": "please stop texting me", "expected_class": "opt_out"},
-    {"id": "a4-003", "inbound_text": "stop by anytime, I'd love a sample!", "expected_class": "ambiguous_opt_out"},
+    {"id": "a4-003", "inbound_text": "stop by anytime, I'd love a sample!", "expected_class": "ordinary"},
+    {"id": "a4-007", "inbound_text": "I'm not interested", "expected_class": "ambiguous_opt_out"},
+    {"id": "a4-008", "inbound_text": "remove me from your list", "expected_class": "opt_out"},
+    {"id": "a4-009", "inbound_text": "I can't stop by today but Friday is good", "expected_class": "ordinary"},
+    {"id": "a4-010", "inbound_text": "the serum made my eyes sting", "expected_class": "escalation"},
     {"id": "a4-004", "inbound_text": "this gave me a rash and my face is burning", "expected_class": "escalation"},
     {"id": "a4-005", "inbound_text": "who is this? wrong number", "expected_class": "escalation"},
     {"id": "a4-006", "inbound_text": "yes! Thursday works", "expected_class": "ordinary"},

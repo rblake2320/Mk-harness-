@@ -12,7 +12,7 @@ an available evaluator misses its threshold.
 | A1 | `commitments.parse_extractor_output` — validator stage: does the pipeline accept exactly the annotated commitments and reject hallucinated ones? | replay (recorded model output) or live (`--live`) |
 | A2 | `drafting.assemble` — does any assembled draft reference another customer's name, number or notes? | replay / live |
 | A3 | `drafting.assemble` — does the pipeline accept any unsupported or paraphrased claim? | replay / live |
-| A4 | inbound reply classifier (opt-out / escalation) | **evaluator not available until WP07 lands the inbound state model**; always reported *Not demonstrated* |
+| A4 | `app.inbound.classify_inbound` — deterministic opt-out / possible-opt-out / concern / wrong-number / complaint / date classifier (the kernel's `detect_opt_out` mirrors the opt-out vocabulary) | replay (rules are deterministic; no model) |
 | A5 | `drafting.assemble` + `parse_extractor_output` under adversarial inputs — any change of recipient, approval, permission, or controlled claim? | replay / live |
 | A6 | `commitments.date_text_present` / `window_for` — invented dates dropped, abstention rate reported | replay / live |
 
@@ -33,7 +33,7 @@ rows A1–A6 require.
 | a1_commitments.jsonl | seed | 500 | **seed only — collection of the 500-case annotated set is not done** |
 | a2_customer_context.jsonl | seed | 500 | seed only |
 | a3_product_claims.jsonl | seed | 500 | seed only |
-| a4_optout_escalation.jsonl | seed | 500 | seed only; no evaluator yet |
+| a4_optout_escalation.jsonl | seed | 500 | seed only |
 | a5_prompt_injection.jsonl | seed | 500 | seed only |
 | a6_dates.jsonl | seed | included in A1 | seed only |
 

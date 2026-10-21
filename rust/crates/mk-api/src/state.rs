@@ -22,6 +22,9 @@ pub struct AppState {
     /// kernel-verified WebAuthn assertion; `None` is legal only when
     /// `MK_ALLOW_UNBOUND_APPROVAL=1` and every approval row is marked `unbound`.
     pub approval_rp: Option<ApprovalRp>,
+    /// Public base URL the messaging provider calls (e.g. `https://hooks.example.com`).
+    /// Webhook signatures are verified over this, never over request headers.
+    pub public_webhook_base: Option<String>,
 }
 
 /// WebAuthn relying-party configuration for approvals.

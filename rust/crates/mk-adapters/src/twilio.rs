@@ -462,11 +462,14 @@ pub enum OptOutSignal {
 /// Advanced Opt-Out. Matched on the trimmed, case-folded whole message, or
 /// as the first word followed only by punctuation.
 const EXPLICIT: &[&str] = &["stop", "stopall", "unsubscribe", "cancel", "end", "quit", "revoke", "optout", "opt-out", "opt out"];
-const POSSIBLE: &[&str] = &[
+/// Clear natural-language stop requests: not carrier keywords, but unambiguous.
+/// Mirrored in `backend/app/inbound.py::_EXPLICIT_PHRASES`; keep both in sync.
+const EXPLICIT_PHRASES: &[&str] = &[
     "stop texting", "stop messaging", "don't text", "dont text", "do not text", "don't message", "do not message",
-    "leave me alone", "remove me", "take me off", "no more texts", "no more messages", "not interested", "wrong number",
-    "unsub", "please stop", "stop it", "stop sending", "stop contacting", "go away", "lose my number",
+    "remove me", "take me off", "no more texts", "no more messages", "unsubscribe me", "stop sending", "stop contacting",
+    "lose my number", "please stop",
 ];
+const POSSIBLE: &[&str] = &["leave me alone", "not interested", "wrong number", "unsub", "stop it", "go away", "no thanks", "no thank you"];
 
 #[must_use]
 pub fn detect_opt_out(body: &str) -> OptOutSignal {
@@ -477,6 +480,9 @@ pub fn detect_opt_out(body: &str) -> OptOutSignal {
     }
     let first = norm.split(' ').next().unwrap_or("");
     if EXPLICIT.contains(&first) && norm.split(' ').count() <= 2 && !norm.starts_with("stop by") {
+        return OptOutSignal::Explicit;
+    }
+    if EXPLICIT_PHRASES.iter().any(|p| norm.contains(p)) {
         return OptOutSignal::Explicit;
     }
     if POSSIBLE.iter().any(|p| norm.contains(p)) || (norm.contains("stop") && !norm.contains("stop by") && !norm.contains("nonstop") && !norm.contains("non-stop")) {
@@ -574,10 +580,11 @@ mod tests {
     #[test]
     fn opt_out_detection_separates_explicit_from_possible() {
         use OptOutSignal as O;
-        for s in ["STOP", "stop", " Stop. ", "UNSUBSCRIBE", "Stop!", "quit", "END", "opt out", "STOP please"] {
+        for s in ["STOP", "stop", " Stop. ", "UNSUBSCRIBE", "Stop!", "quit", "END", "opt out", "STOP please",
+                  "please stop texting me", "I'm not interested, remove me", "Can you stop sending these"] {
             assert_eq!(detect_opt_out(s), O::Explicit, "{s}");
         }
-        for s in ["please stop texting me", "I'm not interested, remove me", "wrong number", "Can you stop sending these", "stop it already", "leave me alone"] {
+        for s in ["wrong number", "stop it already", "leave me alone", "not interested", "no thanks"] {
             assert_eq!(detect_opt_out(s), O::Possible, "{s}");
         }
         for s in ["Stop by anytime, I'd love a sample!", "yes Thursday works", "I can't stop by today but Friday is good", "nonstop fun", "Thanks!"] {

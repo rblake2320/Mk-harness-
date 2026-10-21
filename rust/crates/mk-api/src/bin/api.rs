@@ -52,6 +52,13 @@ async fn main() -> anyhow::Result<()> {
             .unwrap_or(120),
         rust_kernel_enabled: std::env::var("RUST_ACTION_KERNEL_ENABLED").is_ok_and(|v| v == "1"),
         approval_rp: mk_api::ApprovalRp::from_env().map_err(|e| anyhow::anyhow!(e))?,
+        public_webhook_base: std::env::var("MK_PUBLIC_WEBHOOK_BASE").ok().filter(|s| !s.trim().is_empty()).map(|s| {
+            let s = s.trim().trim_end_matches('/').to_owned();
+            if !(s.starts_with("https://") || s.starts_with("http://localhost") || s.starts_with("http://127.0.0.1")) {
+                tracing::warn!("MK_PUBLIC_WEBHOOK_BASE is not https; acceptable only for local testing");
+            }
+            s
+        }),
     };
     if state.approval_rp.is_none() {
         tracing::warn!("MK_ALLOW_UNBOUND_APPROVAL=1: approvals are NOT human-bound; never run production like this");

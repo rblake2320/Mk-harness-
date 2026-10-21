@@ -29,7 +29,7 @@ from sqlalchemy.orm import Session
 
 from ..config import get_settings
 from ..db import get_db
-from ..foundation import require_dispatch_timezone
+from ..foundation import require_dispatch_timezone, preference_for_tz
 from ..kernel import KernelClient, KernelUnavailable, get_kernel_client
 from ..kernel.assertions import ROLE_PLATFORM_OPERATOR, roles_for
 from ..models import Customer, User
@@ -149,7 +149,19 @@ async def propose(body: ProposeIn, p: Principal = Depends(principal),
     if req.get("action_kind") in ("send_sms", "send_dm"):
         c = _contact_customer(db, p, req)
         if c is not None:
-            require_dispatch_timezone(db, c)
+            tz = require_dispatch_timezone(db, c)
+            # The kernel evaluates contact hours in the customer's own zone.
+            args0 = req.get("arguments")
+            if isinstance(args0, dict):
+                args0["contact_tz"] = tz
+    # Production SMS goes through the business's registered provider sender
+    # (WP07). The sender is chosen here from the kernel's registry — never
+    # supplied by the model — and bound into the proposal arguments.
+    if req.get("tool_id") == "sms.provider.send.v1":
+        args0 = req.get("arguments") if isinstance(req.get("arguments"), dict) else None
+        if args0 is None:
+            raise HTTPException(422, "arguments required")
+        args0["sender_identity_id"] = await _select_sender(client, p, args0.get("sender_identity_id"))
     # Identity is bound here AND again in the kernel; body values are discarded.
     req["schema_version"] = req.get("schema_version") or "mk.action.v1"
     req["tenant_id"] = str(uuid.UUID(p.tenant_id))
@@ -168,6 +180,29 @@ async def propose(body: ProposeIn, p: Principal = Depends(principal),
                 raise HTTPException(422, f"arguments.{k} is forbidden")
     return await forward(client, p, "POST", "/actions", json=req,
                          as_agent=(body.origin == "agent"))
+
+
+async def _select_sender(client: KernelClient, p: Principal, requested: Any) -> str:
+    """Pick the registered, active sender identity for this consultant's business.
+    A requested id must be one of the tenant's own; otherwise the caller's own
+    sender is used; a tenant with none cannot propose provider SMS."""
+    try:
+        r = await client.call("GET", "/senders", user_id=p.user_id, tenant_id=p.tenant_id,
+                              roles=roles_for(p.app_role), session_id=p.session_id)
+    except KernelUnavailable as e:
+        raise HTTPException(503, {"code": e.code, "detail": e.detail})
+    senders = [s for s in (r.body or []) if isinstance(s, dict) and s.get("status") == "active"] if r.status_code == 200 else []
+    if requested:
+        rid = _uuid_text(str(requested), "sender_identity_id")
+        if not any(s.get("sender_identity_id") == rid for s in senders):
+            raise HTTPException(422, {"code": "SENDER_NOT_FOUND", "detail": "sender identity is not registered to this tenant"})
+        return rid
+    mine = [s for s in senders if str(s.get("owner_user_id", "")).replace("-", "") == uuid.UUID(p.user_id).hex]
+    pick = mine or senders
+    if not pick:
+        raise HTTPException(422, {"code": "NO_SENDER_IDENTITY",
+                                  "detail": "register a provider sender for this business before proposing SMS"})
+    return str(pick[0]["sender_identity_id"])
 
 
 @router.get("/actions/{action_id}")
@@ -304,6 +339,70 @@ async def revoke_approval(approval_id: str, p: Principal = Depends(principal),
 
 
 # --------------------------------------------------------------------------- #
+# Provider messaging (WP07): sender identities and inbound work queue — relays
+# --------------------------------------------------------------------------- #
+class SenderIn(BaseModel):
+    owner_user_id: str
+    display_name: str = Field(min_length=1, max_length=120)
+    account_sid: str = Field(pattern=r"^AC[0-9a-fA-F]{32}$")
+    auth_token: str = Field(min_length=16, max_length=256)
+    from_number: str | None = Field(default=None, pattern=r"^\+[1-9][0-9]{7,14}$")
+    messaging_service_sid: str | None = Field(default=None, pattern=r"^MG[0-9a-fA-F]{32}$")
+
+
+@router.post("/senders")
+async def register_sender(body: SenderIn, p: Principal = Depends(principal),
+                          client: KernelClient = Depends(get_kernel_client)):
+    """Registers a consultant business's provider sender. The auth token is
+    relayed once to the kernel, which seals it; FastAPI stores nothing."""
+    payload = body.model_dump(exclude_none=True)
+    payload["owner_user_id"] = _uuid_text(body.owner_user_id, "owner_user_id")
+    return await forward(client, p, "POST", "/senders", json=payload)
+
+
+@router.get("/senders")
+async def list_senders(p: Principal = Depends(principal), client: KernelClient = Depends(get_kernel_client)):
+    return await forward(client, p, "GET", "/senders")
+
+
+class RegistrationIn(BaseModel):
+    registration_status: str = Field(pattern="^(unverified|pending|registered|rejected)$")
+    reference: str = Field(default="", max_length=200)
+
+
+@router.post("/senders/{sender_id}/registration")
+async def sender_registration(sender_id: str, body: RegistrationIn, p: Principal = Depends(principal),
+                              client: KernelClient = Depends(get_kernel_client)):
+    return await forward(client, p, "POST", f"/senders/{_uuid_text(sender_id, 'sender_id')}/registration", json=body.model_dump())
+
+
+@router.get("/inbound/health")
+async def inbound_health(p: Principal = Depends(principal), client: KernelClient = Depends(get_kernel_client)):
+    return await forward(client, p, "GET", "/inbound/health")
+
+
+class HealthIn(BaseModel):
+    ok: bool
+    reason: str = Field(default="", max_length=200)
+
+
+@router.post("/inbound/health")
+async def inbound_health_report(body: HealthIn, p: Principal = Depends(principal),
+                                client: KernelClient = Depends(get_kernel_client)):
+    return await forward(client, p, "POST", "/inbound/health", json=body.model_dump())
+
+
+@router.post("/inbound/pause")
+async def inbound_pause(p: Principal = Depends(principal), client: KernelClient = Depends(get_kernel_client)):
+    return await forward(client, p, "POST", "/inbound/pause", json={})
+
+
+@router.post("/inbound/resume")
+async def inbound_resume(p: Principal = Depends(principal), client: KernelClient = Depends(get_kernel_client)):
+    return await forward(client, p, "POST", "/inbound/resume", json={})
+
+
+# --------------------------------------------------------------------------- #
 # Consent + suppression
 # --------------------------------------------------------------------------- #
 class GrantIn(BaseModel):
@@ -335,6 +434,7 @@ async def revoke_permission(contact_id: str, permission_id: str,
 class SuppressionIn(BaseModel):
     channel: str | None = None
     destination: str | None = None
+    destination_hash: str | None = Field(default=None, pattern="^[0-9a-f]{64}$")
     reason: str
     permanent: bool = True
     source: str
@@ -343,7 +443,7 @@ class SuppressionIn(BaseModel):
 @router.post("/suppressions")
 async def add_suppression(body: SuppressionIn, p: Principal = Depends(principal),
                           client: KernelClient = Depends(get_kernel_client)):
-    return await forward(client, p, "POST", "/suppressions", json=body.model_dump())
+    return await forward(client, p, "POST", "/suppressions", json=body.model_dump(exclude_none=True))
 
 
 @router.delete("/suppressions/{suppression_id}")
