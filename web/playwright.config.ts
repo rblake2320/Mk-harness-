@@ -13,6 +13,8 @@ export default defineConfig({
     // container may pin a different build via PW_CHROMIUM_PATH.
     launchOptions: process.env.PW_CHROMIUM_PATH ? { executablePath: process.env.PW_CHROMIUM_PATH } : {},
   },
-  webServer: { command: 'npx vite preview --port 4173 --strictPort', port: 4173, reuseExistingServer: true, timeout: 60_000 },
+  // --host 127.0.0.1: newer Node resolves `localhost` to ::1 first, so an unpinned preview server
+  // is unreachable from the IPv4 baseURL (CI: ERR_CONNECTION_REFUSED).
+  webServer: { command: 'npx vite preview --host 127.0.0.1 --port 4173 --strictPort', url: 'http://127.0.0.1:4173', reuseExistingServer: true, timeout: 60_000 },
   reporter: [['list'], ['json', { outputFile: 'test-results/a11y.json' }]],
 });
