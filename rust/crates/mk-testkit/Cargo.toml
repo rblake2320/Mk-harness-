@@ -21,6 +21,11 @@ tokio = { workspace = true }
 ed25519-dalek = { workspace = true }
 rand = { workspace = true }
 base64 = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true }
+anyhow = { workspace = true }
+hmac = { workspace = true }
+sha1 = { workspace = true }
 
 [[bin]]
 name = "mk-devkeys"
@@ -29,3 +34,7 @@ path = "src/bin/mk-devkeys.rs"
 [[bin]]
 name = "mk-softauthn"
 path = "src/bin/mk-softauthn.rs"
+
+[[bin]]
+name = "mk-loadgen"
+path = "src/bin/mk-loadgen.rs"
