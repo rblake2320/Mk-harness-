@@ -16,7 +16,10 @@ Environment:
 |---|---|---|
 | `MK_DATABASE_URL` | all | `postgres://role:pw@host/db`; role per process type |
 | `MK_REDIS_URL` | relay, worker | `redis://host:6379` |
-| `MK_MASTER_KEY` | api, worker | base64 32 bytes; same key as FastAPI `MASTER_KEY` |
+| `MK_MASTER_KEY` | api, worker, keyctl, restore-gate | base64 32 bytes; same key as FastAPI `MASTER_KEY`. Legacy seal (keyring version 0) and HMAC destination fingerprints |
+| `MK_KEK` | api, worker, keyctl, restore-gate | base64 32 bytes key-encryption key (from the secrets manager / KMS data key). Wraps the per-version data keys in `kernel.key_versions` (migration 0005). Empty = legacy master-key-only seal: allowed for development, logged at start, **refused by production pre-flight** |
+| `MK_KEK_ID` | same | identifier recorded on each wrapped version; default `kek-1`. Change it together with the KEK value |
+| `MK_LEGACY_SEAL_RETIRED` | same | `1` after `mk-keyctl reencrypt` reports zero rows under version 0: the process then refuses to unseal legacy ciphertext at all |
 | `MK_ASSERTION_KEYS` | api | `kid=<base64url Ed25519 public key>,...`; FastAPI holds the private keys |
 | `MK_BIND` | api | default `127.0.0.1:8090`; never expose publicly |
 | `MK_CALLBACK_TOLERANCE_SECS` | api | default 120 |
@@ -42,3 +45,95 @@ Kill switches: `POST /internal/v1/kill-switch/global` (role `platform_operator`)
 and `POST /internal/v1/kill-switch/tenant` (role `tenant_admin`). Both disable
 dispatch without disabling reads; the worker also stops dispatching whenever
 the database (and therefore audit persistence) is unreachable.
+
+## Production runbook
+
+Every step below is a human operator action. Nothing in this section is
+performed by the application or by an agent, and no step enables dispatch
+except the last one, which requires the platform operator's passkey.
+
+### Bring-up (first deployment or new environment)
+
+1. Create the database roles from `deploy/kernel/roles.sql` (owner, migrator,
+   api, worker, relay, readonly logins) and set each process's `MK_DATABASE_URL`
+   to its own login. Never run a process as the owner.
+2. Generate secrets in the secrets manager, never in files or compose:
+   `MK_MASTER_KEY` (32 bytes), `MK_KEK` (32 bytes, or a KMS data key),
+   the FastAPI→kernel Ed25519 assertion key pair (`mk-devkeys gen`; the kernel
+   holds only the public half in `MK_ASSERTION_KEYS`).
+3. Run migrations once with the migrator login: `MK_RUN_MIGRATIONS=1 mk-action-api`
+   (or `sqlx migrate` against `migrations/kernel`). Then create the first
+   wrapped data-key version **before any process starts**: `mk-keyctl rotate
+   "initial"` (owner login, `MK_KEK` set). `mk-keyctl status` must show
+   `current_version=1`; without this step processes seal under the legacy
+   single master key (version 0), which pre-flight refuses for production.
+4. Run the pre-flight (`scripts/kernel-preflight.sh --for-enable`, PR #32): RLS
+   on every `kernel.*` table, per-process logins in place, `MK_APPROVAL_RP_ID`
+   and `MK_APPROVAL_ORIGINS` set, `MK_ALLOW_UNBOUND_APPROVAL` unset, `MK_KEK` set,
+   `MK_PUBLIC_WEBHOOK_BASE` set and equal to the URL configured at the provider.
+5. Start `mk-action-api`, `mk-outbox-relay`, `mk-action-worker`,
+   `mk-audit-verifier` with `RUST_ACTION_KERNEL_ENABLED` **unset** (shadow mode)
+   and the global kill switch **disabled** (its default on a fresh database).
+6. Register a passkey for every approver and for the platform operator
+   (`/approval-credentials/register/*`). Approvals and kill-switch re-enable are
+   impossible without them.
+
+### Enable sequence (first dispatch, or after any restore / incident)
+
+1. `mk-restore-gate --restored-at <RFC3339 of the data's last known-good point>`
+   in report mode. Every check must be `ok: true`; otherwise stop here.
+2. Review the reconciliation backlog it prints; resolve every
+   `reconciliation_required` action against provider records before anything
+   else is sent to those customers.
+3. Confirm inbound health is green (`/internal/v1/inbound/health`), the provider
+   webhook URL matches `MK_PUBLIC_WEBHOOK_BASE`, and one signed test callback
+   from the provider is accepted (`twilio_sim` is for staging only).
+4. Set `RUST_ACTION_KERNEL_ENABLED=1` and restart `mk-action-api`.
+5. The platform operator enables the global switch with a passkey step-up:
+   `POST /internal/v1/kill-switch/global/challenge` → sign → `POST
+   /internal/v1/kill-switch/global {enabled:true, assertion}`. The audit chain
+   records who, when and under which credential.
+6. Tenants are enabled one at a time (`/kill-switch/tenant`), never in bulk,
+   and only for tenants whose sender identity is registered and whose
+   consultants have completed the consent attestation.
+
+### Stop / rollback
+
+* **Stop everything now:** `POST /internal/v1/kill-switch/global {enabled:false}`
+  (no passkey needed to disable — stopping is always allowed). In-flight
+  provider calls finish; nothing new is dispatched. Then follow
+  `docs/runbooks/incident-unapproved-or-duplicate-send.md`.
+* **Stop one tenant:** `POST /internal/v1/kill-switch/tenant`.
+* **Roll back a release:** disable the global switch, deploy the previous
+  images, run the restore gate in report mode, re-enable through the enable
+  sequence. Migrations are forward-only; a release that needs a schema
+  rollback is handled as a restore (`docs/runbooks/restore-without-resend.md`).
+
+### Envelope key rotation (`mk-keyctl`, contract S6/S10)
+
+Runs with the owner login and the same `MK_MASTER_KEY` / `MK_KEK` / `MK_KEK_ID`
+as the API. Every step is idempotent and resumable.
+
+```sh
+mk-keyctl status                 # versions, which is active, rows still under other versions
+mk-keyctl rotate "quarterly"     # new DEK wrapped by MK_KEK → active; previous → retiring
+                                 # restart api + worker so they load the new ring (old data stays readable)
+mk-keyctl reencrypt              # re-seal every sealed column under the active version; safe to interrupt and rerun
+                                 # prints `unreadable: N` for rows no loaded key can open — N must be 0 before the next step
+mk-keyctl retire <old-version>   # refused while any row is still under <old-version>
+```
+
+Rotating the **KEK** itself: set the new `MK_KEK`/`MK_KEK_ID` alongside the
+old one is not supported by design — instead `rotate` under the new KEK (the
+new version is wrapped by it), `reencrypt`, `retire` the versions wrapped by the
+old KEK, then destroy the old KEK in the secrets manager.
+
+Retiring the **legacy** master-key seal (version 0): after `reencrypt` reports
+`kernel.*: rows_not_under_current=0` for every table, set
+`MK_LEGACY_SEAL_RETIRED=1` on api and worker and run `mk-keyctl retire 0`.
+`MK_MASTER_KEY` is still required for destination fingerprints.
+
+### Restore (never re-send)
+
+`docs/runbooks/restore-without-resend.md`. The gate binary is
+`mk-restore-gate`; it never enables dispatch.

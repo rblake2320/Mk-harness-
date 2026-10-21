@@ -4,7 +4,7 @@
 
 use chrono::{DateTime, Utc};
 use mk_audit::{ActorType, EventType, NewEvent};
-use mk_crypto::{Digest, MasterKey, seal, unseal};
+use mk_crypto::{Digest, Keyring};
 use mk_domain::{ActionId, TenantId, UserId};
 use secrecy::{ExposeSecret as _, SecretString};
 use serde::Serialize;
@@ -76,7 +76,7 @@ fn aad(tenant: TenantId, id: Uuid) -> String {
 #[allow(clippy::too_many_arguments)]
 pub async fn register_sender(
     tx: &mut TenantTx<'_>,
-    master: &MasterKey,
+    keyring: &Keyring,
     owner: UserId,
     display_name: &str,
     account_sid: &str,
@@ -87,7 +87,7 @@ pub async fn register_sender(
     now: DateTime<Utc>,
 ) -> Result<Uuid, StoreError> {
     let id = Uuid::now_v7();
-    let sealed = seal(master, &aad(tx.tenant(), id), auth_token).map_err(|_| StoreError::Crypto)?;
+    let sealed = keyring.seal( &aad(tx.tenant(), id), auth_token).map_err(|_| StoreError::Crypto)?;
     sqlx::query(
         "INSERT INTO kernel.sender_identities (sender_identity_id, tenant_id, owner_user_id, provider, display_name, account_sid,
            auth_token_sealed, from_number, messaging_service_sid, created_at, updated_at)
@@ -197,7 +197,7 @@ pub async fn list_senders(tx: &mut TenantTx<'_>) -> Result<Vec<SenderIdentityVie
 
 /// Pool-level (pre-tenant) lookup used by webhooks to bind a URL path to a
 /// tenant. Returns the sealed secret; the caller unseals with the master key.
-pub async fn sender_secret_by_id(pool: &PgPool, master: &MasterKey, id: Uuid) -> Result<SenderIdentitySecret, StoreError> {
+pub async fn sender_secret_by_id(pool: &PgPool, keyring: &Keyring, id: Uuid) -> Result<SenderIdentitySecret, StoreError> {
     let r = sqlx::query(
         "SELECT tenant_id, owner_user_id, account_sid, auth_token_sealed, from_number, messaging_service_sid, status
          FROM kernel.sender_identities WHERE sender_identity_id = $1",
@@ -208,7 +208,7 @@ pub async fn sender_secret_by_id(pool: &PgPool, master: &MasterKey, id: Uuid) ->
     .ok_or(StoreError::NotFound)?;
     let tenant = TenantId::from_uuid(r.try_get("tenant_id")?);
     let sealed: Vec<u8> = r.try_get("auth_token_sealed")?;
-    let auth_token = unseal(master, &aad(tenant, id), &sealed).map_err(|_| StoreError::Crypto)?;
+    let auth_token = keyring.unseal( &aad(tenant, id), &sealed).map_err(|_| StoreError::Crypto)?;
     Ok(SenderIdentitySecret {
         sender_identity_id: id,
         tenant_id: tenant,
@@ -222,7 +222,7 @@ pub async fn sender_secret_by_id(pool: &PgPool, master: &MasterKey, id: Uuid) ->
 }
 
 /// Tenant-scoped secret lookup for the worker's sender resolver.
-pub async fn sender_secret(tx: &mut TenantTx<'_>, master: &MasterKey, id: Uuid) -> Result<SenderIdentitySecret, StoreError> {
+pub async fn sender_secret(tx: &mut TenantTx<'_>, keyring: &Keyring, id: Uuid) -> Result<SenderIdentitySecret, StoreError> {
     let r = sqlx::query(
         "SELECT owner_user_id, account_sid, auth_token_sealed, from_number, messaging_service_sid, status
          FROM kernel.sender_identities WHERE tenant_id = $1 AND sender_identity_id = $2 AND status = 'active'",
@@ -233,7 +233,7 @@ pub async fn sender_secret(tx: &mut TenantTx<'_>, master: &MasterKey, id: Uuid) 
     .await?
     .ok_or(StoreError::NotFound)?;
     let sealed: Vec<u8> = r.try_get("auth_token_sealed")?;
-    let auth_token = unseal(master, &aad(tx.tenant(), id), &sealed).map_err(|_| StoreError::Crypto)?;
+    let auth_token = keyring.unseal( &aad(tx.tenant(), id), &sealed).map_err(|_| StoreError::Crypto)?;
     Ok(SenderIdentitySecret {
         sender_identity_id: id,
         tenant_id: tx.tenant(),
@@ -393,7 +393,7 @@ pub async fn record_delivery_event(
 ) -> Result<EventOutcome, StoreError> {
     let inserted = sqlx::query(
         "INSERT INTO kernel.delivery_events (tenant_id, delivery_id, provider, provider_event_id, provider_status, provider_error_code, received_at, authentication_result, raw_event_digest)
-         VALUES ($1,$2,'twilio',$3,$4,$5,$6,'verified',$7) ON CONFLICT (provider, provider_event_id) DO NOTHING",
+         VALUES ($1,$2,'twilio',$3,$4,$5,$6,'verified',$7) ON CONFLICT (tenant_id, provider, provider_event_id) DO NOTHING",
     )
     .bind(tx.tenant().0)
     .bind(delivery.delivery_id)
@@ -462,7 +462,7 @@ pub enum InboundOutcome {
 #[allow(clippy::too_many_arguments)]
 pub async fn record_inbound(
     tx: &mut TenantTx<'_>,
-    master: &MasterKey,
+    keyring: &Keyring,
     provider_event_id: &str,
     sender_identity_id: Uuid,
     source_destination_hash: &str,
@@ -474,12 +474,12 @@ pub async fn record_inbound(
     now: DateTime<Utc>,
 ) -> Result<InboundOutcome, StoreError> {
     let id = Uuid::now_v7();
-    let sealed = seal(master, &format!("inbound:{}:{}", tx.tenant().0, id), body).map_err(|_| StoreError::Crypto)?;
+    let sealed = keyring.seal( &format!("inbound:{}:{}", tx.tenant().0, id), body).map_err(|_| StoreError::Crypto)?;
     let inserted: Option<Uuid> = sqlx::query_scalar(
         "INSERT INTO kernel.inbound_events (event_id, tenant_id, provider, provider_event_id, sender_identity_id, source_destination_hash,
            received_at, provider_timestamp, content_sealed, content_reference, authentication_result, raw_event_digest, opt_out_signal, disposition)
          VALUES ($1,$2,'twilio',$3,$4,$5,$6,$7,$8,$9,'verified',$10,$11,$12)
-         ON CONFLICT (provider, provider_event_id) DO NOTHING RETURNING event_id",
+         ON CONFLICT (tenant_id, provider, provider_event_id) DO NOTHING RETURNING event_id",
     )
     .bind(id)
     .bind(tx.tenant().0)
@@ -547,7 +547,7 @@ pub struct InboundView {
 }
 
 /// Unprocessed inbound events for async meaning processing (C5 step 7).
-pub async fn pending_inbound(tx: &mut TenantTx<'_>, master: &MasterKey, limit: i64) -> Result<Vec<InboundView>, StoreError> {
+pub async fn pending_inbound(tx: &mut TenantTx<'_>, keyring: &Keyring, limit: i64) -> Result<Vec<InboundView>, StoreError> {
     let rows = sqlx::query(
         "SELECT event_id, provider_event_id, sender_identity_id, source_destination_hash, received_at, provider_timestamp,
                 content_sealed, opt_out_signal, disposition
@@ -562,7 +562,7 @@ pub async fn pending_inbound(tx: &mut TenantTx<'_>, master: &MasterKey, limit: i
         .map(|r| {
             let id: Uuid = r.try_get("event_id")?;
             let sealed: Vec<u8> = r.try_get("content_sealed")?;
-            let body = unseal(master, &format!("inbound:{}:{}", tenant.0, id), &sealed).map_err(|_| StoreError::Crypto)?;
+            let body = keyring.unseal( &format!("inbound:{}:{}", tenant.0, id), &sealed).map_err(|_| StoreError::Crypto)?;
             Ok(InboundView {
                 event_id: id,
                 provider_event_id: r.try_get("provider_event_id")?,

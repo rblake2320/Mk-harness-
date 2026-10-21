@@ -40,7 +40,8 @@ trap cleanup EXIT
 
 log "building release binaries"
 (cd "$ROOT/rust" && cargo build --release -q --bin mk-action-api --bin mk-outbox-relay \
-   --bin mk-action-worker --bin mk-audit-verifier --bin mk-devkeys --bin mk-softauthn --bin mk-twilio-sim)
+   --bin mk-action-worker --bin mk-audit-verifier --bin mk-devkeys --bin mk-softauthn --bin mk-twilio-sim \
+   --bin mk-keyctl --bin mk-restore-gate)
 BIN="$ROOT/rust/target/release"
 
 log "fresh database"
@@ -49,8 +50,12 @@ redis-cli -u "$REDIS_URL" FLUSHALL >/dev/null
 
 eval "$("$BIN/mk-devkeys" gen)"      # MK_ASSERTION_KEYS, DEV_PRIVATE_KEY, MK_MASTER_KEY
 export MK_ASSERTION_KEYS MK_MASTER_KEY
+# Envelope keyring as in production: a KEK wraps the per-version data keys (WP09).
+export MK_KEK="$(python3 -c 'import os,base64;print(base64.b64encode(os.urandom(32)).decode())')" MK_KEK_ID=kek-smoke
 export MK_DATABASE_URL="$PGURL" MK_REDIS_URL="$REDIS_URL" RUST_LOG=info
 MK_MIGRATE_ONLY=1 "$BIN/mk-action-api" >/dev/null
+# Bring-up step: the first wrapped data-key version, so nothing is ever sealed under the legacy single key.
+"$BIN/mk-keyctl" rotate "initial" >/dev/null || die "keyctl initial rotate"
 
 # Deployment enforcement: every process type gets its own LOGIN identity that
 # inherits exactly one privilege role (deploy/kernel/roles.sql). RLS is then
@@ -303,6 +308,63 @@ c=$(propose_provider "One more." "smoke-provider-2"); [ "$c" = 403 ] && [ "$(j '
 [ "$(j 'd["processed"]')" = 1 ] && [ "$(j 'd["events"][0]["class"]')" = opt_out ] || die "inbound processing: $(cat "$WORK/out.json")"
 [ "$(ops -X POST "$APP/api/inbound/process" -d '{"limit":50}')" = 200 ] && [ "$(j 'd["processed"]')" = 0 ] || die "inbound event processed twice"
 log "  provider_accepted → sent → delivered via signed callbacks; forged → 403; STOP → suppressed, proposal refused, processed once"
+
+log "gate 11: envelope key rotation under load of real rows, then the restore gate (report mode)"
+# Operator path with the owner identity: rotate → re-seal → retire; services restart on the new ring.
+"$BIN/mk-keyctl" status >"$WORK/keyctl.log" 2>&1 || die "keyctl status"
+grep -q "current_version=1 " "$WORK/keyctl.log" || die "expected version 1 active: $(cat "$WORK/keyctl.log")"
+"$BIN/mk-keyctl" rotate "smoke" >>"$WORK/keyctl.log" 2>&1 || die "keyctl rotate"
+"$BIN/mk-keyctl" reencrypt >>"$WORK/keyctl.log" 2>&1 || die "keyctl reencrypt"
+grep -q "unreadable (foreign/lost key material, left untouched): 0" "$WORK/keyctl.log" || die "reencrypt reported unreadable rows: $(cat "$WORK/keyctl.log")"
+"$BIN/mk-keyctl" retire 1 >>"$WORK/keyctl.log" 2>&1 || die "keyctl retire 1: $(cat "$WORK/keyctl.log")"
+pkill -f "[m]k-action-api" || true; pkill -f "[m]k-action-worker" || true; sleep 1
+MK_DATABASE_URL="$(url_for mk_api_login api)" MK_BIND=127.0.0.1:8090 RUST_ACTION_KERNEL_ENABLED=1 \
+  MK_APPROVAL_RP_ID="$RP_ID" MK_APPROVAL_ORIGINS="$ORIGIN" MK_PUBLIC_WEBHOOK_BASE="$WEBHOOK_BASE" \
+  "$BIN/mk-action-api" >>"$WORK/api.log" 2>&1 & PIDS+=($!)
+MK_DATABASE_URL="$(url_for mk_worker_login worker)" MK_WORKER_ID=worker-smoke MK_LEASE_SECS=60 MK_ALLOW_LOOPBACK_HTTP=1 \
+  MK_MOBILE_INTAKE_URL="$AGENT/work-orders" MK_EGRESS_AUTHORITIES=127.0.0.1:8787,127.0.0.1:8790 \
+  MK_TWILIO_API_BASE="$TWSIM" MK_PUBLIC_WEBHOOK_BASE="$WEBHOOK_BASE" \
+  "$BIN/mk-action-worker" >>"$WORK/worker.log" 2>&1 & PIDS+=($!)
+for i in $(seq 1 30); do curl -fsS "$API/health/ready" >/dev/null 2>&1 && break; sleep 1; done
+curl -fsS "$API/health/ready" >/dev/null || die "kernel api not ready after rotation"
+# The re-sealed sender credential must still authenticate a provider webhook (new SID, benign text → held for meaning).
+python3 - "$TW_TOKEN" "$WEBHOOK_BASE/webhooks/twilio/inbound/$SENDER" "$API/webhooks/twilio/inbound/$SENDER" "$TW_ACCOUNT" <<'EOF2'
+import sys,hmac,hashlib,base64,urllib.request,urllib.parse
+token,public,deliver,acct=sys.argv[1:]
+form=[("MessageSid","SMsmokerotated1"),("AccountSid",acct),("From","+15555550777"),("To","+15005550006"),("Body","Thanks, see you Thursday"),("NumMedia","0")]
+data=public+"".join(k+v for k,v in sorted(form))
+sig=base64.b64encode(hmac.new(token.encode(),data.encode(),hashlib.sha1).digest()).decode()
+req=urllib.request.Request(deliver,data=urllib.parse.urlencode(form).encode(),headers={"X-Twilio-Signature":sig,"Content-Type":"application/x-www-form-urlencoded"})
+r=urllib.request.urlopen(req); assert r.status==200, r.status
+EOF2
+[ "$(ops -X POST "$APP/api/inbound/process" -d '{"limit":50}')" = 200 ] && [ "$(j 'd["processed"]')" = 1 ] || die "inbound body unreadable after rotation: $(cat "$WORK/out.json")"
+# A new provider send still works end to end under the rotated key (the worker unseals the sender token).
+CUST2=$(curl -fsS "$APP/api/customers" "${H[@]}" -d '{"name":"Smoke Customer Two","phone":"+15555550124"}' | python3 -c 'import sys,json;print(json.load(sys.stdin)["id"])')
+curl -fsS "$APP/api/customers/$CUST2/destinations" "${H[@]}" -d '{"channel":"sms","value":"+15555550124"}' >/dev/null
+curl -fsS -X PUT "$APP/api/customers/$CUST2/preferences" "${H[@]}" -d '{"timezone":"America/Chicago"}' >/dev/null
+CONTACT4=$(python3 -c "import uuid;print(uuid.UUID('$CUST2'))"); [ "$(grant "$CONTACT4")" = 201 ] || die "grant4"
+c=$(ops -X POST "$APP/api/agent-ops/actions" -d "{\"origin\":\"agent\",\"request\":{\"workflow\":\"customer_follow_up\",\"action_kind\":\"send_sms\",\"tool_id\":\"sms.provider.send.v1\",\"resource\":{\"type\":\"contact\",\"id\":\"$CONTACT4\"},\"arguments\":{\"contact_id\":\"$CONTACT4\",\"to\":\"+15555550124\",\"template_id\":\"reorder_followup.v1\",\"rendered_text\":\"Hi! Your refill is ready. Reply STOP to opt out.\"},\"purpose\":\"customer_requested_follow_up\",\"risk\":\"high\",\"requested_at\":\"$NOW\",\"expires_at\":\"$LATER\",\"idempotency_key\":\"smoke-provider-rotated\",\"evidence\":[]}}")
+[ "$c" = 202 ] || die "propose after rotation ($c): $(cat "$WORK/out.json")"
+A6=$(j 'd["result"]["action_id"]'); D6=$(j 'd["result"]["action_digest"]')
+[ "$(approve "$A6" "$D6")" = 200 ] || die "approve after rotation: $(cat "$WORK/out.json")"
+for i in $(seq 1 40); do ops "$APP/api/agent-ops/actions/$A6" >/dev/null; ms=$(j 'd.get("message_state")'); [ "$ms" = delivered ] && break; sleep 1; done
+[ "$ms" = delivered ] || die "provider path broken after key rotation: $(cat "$WORK/out.json")"
+# Restore gate in report mode on the live database: must FAIL (dispatch is enabled) while every
+# recoverability check passes — it never enables anything.
+set +e; "$BIN/mk-restore-gate" --restored-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"$WORK/restore-gate.json" 2>"$WORK/restore-gate.err"; rc=$?; set -e
+[ "$rc" = 1 ] || die "restore gate must refuse while dispatch is enabled (rc=$rc): $(cat "$WORK/restore-gate.json" "$WORK/restore-gate.err")"
+python3 - "$WORK/restore-gate.json" <<'EOF2'
+import json,sys
+rows=[json.loads(l) for l in open(sys.argv[1]) if l.strip()]
+checks={r["check"]:r for r in rows if "check" in r}
+assert checks["global_dispatch_disabled"]["ok"] is False, checks["global_dispatch_disabled"]
+for c in ("keyring_loads","audit_chain_verified","suppression_ledger_loaded","credentials_unseal"):
+    assert checks[c]["ok"] is True, checks[c]
+assert checks["credentials_unseal"]["detail"]["unreadable"]==0
+assert checks["keyring_loads"]["detail"]["current"]==2, checks["keyring_loads"]
+assert [r for r in rows if r.get("gate")=="FAIL"], rows[-1]
+EOF2
+log "  v1 → v2 rotated, re-sealed, v1 retired; webhooks/sends still authenticate; restore gate reports FAIL-while-enabled with all recoverability checks green"
 
 log "no PII in kernel/agent logs"
 ! grep -q "5555550100\|5555550123\|Your order shipped" "$WORK/api.log" "$WORK/worker.log" "$WORK/relay.log" "$WORK/agent.log" || die "PII leaked to logs"

@@ -24,6 +24,7 @@ async fn main() -> anyhow::Result<()> {
     let store = Store::connect(cfg.database_url.expose_secret(), 16).await?;
     let stream = StreamClient::connect(cfg.redis_url.expose_secret(), "mk").await?;
     stream.ensure_groups().await?;
+    let keyring = mk_store::keys::keyring_from_env(store.pool(), &cfg.master_key).await?;
     let egress = EgressAllowlist::new(
         cfg.egress_authorities.iter().map(String::as_str),
         cfg.allow_loopback_http,
@@ -35,7 +36,7 @@ async fn main() -> anyhow::Result<()> {
             egress,
             Box::new(StoreResolver {
                 store: store.clone(),
-                master: cfg.master_key.clone(),
+                keyring: keyring.clone(),
                 intake_url_template: cfg.adapter_intake_template.clone(),
             }),
             "phoneclaw@c59995b726a127da16275d2d8e0760408b988542",
@@ -52,7 +53,7 @@ async fn main() -> anyhow::Result<()> {
             &cfg.twilio_api_base,
             Box::new(StoreSenderResolver {
                 store: store.clone(),
-                master: cfg.master_key.clone(),
+                keyring: keyring.clone(),
                 public_webhook_base: cfg.public_webhook_base.clone(),
             }),
         )?)

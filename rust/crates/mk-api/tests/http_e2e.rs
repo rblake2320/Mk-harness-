@@ -180,10 +180,12 @@ async fn harness() -> Option<Harness> {
     )
     .await
     .ok()?;
+    let master = MasterKey::generate();
     let state = AppState {
         store,
         verifier,
-        master: MasterKey::generate(),
+        keyring: mk_crypto::Keyring::legacy(&master),
+        master,
         tools: Arc::new(ToolAllowlist::v1()),
         metrics: Arc::new(Metrics::new()),
         callback_tolerance_secs: 120,
@@ -1043,7 +1045,7 @@ const ACCOUNT_SID: &str = "ACbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 const TOKEN: &str = "auth-token-for-smoke-0123456789";
 
 #[derive(Debug)]
-struct StoreSenderRes(Store, MasterKey);
+struct StoreSenderRes(Store, mk_crypto::Keyring);
 
 #[async_trait]
 impl mk_adapters::twilio::SenderResolver for StoreSenderRes {
@@ -1078,7 +1080,7 @@ async fn provider_rig(h: &Harness, mode: mk_adapters::twilio_sim::TwilioSimMode)
     assert_eq!(s, StatusCode::CREATED);
     let mgr_key = h.register_passkey(manager, &["manager"]).await;
     // Worker with the Twilio adapter pointed at the simulator; sender resolved from the store.
-    let twilio = TwilioAdapter::new(EgressAllowlist::new([sim.authority().as_str()], true), &sim.api_base(), Box::new(StoreSenderRes(h.state.store.clone(), h.state.master.clone()))).unwrap_or_else(|e| panic!("{e}"));
+    let twilio = TwilioAdapter::new(EgressAllowlist::new([sim.authority().as_str()], true), &sim.api_base(), Box::new(StoreSenderRes(h.state.store.clone(), h.state.keyring.clone()))).unwrap_or_else(|e| panic!("{e}"));
     let ctx = WorkerContext {
         store: h.state.store.clone(),
         registry: AdapterRegistry { internal: InternalRecordAdapter, mobile: None, twilio: Some(twilio) },
@@ -1216,14 +1218,18 @@ async fn inbound_stop_suppresses_cancels_and_dedupes_and_the_control_path_is_ser
     // Two queued-but-not-authorized messages to the customer, then the customer replies STOP.
     let (a1, _) = approved_action(&h, &mut r, "Hi! Reply STOP to opt out.", "+15555550100").await;
     let (a2, _) = approved_action(&h, &mut r, "Hello again! Reply STOP to opt out.", "+15555550100").await;
-    assert_eq!(post_inbound("SMinbound0001", "+15555550100", "STOP").await, StatusCode::OK);
+    // SIDs are unique per run: dedupe is tenant-scoped (0006) but a stale row from a
+    // previous run of this test must never be what the assertion exercises.
+    let run = Uuid::now_v7().simple().to_string();
+    let sid1 = format!("SMinbound0001{run}");
+    assert_eq!(post_inbound(&sid1, "+15555550100", "STOP").await, StatusCode::OK);
     for a in [&a1, &a2] {
         let (_, v) = h.call("GET", &format!("/internal/v1/actions/{a}"), Some(&h.token(r.manager, &["manager"])), None).await;
         assert_eq!(v["state"], json!("suppressed"), "{v}");
         assert_eq!(v["message_state"], json!("cancelled"));
     }
     // Redelivery of the same inbound event creates nothing new (no second suppression row).
-    assert_eq!(post_inbound("SMinbound0001", "+15555550100", "STOP").await, StatusCode::OK);
+    assert_eq!(post_inbound(&sid1, "+15555550100", "STOP").await, StatusCode::OK);
     {
         let mut tx = h.state.store.begin(h.tenant).await.unwrap_or_else(|e| panic!("{e:?}"));
         let n: i64 = sqlx::query_scalar("SELECT count(*) FROM kernel.suppressions WHERE tenant_id = $1 AND reason = 'sms_opt_out'").bind(h.tenant.0).fetch_one(tx.raw_conn()).await.unwrap_or_else(|e| panic!("{e:?}"));
@@ -1239,9 +1245,9 @@ async fn inbound_stop_suppresses_cancels_and_dedupes_and_the_control_path_is_ser
     assert_eq!(s, StatusCode::FORBIDDEN, "{v}");
     assert_eq!(v["decision"]["code"], json!("suppressed"));
     // An ordinary reply from a different customer is queued for meaning, not suppressed.
-    assert_eq!(post_inbound("SMinbound0002", "+15555550177", "yes Thursday works!").await, StatusCode::OK);
+    assert_eq!(post_inbound(&format!("SMinbound0002{run}"), "+15555550177", "yes Thursday works!").await, StatusCode::OK);
     // A possible opt-out creates a hold (non-permanent suppression) and a visible exception path.
-    assert_eq!(post_inbound("SMinbound0003", "+15555550188", "I'm not interested, thanks").await, StatusCode::OK);
+    assert_eq!(post_inbound(&format!("SMinbound0003{run}"), "+15555550188", "I'm not interested, thanks").await, StatusCode::OK);
     let (s, pending) = h.call("GET", "/internal/v1/inbound/pending", Some(&h.token(r.manager, &["manager"])), None).await;
     assert_eq!(s, StatusCode::OK);
     let items = pending.as_array().cloned().unwrap_or_default();
@@ -1277,7 +1283,7 @@ async fn inbound_stop_suppresses_cancels_and_dedupes_and_the_control_path_is_ser
         let (p, pu) = (inbound_path.clone(), inbound_public.clone());
         let to_number = r.from_number.clone();
         async move {
-            let form: Vec<(String, String)> = vec![("MessageSid".into(), "SMinboundrace".into()), ("AccountSid".into(), ACCOUNT_SID.into()), ("From".into(), "+15555550199".into()), ("To".into(), to_number.clone()), ("Body".into(), "STOP".into())];
+            let form: Vec<(String, String)> = vec![("MessageSid".into(), format!("SMinboundrace{run}")), ("AccountSid".into(), ACCOUNT_SID.into()), ("From".into(), "+15555550199".into()), ("To".into(), to_number.clone()), ("Body".into(), "STOP".into())];
             let sig = mk_adapters::twilio::twilio_signature(&AdapterSecret::new(TOKEN), &pu, &form);
             let body = url::form_urlencoded::Serializer::new(String::new()).extend_pairs(form.iter().map(|(k, v)| (k.as_str(), v.as_str()))).finish();
             let req = Request::builder().method("POST").uri(p).header("content-type", "application/x-www-form-urlencoded").header("x-twilio-signature", sig).body(Body::from(body)).unwrap_or_default();

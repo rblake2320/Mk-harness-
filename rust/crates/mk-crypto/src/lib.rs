@@ -12,6 +12,7 @@ pub mod assertion;
 pub mod canonical;
 pub mod digest;
 pub mod hmac_sig;
+pub mod keyring;
 pub mod nonce;
 pub mod seal;
 pub mod secret;
@@ -24,6 +25,7 @@ pub use hmac_sig::{
     HmacError, SignedHeaders, VerifyParams, canonical_signing_input, sign_hmac, verify_hmac,
 };
 pub use nonce::{NonceError, NonceWindow, ReplayGuard};
+pub use keyring::{EnvKek, Kek, Keyring, LEGACY_VERSION};
 pub use seal::{MasterKey, SealError, seal, unseal};
 pub use secret::{AdapterSecret, constant_time_eq, generate_secret};
 pub use webauthn::{CoseAlg, CredentialPublicKey, RegisteredCredential, WebAuthnError};

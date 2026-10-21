@@ -7,6 +7,10 @@ use mk_policy::POLICY_VERSION;
 use mk_store::actions::{self, Actor};
 use mk_store::{Store, StoreError, adapters, assertions, outbox};
 
+/// A queued action whose dispatch message was published this long ago with no
+/// lease since is treated as lost in the queue.
+pub const STRANDED_AFTER_SECS: i64 = 30;
+
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct HousekeepingStats {
     pub expired: usize,
@@ -14,6 +18,8 @@ pub struct HousekeepingStats {
     pub nonces_purged: u64,
     pub jtis_purged: u64,
     pub challenges_purged: u64,
+    /// Queued actions re-enqueued after the queue lost their message (O5: Redis data loss).
+    pub stranded_requeued: usize,
 }
 
 /// Expire overdue actions for one tenant, recover expired leases (moving a
@@ -71,6 +77,20 @@ pub async fn run_once(
         sqlx_release(&mut tx, action_id).await?;
         tx.commit().await?;
         stats.leases_recovered += 1;
+    }
+    // Queue loss: an action can be `queued` with every outbox event published
+    // and nobody holding a lease. Re-enqueue; dispatch skips anything that has
+    // moved on, so this can never double-execute.
+    for tenant in tenants {
+        let mut tx = store.begin(*tenant).await?;
+        for action_id in outbox::stranded_queued(&mut tx, now, STRANDED_AFTER_SECS, 100).await? {
+            let a = actions::get_for_update(&mut tx, action_id).await?;
+            if a.state == ActionState::Queued {
+                outbox::enqueue(&mut tx, action_id, "dispatch", now, serde_json::json!({"requeued": "stranded"})).await?;
+                stats.stranded_requeued += 1;
+            }
+        }
+        tx.commit().await?;
     }
     stats.nonces_purged = adapters::purge_nonces(store.pool(), now).await?;
     stats.jtis_purged = assertions::purge_jtis(store.pool(), now).await?;

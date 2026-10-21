@@ -20,6 +20,7 @@ pub mod consent;
 pub mod error;
 pub mod human_approval;
 pub mod idempotency;
+pub mod keys;
 pub mod messaging;
 pub mod outbox;
 pub mod policy;
@@ -56,6 +57,16 @@ pub fn migrator() -> sqlx::migrate::Migrator {
             4,
             "provider messaging",
             include_str!("../../../../migrations/kernel/0004_provider_messaging.sql"),
+        ),
+        (
+            5,
+            "key versions",
+            include_str!("../../../../migrations/kernel/0005_key_versions.sql"),
+        ),
+        (
+            6,
+            "tenant scoped dedupe",
+            include_str!("../../../../migrations/kernel/0006_tenant_scoped_dedupe.sql"),
         ),
     ];
     let migrations: Vec<Migration> = FILES

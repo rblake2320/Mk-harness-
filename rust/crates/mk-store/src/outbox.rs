@@ -295,3 +295,33 @@ pub async fn record_attempt_end(
     .await?;
     Ok(())
 }
+
+/// Queued actions whose every outbox event was published more than
+/// `stranded_after_secs` ago and that hold no lease: the queue lost the
+/// message (Redis data loss, consumer group reset). Dispatch is idempotent
+/// against state (`not_queued` skip), so re-enqueueing is safe.
+///
+/// Tenant-scoped (RLS): the worker sweeps each tenant inside its own transaction.
+pub async fn stranded_queued(
+    tx: &mut TenantTx<'_>,
+    now: DateTime<Utc>,
+    stranded_after_secs: i64,
+    limit: i64,
+) -> Result<Vec<ActionId>, StoreError> {
+    let cutoff = now - chrono::Duration::seconds(stranded_after_secs);
+    let rows = sqlx::query(
+        "SELECT a.action_id FROM kernel.actions a
+         WHERE a.tenant_id = $4 AND a.state = 'queued'
+           AND NOT EXISTS (SELECT 1 FROM kernel.outbox_events o WHERE o.action_id = a.action_id AND (o.published_at IS NULL OR o.published_at > $1))
+           AND EXISTS (SELECT 1 FROM kernel.outbox_events o WHERE o.action_id = a.action_id AND o.published_at <= $1)
+           AND NOT EXISTS (SELECT 1 FROM kernel.execution_leases l WHERE l.action_id = a.action_id AND l.expires_at > $2)
+         ORDER BY a.updated_at LIMIT $3",
+    )
+    .bind(cutoff)
+    .bind(now)
+    .bind(limit)
+    .bind(tx.tenant().0)
+    .fetch_all(tx.conn())
+    .await?;
+    rows.into_iter().map(|r| Ok(ActionId::from_uuid(r.try_get("action_id")?))).collect()
+}

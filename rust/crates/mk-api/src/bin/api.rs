@@ -40,10 +40,17 @@ async fn main() -> anyhow::Result<()> {
         tracing::info!("migrate-only run complete; exiting");
         return Ok(());
     }
+    let keyring = mk_store::keys::keyring_from_env(store.pool(), &master).await?;
+    if keyring.versions() == [mk_crypto::LEGACY_VERSION] {
+        tracing::warn!("sealing with the legacy single master key (no MK_KEK / key versions); pre-flight refuses this for production");
+    } else {
+        tracing::info!(current = keyring.current_version(), versions = ?keyring.versions(), "envelope keyring loaded");
+    }
     let state = AppState {
         store,
         verifier,
         master,
+        keyring,
         tools: Arc::new(ToolAllowlist::v1()),
         metrics: Arc::new(Metrics::new()),
         callback_tolerance_secs: std::env::var("MK_CALLBACK_TOLERANCE_SECS")

@@ -6,14 +6,14 @@ use mk_adapters::mobile::{AgentResolver, AgentTarget};
 use mk_adapters::twilio::{SenderResolver, TwilioSender};
 use mk_crypto::AdapterSecret;
 use secrecy::ExposeSecret as _;
-use mk_crypto::MasterKey;
+use mk_crypto::Keyring;
 use mk_domain::TenantId;
 use mk_store::{Store, adapters};
 
 #[derive(Debug)]
 pub struct StoreResolver {
     pub store: Store,
-    pub master: MasterKey,
+    pub keyring: Keyring,
     /// Intake path appended to `https://{callback_authority_of_agent}`; in v1
     /// the device agent's intake authority is configured per adapter kind.
     pub intake_url_template: String,
@@ -28,7 +28,7 @@ impl AgentResolver for StoreResolver {
         if !reg.is_active(now) {
             return None;
         }
-        let secrets = adapters::live_secrets(&mut tx, &self.master, reg.adapter_id, now)
+        let secrets = adapters::live_secrets(&mut tx, &self.keyring, reg.adapter_id, now)
             .await
             .ok()?;
         let secret = secrets.into_iter().next()?;
@@ -53,7 +53,7 @@ impl AgentResolver for StoreResolver {
 #[derive(Debug)]
 pub struct StoreSenderResolver {
     pub store: Store,
-    pub master: MasterKey,
+    pub keyring: Keyring,
     pub public_webhook_base: String,
 }
 
@@ -61,7 +61,7 @@ pub struct StoreSenderResolver {
 impl SenderResolver for StoreSenderResolver {
     async fn resolve(&self, tenant: TenantId, sender_identity_id: uuid::Uuid) -> Option<TwilioSender> {
         let mut tx = self.store.begin(tenant).await.ok()?;
-        let s = mk_store::messaging::sender_secret(&mut tx, &self.master, sender_identity_id).await.ok()?;
+        let s = mk_store::messaging::sender_secret(&mut tx, &self.keyring, sender_identity_id).await.ok()?;
         tx.commit().await.ok()?;
         Some(TwilioSender {
             sender_identity_id,

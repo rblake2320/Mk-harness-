@@ -74,7 +74,7 @@ async fn authenticate(
     if sig.is_empty() {
         return Err(forbidden("WEBHOOK_UNSIGNED", "missing X-Twilio-Signature"));
     }
-    let sender = match ms::sender_secret_by_id(st.store.pool(), &st.master, sender_identity_id).await {
+    let sender = match ms::sender_secret_by_id(st.store.pool(), &st.keyring, sender_identity_id).await {
         Ok(s) => s,
         // Unknown sender: same answer as a bad signature, so the path cannot be probed.
         Err(mk_store::StoreError::NotFound) => return Err(forbidden("WEBHOOK_SIGNATURE_INVALID", "signature invalid")),
@@ -270,7 +270,7 @@ pub async fn twilio_inbound(
     ms::lock_control_path(&mut tx, Channel::Sms.as_str(), &dest).await.map_err(|e| rid(e.into()))?;
     let rec = ms::record_inbound(
         &mut tx,
-        &st.master,
+        &st.keyring,
         &message_sid,
         sender_identity_id,
         &dest,
@@ -382,7 +382,7 @@ pub async fn register_sender(
     }
     let now = Utc::now();
     let mut tx = st.store.begin(p.tenant).await.map_err(|e| rid(e.into()))?;
-    let id = ms::register_sender(&mut tx, &st.master, b.owner_user_id, &b.display_name, &b.account_sid, &b.auth_token,
+    let id = ms::register_sender(&mut tx, &st.keyring, b.owner_user_id, &b.display_name, &b.account_sid, &b.auth_token,
                                  b.from_number.as_deref(), b.messaging_service_sid.as_deref(), p.user, now)
         .await
         .map_err(|e| rid(e.into()))?;
@@ -460,7 +460,7 @@ pub async fn inbound_pending(
         return Err(rid(forbidden("AGENT_CANNOT_READ_INBOUND", "customer messages are not available to agent principals")));
     }
     let mut tx = st.store.begin(p.tenant).await.map_err(|e| rid(e.into()))?;
-    let v = ms::pending_inbound(&mut tx, &st.master, q.limit.unwrap_or(50).clamp(1, 200)).await.map_err(|e| rid(e.into()))?;
+    let v = ms::pending_inbound(&mut tx, &st.keyring, q.limit.unwrap_or(50).clamp(1, 200)).await.map_err(|e| rid(e.into()))?;
     Ok(Json(v))
 }
 

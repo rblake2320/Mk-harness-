@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use mk_crypto::{AssertionVerifier, MasterKey};
+use mk_crypto::{AssertionVerifier, Keyring, MasterKey};
 use mk_policy::ToolAllowlist;
 use mk_store::Store;
 
@@ -10,7 +10,10 @@ use crate::metrics::Metrics;
 pub struct AppState {
     pub store: Store,
     pub verifier: AssertionVerifier,
+    /// Fingerprint HMAC key (stable). Sealing uses `keyring`.
     pub master: MasterKey,
+    /// Versioned envelope keys for data at rest (S6).
+    pub keyring: Keyring,
     pub tools: Arc<ToolAllowlist>,
     pub metrics: Arc<Metrics>,
     /// HMAC timestamp tolerance for adapter callbacks (seconds).
