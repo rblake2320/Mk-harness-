@@ -49,7 +49,7 @@ jobs:
         # Failures are surfaced as check-run annotations (readable through the API
         # even where raw job logs are not).
         run: |
-          set -o pipefail
+          set +e -o pipefail   # GitHub runs bash -e: keep going after the pipeline fails so diagnostics print
           cargo nextest run --workspace --no-fail-fast 2>&1 | tee nextest.log
           rc=${PIPESTATUS[0]}
           grep -E "^\s+FAIL \[" nextest.log | sed 's/^\s*/::error title=nextest::/' || true
