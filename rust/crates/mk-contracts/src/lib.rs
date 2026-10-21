@@ -8,6 +8,7 @@
 //! Nothing here decides whether an action is allowed.
 
 pub mod action;
+pub mod message_state;
 pub mod mobile;
 pub mod problem;
 pub mod schema;
@@ -16,6 +17,7 @@ pub use action::{
     ACTION_SCHEMA_VERSION, APPROVAL_SCHEMA_VERSION, ActionRequest, ActionResult, ApprovalRecord,
     Evidence, Origin, Receipt, Resource,
 };
+pub use message_state::MessageState;
 pub use mobile::{
     MOBILE_WORK_ORDER_SCHEMA, MobileCallback, MobilePing, MobileWorkOrder, WorkOrderStep,
 };

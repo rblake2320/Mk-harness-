@@ -9,10 +9,14 @@ ignore = [
   # it appears in Cargo.lock because lockfiles are feature-independent.
   # Verified with `cargo tree -i rsa` (nothing to print).
   { id = "RUSTSEC-2023-0071", reason = "unused optional dependency (sqlx-mysql) never compiled" },
-  # webpki-roots 0.26 via sqlx-core 0.8 `tls-rustls`; the fixed line needs sqlx 0.9 (tracked).
-  # Mitigation (PR #34): production composes the DB URL with sslmode=verify-full and an explicit
-  # RDS root cert (MK_DB_SSLROOTCERT), so the bundled roots are never consulted.
-  { id = "RUSTSEC-2026-0381", reason = "sqlx-core 0.8 pin; production uses an explicit DB root cert" },
+  # webpki-roots 0.26 (distrusted emSign intermediates still bundled). Pulled only by
+  # sqlx-core 0.8's `tls-rustls` feature; the fixed line (1.0.10) requires sqlx 0.9, a
+  # major upgrade tracked for WP09 follow-up. Mitigation in force: production database
+  # URLs are composed with `sslmode=verify-full&sslrootcert=<RDS CA bundle>`
+  # (MK_DB_SSLROOTCERT, mk_store::database_url_from_env) — when a root cert path is given,
+  # sqlx-core builds the rustls root store from that file alone and never consults the
+  # bundled webpki roots. reqwest (provider egress) uses webpki-roots 1.0.10.
+  { id = "RUSTSEC-2026-0381", reason = "sqlx-core 0.8 pin; production uses an explicit RDS root cert so the bundled roots are not consulted" },
 ]
 
 [licenses]

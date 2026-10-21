@@ -148,6 +148,18 @@ pub async fn propose(
         ),
         _ => (Vec::new(), Vec::new(), 0),
     };
+    // Contact hours run in the customer's zone when the application supplied
+    // one; an unparseable zone is refused rather than silently falling back.
+    let contact_tz = match mk_policy::contact_zone(&req.arguments, &tenant_policy.contact_tz) {
+        Ok(z) => z,
+        Err(code) => {
+            return Err(rid(ApiError::new(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "CONTACT_TZ_INVALID",
+                code,
+            )));
+        }
+    };
     let decision = evaluate(&PolicyInput {
         request: &req,
         actor_tenant: p.tenant,
@@ -161,7 +173,7 @@ pub async fn propose(
         permissions: &permissions,
         suppressions: &suppressions,
         sends_last_24h: sends,
-        local_hour: local_hour_in_zone(now, &tenant_policy.contact_tz, tz),
+        local_hour: local_hour_in_zone(now, contact_tz, tz),
         now,
     });
     let (kind, code) = match &decision {
@@ -300,7 +312,11 @@ pub async fn get(
     let a = actions::get(&mut tx, action_id)
         .await
         .map_err(|e| ApiError::from(e).with_request_id(&headers))?;
-    Ok(Json(a.to_result(None)))
+    let mut result = a.to_result(None);
+    super::messaging::enrich_result(&mut tx, &mut result)
+        .await
+        .map_err(|e| e.with_request_id(&headers))?;
+    Ok(Json(result))
 }
 
 /// `POST /internal/v1/actions/{action_id}/cancel`

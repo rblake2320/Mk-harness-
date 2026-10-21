@@ -31,6 +31,9 @@ fn human_only(p: &Principal, headers: &HeaderMap) -> Result<(), ApiError> {
 #[serde(deny_unknown_fields)]
 pub struct GrantBody {
     pub channel: Channel,
+    /// The destination (phone number / address) the consent evidence covers. Hashed
+    /// here with the tenant-keyed fingerprint; the raw value is never stored.
+    pub destination: String,
     pub scope: Vec<String>,
     pub source: String,
     pub proof_digest: mk_crypto::Digest,
@@ -55,6 +58,8 @@ pub async fn grant_permission(
         || b.scope.len() > 16
         || b.expires_at <= b.granted_at
         || b.source.len() > 200
+        || b.destination.trim().is_empty()
+        || b.destination.len() > 320
     {
         return Err(ApiError::new(
             StatusCode::UNPROCESSABLE_ENTITY,
@@ -81,6 +86,7 @@ pub async fn grant_permission(
         b.granted_at,
         b.expires_at,
         p.user,
+        &destination_hash(&st.master, p.tenant, b.channel, &b.destination),
         actor,
         now,
     )
@@ -160,6 +166,11 @@ pub struct SuppressionBody {
     pub channel: Option<Channel>,
     /// Raw destination; hashed server-side, never stored.
     pub destination: Option<String>,
+    /// Alternatively, the kernel's own destination hash (as returned on inbound
+    /// events) — lets the application act on a message without ever holding
+    /// the raw number.
+    #[serde(default)]
+    pub destination_hash: Option<String>,
     pub reason: String,
     pub permanent: bool,
     pub source: String,
@@ -172,7 +183,17 @@ pub async fn add_suppression(
     Json(b): Json<SuppressionBody>,
 ) -> Result<(StatusCode, Json<RevokeResponse>), ApiError> {
     human_only(&p, &headers)?;
-    if b.destination.is_some() && b.channel.is_none() {
+    if let Some(h) = &b.destination_hash
+        && (h.len() != 64 || !h.bytes().all(|c| c.is_ascii_hexdigit()))
+    {
+        return Err(ApiError::new(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "INVALID_SUPPRESSION",
+            "destination_hash must be 64 hex chars",
+        )
+        .with_request_id(&headers));
+    }
+    if (b.destination.is_some() || b.destination_hash.is_some()) && b.channel.is_none() {
         return Err(ApiError::new(
             StatusCode::UNPROCESSABLE_ENTITY,
             "INVALID_SUPPRESSION",
@@ -183,8 +204,9 @@ pub async fn add_suppression(
     let now = Utc::now();
     let actor_id = p.user.to_string();
     let actor = actor_of(&p, &actor_id);
-    let dest_hash = match (&b.channel, &b.destination) {
-        (Some(c), Some(d)) => Some(destination_hash(&st.master, p.tenant, *c, d)),
+    let dest_hash = match (&b.channel, &b.destination, &b.destination_hash) {
+        (Some(c), Some(d), _) => Some(destination_hash(&st.master, p.tenant, *c, d)),
+        (Some(_), None, Some(h)) => Some(h.clone()),
         _ => None,
     };
     let mut tx = st

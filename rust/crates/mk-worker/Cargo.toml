@@ -35,6 +35,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 chrono = { workspace = true }
 uuid = { workspace = true }
+sqlx = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
@@ -42,7 +43,21 @@ anyhow = { workspace = true }
 async-trait = { workspace = true }
 rand = { workspace = true }
 secrecy = { workspace = true }
+prometheus-client = { workspace = true }
+axum = { workspace = true }
 
 [dev-dependencies]
 mk-testkit = { workspace = true }
 sqlx = { workspace = true }
+
+[[bin]]
+name = "mk-keyctl"
+path = "src/bin/keyctl.rs"
+
+[[bin]]
+name = "mk-restore-gate"
+path = "src/bin/restore_gate.rs"
+
+[[bin]]
+name = "mk-healthcheck"
+path = "src/bin/healthcheck.rs"

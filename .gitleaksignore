@@ -1,0 +1,8 @@
+# gitleaks fingerprints for historic FALSE POSITIVES only (content already in pushed history).
+# Each line: commit:file:rule:line. Terraform `*_password = "<role name>"` map keys (descriptions, not values)
+# and a Python type annotation. Never add a real leak here — rotate it and purge history instead.
+b5723c7975276078eebd395cbd54322e285b6ba8:infra/terraform/modules/kernel-platform/kms_secrets.tf:hashicorp-tf-password:57
+b5723c7975276078eebd395cbd54322e285b6ba8:infra/terraform/modules/kernel-platform/kms_secrets.tf:hashicorp-tf-password:58
+b5723c7975276078eebd395cbd54322e285b6ba8:infra/terraform/modules/kernel-platform/kms_secrets.tf:hashicorp-tf-password:59
+b5723c7975276078eebd395cbd54322e285b6ba8:infra/terraform/modules/kernel-platform/kms_secrets.tf:hashicorp-tf-password:60
+c923eb79c8602c31e22de5f5a520028388c6f22b:backend/app/kernel/assertions.py:generic-api-key:68

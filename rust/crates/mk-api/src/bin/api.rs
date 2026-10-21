@@ -18,7 +18,7 @@ async fn main() -> anyhow::Result<()> {
         )
         .try_init();
 
-    let db = std::env::var("MK_DATABASE_URL")?;
+    let db = mk_store::database_url_from_env()?;
     let master = MasterKey::from_base64(&std::env::var("MK_MASTER_KEY")?)
         .map_err(|e| anyhow::anyhow!("MK_MASTER_KEY: {e}"))?;
     // MK_ASSERTION_KEYS = "kid1=<b64url pubkey>,kid2=<b64url pubkey>"
@@ -40,10 +40,19 @@ async fn main() -> anyhow::Result<()> {
         tracing::info!("migrate-only run complete; exiting");
         return Ok(());
     }
+    let keyring = mk_store::keys::keyring_from_env(store.pool(), &master).await?;
+    if keyring.versions() == [mk_crypto::LEGACY_VERSION] {
+        tracing::warn!(
+            "sealing with the legacy single master key (no MK_KEK / key versions); pre-flight refuses this for production"
+        );
+    } else {
+        tracing::info!(current = keyring.current_version(), versions = ?keyring.versions(), "envelope keyring loaded");
+    }
     let state = AppState {
         store,
         verifier,
         master,
+        keyring,
         tools: Arc::new(ToolAllowlist::v1()),
         metrics: Arc::new(Metrics::new()),
         callback_tolerance_secs: std::env::var("MK_CALLBACK_TOLERANCE_SECS")
@@ -51,7 +60,28 @@ async fn main() -> anyhow::Result<()> {
             .and_then(|v| v.parse().ok())
             .unwrap_or(120),
         rust_kernel_enabled: std::env::var("RUST_ACTION_KERNEL_ENABLED").is_ok_and(|v| v == "1"),
+        approval_rp: mk_api::ApprovalRp::from_env().map_err(|e| anyhow::anyhow!(e))?,
+        public_webhook_base: std::env::var("MK_PUBLIC_WEBHOOK_BASE")
+            .ok()
+            .filter(|s| !s.trim().is_empty())
+            .map(|s| {
+                let s = s.trim().trim_end_matches('/').to_owned();
+                if !(s.starts_with("https://")
+                    || s.starts_with("http://localhost")
+                    || s.starts_with("http://127.0.0.1"))
+                {
+                    tracing::warn!(
+                        "MK_PUBLIC_WEBHOOK_BASE is not https; acceptable only for local testing"
+                    );
+                }
+                s
+            }),
     };
+    if state.approval_rp.is_none() {
+        tracing::warn!(
+            "MK_ALLOW_UNBOUND_APPROVAL=1: approvals are NOT human-bound; never run production like this"
+        );
+    }
     let bind = std::env::var("MK_BIND").unwrap_or_else(|_| "127.0.0.1:8090".into());
     let listener = tokio::net::TcpListener::bind(&bind).await?;
     tracing::info!(%bind, enabled = state.rust_kernel_enabled, "mk-action-api listening (private network only)");

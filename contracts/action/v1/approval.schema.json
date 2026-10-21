@@ -20,6 +20,8 @@
     "expires_at": {"type": "string", "format": "date-time"},
     "consumed_at": {"type": ["string", "null"], "format": "date-time"},
     "revoked_at": {"type": ["string", "null"], "format": "date-time"},
-    "session_id": {"type": "string", "maxLength": 128}
+    "session_id": {"type": "string", "maxLength": 128},
+    "human_binding": {"enum": ["webauthn", "unbound"], "description": "webauthn: the approval carried a kernel-verified, transaction-bound WebAuthn assertion from a credential the human registered with the kernel. unbound: accepted only when the kernel runs with MK_ALLOW_UNBOUND_APPROVAL=1 (never in production)."},
+    "approval_credential_row_id": {"type": ["string", "null"], "format": "uuid"}
   }
 }

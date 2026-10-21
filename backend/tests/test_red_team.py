@@ -682,62 +682,18 @@ def test_webhook_tampered_payload_rejected(client):
 
 
 # ---------------------------------------------------------------------------
-# AUTO-TOUCH ON FOLLOW-UP GENERATION
+# RETIRED SURFACES (contract rows W4, P1/P3): no "Power Hour" overdue heuristic,
+# no free-text follow-up generator. Both answer 410 with a pointer.
 # ---------------------------------------------------------------------------
 
-@respx.mock
-def test_follow_up_auto_touches_last_contact(client):
-    """Generating a follow-up draft should update last_contact so Power Hour stays accurate."""
-    t = _setup_user_with_key(client)
-    cid = client.post("/api/customers", headers=auth_headers(t),
-                      json={"name": "Follow Up Customer"}).json()["id"]
-    before = client.get(f"/api/customers/{cid}", headers=auth_headers(t)).json()
-    assert before["last_contact"] is None
-
-    respx.post("https://api.anthropic.com/v1/messages").mock(
-        return_value=httpx.Response(200, json={
-            "content": [{"text": "Hey! Just thinking of you..."}],
-            "usage": {"input_tokens": 10, "output_tokens": 20},
-        }))
-    r = client.post(f"/api/customers/{cid}/follow-up", headers=auth_headers(t),
-                    json={"goal": "check in", "provider": "anthropic"})
-    assert r.status_code == 200
-
-    after = client.get(f"/api/customers/{cid}", headers=auth_headers(t)).json()
-    assert after["last_contact"] is not None
-
-
-# ---------------------------------------------------------------------------
-# POWER HOUR REVENUE SURFACE
-# ---------------------------------------------------------------------------
-
-def test_power_hour_revenue_note_for_never_contacted(client):
-    """Never-contacted customers should show a revenue note with avg order value."""
-    t = signup(client, email=_email())
-    client.post("/api/customers", headers=auth_headers(t),
-                json={"name": "Never Contacted"})
-    suggestions = client.get("/api/customers/suggestions", headers=auth_headers(t)).json()
-    never = next((s for s in suggestions if s["days_since_contact"] is None), None)
-    assert never is not None
-    assert never["revenue_note"] is not None
-    assert "$" in never["revenue_note"]
-
-
-def test_power_hour_revenue_note_absent_for_recent_contact(client):
-    """Recently touched customers (< 30 days) should have no revenue note."""
-    t = signup(client, email=_email())
-    cid = client.post("/api/customers", headers=auth_headers(t),
-                      json={"name": "Recent"}).json()["id"]
-    client.post(f"/api/customers/{cid}/touch", headers=auth_headers(t))
-    suggestions = client.get("/api/customers/suggestions", headers=auth_headers(t)).json()
-    recent = next((s for s in suggestions if s["days_since_contact"] == 0), None)
-    if recent:
-        assert recent["revenue_note"] is None
-
-
-# ---------------------------------------------------------------------------
-# SESSION INVALIDATION (pv claim)
-# ---------------------------------------------------------------------------
+def test_power_hour_and_free_text_follow_up_are_retired(client):
+    t = signup(client, org="Retired", email="retired@example.com")
+    h = auth_headers(t)
+    cid = client.post("/api/customers", headers=h, json={"name": "Anyone"}).json()["id"]
+    assert client.get("/api/customers/suggestions", headers=h).status_code == 410
+    assert client.post(f"/api/customers/{cid}/follow-up", headers=h, json={"goal": "x"}).status_code == 410
+    # last_contact is never silently touched by drafting any more.
+    assert client.get("/api/customers", headers=h).json()[0]["last_contact"] is None
 
 def test_password_change_invalidates_old_tokens(client):
     """Access AND refresh tokens minted before a password change must die."""

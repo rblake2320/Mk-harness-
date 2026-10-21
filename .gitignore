@@ -22,3 +22,6 @@ dist/
 .vscode/
 backend/.env
 *.db
+
+# Local Redis snapshots (never tracked)
+*.rdb

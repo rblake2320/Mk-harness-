@@ -8,8 +8,8 @@ from fastapi.responses import HTMLResponse
 from .config import get_settings, require_secret
 from .db import init_engine
 from .routes import (
-    account, agent_ops, auth, billing, chat, consent, customers, keys, profile, skin,
-    skindata, usage,
+    account, agent_ops, auth, billing, chat, commitments, consent, customers, drafting, foundation, inbound, outreach,
+    keys, profile, skin, skindata, usage,
 )
 
 _PRIVACY_HTML = """<!DOCTYPE html>
@@ -135,7 +135,9 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type"],
 )
 
-for r in (auth.router, chat.router, skin.router, customers.router,
+# foundation before customers: its /customers/import/* and /customers/export.csv paths
+# must win over customers' /customers/{cid}.
+for r in (auth.router, chat.router, skin.router, foundation.router, commitments.router, drafting.router, inbound.router, outreach.router, customers.router,
           keys.router, usage.router, profile.router, consent.router, skindata.router,
           billing.router, account.router, agent_ops.router):
     app.include_router(r, prefix="/api")
@@ -143,7 +145,47 @@ for r in (auth.router, chat.router, skin.router, customers.router,
 
 @app.get("/api/health")
 def health():
+    """Liveness only (load-balancer target health). Never touches dependencies."""
     return {"status": "ok"}
+
+
+@app.get("/api/health/ready")
+async def ready():
+    """Readiness of the core workflow path: database reachable and, when the
+    governed-action kernel is configured, the kernel's own readiness. External
+    uptime checks (contract O3 availability) point here, not at `/api/health`,
+    so a dead database or kernel counts as downtime. Unauthenticated by design;
+    the body carries no tenant data."""
+    from fastapi.responses import JSONResponse
+    from sqlalchemy import text
+
+    from .db import get_db
+    from .kernel.client import KernelUnavailable, get_kernel_client
+
+    checks: dict[str, str] = {}
+    ok = True
+    try:
+        db = next(get_db())
+        try:
+            db.execute(text("SELECT 1"))
+        finally:
+            db.close()
+        checks["database"] = "ok"
+    except Exception:  # noqa: BLE001 — any failure is "not ready"; detail stays in logs
+        checks["database"] = "unavailable"
+        ok = False
+    client = get_kernel_client()
+    if client.configured:
+        try:
+            r = await client.health_ready()
+            checks["kernel"] = "ok" if r.status_code == 200 else "not_ready"
+            ok = ok and r.status_code == 200
+        except KernelUnavailable:
+            checks["kernel"] = "unavailable"
+            ok = False
+    else:
+        checks["kernel"] = "not_configured"
+    return JSONResponse(status_code=200 if ok else 503, content={"status": "ready" if ok else "not_ready", "checks": checks})
 
 
 @app.get("/privacy", response_class=HTMLResponse, include_in_schema=False)

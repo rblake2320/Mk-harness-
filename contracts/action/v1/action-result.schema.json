@@ -22,6 +22,12 @@
       }
     },
     "replay_of": {"type": "string", "format": "uuid"},
-    "updated_at": {"type": "string", "format": "date-time"}
+    "updated_at": {"type": "string", "format": "date-time"},
+    "message_state": {
+      "description": "Contract C3 message lifecycle vocabulary, derived from the kernel state plus provider evidence. Definitions: provider_accepted = provider acknowledged submission; sent = provider reports outbound network submission; delivered = supported provider/carrier receipt; delivery_unknown/submission_unknown = evidence insufficient. Never upgraded because time elapsed. Absent for non-message actions.",
+      "enum": ["proposed", "awaiting_approval", "approved", "queued", "dispatch_authorized", "submission_started", "provider_accepted", "sent", "delivered", "failed", "delivery_unknown", "submission_unknown", "cancelled", "denied", "expired"]
+    },
+    "read_status": {"description": "Separate from delivery; 'unknown' unless a supported recipient-read signal exists.", "enum": ["unknown", "read"]},
+    "provider_message_id": {"type": "string", "maxLength": 64}
   }
 }

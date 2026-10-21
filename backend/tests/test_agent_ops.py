@@ -87,6 +87,16 @@ def _signup(client, n: str, admin_only=False):
     return t
 
 
+def known_customer(client, tok: str, phone: str = "+15555550100") -> str:
+    """A customer this tenant owns, with a timezone, so the F9 gate lets outreach reach the kernel."""
+    r = client.post("/api/customers", json={"name": "Brenda", "phone": phone}, headers=auth_headers(tok))
+    assert r.status_code in (200, 201), r.text
+    cid = r.json()["id"]
+    r = client.put(f"/api/customers/{cid}/preferences", json={"timezone": "America/Chicago"}, headers=auth_headers(tok))
+    assert r.status_code == 200, r.text
+    return uuid.UUID(cid).hex
+
+
 def sms_request(contact_hex: str) -> dict:
     return {
         "workflow": "customer_follow_up", "action_kind": "send_sms",
@@ -133,7 +143,7 @@ def test_unreachable_kernel_is_503_and_writes_are_not_retried(client, kernel_env
     with respx.mock() as m:
         route = m.post(f"{KERNEL}/internal/v1/actions").mock(side_effect=exc)
         r = client.post("/api/agent-ops/actions",
-                        json={"origin": "human", "request": sms_request(uuid.uuid4().hex)},
+                        json={"origin": "human", "request": sms_request(known_customer(client, tok))},
                         headers=auth_headers(tok))
     assert r.status_code == 503
     assert r.json()["code"] == "KERNEL_UNREACHABLE"
@@ -156,6 +166,23 @@ def test_health_requires_live_kernel(client, kernel_env):
         m.get(f"{KERNEL}/health/ready").mock(return_value=httpx.Response(503, json={"db": "down"}))
         r = client.get("/api/agent-ops/health", headers=auth_headers(tok))
     assert r.status_code == 503 and r.json()["kernel_status"] == 503
+
+
+def test_app_readiness_reflects_kernel_and_needs_no_token(client, kernel_env):
+    with respx.mock() as m:
+        m.get(f"{KERNEL}/health/ready").mock(return_value=httpx.Response(200, json={"ok": 1}))
+        r = client.get("/api/health/ready")
+    assert r.status_code == 200 and r.json()["checks"] == {"database": "ok", "kernel": "ok"}
+    with respx.mock() as m:
+        m.get(f"{KERNEL}/health/ready").mock(return_value=httpx.Response(503, json={"db": "down"}))
+        r = client.get("/api/health/ready")
+    assert r.status_code == 503 and r.json()["checks"]["kernel"] == "not_ready"
+    with respx.mock() as m:
+        m.get(f"{KERNEL}/health/ready").mock(side_effect=httpx.ConnectError("down"))
+        r = client.get("/api/health/ready")
+    assert r.status_code == 503 and r.json()["checks"]["kernel"] == "unavailable"
+    # Liveness stays independent of the kernel.
+    assert client.get("/api/health").status_code == 200
 
 
 # --------------------------------------------------------------------------- #
@@ -196,7 +223,7 @@ def test_identity_is_bound_from_jwt_not_body(client, kernel_env):
 
     with respx.mock() as m:
         m.post(f"{KERNEL}/internal/v1/actions").mock(side_effect=handler)
-        req = sms_request(uuid.uuid4().hex)
+        req = sms_request(known_customer(client, tok))
         req["tenant_id"] = str(uuid.uuid4())      # attacker-supplied
         req["requested_by"] = str(uuid.uuid4())   # attacker-supplied
         req["action_id"] = str(uuid.uuid4())      # client may not pick ids
@@ -253,7 +280,7 @@ def test_agent_origin_mints_agent_only_principal(client, kernel_env):
     with respx.mock() as m:
         m.post(f"{KERNEL}/internal/v1/actions").mock(side_effect=handler)
         r = client.post("/api/agent-ops/actions",
-                        json={"origin": "agent", "request": sms_request(uuid.uuid4().hex)},
+                        json={"origin": "agent", "request": sms_request(known_customer(client, tok))},
                         headers=auth_headers(tok))
     assert r.status_code == 201
     assert seen["c"]["roles"] == ["agent"]
@@ -353,7 +380,7 @@ def test_kernel_verdicts_pass_through_unchanged(client, kernel_env, status, body
     with respx.mock() as m:
         m.post(f"{KERNEL}/internal/v1/actions").mock(return_value=httpx.Response(status, json=body))
         r = client.post("/api/agent-ops/actions",
-                        json={"origin": "human", "request": sms_request(uuid.uuid4().hex)},
+                        json={"origin": "human", "request": sms_request(known_customer(client, tok))},
                         headers=auth_headers(tok))
     assert r.status_code == status and r.json() == body
 
@@ -373,7 +400,7 @@ def test_204_passes_through_without_body(client, kernel_env):
 @pytest.mark.parametrize("key", ["callback_url", "password", "api_key", "token", "secret"])
 def test_forbidden_argument_keys_rejected_before_any_call(client, kernel_env, key):
     tok = _signup(client, uuid.uuid4().hex[:6])
-    req = sms_request(uuid.uuid4().hex); req["arguments"][key] = "x"
+    req = sms_request(known_customer(client, tok)); req["arguments"][key] = "x"
     with respx.mock(assert_all_called=False) as m:
         route = m.post(f"{KERNEL}/internal/v1/actions")
         r = client.post("/api/agent-ops/actions", json={"origin": "human", "request": req},
@@ -395,7 +422,7 @@ def test_invalid_ids_are_422_before_any_call(client, kernel_env):
 def test_bad_origin_value_rejected(client, kernel_env):
     tok = _signup(client, uuid.uuid4().hex[:6])
     r = client.post("/api/agent-ops/actions",
-                    json={"origin": "system", "request": sms_request(uuid.uuid4().hex)},
+                    json={"origin": "system", "request": sms_request(known_customer(client, tok))},
                     headers=auth_headers(tok))
     assert r.status_code == 422
 
@@ -439,9 +466,69 @@ def test_forwarded_proposal_matches_published_action_contract(client, kernel_env
     with respx.mock() as m:
         m.post(f"{KERNEL}/internal/v1/actions").mock(side_effect=handler)
         for origin in ("agent", "human"):
-            req = sms_request(uuid.uuid4().hex)
+            req = sms_request(known_customer(client, tok))
             req["arguments"]["agent_id"] = "moto-1"
             r = client.post("/api/agent-ops/actions", json={"origin": origin, "request": req},
                             headers=auth_headers(tok))
             assert r.status_code == 201
             jsonschema.Draft202012Validator(schema).validate(seen["b"])
+
+
+# --------------------------------------------------------------------------- #
+# WP06 — human-approval authority relays (FastAPI never verifies, never signs)
+# --------------------------------------------------------------------------- #
+def test_webauthn_bytes_are_relayed_untouched_and_never_as_agent(client, kernel_env):
+    tok = _signup(client, uuid.uuid4().hex[:6])
+    aid = uuid.uuid4(); seen = {}
+
+    def handler(request):
+        seen["c"] = verify_assertion(request); seen["b"] = json.loads(request.content)
+        return httpx.Response(200, json={"approval": {"human_binding": "webauthn"}, "result": {}})
+
+    wa = {"credential_id": "AQID", "client_data_json": "eyJ0eXBlIjoid2ViYXV0aG4uZ2V0In0",
+          "authenticator_data": "AAAA", "signature": "MEUCIQ"}
+    with respx.mock() as m:
+        m.post(f"{KERNEL}/internal/v1/actions/{aid}/approve").mock(side_effect=handler)
+        r = client.post(f"/api/agent-ops/actions/{aid}/approve",
+                        json={"action_digest": "sha256:" + "b" * 64, "webauthn": wa}, headers=auth_headers(tok))
+    assert r.status_code == 200
+    assert seen["b"]["webauthn"] == wa and "agent" not in seen["c"]["roles"]
+    # Non-base64url bytes are refused before reaching the kernel.
+    bad = dict(wa, signature="not base64!")
+    with respx.mock(assert_all_called=False) as m:
+        m.post(f"{KERNEL}/internal/v1/actions/{aid}/approve").mock(return_value=httpx.Response(200, json={}))
+        r = client.post(f"/api/agent-ops/actions/{aid}/approve",
+                        json={"action_digest": "sha256:" + "b" * 64, "webauthn": bad}, headers=auth_headers(tok))
+        assert r.status_code == 422 and not m.calls
+
+
+def test_passkey_and_challenge_and_revocation_relays(client, kernel_env):
+    tok = _signup(client, uuid.uuid4().hex[:6])
+    aid = uuid.uuid4(); seen = {}
+
+    def rec(name):
+        def h(request):
+            seen[name] = (verify_assertion(request), json.loads(request.content or b"{}"))
+            return httpx.Response(200, json={"ok": name})
+        return h
+
+    with respx.mock() as m:
+        m.post(f"{KERNEL}/internal/v1/actions/{aid}/approval-challenge").mock(side_effect=rec("challenge"))
+        m.post(f"{KERNEL}/internal/v1/approval-credentials/register/begin").mock(side_effect=rec("begin"))
+        m.post(f"{KERNEL}/internal/v1/approval-credentials/register/finish").mock(side_effect=rec("finish"))
+        m.get(f"{KERNEL}/internal/v1/approval-credentials").mock(return_value=httpx.Response(200, json=[]))
+        m.post(f"{KERNEL}/internal/v1/revocations").mock(side_effect=rec("revoke"))
+        h = auth_headers(tok)
+        assert client.post(f"/api/agent-ops/actions/{aid}/approval-challenge", headers=h).status_code == 200
+        assert client.post("/api/agent-ops/approval-credentials/register/begin", headers=h).status_code == 200
+        assert client.post("/api/agent-ops/approval-credentials/register/finish",
+                           json={"client_data_json": "e30", "attestation_object": "oWNmbXRkbm9uZQ", "label": "phone"}, headers=h).status_code == 200
+        assert client.get("/api/agent-ops/approval-credentials", headers=h).status_code == 200
+        # Revoking "my current session" without naming it: FastAPI supplies the kernel session id.
+        assert client.post("/api/agent-ops/revocations", json={"reason": "lost phone"}, headers=h).status_code == 200
+    assert seen["finish"][1] == {"client_data_json": "e30", "attestation_object": "oWNmbXRkbm9uZQ", "label": "phone"}
+    assert seen["revoke"][1]["session_id"] == seen["revoke"][0]["session_id"]
+    for k in ("challenge", "begin", "finish", "revoke"):
+        assert "agent" not in seen[k][0]["roles"]
+    # Unauthenticated → 401 (no kernel call).
+    assert client.post("/api/agent-ops/approval-credentials/register/begin").status_code == 401

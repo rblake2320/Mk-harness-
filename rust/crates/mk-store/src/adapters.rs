@@ -3,7 +3,7 @@
 
 use chrono::{DateTime, Duration, Utc};
 use mk_audit::{EventType, NewEvent};
-use mk_crypto::{AdapterSecret, MasterKey, generate_secret, seal, unseal};
+use mk_crypto::{AdapterSecret, Keyring, generate_secret};
 use mk_domain::{ActionId, AdapterId, TenantId};
 use secrecy::{ExposeSecret, SecretString};
 use serde_json::json;
@@ -50,7 +50,7 @@ fn aad(tenant: TenantId, adapter: AdapterId, credential: Uuid) -> String {
 /// returned **once**; only the sealed form is stored.
 pub async fn register(
     tx: &mut TenantTx<'_>,
-    master: &MasterKey,
+    keyring: &Keyring,
     agent_id: &str,
     name: &str,
     platform: &str,
@@ -79,7 +79,7 @@ pub async fn register(
     .bind(now)
     .execute(tx.conn())
     .await?;
-    let secret = insert_credential(tx, master, adapter_id, now).await?;
+    let secret = insert_credential(tx, keyring, adapter_id, now).await?;
     append_event(
         tx,
         NewEvent {
@@ -100,18 +100,15 @@ pub async fn register(
 
 async fn insert_credential(
     tx: &mut TenantTx<'_>,
-    master: &MasterKey,
+    keyring: &Keyring,
     adapter_id: AdapterId,
     now: DateTime<Utc>,
 ) -> Result<SecretString, StoreError> {
     let credential_id = Uuid::now_v7();
     let secret = generate_secret();
-    let sealed = seal(
-        master,
-        &aad(tx.tenant(), adapter_id, credential_id),
-        &secret,
-    )
-    .map_err(|_| StoreError::Crypto)?;
+    let sealed = keyring
+        .seal(&aad(tx.tenant(), adapter_id, credential_id), &secret)
+        .map_err(|_| StoreError::Crypto)?;
     let fp = AdapterSecret::new(secret.expose_secret().to_string()).fingerprint();
     sqlx::query(
         "INSERT INTO kernel.adapter_credentials (credential_id, tenant_id, adapter_id, secret_ciphertext, secret_fingerprint, created_at)
@@ -132,7 +129,7 @@ async fn insert_credential(
 /// valid at `now + overlap`. The overlap is explicit and audited.
 pub async fn rotate(
     tx: &mut TenantTx<'_>,
-    master: &MasterKey,
+    keyring: &Keyring,
     adapter_id: AdapterId,
     overlap: Duration,
     actor: Actor<'_>,
@@ -151,7 +148,7 @@ pub async fn rotate(
     .bind(now + overlap)
     .execute(tx.conn())
     .await?;
-    let secret = insert_credential(tx, master, adapter_id, now).await?;
+    let secret = insert_credential(tx, keyring, adapter_id, now).await?;
     append_event(
         tx,
         NewEvent {
@@ -269,7 +266,7 @@ fn row_to_reg(
 /// rotation overlap this returns two; after it, one; after revoke, none.
 pub async fn live_secrets(
     tx: &mut TenantTx<'_>,
-    master: &MasterKey,
+    keyring: &Keyring,
     adapter_id: AdapterId,
     now: DateTime<Utc>,
 ) -> Result<Vec<AdapterSecret>, StoreError> {
@@ -289,7 +286,8 @@ pub async fn live_secrets(
         .map(|r| {
             let cid: Uuid = r.try_get("credential_id")?;
             let ct: Vec<u8> = r.try_get("secret_ciphertext")?;
-            let s = unseal(master, &aad(tenant, adapter_id, cid), &ct)
+            let s = keyring
+                .unseal(&aad(tenant, adapter_id, cid), &ct)
                 .map_err(|_| StoreError::Crypto)?;
             Ok(AdapterSecret::new(s.expose_secret().to_string()))
         })

@@ -9,6 +9,8 @@
 pub mod egress;
 pub mod mobile;
 pub mod simulator;
+pub mod twilio;
+pub mod twilio_sim;
 
 use async_trait::async_trait;
 use mk_contracts::ActionRequest;
@@ -151,6 +153,7 @@ impl ActionAdapter for InternalRecordAdapter {
 pub struct AdapterRegistry {
     pub internal: InternalRecordAdapter,
     pub mobile: Option<mobile::MobileAdapter>,
+    pub twilio: Option<twilio::TwilioAdapter>,
 }
 
 impl AdapterRegistry {
@@ -159,6 +162,7 @@ impl AdapterRegistry {
         match adapter_kind {
             "crm-internal-v1" | "calendar-internal-v1" => Some(&self.internal),
             "mobile-adapter-v1" => self.mobile.as_ref().map(|m| m as &dyn ActionAdapter),
+            twilio::ADAPTER_KIND => self.twilio.as_ref().map(|t| t as &dyn ActionAdapter),
             _ => None,
         }
     }

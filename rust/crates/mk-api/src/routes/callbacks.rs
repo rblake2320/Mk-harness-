@@ -95,7 +95,7 @@ pub async fn callback(
             return Err(unauthorized(&headers));
         }
     };
-    let secrets = adapters::live_secrets(&mut tx, &st.master, reg.adapter_id, now)
+    let secrets = adapters::live_secrets(&mut tx, &st.keyring, reg.adapter_id, now)
         .await
         .map_err(|e| ApiError::from(e).with_request_id(&headers))?;
     let (ts, nonce, sig) = (h(HDR_TIMESTAMP), h(HDR_NONCE), h(HDR_SIGNATURE));
