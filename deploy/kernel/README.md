@@ -21,6 +21,10 @@ Environment:
 | `MK_MASTER_KEY` | api, worker, keyctl, restore-gate | base64 32 bytes; same key as FastAPI `MASTER_KEY`. Legacy seal (keyring version 0) and HMAC destination fingerprints. **Not** given to the verifier |
 | `MK_KEK` | api, worker, keyctl, restore-gate | base64 32 bytes key-encryption key (from the secrets manager / KMS data key). Wraps the per-version data keys in `kernel.key_versions` (migration 0005). Empty = legacy master-key-only seal: allowed for development, logged at start, **refused by production pre-flight** |
 | `MK_KEK_ID` | same | identifier recorded on each wrapped version; default `kek-1`. Change it together with the KEK value |
+| `MK_FINGERPRINT_KEYS` | api, keyctl | optional `kid=base64(32 bytes),...` destination-fingerprint keys; **first entry is current**. Unset = `m0` = `MK_MASTER_KEY` (pre-0008 behaviour). Rotation order and `mk-keyctl fingerprint-status / fingerprint-rekey / fingerprint-prune`: `docs/runbooks/key-compromise.md` |
+| `MK_TENANT_READ_RPS` / `MK_TENANT_READ_BURST` | api | per-tenant GET budget per replica (default 20 / 40); over → `429 TENANT_RATE_LIMITED` + `Retry-After` |
+| `MK_TENANT_WRITE_RPS` / `MK_TENANT_WRITE_BURST` | api | per-tenant non-GET budget per replica (default 5 / 10) |
+| `MK_MAX_INFLIGHT` | api | concurrent `/internal/v1` requests per replica (default 256); full → `503 OVER_CAPACITY` + `Retry-After: 1`. Webhooks, adapter callbacks and health are never shed. Published envelope: `docs/load/limits.md` |
 | `MK_LEGACY_SEAL_RETIRED` | same | `1` after `mk-keyctl reencrypt` reports zero rows under version 0: the process then refuses to unseal legacy ciphertext at all |
 | `MK_ASSERTION_KEYS` | api | `kid=<base64url Ed25519 public key>,...`; FastAPI holds the private keys |
 | `MK_BIND` | api | default `127.0.0.1:8090`; never expose publicly |

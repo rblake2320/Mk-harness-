@@ -186,6 +186,7 @@ async fn harness() -> Option<Harness> {
         verifier,
         keyring: mk_crypto::Keyring::legacy(&master),
         fingerprints: Arc::new(mk_store::fingerprint::FingerprintKeys::from_master(&master)),
+        limiter: mk_api::limits::Limiter::new(test_limits()),
         master,
         tools: Arc::new(ToolAllowlist::v1()),
         metrics: Arc::new(Metrics::new()),
@@ -209,6 +210,17 @@ async fn harness() -> Option<Harness> {
         resolver: Arc::new(MapResolver(Mutex::new(HashMap::new()))),
         ctx_registry_secret_slot: Arc::new(Mutex::new(None)),
     })
+}
+
+/// Generous limits for the functional suites; the O2 test builds tight ones.
+fn test_limits() -> mk_api::limits::LimitConfig {
+    mk_api::limits::LimitConfig {
+        read_rps: 10_000.0,
+        read_burst: 10_000.0,
+        write_rps: 10_000.0,
+        write_burst: 10_000.0,
+        max_inflight: 1024,
+    }
 }
 
 const RP_ID: &str = "approve.test.invalid";
@@ -2126,4 +2138,163 @@ async fn ambiguous_submission_becomes_submission_unknown_and_inbound_pause_defer
         ),
         "{out:?}"
     );
+}
+
+/// O2: per-tenant limits refuse with 429 + Retry-After after the assertion
+/// verifies; one tenant exhausting its budget never affects another tenant or
+/// its own write budget; a full replica refuses /internal/v1 with 503 +
+/// Retry-After immediately, while provider webhooks and health are never shed.
+#[tokio::test]
+async fn per_tenant_limits_and_graceful_rejection_above_capacity() {
+    let Some(mut h) = harness().await else {
+        eprintln!("skipping");
+        return;
+    };
+    let mut st = h.state.clone();
+    st.limiter = mk_api::limits::Limiter::new(mk_api::limits::LimitConfig {
+        read_rps: 0.5,
+        read_burst: 3.0,
+        write_rps: 0.5,
+        write_burst: 2.0,
+        max_inflight: 1,
+    });
+    h.app = router(st.clone());
+    h.state = st;
+    let user = UserId::new();
+    let path = "/internal/v1/approvals/pending";
+    for i in 0..3 {
+        let (s, v) = h
+            .call("GET", path, Some(&h.token(user, &["manager"])), None)
+            .await;
+        assert_ne!(
+            s,
+            StatusCode::TOO_MANY_REQUESTS,
+            "request {i} within burst: {v}"
+        );
+    }
+    let req = Request::builder()
+        .method("GET")
+        .uri(path)
+        .header(
+            "authorization",
+            format!("Bearer {}", h.token(user, &["manager"])),
+        )
+        .body(Body::empty())
+        .unwrap_or_default();
+    let resp = h
+        .app
+        .clone()
+        .oneshot(req)
+        .await
+        .unwrap_or_else(|e| panic!("{e:?}"));
+    assert_eq!(resp.status(), StatusCode::TOO_MANY_REQUESTS);
+    let ra: u64 = resp.headers()["retry-after"]
+        .to_str()
+        .unwrap_or("0")
+        .parse()
+        .unwrap_or(0);
+    assert!((1..=2).contains(&ra), "Retry-After {ra}");
+    // An unauthenticated or forged caller cannot spend (or probe) the bucket: 401, not 429.
+    let (s, _) = h.call("GET", path, Some("not-a-token"), None).await;
+    assert_eq!(s, StatusCode::UNAUTHORIZED);
+    // Writes have their own budget.
+    let (s, v) = h
+        .call(
+            "POST",
+            "/internal/v1/actions",
+            Some(&h.token(user, &["agent"])),
+            Some(json!({"junk": true})),
+        )
+        .await;
+    assert_ne!(s, StatusCode::TOO_MANY_REQUESTS, "{v}");
+    // Another tenant is unaffected.
+    let own = h.tenant;
+    h.tenant = TenantId::new();
+    let (s, v) = h
+        .call(
+            "GET",
+            path,
+            Some(&h.token(UserId::new(), &["manager"])),
+            None,
+        )
+        .await;
+    assert_ne!(s, StatusCode::TOO_MANY_REQUESTS, "{v}");
+    h.tenant = own;
+    // Replica full: hold the only permit.
+    let held = h
+        .state
+        .limiter
+        .try_enter()
+        .unwrap_or_else(|| panic!("permit"));
+    let other = TenantId::new();
+    h.tenant = other;
+    let req = Request::builder()
+        .method("GET")
+        .uri(path)
+        .header(
+            "authorization",
+            format!("Bearer {}", h.token(UserId::new(), &["manager"])),
+        )
+        .header("x-request-id", "shed-1")
+        .body(Body::empty())
+        .unwrap_or_default();
+    let resp = h
+        .app
+        .clone()
+        .oneshot(req)
+        .await
+        .unwrap_or_else(|e| panic!("{e:?}"));
+    assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(resp.headers()["retry-after"], "1");
+    let body = resp
+        .into_body()
+        .collect()
+        .await
+        .map(http_body_util::Collected::to_bytes)
+        .unwrap_or_default();
+    let v: Value = serde_json::from_slice(&body).unwrap_or(Value::Null);
+    assert_eq!(v["code"], json!("OVER_CAPACITY"), "{v}");
+    // Never shed: health and the provider webhook (an inbound STOP must be heard).
+    let (s, _) = h.call("GET", "/health/live", None, None).await;
+    assert_eq!(s, StatusCode::OK);
+    let req = Request::builder()
+        .method("POST")
+        .uri(format!("/webhooks/twilio/inbound/{}", Uuid::now_v7()))
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body(Body::from(
+            "From=%2B15555550100&To=%2B15555550101&Body=STOP&MessageSid=SMx",
+        ))
+        .unwrap_or_default();
+    let resp = h
+        .app
+        .clone()
+        .oneshot(req)
+        .await
+        .unwrap_or_else(|e| panic!("{e:?}"));
+    assert_ne!(
+        resp.status(),
+        StatusCode::SERVICE_UNAVAILABLE,
+        "webhooks are never shed"
+    );
+    drop(held);
+    let (s, _) = h
+        .call(
+            "GET",
+            path,
+            Some(&h.token(UserId::new(), &["manager"])),
+            None,
+        )
+        .await;
+    assert_ne!(
+        s,
+        StatusCode::SERVICE_UNAVAILABLE,
+        "capacity returns once the permit is released"
+    );
+    h.tenant = own;
+    let metrics = h.state.metrics.encode();
+    assert!(
+        metrics.contains("mk_requests_rejected_total{code=\"tenant_read\"}"),
+        "{metrics}"
+    );
+    assert!(metrics.contains("mk_requests_rejected_total{code=\"over_capacity\"}"));
 }

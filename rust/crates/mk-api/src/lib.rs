@@ -8,6 +8,7 @@
 
 pub mod auth;
 pub mod error;
+pub mod limits;
 pub mod metrics;
 pub mod routes;
 pub mod state;
@@ -110,7 +111,11 @@ pub fn router(state: AppState) -> Router {
             get(routes::messaging::inbound_health).post(routes::messaging::inbound_health_report),
         )
         .route("/inbound/pause", post(routes::messaging::inbound_pause))
-        .route("/inbound/resume", post(routes::messaging::inbound_resume));
+        .route("/inbound/resume", post(routes::messaging::inbound_resume))
+        // O2: refuse immediately (503 + Retry-After) when the replica is full,
+        // rather than queueing into the request timeout. Webhooks, adapter
+        // callbacks and health are outside this router and never shed.
+        .layer(axum::middleware::from_fn_with_state(state.clone(), shed));
 
     Router::new()
         .nest("/internal/v1", internal)
@@ -142,6 +147,25 @@ pub fn router(state: AppState) -> Router {
         .layer(PropagateRequestIdLayer::x_request_id())
         .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid))
         .with_state(state)
+}
+
+async fn shed(
+    axum::extract::State(st): axum::extract::State<AppState>,
+    req: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    let Some(permit) = st.limiter.try_enter() else {
+        st.metrics
+            .rejected
+            .get_or_create(&metrics::AuthFailLabels {
+                code: "over_capacity".into(),
+            })
+            .inc();
+        return limits::over_capacity(req.headers());
+    };
+    let res = next.run(req).await;
+    drop(permit);
+    res
 }
 
 /// Request counter + latency histogram keyed by the *matched route template*

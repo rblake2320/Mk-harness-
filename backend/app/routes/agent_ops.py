@@ -85,10 +85,12 @@ async def forward(
         )
     except KernelUnavailable as e:
         return _problem(503, e.code, "Action kernel unavailable", e.detail)
+    headers = {"X-Request-Id": r.request_id}
+    if r.retry_after and r.retry_after.isdigit() and r.status_code in (429, 503):
+        headers["Retry-After"] = r.retry_after
     if r.body is None:
-        return Response(status_code=r.status_code, headers={"X-Request-Id": r.request_id})
-    return JSONResponse(status_code=r.status_code, content=r.body,
-                        headers={"X-Request-Id": r.request_id})
+        return Response(status_code=r.status_code, headers=headers)
+    return JSONResponse(status_code=r.status_code, content=r.body, headers=headers)
 
 
 def _uuid_text(value: str, what: str) -> str:

@@ -90,6 +90,37 @@ impl FromRequestParts<AppState> for Principal {
             )
             .with_request_id(&parts.headers)
         })?;
+        // O2: charge the tenant's bucket only after the signature verified (no
+        // one else can spend it) and before the jti write (a refusal costs no
+        // database round trip).
+        let class = if parts.method == axum::http::Method::GET {
+            crate::limits::Class::Read
+        } else {
+            crate::limits::Class::Write
+        };
+        if let Err(retry_after) =
+            state
+                .limiter
+                .charge(assertion.tenant_id, class, std::time::Instant::now())
+        {
+            state
+                .metrics
+                .rejected
+                .get_or_create(&crate::metrics::AuthFailLabels {
+                    code: match class {
+                        crate::limits::Class::Read => "tenant_read".into(),
+                        crate::limits::Class::Write => "tenant_write".into(),
+                    },
+                })
+                .inc();
+            return Err(ApiError::new(
+                StatusCode::TOO_MANY_REQUESTS,
+                "TENANT_RATE_LIMITED",
+                "Tenant request rate exceeded; retry later",
+            )
+            .with_request_id(&parts.headers)
+            .with_retry_after(retry_after));
+        }
         // Single-use jti for every non-GET request, recorded durably in
         // Postgres so every API replica shares one view. A store failure is
         // a refusal, never a pass: fail closed.

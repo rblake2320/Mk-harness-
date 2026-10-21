@@ -54,6 +54,10 @@ locals {
         { name = "MK_APPROVAL_RP_ID", value = var.approval_rp_id },
         { name = "MK_APPROVAL_ORIGINS", value = join(",", var.approval_origins) },
         { name = "MK_DB_USER", value = "mk_api_login" },
+        # O2 per-replica limits (docs/load/limits.md); totals scale with desired_count.
+        { name = "MK_TENANT_READ_RPS", value = "20" },
+        { name = "MK_TENANT_WRITE_RPS", value = "5" },
+        { name = "MK_MAX_INFLIGHT", value = "256" },
         # RUST_ACTION_KERNEL_ENABLED is deliberately NOT set here: enabling is the
         # release owner's step (deploy/kernel/README.md enable sequence).
       ])

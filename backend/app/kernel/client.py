@@ -46,6 +46,9 @@ class KernelResponse:
     status_code: int
     body: Any
     request_id: str
+    # Kernel capacity refusals (429 TENANT_RATE_LIMITED / 503 OVER_CAPACITY)
+    # carry Retry-After; forwarded so clients back off instead of hammering.
+    retry_after: str | None = None
 
 
 class KernelClient:
@@ -100,7 +103,8 @@ class KernelClient:
                 async with httpx.AsyncClient(timeout=self.timeout) as http:
                     r = await http.request(method.upper(), url, headers=headers, json=json)
                 return KernelResponse(
-                    status_code=r.status_code, body=_json_or_none(r), request_id=rid)
+                    status_code=r.status_code, body=_json_or_none(r), request_id=rid,
+                    retry_after=r.headers.get("retry-after"))
             except httpx.TransportError as e:  # connect, read, write, pool, timeouts
                 last_exc = e
         raise KernelUnavailable(

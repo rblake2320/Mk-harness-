@@ -55,6 +55,9 @@ async fn main() -> anyhow::Result<()> {
             mk_store::fingerprint::FingerprintKeys::from_env(&master)
                 .map_err(|e| anyhow::anyhow!("MK_FINGERPRINT_KEYS: {e}"))?,
         ),
+        limiter: mk_api::limits::Limiter::new(
+            mk_api::limits::LimitConfig::from_env().map_err(|e| anyhow::anyhow!(e))?,
+        ),
         master,
         keyring,
         tools: Arc::new(ToolAllowlist::v1()),

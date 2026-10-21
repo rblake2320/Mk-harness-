@@ -18,6 +18,8 @@ pub struct AppState {
     pub fingerprints: Arc<mk_store::fingerprint::FingerprintKeys>,
     pub tools: Arc<ToolAllowlist>,
     pub metrics: Arc<Metrics>,
+    /// Per-tenant rate limits and replica in-flight cap (O2).
+    pub limiter: crate::limits::Limiter,
     /// HMAC timestamp tolerance for adapter callbacks (seconds).
     pub callback_tolerance_secs: i64,
     /// Feature flag: when false, proposals are evaluated and recorded but

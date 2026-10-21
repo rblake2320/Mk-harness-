@@ -62,6 +62,12 @@ services:
       MK_APPROVAL_ORIGINS: ${MK_APPROVAL_ORIGINS:?comma list, e.g. https://app.example.com}
       # Provider webhooks (WP07): the public URL the provider is configured to call.
       MK_PUBLIC_WEBHOOK_BASE: ${MK_PUBLIC_WEBHOOK_BASE:?e.g. https://hooks.example.com}
+      # Capacity (O2), per replica — docs/load/limits.md.
+      MK_TENANT_READ_RPS: ${MK_TENANT_READ_RPS:-20}
+      MK_TENANT_WRITE_RPS: ${MK_TENANT_WRITE_RPS:-5}
+      MK_MAX_INFLIGHT: ${MK_MAX_INFLIGHT:-256}
+      # Optional versioned fingerprint keys (first = current); unset = master key as m0.
+      MK_FINGERPRINT_KEYS: ${MK_FINGERPRINT_KEYS:-}
     read_only: true
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
