@@ -18,7 +18,7 @@ Environment:
 | `MK_DB_HOST`, `MK_DB_USER`, `MK_DB_PASSWORD`, `MK_DB_NAME`, `MK_DB_PORT` | all | alternative to `MK_DATABASE_URL` (composed in-process, `sslmode=require`); the orchestrator injects these so no password-bearing URL is written anywhere |
 | `MK_DB_SSLROOTCERT` | all | path to the database CA bundle (RDS global bundle). **Required in production**: switches to `sslmode=verify-full` and makes the client trust that CA alone instead of the bundled webpki roots (see `rust/deny.toml`, RUSTSEC-2026-0381) |
 | `MK_REDIS_URL` | relay, worker | `redis://host:6379` |
-| `MK_MASTER_KEY` | api, worker, keyctl, restore-gate | base64 32 bytes; same key as FastAPI `MASTER_KEY`. Legacy seal (keyring version 0) and HMAC destination fingerprints |
+| `MK_MASTER_KEY` | api, worker, keyctl, restore-gate | base64 32 bytes; same key as FastAPI `MASTER_KEY`. Legacy seal (keyring version 0) and HMAC destination fingerprints. **Not** given to the verifier |
 | `MK_KEK` | api, worker, keyctl, restore-gate | base64 32 bytes key-encryption key (from the secrets manager / KMS data key). Wraps the per-version data keys in `kernel.key_versions` (migration 0005). Empty = legacy master-key-only seal: allowed for development, logged at start, **refused by production pre-flight** |
 | `MK_KEK_ID` | same | identifier recorded on each wrapped version; default `kek-1`. Change it together with the KEK value |
 | `MK_LEGACY_SEAL_RETIRED` | same | `1` after `mk-keyctl reencrypt` reports zero rows under version 0: the process then refuses to unseal legacy ciphertext at all |
@@ -58,6 +58,27 @@ except the last one, which requires the platform operator's passkey.
 
 ### Bring-up (first deployment or new environment)
 
+0. Generate secrets once per environment (CSPRNG, owner-only file ACL; never commit the file):
+
+   ```powershell
+   pwsh -File scripts\kernel-secrets.ps1 -EnvFile .env     # Windows
+   # or: scripts/kernel-secrets.sh .env                     # Linux/macOS
+   ```
+
+   Produces `POSTGRES_PASSWORD`, `JWT_SECRET`, `MASTER_KEY`, the Ed25519 pair
+   (`MK_ASSERTION_KEYS` public → kernel; `KERNEL_ASSERTION_PRIVATE_KEY` private →
+   FastAPI only) and the four `MK_DB_*_PASSWORD` login passwords, and leaves
+   `RUST_ACTION_KERNEL_ENABLED=0`. Add `MK_KEK` from the secrets manager / KMS.
+   Template: `deploy/kernel/.env.kernel.example`. In AWS the same values live in
+   Secrets Manager (`infra/terraform`), never in a file.
+   Local/compose bring-up (order enforced by `depends_on`):
+
+   ```bash
+   docker compose -f docker-compose.yml -f docker-compose.kernel.yml up -d
+   # kernel-migrate (schema owner) → kernel-roles (LOGIN identities) → kernel-api / kernel-relay / kernel-worker → api
+   docker compose --profile verify run --rm kernel-verifier     # audit chains, read-only identity
+   ```
+
 1. Create the database roles from `deploy/kernel/roles.sql` (owner, migrator,
    api, worker, relay, readonly logins) and set each process's `MK_DATABASE_URL`
    to its own login. Never run a process as the owner.
@@ -75,6 +96,18 @@ except the last one, which requires the platform operator's passkey.
    on every `kernel.*` table, per-process logins in place, `MK_APPROVAL_RP_ID`
    and `MK_APPROVAL_ORIGINS` set, `MK_ALLOW_UNBOUND_APPROVAL` unset, `MK_KEK` set,
    `MK_PUBLIC_WEBHOOK_BASE` set and equal to the URL configured at the provider.
+
+   ```bash
+   KERNEL_URL=http://kernel-api:8090 APP_URL=https://<app> PG_HOST=db PG_DB=mkharness \
+   PG_ADMIN_URL=postgres://mk:$POSTGRES_PASSWORD@db/mkharness \
+   MK_PREFLIGHT_EMAIL=<ops user> MK_PREFLIGHT_PASSWORD=… \
+   scripts/kernel-preflight.sh                 # liveness, assertion pairing, schema head, least-privilege
+                                               # identities, RLS, kill switches, audit chain, compose hygiene
+   scripts/kernel-preflight.sh --for-enable    # + a reviewed deploy/kernel/ACCEPTANCE.md (no placeholders,
+                                               #   negatives present, `Result: ACCEPTED` exactly)
+   ```
+
+   Pre-flight is exercised by `scripts/kernel-live-smoke.sh` and so by CI on every PR.
 5. Start `mk-action-api`, `mk-outbox-relay`, `mk-action-worker`,
    `mk-audit-verifier` with `RUST_ACTION_KERNEL_ENABLED` **unset** (shadow mode)
    and the global kill switch **disabled** (its default on a fresh database).
@@ -108,6 +141,9 @@ except the last one, which requires the platform operator's passkey.
   provider calls finish; nothing new is dispatched. Then follow
   `docs/runbooks/incident-unapproved-or-duplicate-send.md`.
 * **Stop one tenant:** `POST /internal/v1/kill-switch/tenant`.
+* **Out-of-band stop** (application unreachable): `psql $ADMIN -c "UPDATE kernel.kill_switches SET dispatch_enabled=false WHERE scope='global'"`.
+* **Shadow mode:** unset `RUST_ACTION_KERNEL_ENABLED` and restart kernel-api — proposals are evaluated and audited, never enqueued.
+* The worker also stops dispatching on its own whenever Postgres is unreachable (audit persistence is a precondition of execution).
 * **Roll back a release:** disable the global switch, deploy the previous
   images, run the restore gate in report mode, re-enable through the enable
   sequence. Migrations are forward-only; a release that needs a schema
@@ -136,6 +172,25 @@ Retiring the **legacy** master-key seal (version 0): after `reencrypt` reports
 `kernel.*: rows_not_under_current=0` for every table, set
 `MK_LEGACY_SEAL_RETIRED=1` on api and worker and run `mk-keyctl retire 0`.
 `MK_MASTER_KEY` is still required for destination fingerprints.
+
+### Other credential rotation
+
+* **Assertion key**: add `k2=<pub>` to `MK_ASSERTION_KEYS` (comma list), redeploy
+  kernel-api; switch FastAPI to `KERNEL_ASSERTION_KID=k2` + new private key;
+  after ≥ 2 minutes (assertion life 30 s + skew) remove `k1`.
+* **Adapter secret**: `POST /api/agent-ops/adapters/{id}/rotate` (overlap window
+  returned); update the device agent's `MK_AGENT_SECRET`; the old secret dies at
+  `not_after`.
+* **DB login passwords**: rerun `kernel-roles` with new `MK_DB_*_PASSWORD`
+  (`ALTER ROLE … PASSWORD`), then restart the matching process.
+* **`MASTER_KEY`**: sealed data no longer depends on it once the legacy seal is
+  retired (above), but destination fingerprints do; its rotation re-fingerprints
+  suppressions and is **Not demonstrated** (`docs/runbooks/key-compromise.md`).
+  `kernel-secrets` never rotates it under `-Force`/`--force`; `-RotateMasterKey`
+  refuses when a key exists unless `-IAcceptCredentialLoss` is given.
+
+Technical controls here do not by themselves establish legal compliance for
+outreach (`docs/release/legal-provider-gate.md`).
 
 ### Restore (never re-send)
 

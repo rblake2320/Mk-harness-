@@ -115,7 +115,6 @@ services:
     command: ["/usr/local/bin/mk-audit-verifier"]
     environment:
       MK_DATABASE_URL: postgresql://mk_readonly_login:${MK_DB_READONLY_PASSWORD}@db:5432/mkharness
-      MK_MASTER_KEY: ${MASTER_KEY:?set in .env}
     read_only: true
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
