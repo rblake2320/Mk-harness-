@@ -76,7 +76,7 @@ export default function BriefView({ onOpenCustomer }: { onOpenCustomer: (id: str
               Permission: <strong>{it.permission_state}</strong> (checked {fmtWhen(it.permission_checked_at)}) — {it.permission_note}
             </div>
             <div className="row" style={{ marginTop: 10 }}>
-              {it.customer && it.permission_state === 'granted' && (
+              {it.customer && it.permission_state === 'active' && (
                 <button className="btn" disabled={busy === it.id} onClick={() => draft(it)}>Draft a message</button>
               )}
               <button className="btn ghost" disabled={busy === it.id} onClick={() => act(it, 'defer')}>Defer to tomorrow</button>

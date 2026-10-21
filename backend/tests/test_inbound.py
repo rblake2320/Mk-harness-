@@ -160,3 +160,42 @@ def test_evaluation_harness_scores_a4_with_the_classifier():
     from tests.evaluations import run as ev  # noqa: PLC0415
     r = ev.eval_a4()
     assert r.available and r.cases >= 6 and r.passed(), (r.metrics, r.failures)
+
+
+def test_failed_processed_mark_never_duplicates_application_records(client, kernel_env):
+    """Codex finding on #35: if the kernel 'processed' mark fails after the application
+    commit, the event stays pending and the next run must not create the exception,
+    outcome or draft again. The ledger row makes the retry a mark-only replay."""
+    tok = _signup(client, uuid.uuid4().hex[:6])
+    h = auth_headers(tok)
+    cid, _, fp = _customer(client, h, phone="+15555557101")
+    events = [_event(fp, "this gave me a rash", sid="SMretry1"), _event(fp, "can you text me after the holidays?", sid="SMretry2")]
+    marks: list[str] = []
+
+    def mark_fails(request, eid):
+        marks.append(eid)
+        return httpx.Response(500, json={"code": "INTERNAL"})
+
+    def mark_ok(request, eid):
+        marks.append(eid)
+        return httpx.Response(204)
+
+    def hold(request):
+        return httpx.Response(201, json={"suppression_id": str(uuid.uuid4()), "suppressed_actions": 0})
+
+    for side in (mark_fails, mark_ok):
+        with respx.mock(assert_all_called=False) as m:
+            m.get(f"{KERNEL}/internal/v1/inbound/pending?limit=50").mock(return_value=_pending(events))
+            hold_route = m.post(f"{KERNEL}/internal/v1/suppressions").mock(side_effect=hold)
+            m.post(url__regex=rf"{KERNEL}/internal/v1/inbound/(?P<eid>[0-9a-f-]+)/processed$").mock(side_effect=side)
+            r = client.post("/api/inbound/process", json={"limit": 50}, headers=h)
+            assert r.status_code == 200, r.text
+            if side is mark_ok:
+                assert all(e.get("replayed") for e in r.json()["events"]), r.json()
+                assert all(e["marked_processed"] == 204 for e in r.json()["events"])
+                assert not hold_route.called, "the hold is not requested twice"
+    assert len(marks) == 4
+    ex = [e for e in client.get("/api/exceptions", headers=h).json() if e["customer_id"] == cid]
+    assert len(ex) == 1 and ex[0]["kind"] == "product_concern", ex
+    drafts = [c for c in client.get(f"/api/commitments?customer_id={cid}", headers=h).json() if c["kind"] == "customer_date"]
+    assert len(drafts) == 1, drafts

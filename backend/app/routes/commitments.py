@@ -20,7 +20,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..commitments import (
-    EXTRACTOR_SYSTEM, KINDS, OUTCOME_KINDS, RELATIVE_WINDOWS, brief_for, confirm, create_draft,
+    EXTRACTOR_SYSTEM, KINDS, OUTCOME_KINDS, RELATIVE_WINDOWS, brief_for, confirm, create_draft, defer,
     generate_brief, parse_extractor_output, record_outcome,
 )
 from ..db import get_db
@@ -136,10 +136,7 @@ class DeferIn(BaseModel):
 @router.post("/commitments/{cid}/defer")
 def defer_commitment(cid: str, body: DeferIn, user: User = Depends(check_rate), db: Session = Depends(get_db)):
     c = _own_commitment(db, user, cid)
-    if c.status not in ("confirmed", "deferred"):
-        raise HTTPException(409, f"commitment is {c.status}")
-    c.status = "deferred"
-    confirm(db, c, user_id=user.id, text=None, due_at=body.due_at, relative_window=body.relative_window)
+    defer(db, c, user_id=user.id, due_at=body.due_at, relative_window=body.relative_window)
     record_outcome(db, tenant_id=user.tenant_id, user_id=user.id, customer_id=c.customer_id, kind="deferred",
                    commitment=None, action_link_id=None, note=body.reason)
     db.commit()
@@ -229,8 +226,7 @@ def defer_item(iid: str, body: ItemDeferIn, user: User = Depends(check_rate), db
     it = _own_item(db, user, iid)
     if it.source_type == "commitment":
         c = _own_commitment(db, user, it.source_reference)
-        c.status = "deferred"
-        confirm(db, c, user_id=user.id, text=None, due_at=body.due_at, relative_window=body.relative_window)
+        defer(db, c, user_id=user.id, due_at=body.due_at, relative_window=body.relative_window)
     it.state, it.version = "deferred", it.version + 1
     it.audit_ref = audit(db, user.tenant_id, user.id, "brief.defer", {"item_id": it.id})
     db.commit()

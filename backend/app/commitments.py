@@ -190,6 +190,38 @@ def create_draft(db: Session, *, tenant_id: str, user_id: str, customer: Custome
     return c
 
 
+def _apply_timing(c: Commitment, due_at: datetime | None, relative_window: str | None,
+                  now: datetime | None) -> None:
+    tz = zoneinfo.ZoneInfo(c.timezone or "America/Chicago")
+    if due_at is not None:
+        c.due_at, c.due_window_start, c.due_window_end = due_at.astimezone(tz), None, None
+    elif relative_window:
+        if relative_window not in RELATIVE_WINDOWS or relative_window == "unspecified":
+            raise HTTPException(422, "choose a window or a date")
+        ws, we = window_for(relative_window, (now or utcnow()).astimezone(tz))
+        c.due_at, c.due_window_start, c.due_window_end = None, ws, we
+
+
+def defer(db: Session, c: Commitment, *, user_id: str, due_at: datetime | None,
+          relative_window: str | None, now: datetime | None = None) -> Commitment:
+    """Reschedule a confirmed (or already deferred) commitment. It stays
+    `deferred` — it is NOT re-confirmed — and the brief brings it back when the
+    new date or window arrives. A new date or window is required: a deferral with
+    no time would silently drop the follow-up."""
+    if c.status not in ("confirmed", "deferred"):
+        raise HTTPException(409, f"commitment is {c.status}")
+    if due_at is None and not relative_window:
+        raise HTTPException(422, "a new date or window is required to defer")
+    _apply_timing(c, due_at, relative_window, now)
+    c.status, c.version, c.updated_at = "deferred", c.version + 1, utcnow()
+    c.audit_ref = audit(db, c.tenant_id, user_id, "commitment.defer",
+                        {"commitment_id": c.id, "customer_id": c.customer_id,
+                         "due_at": c.due_at.isoformat() if c.due_at else None,
+                         "window": [c.due_window_start.isoformat() if c.due_window_start else None,
+                                    c.due_window_end.isoformat() if c.due_window_end else None]})
+    return c
+
+
 def confirm(db: Session, c: Commitment, *, user_id: str, text: str | None, due_at: datetime | None,
             relative_window: str | None, now: datetime | None = None) -> Commitment:
     """Consultant confirms customer, meaning and date/window (W1). A draft with only
@@ -290,10 +322,11 @@ def generate_brief(db: Session, *, tenant_id: str, user_id: str, brief_date: dat
             upsert(cust, "exception", RANK_SAFETY, "exception", ex.id, aware(ex.created_at),
                    "Review the exception before any outreach")
 
-    # 2–5. Confirmed commitments by kind and timing
+    # 2–5. Confirmed commitments by kind and timing. Deferred ones re-enter on their
+    # new date/window (the "not yet in scope" check below keeps them out until then).
     for c in db.scalars(select(Commitment).where(Commitment.tenant_id == tenant_id,
                                                  Commitment.owner_user_id == user_id,
-                                                 Commitment.status == "confirmed")):
+                                                 Commitment.status.in_(("confirmed", "deferred")))):
         cust = db.get(Customer, c.customer_id)
         if not cust:
             continue

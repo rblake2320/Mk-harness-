@@ -15,7 +15,7 @@ Proves:
 """
 import json
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import httpx
 import pytest
@@ -207,7 +207,14 @@ def test_golden_brief_candidates_and_ordering(client):
     # skip + defer
     ang = [i for i in after if i["customer"]["name"] == "Angela"][0]
     assert client.post(f"/api/brief/items/{ang['id']}/defer", json={"relative_window": "next_week"}, headers=h).status_code == 200
-    assert client.get(f"/api/commitments?customer_id={customers['Angela']}", headers=h).json()[0]["status"] == "confirmed"
+    # Deferral keeps the commitment deferred (it is not re-confirmed) ...
+    ang_c = client.get(f"/api/commitments?customer_id={customers['Angela']}", headers=h).json()[0]
+    assert ang_c["status"] == "deferred", ang_c
+    # ... and the brief brings it back once its new window opens (a deferral never drops it).
+    later = (date.fromisoformat(today) + timedelta(days=8)).isoformat()
+    assert "Angela" in [i["customer"]["name"] for i in client.get(f"/api/brief?date={later}", headers=h).json()["items"]]
+    # A deferral without a new date or window is refused rather than silently parking it.
+    assert client.post(f"/api/commitments/{ang_c['id']}/defer", json={}, headers=h).status_code == 422
     fay = [i for i in after if i["customer"]["name"] == "Fay"][0]
     assert client.post(f"/api/brief/items/{fay['id']}/skip", headers=h).status_code == 200
     final = client.get(f"/api/brief?date={today}", headers=h).json()["items"]

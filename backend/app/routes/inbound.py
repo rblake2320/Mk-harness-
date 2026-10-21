@@ -13,6 +13,7 @@ commitment evidence fields and never logged or placed in audit metadata.
 """
 from __future__ import annotations
 
+import json
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -26,7 +27,7 @@ from ..foundation import audit, seal
 from ..inbound import EXCEPTION_KIND, STOPS_SALES_FOLLOW_UP, classify_inbound
 from ..kernel import KernelClient, KernelUnavailable, get_kernel_client
 from ..kernel.assertions import roles_for
-from ..models import Customer, CustomerDestination, ExceptionRecord, User
+from ..models import Customer, CustomerDestination, ExceptionRecord, InboundApplication, User
 from ..ratelimit import check_rate
 from .agent_ops import Principal, principal
 
@@ -78,6 +79,21 @@ async def process_inbound(body: ProcessIn, p: Principal = Depends(principal), us
     for ev in r.body or []:
         event_id = str(ev["event_id"])
         source_ref = f"inbound:{ev['provider_event_id']}"
+        done = db.scalar(select(InboundApplication).where(InboundApplication.tenant_id == user.tenant_id,
+                                                          InboundApplication.source_reference == source_ref))
+        if done is not None:
+            # Applied on an earlier attempt whose kernel "processed" mark failed: only
+            # retry the mark. Nothing is created twice.
+            try:
+                mr = await client.call("POST", f"/inbound/{event_id}/processed", user_id=p.user_id,
+                                       tenant_id=p.tenant_id, roles=roles_for(p.app_role),
+                                       session_id=p.session_id, json={})
+            except KernelUnavailable as e:
+                raise HTTPException(503, {"code": e.code, "detail": e.detail})
+            results.append({"event_id": event_id, "class": done.label, "customer_id": done.customer_id,
+                            "matches": None, "created": json.loads(done.created_json), "hold": done.hold_status,
+                            "marked_processed": mr.status_code, "replayed": True})
+            continue
         text = ev.get("body") or ""
         klass = classify_inbound(text)
         customers = _customers_for_fingerprint(db, user.tenant_id, ev["source_destination_hash"])
@@ -124,7 +140,10 @@ async def process_inbound(body: ProcessIn, p: Principal = Depends(principal), us
                 hold = hr.status_code
             except KernelUnavailable as e:
                 raise HTTPException(503, {"code": e.code, "detail": e.detail})
-        db.commit()
+        db.add(InboundApplication(tenant_id=user.tenant_id, source_reference=source_ref, kernel_event_id=event_id,
+                                  label=label, customer_id=customer.id if customer else None,
+                                  created_json=json.dumps(created), hold_status=hold))
+        db.commit()  # application objects + ledger row are one transaction
         # Mark processed only after the application objects are committed.
         try:
             mr = await client.call("POST", f"/inbound/{event_id}/processed", user_id=p.user_id, tenant_id=p.tenant_id,

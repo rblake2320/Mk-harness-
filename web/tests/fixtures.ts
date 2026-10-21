@@ -15,7 +15,7 @@ export async function mockApi(page: Page) {
     if (p === '/api/auth/me') return json({ id: 'u1', email: 'a@x', role: 'admin', display_name: 'Angela' });
     if (p === '/api/brief') return json({ date: '2026-10-21', items: [{
       id: 'b1', customer: { id: 'c1', name: 'Brenda Lee' }, rule: 'due_today', rank_category: 2, source_type: 'commitment', source_reference: 'k1', source: COMMIT,
-      due_at: '2026-10-21T14:00:00Z', state: 'open', permission_state: 'granted', permission_checked_at: '2026-10-21T08:00:00Z',
+      due_at: '2026-10-21T14:00:00Z', state: 'open', permission_state: 'active', permission_checked_at: '2026-10-21T08:00:00Z',
       permission_note: 'historical observation; execution re-checks the kernel', suggested_step: 'Send the shade chart you promised.', draft_version_id: null,
       controls: ['approve', 'edit', 'defer', 'resolve', 'skip'] }] });
     if (p === '/api/approvals/pending') return json([{
@@ -24,7 +24,7 @@ export async function mockApi(page: Page) {
       purpose: 'customer_requested_follow_up', workflow: 'customer_follow_up', risk: 'high', customer: { id: 'c1', name: 'Brenda Lee' },
       sending_business: { sender_identity_id: 's1', display_name: "Angela's Business", from_number: '+15005550006', registration_status: 'registered' },
       supporting: { commitment: { id: 'k1', text: 'Send the shade chart', status: 'confirmed', evidence_digest: 'sha256:' + 'a'.repeat(64) }, draft_version_id: 'd1', evidence_count: 2 },
-      permission: { state: 'granted', checked_at: '2026-10-21T08:00:00Z', note: 'historical observation; the kernel re-checks consent and suppression at send time' },
+      permission: { state: 'active', checked_at: '2026-10-21T08:00:00Z', note: 'historical observation; the kernel re-checks consent and suppression at send time' },
       scheduled_for: null, approval_expires_at: '2026-10-21T15:00:00Z', approval_lifetime_minutes: 15,
       human_steps: ['Your passkey signs this exact text.', 'Approval is single-use and expires.'] }]);
     if (p === '/api/exceptions') return json([{ id: 'x1', customer_id: 'c1', kind: 'product_concern', state: 'open', source_reference: 'inbound:SM1', detail: 'rash — this gave me a rash', created_at: '2026-10-21T09:00:00Z', resolved_at: null }]);

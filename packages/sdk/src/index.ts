@@ -286,7 +286,7 @@ export class MKClient {
   }
   cancelCommitment(id: string, reason = '') { return this.request<Commitment>(`/api/commitments/${id}/cancel`, { method: 'POST', body: JSON.stringify({ reason }) }); }
   extractCommitments(customer_id: string, text: string, provider?: string) {
-    return this.request<any>('/api/commitments/extract', { method: 'POST', body: JSON.stringify({ customer_id, source_text: text, provider }) });
+    return this.request<any>('/api/commitments/extract', { method: 'POST', body: JSON.stringify({ customer_id, conversation_text: text, provider }) });
   }
   recordOutcome(body: { customer_id: string; kind: string; commitment_id?: string; note?: string }) {
     return this.request<any>('/api/outcomes', { method: 'POST', body: JSON.stringify(body) });

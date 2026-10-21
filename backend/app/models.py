@@ -506,6 +506,26 @@ class ExceptionRecord(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
 
+class InboundApplication(Base):
+    """Application-side idempotency ledger for inbound processing (C5 step 7).
+
+    One row per (tenant, provider event), written in the SAME transaction as the
+    outcomes / exceptions / commitment drafts the event produced. If marking the
+    event processed in the kernel then fails, the retry finds this row and only
+    re-marks — it never creates those records twice."""
+    __tablename__ = "inbound_applications"
+    __table_args__ = (UniqueConstraint("tenant_id", "source_reference", name="uq_inbound_application"),)
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=uid)
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), index=True)
+    source_reference: Mapped[str] = mapped_column(String(80))      # inbound:<provider_event_id>
+    kernel_event_id: Mapped[str] = mapped_column(String(64))
+    label: Mapped[str] = mapped_column(String(32))
+    customer_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    created_json: Mapped[str] = mapped_column(Text, default="[]")
+    hold_status: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
 class Outcome(Base):
     """Business outcome, separate from transport state (X1)."""
     __tablename__ = "outcomes"
