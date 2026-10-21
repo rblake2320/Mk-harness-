@@ -58,7 +58,13 @@ struct World {
 
 async fn world(mode: SimMode) -> Option<World> {
     let url = mk_testkit::test_database_url()?;
-    let store = Store::connect(&url, 8).await.ok()?;
+    // MK_TEST_POOL_SIZE=1 (CI) makes any second pooled-connection acquisition
+    // inside an open transaction fail fast instead of deadlocking under load.
+    let pool = std::env::var("MK_TEST_POOL_SIZE")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(8);
+    let store = Store::connect(&url, pool).await.ok()?;
     store.migrate().await.ok()?;
     let tenant = TenantId::new();
     let secret = AdapterSecret::new("sim-secret-0123456789");

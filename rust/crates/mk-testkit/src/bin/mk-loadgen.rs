@@ -172,6 +172,7 @@ struct Rig {
     signer: AssertionSigner,
     account_sid: String,
     auth_token: String,
+    number_base: u64,
     rp_id: String,
     origin: String,
     counters: Counters,
@@ -258,10 +259,9 @@ impl Rig {
     async fn setup_tenant(&self, i: usize) -> anyhow::Result<Tenant> {
         let id = Uuid::now_v7();
         let (admin, agent, approver) = (Uuid::now_v7(), Uuid::now_v7(), Uuid::now_v7());
-        let from_number = format!(
-            "+1500555{:04}",
-            (u64::from(rand::random::<u16>()) + i as u64) % 10000
-        );
+        // Unique per tenant within a run (a random per-run base plus the index,
+        // mod 10 000): sender numbers are unique per business by design.
+        let from_number = format!("+1500555{:04}", (self.number_base + i as u64) % 10000);
         let (s, v) = self
             .call(
                 reqwest::Method::POST,
@@ -715,6 +715,7 @@ async fn main() -> anyhow::Result<()> {
         ),
         account_sid: env("MK_TWSIM_ACCOUNT_SID")?,
         auth_token: env("MK_TWSIM_AUTH_TOKEN")?,
+        number_base: u64::from(rand::random::<u16>()),
         rp_id: std::env::var("MK_LOAD_RP_ID").unwrap_or_else(|_| "localhost".into()),
         origin: std::env::var("MK_LOAD_ORIGIN").unwrap_or_else(|_| "http://localhost:8000".into()),
         counters: Counters::new(),

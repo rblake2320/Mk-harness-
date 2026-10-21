@@ -113,21 +113,26 @@ pub async fn global_kill_switch(
             .with_request_id(&headers));
         };
         let now = Utc::now();
-        let mut tx = st
-            .store
-            .begin(p.tenant)
-            .await
-            .map_err(|e| ApiError::from(e).with_request_id(&headers))?;
-        super::human_approval::verify_operator_step_up(
+        // Burn first on its own connection, then verify in the decision transaction.
+        let challenge = super::human_approval::burn_step_up_challenge(
             &st,
-            &mut tx,
             &p,
+            mk_store::human_approval::ChallengeKind::Operator,
+            mk_domain::ActionId::from_uuid(uuid::Uuid::nil()),
             &super::human_approval::global_enable_op_digest(),
             w,
             now,
         )
         .await
         .map_err(|e| e.with_request_id(&headers))?;
+        let mut tx = st
+            .store
+            .begin(p.tenant)
+            .await
+            .map_err(|e| ApiError::from(e).with_request_id(&headers))?;
+        super::human_approval::verify_step_up(&st, &mut tx, &p, &challenge, w, now)
+            .await
+            .map_err(|e| e.with_request_id(&headers))?;
         tx.commit()
             .await
             .map_err(|e| ApiError::from(e).with_request_id(&headers))?;

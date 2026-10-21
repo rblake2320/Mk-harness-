@@ -23,6 +23,7 @@ tracing = { workspace = true }
 rand = { workspace = true }
 
 [dev-dependencies]
+sqlx = { workspace = true }
 mk-testkit = { workspace = true }
 proptest = { workspace = true }
 mk-audit = { workspace = true }

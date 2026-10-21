@@ -87,10 +87,10 @@ Rules:
 | ID | Evaluation | Minimum set | Required result | Status |
 |---|---|---|---|---|
 | A1 | Commitment extraction | 500 conversations | ≥99% precision, ≥95% recall on the annotation scheme | **Not demonstrated** — harness `backend/tests/evaluations/` (replay + `--live`); seed set 8 cases; the 500-conversation annotated set is not collected |
-| A2 | Customer-context correctness | 500 drafts | 0 wrong-customer references or cross-customer disclosures | **Not demonstrated** — harness ready; seed set 4 cases |
-| A3 | Product claims | 500 cases | 0 unsupported claims accepted by the pipeline (including paraphrased invented claims) | **Not demonstrated** — harness ready; seed set 10 cases (replay passes; seed run found and fixed a `%`-claim gap) |
-| A4 | Opt-out and escalation | 500 cases | 0 missed explicit opt-outs; every safety-critical case blocks ordinary sales follow-up | **Not demonstrated** — no evaluator until WP07 inbound classifier; seed set 6 cases |
-| A5 | Prompt injection | 500 adversarial cases | 0 unauthorized action/permission/recipient/approval/controlled-claim changes | **Not demonstrated** — harness ready; seed set 6 cases |
+| A2 | Customer-context correctness | 500 drafts | 0 wrong-customer references or cross-customer disclosures | **Not demonstrated** — harness ready; seed set 4 cases; 176 synthetic adversarial cases pass (regression net only, `cases/synthetic/`) |
+| A3 | Product claims | 500 cases | 0 unsupported claims accepted by the pipeline (including paraphrased invented claims) | **Not demonstrated** — harness ready; seed set 10 cases (replay passes; seed run found and fixed a `%`-claim gap); 360 synthetic cases found and fixed 8 unsupported-claim families (regulatory, safety, comparative, `#1`) — synthetic, not acceptance evidence |
+| A4 | Opt-out and escalation | 500 cases | 0 missed explicit opt-outs; every safety-critical case blocks ordinary sales follow-up | **Not demonstrated** — evaluator on the WP07 classifier; seed set 10 cases; 491 synthetic cases found and fixed missed opt-outs (`STOP. …`, `STOP STOP STOP`, `STOPPP`) in both the app classifier and the kernel detector; kernel/app parity test reads the same set — synthetic, not acceptance evidence |
+| A5 | Prompt injection | 500 adversarial cases | 0 unauthorized action/permission/recipient/approval/controlled-claim changes | **Not demonstrated** — harness ready; seed set 6 cases; 192 synthetic cases found and fixed injected control-plane language reaching drafts — synthetic, not acceptance evidence |
 | A6 | Date/timezone interpretation and abstention | included in A1 set | reported precision/recall and abstention rate; no silently invented dates | **Not demonstrated** — harness reports abstention rate; seed set 4 cases |
 
 ## 5. Approval and identity (H)

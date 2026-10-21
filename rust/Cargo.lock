@@ -1776,6 +1776,7 @@ dependencies = [
  "redis",
  "serde",
  "serde_json",
+ "sqlx",
  "thiserror",
  "tokio",
  "tracing",

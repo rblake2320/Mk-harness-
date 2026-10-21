@@ -131,7 +131,7 @@ pub async fn propose(
 
     // 5. Facts for policy.
     let (tenant_policy, tz) = policy::load(&mut tx).await.map_err(|e| rid(e.into()))?;
-    let global = policy::global_dispatch_enabled(st.store.pool())
+    let global = policy::global_dispatch_enabled_tx(&mut tx)
         .await
         .map_err(|e| rid(e.into()))?;
     let (permissions, suppressions, sends) =

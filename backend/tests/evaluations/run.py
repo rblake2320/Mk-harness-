@@ -45,8 +45,12 @@ THRESHOLDS = {
 }
 
 
+SYNTHETIC = CASES / "synthetic"
+_DIR = [CASES]   # switched to SYNTHETIC by --synthetic
+
+
 def load(name: str) -> list[dict]:
-    p = CASES / name
+    p = _DIR[0] / name
     if not p.exists():
         return []
     return [json.loads(l) for l in p.read_text().splitlines() if l.strip() and not l.startswith("#")]
@@ -249,7 +253,11 @@ def main(argv=None) -> int:
     ap.add_argument("--provider", default="anthropic")
     ap.add_argument("--counts", action="store_true")
     ap.add_argument("--json", help="write machine-readable results here")
+    ap.add_argument("--synthetic", action="store_true",
+                    help="evaluate the template-generated sets in cases/synthetic/ (A2–A5 only; never acceptance evidence)")
     a = ap.parse_args(argv)
+    if a.synthetic:
+        _DIR[0] = SYNTHETIC
     if a.counts:
         for row, f in (("A1", "a1_commitments.jsonl"), ("A2", "a2_customer_context.jsonl"), ("A3", "a3_product_claims.jsonl"),
                        ("A4", "a4_optout_escalation.jsonl"), ("A5", "a5_prompt_injection.jsonl"), ("A6", "a6_dates.jsonl")):
@@ -258,15 +266,21 @@ def main(argv=None) -> int:
             print(f"{row}: {n} cases ({'contracted ' + str(need) if need else 'included in A1'}){'' if not need or n >= need else '  — SHORTFALL'}")
         return 0
     live = a.provider if a.live else None
-    a1, a6 = eval_a1_a6(live)
-    rows = [a1, eval_drafts("a2_customer_context.jsonl", "A2", live), eval_drafts("a3_product_claims.jsonl", "A3", live),
-            eval_a4(), eval_drafts("a5_prompt_injection.jsonl", "A5", live), a6]
+    if a.synthetic:
+        rows = [eval_drafts("a2_customer_context.jsonl", "A2", live), eval_drafts("a3_product_claims.jsonl", "A3", live),
+                eval_a4(), eval_drafts("a5_prompt_injection.jsonl", "A5", live)]
+    else:
+        a1, a6 = eval_a1_a6(live)
+        rows = [a1, eval_drafts("a2_customer_context.jsonl", "A2", live), eval_drafts("a3_product_claims.jsonl", "A3", live),
+                eval_a4(), eval_drafts("a5_prompt_injection.jsonl", "A5", live), a6]
     ok = True
-    print(f"mode: {'LIVE ' + a.provider if live else 'REPLAY (recorded model output; validator stages only)'}  at {datetime.now(timezone.utc).isoformat()}")
+    print(f"mode: {'LIVE ' + a.provider if live else 'REPLAY (recorded model output; validator stages only)'}"
+          f"{'  SYNTHETIC SETS (template-generated; not annotated; never acceptance evidence)' if a.synthetic else ''}"
+          f"  at {datetime.now(timezone.utc).isoformat()}")
     for r in rows:
         status = "PASS" if r.passed() else ("N/A" if not r.available else "FAIL")
         need = CONTRACTED[r.row]
-        size = f"{r.cases}/{need}" if need else f"{r.cases}"
+        size = f"{r.cases} synthetic" if a.synthetic else (f"{r.cases}/{need}" if need else f"{r.cases}")
         print(f"{r.row} {status:4} cases={size} {json.dumps(r.metrics)}")
         for f in r.failures[:20]:
             print(f"    - {f}")

@@ -223,3 +223,15 @@ def test_customer_match_survives_kernel_fingerprint_rotation(client, kernel_env)
     by_sid = {e["event_id"]: e for e in r.json()["events"]}
     assert by_sid[ev["event_id"]]["customer_id"] == cid
     assert by_sid[stray["event_id"]]["customer_id"] is None
+
+
+def test_classifier_findings_from_the_synthetic_set():
+    """A keyword followed by a sentence break, repeated keywords and emphatic spellings
+    are explicit opt-outs; 'stopped' is not a stop request; plural concern words match."""
+    for t in ("STOP. this gave me a rash", "Stop! who is this", "STOP, I'm not interested", "STOP\nsent from my iPhone",
+              "stop - not interested", "STOP STOP STOP", "STOPPP", "stooop", "stopall, thanks"):
+        assert classify_inbound(t).label == "opt_out", t
+    assert classify_inbound("Stopped by the store yesterday, loved it").label == "ordinary"
+    assert classify_inbound("bus stop was late").label == "ambiguous_opt_out", "a bare 'stop' still holds"
+    for t in ("blisters on my cheek", "rashes everywhere", "my lips swelled up"):
+        assert classify_inbound(t).label == "product_concern", t

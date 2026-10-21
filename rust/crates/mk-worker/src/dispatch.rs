@@ -104,7 +104,7 @@ pub async fn dispatch_one(
     };
 
     let (tenant_policy, tz_offset) = policy::load(&mut tx).await?;
-    let global = policy::global_dispatch_enabled(store.pool()).await?;
+    let global = policy::global_dispatch_enabled_tx(&mut tx).await?;
     let action_fps = action.destination_fingerprints_set();
     let (permissions, suppressions, sends_last_24h) = match (
         action.channel,

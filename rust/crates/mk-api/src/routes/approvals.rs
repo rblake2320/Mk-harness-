@@ -57,6 +57,43 @@ async fn decide(
     let now = Utc::now();
     let actor_id = p.user.to_string();
     let actor = actor_of(p, &actor_id);
+    // Burn any WebAuthn challenge BEFORE opening the decision transaction: the
+    // burn commits on its own connection, and a request must never hold two
+    // pooled connections at once (pool deadlock under load). The burn binds to
+    // the action's stored digest, read on a short connection of its own.
+    let burned = match (st.approval_rp.is_some(), body.webauthn.as_ref()) {
+        (true, Some(w)) => {
+            let stored = {
+                let mut r = st.store.begin(p.tenant).await.map_err(|e| rid(e.into()))?;
+                let a = actions::get(&mut r, action_id)
+                    .await
+                    .map_err(|e| rid(e.into()))?;
+                r.commit().await.map_err(|e| rid(e.into()))?;
+                a.digest
+            };
+            if !stored.ct_eq(&body.action_digest) {
+                return Err(rid(ApiError::new(
+                    StatusCode::CONFLICT,
+                    "APPROVAL_DIGEST_MISMATCH",
+                    "The action changed since it was displayed",
+                )));
+            }
+            Some(
+                super::human_approval::burn_step_up_challenge(
+                    st,
+                    p,
+                    mk_store::human_approval::ChallengeKind::Approve,
+                    action_id,
+                    &stored,
+                    w,
+                    now,
+                )
+                .await
+                .map_err(rid)?,
+            )
+        }
+        _ => None,
+    };
     let mut tx = st.store.begin(p.tenant).await.map_err(|e| rid(e.into()))?;
     let a = actions::get_for_update(&mut tx, action_id)
         .await
@@ -80,8 +117,13 @@ async fn decide(
             )));
         }
         (_, true, Some(w)) => HumanBinding::WebAuthn(
-            super::human_approval::verify_for_approval(
-                st, &mut tx, p, action_id, &a.digest, w, now,
+            super::human_approval::verify_step_up(
+                st,
+                &mut tx,
+                p,
+                burned.as_deref().unwrap_or_default(),
+                w,
+                now,
             )
             .await
             .map_err(rid)?,

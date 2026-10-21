@@ -39,8 +39,31 @@ CLAIM_MARKERS = re.compile(
     r"\b(clinically|proven|guarantee[sd]?|cures?|heals?|treats?|reduces? wrinkles|anti-?aging|"
     r"dermatologist|medical(ly)?|prescription|eliminates?|erases?|reverses?|"
     r"results? in \d+|instantly|permanent(ly)?|miracle|detox|collagen|"
-    r"acne|eczema|rosacea|psoriasis|melasma|hyperpigmentation|spf\s?\d+|sunscreen)\b"
+    r"acne|eczema|rosacea|psoriasis|melasma|hyperpigmentation|spf\s?\d+|sunscreen|"
+    # Regulatory / testing / certification claims.
+    r"fda|approved|certified|(doctor|lab|derm[a-z]*|clinically)[- ]tested|tested|hypoallergenic|"
+    r"non-?comedogenic|"
+    # Safety / suitability / composition claims.
+    r"safe (for|on)|all skin types|sensitive skin|gentle enough|natural|organic|vegan|cruelty-?free|"
+    r"(paraben|sulfate|chemical|toxin|fragrance)-?free|non-?toxic|"
+    # Comparative / superlative claims.
+    r"better than|(?<!all the )best(?! wishes| regards)|number one|top-?rated|leading|most effective|"
+    r"outperforms?|beats|botox|fillers?|"
+    # Efficacy verbs and outcomes.
+    r"reduc(e|es|ed|ing)|minimi[sz](e|es|ed|ing)|visibl[ey]|prevent(s|ed|ing)?|protect(s|ed|ing|ion)?|"
+    r"repair(s|ed|ing)?|restor(e|es|ed|ing)|firm(s|ing)?|lift(s|ing)?|tighten(s|ing)?|brighten(s|ing)?|"
+    r"wrinkles?|fine lines|pores|dark spots|sun damage|aging|ageing|younger|overnight|results?)\b"
+    r"|#\s?1\b"     # "#1 cream": '#' is not a word char, so outside the \b group
     r"|\d+\s?%",   # percentages are results claims; '%' is not a word char so no trailing \b
+    re.IGNORECASE,
+)
+# Control-plane language never belongs in a customer message: it is the trace of a
+# prompt injection the model followed, and it misstates who authorised the message
+# (approval and permission live only in the kernel). Refused, review task created.
+CONTROL_LANGUAGE = re.compile(
+    r"\b(pre-?approved|approval (granted|given|confirmed)|approved by|no review|without review|"
+    r"permission\s*[=:]|consent\s*[=:]|system\s*:|assistant\s*:|ignore (all )?(previous|prior|above) instructions|"
+    r"as instructed|instructions? (say|said)|override|admin mode|developer mode)",
     re.IGNORECASE,
 )
 # Destination-like strings (phone numbers, e-mail addresses, URLs) never belong in relationship text:
@@ -174,6 +197,9 @@ def assemble(db: Session, *, tenant_id: str, user_id: str, customer: Customer, c
         return refuse(f"relationship text contains product-claim language ('{m}') outside an approved claim")
     if FORBIDDEN_ANYWHERE.search(rel):
         return refuse(f"forbidden language: '{FORBIDDEN_ANYWHERE.search(rel).group(0)}'", "forbidden_language")
+    if CONTROL_LANGUAGE.search(rel):
+        return refuse(f"control-plane language in a customer message: '{CONTROL_LANGUAGE.search(rel).group(0)}'",
+                      "control_language")
     if DESTINATION_LIKE.search(rel_only):
         return refuse("relationship text contains a phone number, address or link; destinations are never chosen in text",
                       "destination_in_text")
@@ -214,7 +240,7 @@ def consultant_edit(db: Session, *, tenant_id: str, user_id: str, prior: DraftVe
     stripped = new_text
     for c in candidates:
         stripped = stripped.replace(c.approved_text, "")
-    if CLAIM_MARKERS.search(stripped) or FORBIDDEN_ANYWHERE.search(new_text):
+    if CLAIM_MARKERS.search(stripped) or FORBIDDEN_ANYWHERE.search(new_text) or CONTROL_LANGUAGE.search(stripped):
         raise HTTPException(422, {"code": "UNAPPROVED_CLAIM_LANGUAGE",
                                   "detail": "edited text contains product-claim or forbidden language that is not an approved claim"})
     if len(new_text) > MAX_SMS_CHARS:

@@ -616,25 +616,78 @@ pub fn detect_opt_out(body: &str) -> OptOutSignal {
         })
         .collect();
     let norm = norm.split_whitespace().collect::<Vec<_>>().join(" ");
+    if norm.is_empty() {
+        return OptOutSignal::None;
+    }
     if EXPLICIT.contains(&norm.as_str()) {
         return OptOutSignal::Explicit;
     }
-    let first = norm.split(' ').next().unwrap_or("");
-    if EXPLICIT.contains(&first) && norm.split(' ').count() <= 2 && !norm.starts_with("stop by") {
+    let words: Vec<&str> = norm.split(' ').collect();
+    let first = words[0];
+    if is_keyword(first) && words.len() <= 2 && !norm.starts_with("stop by") {
+        return OptOutSignal::Explicit;
+    }
+    // "STOP STOP STOP"
+    if words.iter().all(|w| is_keyword(w)) {
+        return OptOutSignal::Explicit;
+    }
+    // "STOP. this gave me a rash", "Stop! who is this", "STOP\nsent from my phone":
+    // a stop keyword opening the message, then a sentence break.
+    if keyword_then_break(body) {
         return OptOutSignal::Explicit;
     }
     if EXPLICIT_PHRASES.iter().any(|p| norm.contains(p)) {
         return OptOutSignal::Explicit;
     }
     if POSSIBLE.iter().any(|p| norm.contains(p))
-        || (norm.contains("stop")
+        || (words.iter().any(|w| is_stop_word(w))
             && !norm.contains("stop by")
-            && !norm.contains("nonstop")
             && !norm.contains("non-stop"))
     {
         return OptOutSignal::Possible;
     }
     OptOutSignal::None
+}
+
+/// "stop" with emphatic repeats ("stopp", "stooop") — not "stopped" or "nonstop".
+fn is_stop_word(w: &str) -> bool {
+    let b = w.as_bytes();
+    let s_t = b.len() >= 4 && b[0] == b's' && b[1] == b't';
+    if !s_t {
+        return false;
+    }
+    let rest = &b[2..];
+    let os = rest.iter().take_while(|c| **c == b'o').count();
+    let ps = rest[os..].iter().take_while(|c| **c == b'p').count();
+    os >= 1 && ps >= 1 && os + ps == rest.len()
+}
+
+fn is_keyword(w: &str) -> bool {
+    EXPLICIT.contains(&w) || is_stop_word(w)
+}
+
+/// A stop keyword that opens the raw message, followed by `. ! , ; :`, a
+/// newline, or a dash. Mirrors `backend/app/inbound.py::_KEYWORD_THEN_BREAK`.
+fn keyword_then_break(body: &str) -> bool {
+    let t = body.trim_start().to_lowercase();
+    for kw in [
+        "stopall",
+        "stop",
+        "unsubscribe",
+        "optout",
+        "opt-out",
+        "opt out",
+        "revoke",
+    ] {
+        if let Some(rest) = t.strip_prefix(kw) {
+            let rest = rest.trim_start_matches([' ', '\t']);
+            if rest.starts_with(['.', '!', ',', ';', ':', '\n', '–', '—']) || rest.starts_with("- ")
+            {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 #[cfg(test)]
@@ -803,6 +856,18 @@ mod tests {
             "please stop texting me",
             "I'm not interested, remove me",
             "Can you stop sending these",
+            // Synthetic-set findings (A4): keyword then a sentence break, repeats,
+            // emphatic spellings, and an explicit phrase with a wrong-number cue.
+            "STOP. this gave me a rash",
+            "Stop! who is this",
+            "STOP, I'm not interested",
+            "STOP\nsent from my iPhone",
+            "stop - not interested",
+            "STOP STOP STOP",
+            "STOPPP",
+            "stooop",
+            "who is this? please stop texting me",
+            "wrong number, please stop texting",
         ] {
             assert_eq!(detect_opt_out(s), O::Explicit, "{s}");
         }
@@ -821,13 +886,55 @@ mod tests {
             "I can't stop by today but Friday is good",
             "nonstop fun",
             "Thanks!",
+            "Stopped by the store yesterday, loved it",
+            "stopwatch",
         ] {
             assert_ne!(detect_opt_out(s), O::Explicit, "{s}");
         }
+        assert_eq!(
+            detect_opt_out("Stopped by the store yesterday, loved it"),
+            O::None,
+            "'stopped' is not a stop request"
+        );
+        assert_eq!(
+            detect_opt_out("bus stop was late"),
+            O::Possible,
+            "a bare 'stop' still holds"
+        );
+        assert_eq!(detect_opt_out("   "), O::None);
         assert_eq!(
             detect_opt_out("Stop by anytime, I'd love a sample!"),
             O::None
         );
         assert_eq!(detect_opt_out("yes Thursday works"), O::None);
+    }
+
+    /// Parity with the application classifier on the synthetic A4 set: every case
+    /// labelled an explicit opt-out is Explicit in the kernel (the kernel writes the
+    /// permanent suppression); every possible opt-out is at least held; ordinary
+    /// messages are never suppressed.
+    #[test]
+    fn kernel_detector_agrees_with_the_a4_synthetic_set() {
+        use OptOutSignal as O;
+        let set = include_str!(
+            "../../../../backend/tests/evaluations/cases/synthetic/a4_optout_escalation.jsonl"
+        );
+        let mut n = 0;
+        for line in set.lines().filter(|l| !l.trim().is_empty()) {
+            let v: serde_json::Value = serde_json::from_str(line).unwrap();
+            let text = v["inbound_text"].as_str().unwrap();
+            let got = detect_opt_out(text);
+            if v["kernel_expected"] == "explicit" {
+                assert_eq!(got, O::Explicit, "{} {text:?}", v["id"]);
+            }
+            match v["expected_class"].as_str().unwrap() {
+                "opt_out" => assert_eq!(got, O::Explicit, "{} {text:?}", v["id"]),
+                "ambiguous_opt_out" => assert_ne!(got, O::None, "{} {text:?}", v["id"]),
+                "ordinary" => assert_eq!(got, O::None, "{} {text:?}", v["id"]),
+                _ => {}
+            }
+            n += 1;
+        }
+        assert!(n > 400, "synthetic set present ({n})");
     }
 }

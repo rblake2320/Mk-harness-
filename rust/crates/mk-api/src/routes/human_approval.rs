@@ -304,61 +304,50 @@ pub struct WebAuthnAssertionBody {
     pub signature: String,
 }
 
-/// Verify a transaction-bound WebAuthn assertion for `(action, digest)` inside
-/// the approver's transaction. Returns the credential row that proved it.
-pub async fn verify_for_approval(
+/// Step 1 of a step-up (approval or operator): decode the assertion and burn its
+/// challenge in its **own committed transaction** — a failed verification must
+/// still consume the challenge, and the caller's transaction may roll back.
+///
+/// MUST be called while the caller holds no other pooled connection: opening
+/// this transaction inside another one deadlocks the pool under load (two
+/// connections per request; found by the 2× load run and pinned by running the
+/// HTTP suite with `MK_TEST_POOL_SIZE=1`).
+pub async fn burn_step_up_challenge(
     st: &AppState,
-    tx: &mut mk_store::TenantTx<'_>,
-    p: &Principal,
-    action_id: ActionId,
-    digest: &mk_crypto::Digest,
-    body: &WebAuthnAssertionBody,
-    now: chrono::DateTime<Utc>,
-) -> Result<Uuid, ApiError> {
-    verify_step_up(
-        st,
-        tx,
-        p,
-        ChallengeKind::Approve,
-        action_id,
-        digest,
-        body,
-        now,
-    )
-    .await
-}
-
-/// Platform-operator step-up: same verification, challenge bound to an
-/// operation digest instead of an action.
-pub async fn verify_operator_step_up(
-    st: &AppState,
-    tx: &mut mk_store::TenantTx<'_>,
-    p: &Principal,
-    op_digest: &mk_crypto::Digest,
-    body: &WebAuthnAssertionBody,
-    now: chrono::DateTime<Utc>,
-) -> Result<Uuid, ApiError> {
-    verify_step_up(
-        st,
-        tx,
-        p,
-        ChallengeKind::Operator,
-        ActionId::from_uuid(Uuid::nil()),
-        op_digest,
-        body,
-        now,
-    )
-    .await
-}
-
-#[allow(clippy::too_many_arguments)]
-async fn verify_step_up(
-    st: &AppState,
-    tx: &mut mk_store::TenantTx<'_>,
     p: &Principal,
     kind: ChallengeKind,
     action_id: ActionId,
     digest: &mk_crypto::Digest,
+    body: &WebAuthnAssertionBody,
+    now: chrono::DateTime<Utc>,
+) -> Result<Vec<u8>, ApiError> {
+    rp_or_unbound(st)?;
+    let cdj = b64url_decode(&body.client_data_json).map_err(webauthn_err)?;
+    let challenge = extract_challenge(&cdj)?;
+    let mut burn = st.store.begin(p.tenant).await?;
+    let outcome = ha::consume_challenge(
+        &mut burn,
+        p.user,
+        kind,
+        &challenge,
+        Some((action_id, digest)),
+        now,
+    )
+    .await;
+    // Commit the burn even when the binding check failed.
+    burn.commit().await?;
+    outcome?;
+    Ok(challenge)
+}
+
+/// Step 2: verify the assertion over the already-burned `challenge` against the
+/// user's registered credential, inside the caller's transaction (sign-count
+/// update commits or rolls back with the decision).
+pub async fn verify_step_up(
+    st: &AppState,
+    tx: &mut mk_store::TenantTx<'_>,
+    p: &Principal,
+    challenge: &[u8],
     body: &WebAuthnAssertionBody,
     now: chrono::DateTime<Utc>,
 ) -> Result<Uuid, ApiError> {
@@ -367,23 +356,8 @@ async fn verify_step_up(
     let cdj = b64url_decode(&body.client_data_json).map_err(webauthn_err)?;
     let ad = b64url_decode(&body.authenticator_data).map_err(webauthn_err)?;
     let sig = b64url_decode(&body.signature).map_err(webauthn_err)?;
-    let challenge = extract_challenge(&cdj)?;
-    // Consume first, in its own committed transaction: a failed verification
-    // must still burn the challenge (the caller's transaction will roll back).
-    {
-        let mut burn = st.store.begin(p.tenant).await?;
-        let outcome = ha::consume_challenge(
-            &mut burn,
-            p.user,
-            kind,
-            &challenge,
-            Some((action_id, digest)),
-            now,
-        )
-        .await;
-        // Commit the burn even when the binding check failed.
-        burn.commit().await?;
-        outcome?;
+    if extract_challenge(&cdj)? != challenge {
+        return Err(webauthn_err(webauthn::WebAuthnError::ChallengeMismatch));
     }
     let cred = ha::credential_for_update(tx, p.user, &cred_id)
         .await
@@ -399,7 +373,7 @@ async fn verify_step_up(
         &cdj,
         &ad,
         &sig,
-        &challenge,
+        challenge,
         &rp.rp_id,
         &rp.origins,
         &cred.public_key,

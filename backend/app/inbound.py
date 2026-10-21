@@ -40,9 +40,9 @@ _EXPLICIT_PHRASES = ("stop texting", "stop messaging", "don't text", "dont text"
 _POSSIBLE = ("leave me alone", "not interested", "unsub", "stop it", "go away", "no thanks", "no thank you")
 _WRONG_NUMBER = re.compile(r"\b(wrong number|who is this|who's this|who dis|don't know you|dont know you|"
                            r"i don't know who you are|not (angela|her|him|them)|you have the wrong)\b", re.I)
-_CONCERN = re.compile(r"\b(rash|burn(ing|ed|s)?|sting(ing|s)?|itch(y|ing|es)?|hives|swell(ing|ed)|swollen|"
+_CONCERN = re.compile(r"\b(rash(es)?|burn(ing|ed|s)?|sting(ing|s)?|itch(y|ing|es)?|hives|swell(ing|ed|s)?|swollen|"
                       r"break(ing)? out|broke out|breakout|allerg(y|ic|ies)|reaction|irritat(ed|ion|ing)|"
-                      r"redness|blister|peeling|infection|pain(ful)?|hurt(s|ing)?|doctor|dermatologist|er\b|"
+                      r"redness|blister(s|ed|ing)?|peeling|infect(ion|ions|ed)|pain(ful)?|hurt(s|ing)?|doctor|dermatologist|er\b|"
                       r"emergency|hospital|made my (skin|face) worse)\b", re.I)
 _COMPLAINT = re.compile(r"\b(never (arrived|came|got|received)|didn't (arrive|come|get|receive)|did not (arrive|receive)|"
                         r"broken|damaged|leaking|wrong (item|product|shade|color|colour|order)|missing|refund|"
@@ -56,10 +56,23 @@ _DATE = re.compile(r"\b(next (week|month|monday|tuesday|wednesday|thursday|frida
                    r"get back to (you|me)|circle back|remind me|follow up (with me )?(later|next)|when i get back))\b", re.I)
 
 _PUNCT = re.compile(r"[.!?,\"'“”]")
+# A stop keyword that opens the message and is followed by a sentence break
+# ("STOP. this gave me a rash", "Stop! who is this", "STOP\nsent from my phone"):
+# the customer said STOP; what follows does not soften it. Mirrored in the kernel
+# (`mk_adapters::twilio::detect_opt_out`).
+# "stop" as a word (also "stopp", "stooop"); not "stopped", "nonstop", "bus stop" is
+# still a hold — over-holding is safe, a missed stop is not.
+_STOP_WORD = re.compile(r"\bsto+p+\b")
+_KEYWORD_THEN_BREAK = re.compile(r"^\s*(stop|stopall|unsubscribe|optout|opt[- ]out|revoke)\s*([.!,;:\n]|-\s|–|—)", re.I)
 
 
 def _norm(text: str) -> str:
     return " ".join(_PUNCT.sub("", text.strip().lower()).split())
+
+
+def _is_keyword(word: str) -> bool:
+    """A carrier opt-out keyword, including emphatic spellings of stop ("STOPPP", "stooop")."""
+    return word in _EXPLICIT or bool(re.fullmatch(r"sto+p+", word))
 
 
 @dataclass(frozen=True)
@@ -76,14 +89,23 @@ def classify_inbound(text: str) -> InboundClass:
         return InboundClass("ordinary", "")
     if norm in _EXPLICIT:
         return InboundClass("opt_out", text.strip())
-    first = norm.split(" ")[0]
-    if first in _EXPLICIT and len(norm.split(" ")) <= 2 and not norm.startswith("stop by"):
+    words = norm.split(" ")
+    first = words[0]
+    if _is_keyword(first) and len(words) <= 2 and not norm.startswith("stop by"):
         return InboundClass("opt_out", text.strip())
+    if all(_is_keyword(w) for w in words):                     # "STOP STOP STOP"
+        return InboundClass("opt_out", text.strip())
+    if _KEYWORD_THEN_BREAK.search(text):
+        return InboundClass("opt_out", text.strip())
+    # Wrong number outranks a natural-language stop phrase *here*: the kernel has
+    # already suppressed the number permanently (its detector treats the phrase as
+    # explicit), and the business outcome is "this customer's number is wrong",
+    # not "this customer opted out".
     if _WRONG_NUMBER.search(text):
         return InboundClass("wrong_number", _WRONG_NUMBER.search(text).group(0))
     if any(p in norm for p in _EXPLICIT_PHRASES):
         return InboundClass("opt_out", text.strip())
-    if any(p in norm for p in _POSSIBLE) or ("stop" in norm and "stop by" not in norm and "nonstop" not in norm and "non-stop" not in norm):
+    if any(p in norm for p in _POSSIBLE) or (_STOP_WORD.search(norm) and "stop by" not in norm and "non-stop" not in norm):
         return InboundClass("ambiguous_opt_out", text.strip())
     m = _CONCERN.search(text)
     if m:
