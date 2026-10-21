@@ -7,12 +7,13 @@ use std::time::Duration;
 
 use mk_adapters::egress::EgressAllowlist;
 use mk_adapters::mobile::MobileAdapter;
+use mk_adapters::twilio::TwilioAdapter;
 use mk_adapters::{AdapterRegistry, InternalRecordAdapter};
 use mk_policy::ToolAllowlist;
 use mk_queue::{RetryPolicy, StreamClient};
 use mk_store::Store;
 use mk_worker::config::{Config, init_tracing};
-use mk_worker::resolver::StoreResolver;
+use mk_worker::resolver::{StoreResolver, StoreSenderResolver};
 use mk_worker::{DispatchOutcome, WorkerContext, dispatch_one, housekeeping};
 use secrecy::ExposeSecret;
 
@@ -23,6 +24,7 @@ async fn main() -> anyhow::Result<()> {
     let store = Store::connect(cfg.database_url.expose_secret(), 16).await?;
     let stream = StreamClient::connect(cfg.redis_url.expose_secret(), "mk").await?;
     stream.ensure_groups().await?;
+    let keyring = mk_store::keys::keyring_from_env(store.pool(), &cfg.master_key).await?;
     let egress = EgressAllowlist::new(
         cfg.egress_authorities.iter().map(String::as_str),
         cfg.allow_loopback_http,
@@ -34,10 +36,29 @@ async fn main() -> anyhow::Result<()> {
             egress,
             Box::new(StoreResolver {
                 store: store.clone(),
-                master: cfg.master_key.clone(),
+                keyring: keyring.clone(),
                 intake_url_template: cfg.adapter_intake_template.clone(),
             }),
             "phoneclaw@c59995b726a127da16275d2d8e0760408b988542",
+        )?)
+    };
+    let twilio = if cfg.twilio_api_base.is_empty() {
+        None
+    } else {
+        if cfg.public_webhook_base.is_empty() {
+            anyhow::bail!("MK_PUBLIC_WEBHOOK_BASE is required when MK_TWILIO_API_BASE is set");
+        }
+        Some(TwilioAdapter::new(
+            EgressAllowlist::new(
+                cfg.egress_authorities.iter().map(String::as_str),
+                cfg.allow_loopback_http,
+            ),
+            &cfg.twilio_api_base,
+            Box::new(StoreSenderResolver {
+                store: store.clone(),
+                keyring: keyring.clone(),
+                public_webhook_base: cfg.public_webhook_base.clone(),
+            }),
         )?)
     };
     let ctx = WorkerContext {
@@ -45,12 +66,42 @@ async fn main() -> anyhow::Result<()> {
         registry: AdapterRegistry {
             internal: InternalRecordAdapter,
             mobile,
+            twilio,
         },
         tools: ToolAllowlist::v1(),
         worker_id: cfg.worker_id.clone(),
         lease_ttl: Duration::from_secs(cfg.lease_secs),
         retry: RetryPolicy::default(),
     };
+
+    let metrics = Arc::new(mk_worker::metrics::WorkerMetrics::new());
+    metrics.provider_live.set(i64::from(
+        cfg.twilio_api_base.trim_end_matches('/') == "https://api.twilio.com",
+    ));
+    if !cfg.metrics_bind.is_empty() {
+        let (m, bind) = (metrics.clone(), cfg.metrics_bind.clone());
+        tokio::spawn(async move {
+            if let Err(e) = mk_worker::metrics::serve(&bind, m).await {
+                tracing::error!(error = %e, "metrics listener failed");
+            }
+        });
+        let (m, s, secs) = (
+            metrics.clone(),
+            store.clone(),
+            cfg.metrics_sample_secs.max(5),
+        );
+        tokio::spawn(async move {
+            loop {
+                match mk_store::audit::all_tenants(s.pool()).await {
+                    Ok(t) => mk_worker::metrics::sample(&s, &t, &m, chrono::Utc::now()).await,
+                    Err(_) => {
+                        m.sampler_errors.inc();
+                    }
+                }
+                tokio::time::sleep(Duration::from_secs(secs)).await;
+            }
+        });
+    }
 
     let stopping = Arc::new(AtomicBool::new(false));
     {
@@ -91,7 +142,10 @@ async fn main() -> anyhow::Result<()> {
             if stopping.load(Ordering::SeqCst) {
                 break;
             }
-            match dispatch_one(&ctx, &d.message, chrono::Utc::now()).await {
+            let started = std::time::Instant::now();
+            let outcome = dispatch_one(&ctx, &d.message, chrono::Utc::now()).await;
+            metrics.record_outcome(&outcome, started.elapsed());
+            match outcome {
                 Ok(DispatchOutcome::Skipped { ack: false, reason }) => {
                     tracing::debug!(action_id = %d.message.action_id, reason, "left unacked");
                 }
@@ -117,7 +171,10 @@ async fn main() -> anyhow::Result<()> {
                 )
                 .await
                 {
-                    Ok(stats) => tracing::info!(?stats, "housekeeping"),
+                    Ok(stats) => {
+                        metrics.record_housekeeping(&stats);
+                        tracing::info!(?stats, "housekeeping");
+                    }
                     Err(e) => tracing::warn!(error = %e, "housekeeping failed"),
                 },
                 Err(e) => tracing::warn!(error = %e, "tenant listing failed"),

@@ -60,6 +60,11 @@ pub async fn metrics(
 #[serde(deny_unknown_fields)]
 pub struct KillSwitchBody {
     pub dispatch_enabled: bool,
+    /// Required to re-enable the *global* switch when the kernel has an
+    /// approval RP configured: a platform operator's registered passkey must
+    /// sign the kernel-issued operator challenge. Disabling never needs it.
+    #[serde(default)]
+    pub webauthn: Option<super::human_approval::WebAuthnAssertionBody>,
 }
 
 pub async fn tenant_kill_switch(
@@ -96,6 +101,37 @@ pub async fn global_kill_switch(
 ) -> Result<StatusCode, ApiError> {
     p.require_role("platform_operator")
         .map_err(|e| e.with_request_id(&headers))?;
+    if b.dispatch_enabled && st.approval_rp.is_some() {
+        // Threat model T4: a compromised proxy can mint `platform_operator`; it
+        // must not be able to turn dispatch back on without the operator's key.
+        let Some(w) = b.webauthn.as_ref() else {
+            return Err(ApiError::new(
+                StatusCode::FORBIDDEN,
+                "WEBAUTHN_REQUIRED",
+                "Re-enabling the global kill switch requires an operator passkey step-up",
+            )
+            .with_request_id(&headers));
+        };
+        let now = Utc::now();
+        let mut tx = st
+            .store
+            .begin(p.tenant)
+            .await
+            .map_err(|e| ApiError::from(e).with_request_id(&headers))?;
+        super::human_approval::verify_operator_step_up(
+            &st,
+            &mut tx,
+            &p,
+            &super::human_approval::global_enable_op_digest(),
+            w,
+            now,
+        )
+        .await
+        .map_err(|e| e.with_request_id(&headers))?;
+        tx.commit()
+            .await
+            .map_err(|e| ApiError::from(e).with_request_id(&headers))?;
+    }
     policy::set_global_dispatch(st.store.pool(), b.dispatch_enabled, &p.user.to_string())
         .await
         .map_err(|e| ApiError::from(e).with_request_id(&headers))?;

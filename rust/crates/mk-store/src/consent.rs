@@ -30,13 +30,14 @@ pub async fn grant_permission(
     granted_at: DateTime<Utc>,
     expires_at: DateTime<Utc>,
     recorded_by: UserId,
+    destination_hash: &str,
     actor: Actor<'_>,
     now: DateTime<Utc>,
 ) -> Result<Uuid, StoreError> {
     let id = Uuid::now_v7();
     sqlx::query(
         "INSERT INTO kernel.contact_permissions (permission_id, tenant_id, contact_id, channel, status, scope, source,
-           proof_digest, granted_at, expires_at, recorded_by) VALUES ($1,$2,$3,$4,'granted',$5,$6,$7,$8,$9,$10)",
+           proof_digest, granted_at, expires_at, recorded_by, destination_hash) VALUES ($1,$2,$3,$4,'granted',$5,$6,$7,$8,$9,$10,$11)",
     )
     .bind(id)
     .bind(tx.tenant().0)
@@ -48,6 +49,7 @@ pub async fn grant_permission(
     .bind(granted_at)
     .bind(expires_at)
     .bind(recorded_by.0)
+    .bind(destination_hash)
     .execute(tx.conn())
     .await?;
     append_event(
@@ -111,7 +113,7 @@ pub async fn permissions_for(
 ) -> Result<Vec<ContactPermissionFact>, StoreError> {
     let tenant = tx.tenant();
     let rows = sqlx::query(
-        "SELECT status, scope, granted_at, expires_at, revoked_at FROM kernel.contact_permissions
+        "SELECT status, scope, granted_at, expires_at, revoked_at, destination_hash FROM kernel.contact_permissions
          WHERE tenant_id = $1 AND contact_id = $2 AND channel = $3",
     )
     .bind(tenant.0)
@@ -136,6 +138,7 @@ pub async fn permissions_for(
                 granted_at: r.try_get("granted_at")?,
                 expires_at: r.try_get("expires_at")?,
                 revoked_at: r.try_get("revoked_at")?,
+                destination_hash: r.try_get("destination_hash")?,
             })
         })
         .collect()
@@ -152,6 +155,11 @@ pub async fn add_suppression(
     actor: Actor<'_>,
     now: DateTime<Utc>,
 ) -> Result<Uuid, StoreError> {
+    // C6: suppression and dispatch authorization share one serialized control
+    // path per (tenant, channel, destination). Re-entrant within a session.
+    if let (Some(ch), Some(d)) = (channel, destination_hash) {
+        crate::messaging::lock_control_path(tx, ch.as_str(), d).await?;
+    }
     let id = Uuid::now_v7();
     sqlx::query(
         "INSERT INTO kernel.suppressions (suppression_id, tenant_id, normalized_destination_hash, channel, scope, reason, permanent, created_at, source)

@@ -1,0 +1,25 @@
+# Secret scanning configuration (contract S8). Extends the default ruleset.
+# Allowlisted paths are test fixtures that contain *shape-valid, value-fake*
+# material by design (published Twilio signature vector, software authenticator
+# fixtures, dev key generator output in test logs). Nothing under backend/app,
+# rust/crates/*/src (non-test), deploy/, infra/ may ever be allowlisted.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "test fixtures with fake credentials"
+paths = [
+  '''rust/crates/mk-adapters/src/twilio\.rs''',           # published Twilio signature test vector
+  '''rust/crates/mk-crypto/src/webauthn\.rs''',           # softauthn test fixtures
+  '''rust/crates/[a-z-]+/tests/.*''',
+  '''backend/tests/.*''',
+  '''contracts/tests/.*''',
+  '''web/tests/.*''',
+  '''tools/mobile-agent-adb/test_.*\.py''',
+]
+regexes = [
+  '''ACaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa''',   # smoke account SID (fake)
+  '''ACbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb''',   # e2e account SID (fake)
+  '''ACcccccccccccccccccccccccccccccccc''',   # load account SID (fake)
+  '''dev-secret-dev-secret-dev-secret-123''', # MK_ALLOW_DEV_SECRETS placeholder
+]

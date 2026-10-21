@@ -1,0 +1,193 @@
+{
+  "tool": "mk-loadgen",
+  "at": "2026-10-21T02:35:42.002510486+00:00",
+  "run": {
+    "duration_secs": 120,
+    "tenants": 10,
+    "proposals_per_sec": 20.0,
+    "reads_per_sec": 100.0,
+    "inbound_per_sec": 10.0,
+    "envelope_run": false
+  },
+  "counts": {
+    "proposals_ok": 2400,
+    "proposals_rejected": 0,
+    "proposals_error": 0,
+    "approvals_ok": 2398,
+    "approvals_error": 0,
+    "delivered": 2398,
+    "not_delivered_in_time": 0,
+    "consent_cancelled_before_dispatch": 0,
+    "approvals_refused_4xx": 2,
+    "reads_ok": 12000,
+    "reads_error": 0,
+    "inbound_ok": 1200,
+    "inbound_error": 0,
+    "optout_blocked": 12,
+    "optout_not_blocked": 0,
+    "duplicate_provider_message_ids": 0
+  },
+  "latency_secs": {
+    "propose": {
+      "count": 2400,
+      "p50": 0.017790947,
+      "p95": 0.041030297,
+      "p99": 0.063649123,
+      "max": 0.117185814
+    },
+    "approve": {
+      "count": 2400,
+      "p50": 0.019063723,
+      "p95": 0.043435922,
+      "p99": 0.062345696,
+      "max": 0.1215846
+    },
+    "approved_to_dispatch_start": {
+      "count": 2398,
+      "p50": 0.412950031,
+      "p95": 0.523841602,
+      "p99": 0.536593997,
+      "max": 0.631834865
+    },
+    "approved_to_delivered": {
+      "count": 2398,
+      "p50": 0.620218293,
+      "p95": 0.829959854,
+      "p99": 0.849464543,
+      "max": 0.954055055
+    },
+    "read_pending_approvals": {
+      "count": 12000,
+      "p50": 0.00612616,
+      "p95": 0.013225946,
+      "p99": 0.020816564,
+      "max": 0.073565875
+    },
+    "inbound_webhook": {
+      "count": 1200,
+      "p50": 0.011255772,
+      "p95": 0.030363195,
+      "p99": 0.052258316,
+      "max": 0.119328536
+    },
+    "optout_to_block": {
+      "count": 12,
+      "p50": 0.037080195,
+      "p95": 0.052762356,
+      "p99": 0.056281836,
+      "max": 0.056281836
+    }
+  },
+  "slo": [
+    {
+      "id": "O3-api-p95",
+      "requirement": "non-AI API p95 ≤ 500 ms",
+      "target": "0.5",
+      "measured": {
+        "propose_p95": 0.041030297,
+        "approve_p95": 0.043435922,
+        "read_p95": 0.013225946
+      },
+      "pass": true,
+      "note": "propose, approve (incl. passkey challenge round-trip) and pending-approvals read"
+    },
+    {
+      "id": "O3-api-p99",
+      "requirement": "non-AI API p99 ≤ 1.5 s",
+      "target": "1.5",
+      "measured": {
+        "propose_p99": 0.063649123,
+        "approve_p99": 0.062345696,
+        "read_p99": 0.020816564
+      },
+      "pass": true,
+      "note": ""
+    },
+    {
+      "id": "O3-dispatch-start",
+      "requirement": "approved eligible action → dispatch start p95 ≤ 10 s / p99 ≤ 60 s",
+      "target": "10 / 60",
+      "measured": {
+        "p95": 0.523841602,
+        "p99": 0.536593997,
+        "count": 2398
+      },
+      "pass": true,
+      "note": "observed by polling at 100 ms; includes outbox relay + stream + worker lease"
+    },
+    {
+      "id": "O3-delivered",
+      "requirement": "approved → delivered via signed callbacks (informational)",
+      "target": "—",
+      "measured": {
+        "p95": 0.829959854,
+        "p99": 0.849464543,
+        "count": 2398
+      },
+      "pass": null,
+      "note": "simulator callbacks; real provider latency is not represented"
+    },
+    {
+      "id": "O3-inbound-persist",
+      "requirement": "inbound persistence p99 ≤ 2 s",
+      "target": "2",
+      "measured": {
+        "p99": 0.052258316,
+        "count": 1200
+      },
+      "pass": true,
+      "note": "signed webhook → 200 (recorded, deduped, sealed)"
+    },
+    {
+      "id": "O3-optout",
+      "requirement": "opt-out recorded → new dispatch blocked immediately at the authorization boundary",
+      "target": "every probe",
+      "measured": {
+        "blocked": 12,
+        "not_blocked": 0,
+        "p99_secs": 0.056281836
+      },
+      "pass": true,
+      "note": "STOP then an immediate proposal to the same destination must be 403 suppressed"
+    },
+    {
+      "id": "O4-no-dup",
+      "requirement": "no unauthorized or duplicate execution",
+      "target": "0",
+      "measured": {
+        "duplicate_provider_message_ids": 0,
+        "not_delivered_in_time": 0
+      },
+      "pass": true,
+      "note": "duplicate detection is by provider message id across the whole run"
+    },
+    {
+      "id": "O4-errors",
+      "requirement": "error rate under load",
+      "target": "< 5% transport/5xx",
+      "measured": {
+        "ratio": 0.0,
+        "errors": 0
+      },
+      "pass": true,
+      "note": ""
+    },
+    {
+      "id": "O4-envelope",
+      "requirement": "8 h at envelope (20 proposal/s, 100 read/s, 10 dispatch/s), 30 min at 2×, 24 h at ½",
+      "target": "run length and rates",
+      "measured": {
+        "duration_secs": 120,
+        "proposals_per_sec": 20.0,
+        "reads_per_sec": 100.0
+      },
+      "pass": false,
+      "note": "NOT an envelope run — this report is a functional load check, not qualification evidence"
+    }
+  ],
+  "verdict": {
+    "all_measured_slos_pass": true,
+    "qualification_evidence": false,
+    "status_vocabulary": "author-run → Implemented at most; Independently verified requires a second person to run and record this"
+  }
+}

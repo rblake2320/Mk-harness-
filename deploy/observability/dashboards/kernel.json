@@ -1,0 +1,896 @@
+{
+ "uid": "mk-kernel",
+ "title": "MK action kernel",
+ "tags": [
+  "mk",
+  "kernel"
+ ],
+ "timezone": "utc",
+ "schemaVersion": 39,
+ "version": 1,
+ "refresh": "30s",
+ "time": {
+  "from": "now-6h",
+  "to": "now"
+ },
+ "templating": {
+  "list": [
+   {
+    "name": "DS",
+    "type": "datasource",
+    "query": "prometheus",
+    "label": "Prometheus"
+   }
+  ]
+ },
+ "panels": [
+  {
+   "id": 1,
+   "type": "row",
+   "title": "Safety state",
+   "gridPos": {
+    "x": 0,
+    "y": 0,
+    "w": 24,
+    "h": 1
+   },
+   "collapsed": false
+  },
+  {
+   "id": 2,
+   "type": "stat",
+   "title": "Global dispatch enabled",
+   "gridPos": {
+    "x": 0,
+    "y": 1,
+    "w": 4,
+    "h": 4
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS}"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "mk_kill_switch_global_enabled",
+     "legendFormat": "__auto"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {},
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    },
+    "colorMode": "background"
+   }
+  },
+  {
+   "id": 3,
+   "type": "stat",
+   "title": "Tenants dispatch disabled",
+   "gridPos": {
+    "x": 4,
+    "y": 1,
+    "w": 4,
+    "h": 4
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS}"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "mk_tenants_dispatch_disabled",
+     "legendFormat": "__auto"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {},
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    },
+    "colorMode": "background"
+   }
+  },
+  {
+   "id": 4,
+   "type": "stat",
+   "title": "Tenants inbound blocked",
+   "gridPos": {
+    "x": 8,
+    "y": 1,
+    "w": 4,
+    "h": 4
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS}"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "mk_tenants_inbound_blocked",
+     "legendFormat": "__auto"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {},
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    },
+    "colorMode": "background"
+   }
+  },
+  {
+   "id": 5,
+   "type": "stat",
+   "title": "Audit head mismatches",
+   "gridPos": {
+    "x": 12,
+    "y": 1,
+    "w": 4,
+    "h": 4
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS}"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "mk_audit_head_mismatches",
+     "legendFormat": "__auto"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {},
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    },
+    "colorMode": "background"
+   }
+  },
+  {
+   "id": 6,
+   "type": "stat",
+   "title": "Reconciliation required",
+   "gridPos": {
+    "x": 16,
+    "y": 1,
+    "w": 4,
+    "h": 4
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS}"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "mk_actions_reconciliation_required",
+     "legendFormat": "__auto"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {},
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    },
+    "colorMode": "background"
+   }
+  },
+  {
+   "id": 7,
+   "type": "stat",
+   "title": "Legacy seal / retiring versions",
+   "gridPos": {
+    "x": 20,
+    "y": 1,
+    "w": 4,
+    "h": 4
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS}"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "mk_sealed_with_legacy_key",
+     "legendFormat": "__auto"
+    },
+    {
+     "refId": "B",
+     "expr": "mk_key_versions_retiring",
+     "legendFormat": "__auto"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {},
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    },
+    "colorMode": "background"
+   }
+  },
+  {
+   "id": 8,
+   "type": "row",
+   "title": "API availability and latency (O3: p95 \u2264 500 ms, p99 \u2264 1.5 s, non-AI routes)",
+   "gridPos": {
+    "x": 0,
+    "y": 5,
+    "w": 24,
+    "h": 1
+   },
+   "collapsed": false
+  },
+  {
+   "id": 9,
+   "type": "timeseries",
+   "title": "Request rate by status",
+   "gridPos": {
+    "x": 0,
+    "y": 6,
+    "w": 8,
+    "h": 7
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS}"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "sum by (status) (rate(mk_requests_total[5m]))",
+     "legendFormat": "__auto"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "reqps"
+    },
+    "overrides": []
+   },
+   "options": {}
+  },
+  {
+   "id": 10,
+   "type": "timeseries",
+   "title": "5xx error ratio",
+   "gridPos": {
+    "x": 8,
+    "y": 6,
+    "w": 8,
+    "h": 7
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS}"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "sum(rate(mk_requests_total{status=~\"5..\"}[5m])) / clamp_min(sum(rate(mk_requests_total[5m])),0.001)",
+     "legendFormat": "__auto"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percentunit"
+    },
+    "overrides": []
+   },
+   "options": {}
+  },
+  {
+   "id": 11,
+   "type": "timeseries",
+   "title": "Latency p95 / p99 (all routes)",
+   "gridPos": {
+    "x": 16,
+    "y": 6,
+    "w": 8,
+    "h": 7
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS}"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "histogram_quantile(0.95, sum by (le) (rate(mk_request_duration_seconds_bucket[5m])))",
+     "legendFormat": "p95"
+    },
+    {
+     "refId": "B",
+     "expr": "histogram_quantile(0.99, sum by (le) (rate(mk_request_duration_seconds_bucket[5m])))",
+     "legendFormat": "p99"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "s"
+    },
+    "overrides": []
+   },
+   "options": {}
+  },
+  {
+   "id": 12,
+   "type": "timeseries",
+   "title": "Latency p95 by route",
+   "gridPos": {
+    "x": 0,
+    "y": 13,
+    "w": 12,
+    "h": 7
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS}"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "histogram_quantile(0.95, sum by (le, route) (rate(mk_request_duration_seconds_bucket[5m])))",
+     "legendFormat": "__auto"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "s"
+    },
+    "overrides": []
+   },
+   "options": {}
+  },
+  {
+   "id": 13,
+   "type": "timeseries",
+   "title": "Policy decisions",
+   "gridPos": {
+    "x": 12,
+    "y": 13,
+    "w": 12,
+    "h": 7
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS}"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "sum by (decision, code) (rate(mk_policy_decisions_total[5m]))",
+     "legendFormat": "__auto"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {},
+    "overrides": []
+   },
+   "options": {}
+  },
+  {
+   "id": 14,
+   "type": "row",
+   "title": "Queue and dispatch (O3: approved \u2192 dispatch start p95 \u2264 10 s / p99 \u2264 60 s)",
+   "gridPos": {
+    "x": 0,
+    "y": 20,
+    "w": 24,
+    "h": 1
+   },
+   "collapsed": false
+  },
+  {
+   "id": 15,
+   "type": "timeseries",
+   "title": "Queue depth / dispatching / leases",
+   "gridPos": {
+    "x": 0,
+    "y": 21,
+    "w": 8,
+    "h": 7
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS}"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "mk_queue_depth",
+     "legendFormat": "__auto"
+    },
+    {
+     "refId": "B",
+     "expr": "mk_actions_dispatching",
+     "legendFormat": "__auto"
+    },
+    {
+     "refId": "C",
+     "expr": "mk_leases_active",
+     "legendFormat": "__auto"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {},
+    "overrides": []
+   },
+   "options": {}
+  },
+  {
+   "id": 16,
+   "type": "timeseries",
+   "title": "Oldest eligible age / outbox lag / oldest lease",
+   "gridPos": {
+    "x": 8,
+    "y": 21,
+    "w": 8,
+    "h": 7
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS}"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "mk_queue_oldest_eligible_age_seconds",
+     "legendFormat": "__auto"
+    },
+    {
+     "refId": "B",
+     "expr": "mk_outbox_lag_seconds",
+     "legendFormat": "__auto"
+    },
+    {
+     "refId": "C",
+     "expr": "mk_lease_oldest_age_seconds",
+     "legendFormat": "__auto"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "s"
+    },
+    "overrides": []
+   },
+   "options": {}
+  },
+  {
+   "id": 17,
+   "type": "timeseries",
+   "title": "Dispatch outcomes",
+   "gridPos": {
+    "x": 16,
+    "y": 21,
+    "w": 8,
+    "h": 7
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS}"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "sum by (outcome) (rate(mk_dispatch_outcomes_total[5m]))",
+     "legendFormat": "__auto"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {},
+    "overrides": []
+   },
+   "options": {}
+  },
+  {
+   "id": 18,
+   "type": "timeseries",
+   "title": "Dispatch duration p95 / p99",
+   "gridPos": {
+    "x": 0,
+    "y": 28,
+    "w": 8,
+    "h": 7
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS}"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "histogram_quantile(0.95, sum by (le) (rate(mk_dispatch_duration_seconds_bucket[5m])))",
+     "legendFormat": "p95"
+    },
+    {
+     "refId": "B",
+     "expr": "histogram_quantile(0.99, sum by (le) (rate(mk_dispatch_duration_seconds_bucket[5m])))",
+     "legendFormat": "p99"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "s"
+    },
+    "overrides": []
+   },
+   "options": {}
+  },
+  {
+   "id": 19,
+   "type": "timeseries",
+   "title": "Outbox unpublished / dead letters",
+   "gridPos": {
+    "x": 8,
+    "y": 28,
+    "w": 8,
+    "h": 7
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS}"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "mk_outbox_unpublished",
+     "legendFormat": "__auto"
+    },
+    {
+     "refId": "B",
+     "expr": "mk_dead_letters",
+     "legendFormat": "__auto"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {},
+    "overrides": []
+   },
+   "options": {}
+  },
+  {
+   "id": 20,
+   "type": "timeseries",
+   "title": "Housekeeping actions",
+   "gridPos": {
+    "x": 16,
+    "y": 28,
+    "w": 8,
+    "h": 7
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS}"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "sum by (kind) (increase(mk_housekeeping_total[15m]))",
+     "legendFormat": "__auto"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {},
+    "overrides": []
+   },
+   "options": {}
+  },
+  {
+   "id": 21,
+   "type": "row",
+   "title": "Provider, callbacks and inbound (O3: inbound \u2192 visible p95 \u2264 5 s)",
+   "gridPos": {
+    "x": 0,
+    "y": 35,
+    "w": 24,
+    "h": 1
+   },
+   "collapsed": false
+  },
+  {
+   "id": 22,
+   "type": "timeseries",
+   "title": "Submission unknown (deliveries)",
+   "gridPos": {
+    "x": 0,
+    "y": 36,
+    "w": 8,
+    "h": 7
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS}"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "mk_deliveries_submission_unknown",
+     "legendFormat": "__auto"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {},
+    "overrides": []
+   },
+   "options": {}
+  },
+  {
+   "id": 23,
+   "type": "timeseries",
+   "title": "Callbacks applied / duplicate",
+   "gridPos": {
+    "x": 8,
+    "y": 36,
+    "w": 8,
+    "h": 7
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS}"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "rate(mk_callbacks_applied_total[5m])",
+     "legendFormat": "applied"
+    },
+    {
+     "refId": "B",
+     "expr": "rate(mk_callbacks_duplicate_total[5m])",
+     "legendFormat": "duplicate"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {},
+    "overrides": []
+   },
+   "options": {}
+  },
+  {
+   "id": 24,
+   "type": "timeseries",
+   "title": "Auth failures (assertions, webhooks, adapter HMAC)",
+   "gridPos": {
+    "x": 16,
+    "y": 36,
+    "w": 8,
+    "h": 7
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS}"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "sum by (code) (rate(mk_assertion_failures_total[5m]))",
+     "legendFormat": "__auto"
+    },
+    {
+     "refId": "B",
+     "expr": "sum by (code) (rate(mk_hmac_failures_total[5m]))",
+     "legendFormat": "__auto"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {},
+    "overrides": []
+   },
+   "options": {}
+  },
+  {
+   "id": 25,
+   "type": "timeseries",
+   "title": "Inbound events by disposition",
+   "gridPos": {
+    "x": 0,
+    "y": 43,
+    "w": 8,
+    "h": 7
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS}"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "sum by (disposition) (rate(mk_inbound_events_total[5m]))",
+     "legendFormat": "__auto"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {},
+    "overrides": []
+   },
+   "options": {}
+  },
+  {
+   "id": 26,
+   "type": "timeseries",
+   "title": "Inbound pending / oldest pending age",
+   "gridPos": {
+    "x": 8,
+    "y": 43,
+    "w": 8,
+    "h": 7
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS}"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "mk_inbound_pending",
+     "legendFormat": "__auto"
+    },
+    {
+     "refId": "B",
+     "expr": "mk_inbound_oldest_pending_age_seconds",
+     "legendFormat": "__auto"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {},
+    "overrides": []
+   },
+   "options": {}
+  },
+  {
+   "id": 27,
+   "type": "timeseries",
+   "title": "Approvals pending / expiring within 1 h",
+   "gridPos": {
+    "x": 16,
+    "y": 43,
+    "w": 8,
+    "h": 7
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS}"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "mk_approvals_pending",
+     "legendFormat": "__auto"
+    },
+    {
+     "refId": "B",
+     "expr": "mk_approvals_expiring_1h",
+     "legendFormat": "__auto"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {},
+    "overrides": []
+   },
+   "options": {}
+  },
+  {
+   "id": 28,
+   "type": "row",
+   "title": "Sampler health",
+   "gridPos": {
+    "x": 0,
+    "y": 50,
+    "w": 24,
+    "h": 1
+   },
+   "collapsed": false
+  },
+  {
+   "id": 29,
+   "type": "timeseries",
+   "title": "Sampler errors / duration p95",
+   "gridPos": {
+    "x": 0,
+    "y": 51,
+    "w": 12,
+    "h": 7
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS}"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "increase(mk_metrics_sampler_errors_total[15m])",
+     "legendFormat": "errors (15m)"
+    },
+    {
+     "refId": "B",
+     "expr": "histogram_quantile(0.95, sum by (le) (rate(mk_metrics_sampler_duration_seconds_bucket[5m])))",
+     "legendFormat": "duration p95"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {},
+    "overrides": []
+   },
+   "options": {}
+  },
+  {
+   "id": 30,
+   "type": "timeseries",
+   "title": "Tenants known",
+   "gridPos": {
+    "x": 12,
+    "y": 51,
+    "w": 12,
+    "h": 7
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS}"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "mk_tenants_total",
+     "legendFormat": "__auto"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {},
+    "overrides": []
+   },
+   "options": {}
+  }
+ ],
+ "annotations": {
+  "list": [
+   {
+    "name": "Kill switch",
+    "datasource": {
+     "type": "prometheus",
+     "uid": "${DS}"
+    },
+    "expr": "changes(mk_kill_switch_global_enabled[1m]) > 0",
+    "titleFormat": "global switch changed",
+    "enable": true
+   }
+  ]
+ }
+}

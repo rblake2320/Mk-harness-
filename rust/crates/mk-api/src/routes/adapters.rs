@@ -72,7 +72,7 @@ pub async fn register(
         .map_err(|e| ApiError::from(e).with_request_id(&headers))?;
     let (adapter, secret) = adapters::register(
         &mut tx,
-        &st.master,
+        &st.keyring,
         &b.agent_id,
         &b.name,
         &b.platform,
@@ -142,7 +142,7 @@ pub async fn rotate(
         .map_err(|e| ApiError::from(e).with_request_id(&headers))?;
     let secret = adapters::rotate(
         &mut tx,
-        &st.master,
+        &st.keyring,
         adapter_id,
         Duration::seconds(overlap),
         actor,

@@ -19,7 +19,7 @@ use std::time::Duration;
 use tower_http::request_id::{MakeRequestUuid, PropagateRequestIdLayer, SetRequestIdLayer};
 use tower_http::timeout::TimeoutLayer;
 
-pub use state::AppState;
+pub use state::{AppState, ApprovalRp};
 
 pub const MAX_BODY_BYTES: usize = 256 * 1024;
 
@@ -38,6 +38,27 @@ pub fn router(state: AppState) -> Router {
             post(routes::approvals::reject),
         )
         .route("/approvals/pending", get(routes::approvals::pending))
+        .route(
+            "/actions/{action_id}/approval-challenge",
+            post(routes::human_approval::approval_challenge),
+        )
+        .route(
+            "/approval-credentials/register/begin",
+            post(routes::human_approval::register_begin),
+        )
+        .route(
+            "/approval-credentials/register/finish",
+            post(routes::human_approval::register_finish),
+        )
+        .route("/approval-credentials", get(routes::human_approval::list))
+        .route(
+            "/approval-credentials/{credential_row_id}/revoke",
+            post(routes::human_approval::revoke_credential),
+        )
+        .route(
+            "/revocations",
+            post(routes::human_approval::revoke_principal),
+        )
         .route(
             "/approvals/{approval_id}/revoke",
             post(routes::approvals::revoke),
@@ -66,7 +87,30 @@ pub fn router(state: AppState) -> Router {
             post(routes::adapters::revoke),
         )
         .route("/kill-switch/tenant", post(routes::ops::tenant_kill_switch))
-        .route("/kill-switch/global", post(routes::ops::global_kill_switch));
+        .route("/kill-switch/global", post(routes::ops::global_kill_switch))
+        .route(
+            "/kill-switch/global/challenge",
+            post(routes::human_approval::global_enable_challenge),
+        )
+        .route(
+            "/senders",
+            post(routes::messaging::register_sender).get(routes::messaging::list_senders),
+        )
+        .route(
+            "/senders/{id}/registration",
+            post(routes::messaging::set_registration),
+        )
+        .route("/inbound/pending", get(routes::messaging::inbound_pending))
+        .route(
+            "/inbound/{event_id}/processed",
+            post(routes::messaging::inbound_processed),
+        )
+        .route(
+            "/inbound/health",
+            get(routes::messaging::inbound_health).post(routes::messaging::inbound_health_report),
+        )
+        .route("/inbound/pause", post(routes::messaging::inbound_pause))
+        .route("/inbound/resume", post(routes::messaging::inbound_resume));
 
     Router::new()
         .nest("/internal/v1", internal)
@@ -74,9 +118,22 @@ pub fn router(state: AppState) -> Router {
             "/adapter/v1/work-orders/{action_id}/callbacks",
             post(routes::callbacks::callback),
         )
+        // Provider webhooks: public ingress, authenticated by provider signature.
+        .route(
+            "/webhooks/twilio/status/{sender_identity_id}",
+            post(routes::messaging::twilio_status),
+        )
+        .route(
+            "/webhooks/twilio/inbound/{sender_identity_id}",
+            post(routes::messaging::twilio_inbound),
+        )
         .route("/health/live", get(routes::ops::live))
         .route("/health/ready", get(routes::ops::ready))
         .route("/metrics", get(routes::ops::metrics))
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            record_request,
+        ))
         .layer(DefaultBodyLimit::max(MAX_BODY_BYTES))
         .layer(TimeoutLayer::with_status_code(
             axum::http::StatusCode::GATEWAY_TIMEOUT,
@@ -85,4 +142,32 @@ pub fn router(state: AppState) -> Router {
         .layer(PropagateRequestIdLayer::x_request_id())
         .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid))
         .with_state(state)
+}
+
+/// Request counter + latency histogram keyed by the *matched route template*
+/// (`/internal/v1/actions/{action_id}`), never the concrete path, so no
+/// identifier reaches the metrics endpoint and cardinality stays bounded.
+async fn record_request(
+    axum::extract::State(st): axum::extract::State<AppState>,
+    req: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    let route = req
+        .extensions()
+        .get::<axum::extract::MatchedPath>()
+        .map_or_else(|| "unmatched".to_owned(), |p| p.as_str().to_owned());
+    let started = std::time::Instant::now();
+    let res = next.run(req).await;
+    st.metrics
+        .requests
+        .get_or_create(&metrics::RouteLabels {
+            route: route.clone(),
+            status: res.status().as_u16(),
+        })
+        .inc();
+    st.metrics
+        .request_duration
+        .get_or_create(&metrics::PathLabels { route })
+        .observe(started.elapsed().as_secs_f64());
+    res
 }

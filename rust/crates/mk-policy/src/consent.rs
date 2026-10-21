@@ -22,6 +22,10 @@ pub struct ContactPermissionFact {
     pub granted_at: DateTime<Utc>,
     pub expires_at: DateTime<Utc>,
     pub revoked_at: Option<DateTime<Utc>>,
+    /// Fingerprint of the destination the consent evidence covers (same HMAC the
+    /// suppression ledger uses). `None` = recorded before migration 0007; such a
+    /// permission no longer authorizes outreach to any destination (fail closed).
+    pub destination_hash: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -132,6 +136,19 @@ pub fn check_outreach_consent(q: &ConsentQuery<'_>) -> Result<(), ConsentError> 
             code: DenyCode::ContactPermissionScopeMismatch,
         });
     }
+    // The permission must cover THIS destination: consent evidence is for a number
+    // or address, not for "any SMS to this contact". An empty query hash (no
+    // destination in the action) never matches.
+    if q.destination_hash.is_empty()
+        || !current.iter().any(|p| {
+            p.destination_hash.as_deref() == Some(q.destination_hash)
+                && p.scope.iter().any(|s| s == q.purpose)
+        })
+    {
+        return Err(ConsentError {
+            code: DenyCode::ContactPermissionDestinationMismatch,
+        });
+    }
     Ok(())
 }
 
@@ -164,6 +181,7 @@ mod tests {
             granted_at: t(1),
             expires_at: t(23),
             revoked_at: None,
+            destination_hash: Some("dest-abc".into()),
         }
     }
 
@@ -299,6 +317,61 @@ mod tests {
         assert_eq!(
             check_outreach_consent(&query(tn, c, &[foreign], &[], t(12))).map_err(|e| e.code),
             Err(DenyCode::ContactPermissionMissing)
+        );
+    }
+
+    #[test]
+    fn permission_for_another_destination_does_not_authorize_this_one() {
+        let (tenant, contact) = (TenantId::new(), ContactId::new());
+        let mut p = perm(tenant, contact);
+        p.destination_hash = Some("dest-other".into());
+        let r = check_outreach_consent(&query(tenant, contact, &[p], &[], t(10)));
+        assert_eq!(
+            r.map_err(|e| e.code),
+            Err(DenyCode::ContactPermissionDestinationMismatch)
+        );
+    }
+
+    #[test]
+    fn legacy_permission_without_destination_fails_closed() {
+        let (tenant, contact) = (TenantId::new(), ContactId::new());
+        let mut p = perm(tenant, contact);
+        p.destination_hash = None;
+        let r = check_outreach_consent(&query(tenant, contact, &[p], &[], t(10)));
+        assert_eq!(
+            r.map_err(|e| e.code),
+            Err(DenyCode::ContactPermissionDestinationMismatch)
+        );
+    }
+
+    #[test]
+    fn action_without_destination_never_matches() {
+        let (tenant, contact) = (TenantId::new(), ContactId::new());
+        let p = perm(tenant, contact);
+        let perms = [p];
+        let mut q = query(tenant, contact, &perms, &[], t(10));
+        q.destination_hash = "";
+        assert_eq!(
+            check_outreach_consent(&q).map_err(|e| e.code),
+            Err(DenyCode::ContactPermissionDestinationMismatch)
+        );
+    }
+
+    #[test]
+    fn scope_and_destination_must_be_on_the_same_permission() {
+        // One grant covers the purpose for destination A, another covers a different
+        // purpose for destination B: outreach to B for the first purpose is refused.
+        let (tenant, contact) = (TenantId::new(), ContactId::new());
+        let a = perm(tenant, contact);
+        let mut b = perm(tenant, contact);
+        b.destination_hash = Some("dest-b".into());
+        b.scope = vec!["order_status".into()];
+        let perms = [a, b];
+        let mut q = query(tenant, contact, &perms, &[], t(10));
+        q.destination_hash = "dest-b";
+        assert_eq!(
+            check_outreach_consent(&q).map_err(|e| e.code),
+            Err(DenyCode::ContactPermissionDestinationMismatch)
         );
     }
 }

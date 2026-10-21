@@ -1,7 +1,8 @@
 //! `mk-audit-verifier`: scans every tenant's audit chain and reports breaks.
 //! Exit code is non-zero when any chain fails verification.
 //!
-//! Needs only `MK_DATABASE_URL` (the read-only identity). It deliberately does
+//! Needs only the read-only identity's database URL (`MK_DATABASE_URL`, or the
+//! `MK_DB_*` parts `mk_store::database_url_from_env` composes). It deliberately does
 //! not load the worker `Config`: a verifier must not require the master key
 //! or Redis, and must run under `mk_kernel_readonly`.
 
@@ -11,8 +12,8 @@ use mk_worker::config::init_tracing;
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     init_tracing();
-    let db = std::env::var("MK_DATABASE_URL")
-        .map_err(|_| anyhow::anyhow!("missing env MK_DATABASE_URL"))?;
+    // MK_DATABASE_URL, or MK_DB_HOST/MK_DB_USER/MK_DB_PASSWORD as the orchestrator injects them.
+    let db = mk_store::database_url_from_env().map_err(|e| anyhow::anyhow!("database url: {e}"))?;
     let store = Store::connect(&db, 4).await?;
     let tenants = mk_store::audit::all_tenants(store.pool()).await?;
     let mut failures = 0usize;

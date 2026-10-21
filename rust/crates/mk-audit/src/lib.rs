@@ -73,6 +73,17 @@ pub enum EventType {
     ReconciliationRequired,
     AuditExport,
     KillSwitchChanged,
+    ApprovalCredentialRegistered,
+    ApprovalCredentialRevoked,
+    PrincipalRevoked,
+    SenderIdentityRegistered,
+    SenderIdentityUpdated,
+    InboundReceived,
+    InboundOptOut,
+    InboundHeld,
+    DeliveryEvent,
+    InboundPaused,
+    InboundResumed,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

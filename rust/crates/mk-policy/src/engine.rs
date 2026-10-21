@@ -354,8 +354,24 @@ pub fn recheck_at_dispatch(input: &RecheckInput<'_>) -> Result<(), DenyCode> {
     Ok(())
 }
 
-/// Hour of day in the tenant's IANA zone at `now`, honouring DST. Falls
-/// back to a fixed offset only when the zone name is unknown.
+/// The zone the contact-hours check runs in: the contact's own IANA zone
+/// (`arguments.contact_tz`, set by the application from the customer's
+/// recorded preference) when present and valid, else the tenant's zone.
+/// An invalid contact zone is a hard refusal at the caller (never a silent
+/// fallback to the business's hours).
+pub fn contact_zone<'a>(
+    args: &'a serde_json::Map<String, serde_json::Value>,
+    tenant_tz: &'a str,
+) -> Result<&'a str, &'static str> {
+    match args.get("contact_tz").and_then(serde_json::Value::as_str) {
+        None => Ok(tenant_tz),
+        Some(z) if z.parse::<chrono_tz::Tz>().is_ok() => Ok(z),
+        Some(_) => Err("contact_tz_invalid"),
+    }
+}
+
+/// Hour of day in the given IANA zone at `now`, honouring DST. Falls back
+/// to a fixed offset only when the zone name is unknown.
 #[must_use]
 pub fn local_hour_in_zone(now: DateTime<Utc>, tz: &str, fallback_offset_minutes: i32) -> u8 {
     match tz.parse::<chrono_tz::Tz>() {
@@ -455,6 +471,7 @@ mod tests {
             granted_at: t(1),
             expires_at: t(23),
             revoked_at: None,
+            destination_hash: Some("dest".into()),
         }];
         Fx {
             tenant,
@@ -654,6 +671,8 @@ mod tests {
             consumed_at: None,
             revoked_at: None,
             session_id: None,
+            human_binding: "webauthn".into(),
+            approval_credential_row_id: None,
         }
     }
 
@@ -868,5 +887,33 @@ mod tests {
     fn local_hour_helper() {
         assert_eq!(local_hour_with_offset(t(10), -300), 5);
         assert_eq!(local_hour_with_offset(t(23), 120), 1);
+    }
+
+    #[test]
+    fn contact_zone_prefers_contact_and_refuses_garbage() {
+        let mut args = serde_json::Map::new();
+        assert_eq!(
+            contact_zone(&args, "America/Chicago"),
+            Ok("America/Chicago")
+        );
+        args.insert(
+            "contact_tz".into(),
+            serde_json::json!("America/Los_Angeles"),
+        );
+        assert_eq!(
+            contact_zone(&args, "America/Chicago"),
+            Ok("America/Los_Angeles")
+        );
+        args.insert("contact_tz".into(), serde_json::json!("Mars/Olympus"));
+        assert_eq!(
+            contact_zone(&args, "America/Chicago"),
+            Err("contact_tz_invalid")
+        );
+        // 21:00 Chicago is 19:00 Los Angeles: inside hours for the contact, outside for the business.
+        let now = chrono::DateTime::parse_from_rfc3339("2026-10-20T02:00:00Z")
+            .map(|d| d.with_timezone(&Utc))
+            .unwrap_or_default();
+        assert_eq!(local_hour_in_zone(now, "America/Chicago", 0), 21);
+        assert_eq!(local_hour_in_zone(now, "America/Los_Angeles", 0), 19);
     }
 }

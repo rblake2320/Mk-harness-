@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.consultant-studio.invalid/inbound/v1/inbound-event.schema.json",
+  "title": "MK inbound event v1",
+  "description": "A customer message received through the enrolled sending identity's provider webhook. Recorded durably by the kernel BEFORE the provider is acknowledged. The body is sealed (content_reference points at it) and never appears in logs or audit metadata. Fields are exactly those the production completion contract requires.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["event_id", "provider", "provider_event_id", "tenant_id", "sender_identity_id", "source_destination",
+               "received_at", "provider_timestamp", "content_reference", "authentication_result", "raw_event_digest",
+               "opt_out_signal", "disposition"],
+  "properties": {
+    "event_id": {"type": "string", "format": "uuid"},
+    "provider": {"enum": ["twilio"]},
+    "provider_event_id": {"type": "string", "minLength": 1, "maxLength": 64, "description": "Provider message id (MessageSid); the durable dedupe key with provider."},
+    "tenant_id": {"type": "string", "format": "uuid"},
+    "sender_identity_id": {"type": "string", "format": "uuid"},
+    "source_destination": {"type": "string", "pattern": "^[0-9a-f]{64}$", "description": "HMAC fingerprint of the customer's number; the raw number is never stored on the event."},
+    "received_at": {"type": "string", "format": "date-time"},
+    "provider_timestamp": {"type": ["string", "null"], "format": "date-time"},
+    "content_reference": {"type": "string", "pattern": "^sealed:[0-9a-f-]{36}$"},
+    "authentication_result": {"enum": ["verified"], "description": "Only verified events are recorded; failures are refused with 403 and never create a row."},
+    "raw_event_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "opt_out_signal": {"enum": ["explicit", "possible", "none"]},
+    "disposition": {"enum": ["suppressed", "held", "queued_for_meaning"]},
+    "acknowledged_at": {"type": ["string", "null"], "format": "date-time"},
+    "processed_at": {"type": ["string", "null"], "format": "date-time"}
+  }
+}

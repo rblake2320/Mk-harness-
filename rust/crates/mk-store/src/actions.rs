@@ -42,6 +42,19 @@ impl StoredAction {
             receipt,
             replay_of: self.replay_of,
             updated_at: self.updated_at,
+            // Message-lifecycle vocabulary (contract C3). Customer-message kinds
+            // always carry it; a delivery record refines it via `with_delivery`.
+            message_state: self
+                .request
+                .action_kind
+                .is_outreach()
+                .then(|| mk_contracts::MessageState::derive(self.state, None)),
+            read_status: self
+                .request
+                .action_kind
+                .is_outreach()
+                .then(|| "unknown".to_owned()),
+            provider_message_id: None,
         }
     }
 }

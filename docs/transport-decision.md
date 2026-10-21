@@ -62,3 +62,26 @@ disabled in production configuration.
 | ADB-driven consumer phone as the production path | unregistered consumer sender, carrier terms, no delivery receipts, physical device operations, onboarding burden — fails C1, C3, C10 and X5 by construction |
 | iPhone assisted mode (human taps send) | no automation possible on iOS; weaker evidence; remains a documented idea, not a candidate |
 | Direct carrier integrations | scope and cost exceed a single provider API with no reliability benefit at this scale |
+
+
+## Implementation status (WP07, 2026-10-20)
+
+Implemented against a provider **simulator**; nothing here has run against Twilio's
+production API yet (onboarding, 10DLC/toll-free registration and carrier behaviour are
+WP11/WP12 evidence).
+
+| Piece | Where |
+|---|---|
+| Adapter `twilio-sms-v1` (tool `sms.provider.send.v1`, egress pinned to `api.twilio.com`) | `rust/crates/mk-adapters/src/twilio.rs` |
+| Sender identities: one registered number or Messaging Service per consultant business, provider credentials sealed with the kernel master key; the API process never unseals | `migrations/kernel/0004_provider_messaging.sql`, `mk-store::messaging` |
+| Error classification: connect failure → transient; 5xx / lost response / unparseable → **ambiguous** (never retried blindly); 400 code 21610 → `provider_opt_out` → suppression; 429 → rate-limited | `twilio.rs::classify`, `mk-worker::dispatch` |
+| Reconciliation of an ambiguous submission by `(from, to, date, body digest)` → Found / NotFound / Multiple (human resolves Multiple) | `twilio.rs::reconcile_submission` |
+| Delivery record per attempt with monotonic provider-evidence state; every callback preserved as an event | `kernel.message_deliveries`, `kernel.delivery_events` |
+| Contract C3 vocabulary on every action result (`message_state`, `read_status`, `provider_message_id`) | `mk-contracts::MessageState` |
+| Simulator + `mk-twilio-sim` binary (test equipment; posts signed callbacks over the kernel-supplied StatusCallback URL) | `mk-adapters::twilio_sim` |
+
+Evidence (author-run): 12 adapter tests, 3 kernel e2e tests
+(`provider_sms_path_with_authenticated_callbacks_and_monotonic_states`,
+`inbound_stop_suppresses_cancels_and_dedupes_and_the_control_path_is_serialized`,
+`ambiguous_submission_becomes_submission_unknown_and_inbound_pause_defers_dispatch`),
+live-smoke gate 10.

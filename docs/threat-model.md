@@ -55,8 +55,9 @@ Boundaries: browser ↔ FastAPI; FastAPI ↔ kernel (assertion); kernel ↔ Post
 ### T4 Compromised FastAPI proposal service (holds the assertion private key)
 | Attack | Control | Status | Test / WP |
 |---|---|---|---|
-| Mint an assertion for any user/tenant and **approve** | **Gap:** today the same key signs proposal and approval principals | **N** | WP06 H6: separate approval authority — approval requests carry a WebAuthn assertion whose challenge = action digest, verified by the kernel against the user's registered credential; FastAPI cannot produce it |
-| Mint `platform_operator` and flip the global switch | role minted only for ids in `KERNEL_PLATFORM_OPERATORS` — but a compromised FastAPI controls that env | N | WP06: global switch requires WebAuthn step-up by an operator credential registered in the kernel |
+| Mint an assertion for any user/tenant and **approve** | Approval requires a kernel-verified WebAuthn assertion over a digest-bound single-use challenge from a credential the human registered with the kernel; FastAPI relays bytes it cannot produce (`WEBAUTHN_REQUIRED` otherwise) | **I** (author-run: 12-step e2e, smoke gate 8) | WP06 H6 — `migrations/kernel/0003`, `mk-crypto::webauthn`, `mk-api::routes::human_approval` |
+| Mint `platform_operator` and flip the global switch | Disabling stays assertion-only (fail-safe). **Re-enabling** requires an operator passkey step-up over an operation-bound challenge (`/kill-switch/global/challenge`) | **I** (e2e step 13) | WP06 — `routes/ops.rs::global_kill_switch` |
+| Relay a captured, still-live assertion once within its 2-minute challenge window while also controlling the approver's browser session | Residual: single-use challenge + 2-min TTL + counter bound the blast radius to one approval of the exact action the human was shown | N | WP08 (approval screen shows what is being signed), WP10 (independent review) |
 | Propose unlimited actions | policy still applies; approvals still required; frequency caps | V | — |
 | Exfiltrate PII | FastAPI holds customer data by design; mitigations are detection (S12 logging rules), least data in kernel responses | I | WP09 |
 

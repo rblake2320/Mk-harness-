@@ -3,9 +3,9 @@ name: Rust action kernel
 on:
   push:
     branches: [main]
-    paths: ["rust/**", "contracts/**", "migrations/**", "deploy/kernel/**", "evidence/**", "scripts/**", "tools/**", "backend/app/kernel/**", "backend/app/routes/agent_ops.py", "docker-compose.kernel.yml", ".github/workflows/kernel-ci.yml"]
+    paths: ["rust/**", "contracts/**", "migrations/**", "deploy/**", "evidence/**", "scripts/**", "tools/**", "infra/**", "backend/app/kernel/**", "backend/app/routes/agent_ops.py", "docker-compose.kernel.yml", ".github/workflows/kernel-ci.yml"]
   pull_request:
-    paths: ["rust/**", "contracts/**", "migrations/**", "deploy/kernel/**", "evidence/**", "scripts/**", "tools/**", "backend/app/kernel/**", "backend/app/routes/agent_ops.py", "docker-compose.kernel.yml", ".github/workflows/kernel-ci.yml"]
+    paths: ["rust/**", "contracts/**", "migrations/**", "deploy/**", "evidence/**", "scripts/**", "tools/**", "infra/**", "backend/app/kernel/**", "backend/app/routes/agent_ops.py", "docker-compose.kernel.yml", ".github/workflows/kernel-ci.yml"]
 
 permissions:
   contents: read
@@ -45,13 +45,22 @@ jobs:
           workspaces: rust
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
-      - run: cargo nextest run --workspace --no-fail-fast
+      - name: cargo nextest run --workspace --no-fail-fast
+        # Failures are surfaced as check-run annotations (readable through the API
+        # even where raw job logs are not).
+        run: |
+          set +e -o pipefail   # GitHub runs bash -e: keep going after the pipeline fails so diagnostics print
+          cargo nextest run --workspace --no-fail-fast 2>&1 | tee nextest.log
+          rc=${PIPESTATUS[0]}
+          grep -E "^\s+FAIL \[" nextest.log | sed 's/^\s*/::error title=nextest::/' || true
+          grep -E "panicked at|assertion .* failed" nextest.log | head -40 | sed 's/^/::error title=panic::/' || true
+          exit $rc
         env:
           MK_TEST_DATABASE_URL: postgres://postgres:kernel@127.0.0.1:5432/mk_kernel_test
           MK_TEST_REDIS_URL: redis://127.0.0.1:6379
       - run: cargo test --doc --workspace
       - run: cargo deny check
-      - run: cargo audit --ignore RUSTSEC-2023-0071 --ignore RUSTSEC-2026-0381  # sqlx-mysql never compiled; see deny.toml
+      - run: cargo audit --ignore RUSTSEC-2023-0071 --ignore RUSTSEC-2026-0381  # both justified in deny.toml (unused sqlx-mysql; webpki-roots via sqlx-core with pinned DB root cert)
       - name: SBOM
         run: cargo cyclonedx --format json --all
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -68,13 +77,55 @@ jobs:
         with: { python-version: "3.12" }
       - run: pip install jsonschema==4.23.0
       - name: JSON Schema fixtures + cross-language HMAC vectors (Python side)
-        run: python -I contracts/tests/test_contracts.py
+        run: python -I contracts/tests/test_contracts.py 2>&1 | tee contracts.log || { grep -E "Error|FAIL|Traceback" contracts.log | head -20 | sed 's/^/::error title=contracts::/'; exit 1; }
       - name: Real-device agent suite (stdlib, no device)
         run: python -m unittest -v
         working-directory: tools/mobile-agent-adb
       - run: pip install pyyaml==6.0.2
       - name: Evidence records validate (schema + checksums)
-        run: python -I tools/evidence/check.py
+        run: python -I tools/evidence/check.py 2>&1 | tee evidence.log || { sed 's/^/::error title=evidence::/' evidence.log; exit 1; }
+      - name: Release verdict tool (unit tests, then the current verdict as an artifact — NOT READY is expected, not a CI failure)
+        run: |
+          python -m unittest -v tools/evidence/test_readiness.py tools/qualification/test_c10_tally.py tools/qualification/test_k1_analysis.py tools/release/test_margin.py
+          python -I tools/evidence/readiness.py --json > readiness.json || [ $? -eq 1 ]
+          python -I tools/evidence/readiness.py || true
+      - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with: { name: release-readiness, path: readiness.json }
+
+  observability:
+    # Alert rules must parse and every paging rule must fire on injected series
+    # (contract O7 "alert rules tested by injection"); a rule referencing a metric
+    # the binaries do not export is caught by the metric-name cross-check.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - name: Install promtool
+        run: |
+          set -euo pipefail
+          V=3.5.0
+          curl -sSL -o p.tgz "https://github.com/prometheus/prometheus/releases/download/v${V}/prometheus-${V}.linux-amd64.tar.gz"
+          echo "e811827af26d822afb09a4f28314f61b618b12cff5369835a67f674d8b46f39a  p.tgz" | sha256sum -c -
+          tar xzf p.tgz
+          sudo install "prometheus-${V}.linux-amd64/promtool" /usr/local/bin/promtool
+      - run: bash scripts/observability-check.sh
+
+  secret-scan:
+    # S8: secret scanning over the full history. Secrets live only in env /
+    # ~/.secrets; a hit here is a P0 and blocks the image job.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with: { fetch-depth: 0 }
+      - name: Install gitleaks
+        run: |
+          set -euo pipefail
+          V=8.21.2
+          curl -sSL -o gl.tgz "https://github.com/gitleaks/gitleaks/releases/download/v${V}/gitleaks_${V}_linux_x64.tar.gz"
+          tar xzf gl.tgz gitleaks
+          sudo install gitleaks /usr/local/bin/gitleaks
+      - run: gitleaks detect --source . --redact --no-banner --config .gitleaks.toml
 
   # End-to-end through the application: real binaries, Postgres, Redis, FastAPI,
   # the device agent in dry-run, per-process DB logins, and the production
@@ -124,10 +175,16 @@ jobs:
 
   kernel-image:
     runs-on: ubuntu-latest
-    needs: [kernel, contracts]
+    needs: [kernel, contracts, secret-scan]
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - run: docker build -f deploy/kernel/Dockerfile -t mk-action-kernel:ci .
+      - name: Build image (CI computes the RDS CA bundle checksum it builds with and reports it; a production build must pass the operator-pinned value)
+        run: |
+          set -euo pipefail
+          curl -fsSL -o rds.pem https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
+          SHA=$(sha256sum rds.pem | cut -c1-64)
+          echo "::notice title=RDS CA bundle::sha256 of the bundle fetched for this CI build: $SHA"
+          docker build -f deploy/kernel/Dockerfile --build-arg RDS_CA_BUNDLE_SHA256="$SHA" -t mk-action-kernel:ci .
       - name: Scan image
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:

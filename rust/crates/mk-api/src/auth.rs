@@ -124,6 +124,31 @@ impl FromRequestParts<AppState> for Principal {
                 .with_request_id(&parts.headers));
             }
         }
+        // Row H9: a revoked session or user is refused before any handler
+        // runs, for reads and writes alike. Store failure → refusal.
+        let revoked = mk_store::human_approval::is_revoked(
+            state.store.pool(),
+            TenantId::from_uuid(assertion.tenant_id),
+            UserId::from_uuid(assertion.sub),
+            &assertion.session_id,
+        )
+        .await
+        .map_err(|e| ApiError::from(e).with_request_id(&parts.headers))?;
+        if revoked {
+            state
+                .metrics
+                .assertion_failures
+                .get_or_create(&crate::metrics::AuthFailLabels {
+                    code: "principal_revoked".into(),
+                })
+                .inc();
+            return Err(ApiError::new(
+                StatusCode::UNAUTHORIZED,
+                "PRINCIPAL_REVOKED",
+                "Session or user has been revoked",
+            )
+            .with_request_id(&parts.headers));
+        }
         Ok(Self {
             tenant: TenantId::from_uuid(assertion.tenant_id),
             user: UserId::from_uuid(assertion.sub),

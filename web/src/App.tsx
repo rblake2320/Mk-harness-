@@ -5,6 +5,12 @@ import SkinView from './views/Skin.tsx';
 import CustomersView from './views/Customers.tsx';
 import BillingView from './views/Billing.tsx';
 import SettingsView from './views/Settings.tsx';
+import BriefView from './views/Brief.tsx';
+import ApprovalsView from './views/Approvals.tsx';
+import InboxView from './views/Inbox.tsx';
+import CustomerDetail from './views/CustomerDetail.tsx';
+import GovernanceSettings from './views/Governance.tsx';
+import type { Customer } from '../../packages/sdk/src/index.ts';
 import { AiNoticeModal } from './components/AiDisclosure.tsx';
 import './styles.css';
 
@@ -24,7 +30,13 @@ function refFromUrl(): string | undefined {
 
 export default function App() {
   const [tokens, setTokens] = useState<Tokens | null>(loadTokens);
-  const [view, setView] = useState<'chat' | 'skin' | 'customers' | 'billing' | 'settings'>('chat');
+  const [view, setView] = useState<'brief' | 'approvals' | 'inbox' | 'customers' | 'chat' | 'skin' | 'billing' | 'settings'>('brief');
+  const [openCustomer, setOpenCustomer] = useState<Customer | null>(null);
+  const [me, setMe] = useState<{ id: string } | null>(null);
+  useEffect(() => { if (tokens) client.me().then(setMe).catch(() => {}); }, [tokens]);
+  function goCustomer(id: string) {
+    client.listCustomers().then(list => { const c = list.find(x => x.id === id); if (c) { setOpenCustomer(c); setView('customers'); } }).catch(() => {});
+  }
 
   useEffect(() => {
     client.tokens = tokens;
@@ -37,13 +49,15 @@ export default function App() {
 
   return (
     <div className="shell">
+      <a className="skip-link" href="#main">Skip to content</a>
       <AiNoticeModal />
       <nav className="rail" aria-label="Main">
         <div className="brand display">Consultant <em>Studio</em></div>
-        {([['chat', 'Ask anything'], ['skin', 'Skin studio'],
-           ['customers', 'My customers'], ['billing', 'Plan & billing'],
-           ['settings', 'Settings']] as const).map(([k, label]) => (
-          <button key={k} className={view === k ? 'active' : ''} onClick={() => setView(k)}>
+        {([['brief', "Today's brief"], ['approvals', 'Approvals'], ['inbox', 'Inbox & exceptions'],
+           ['customers', 'My customers'], ['chat', 'Ask anything'], ['skin', 'Skin studio'],
+           ['billing', 'Plan & billing'], ['settings', 'Settings']] as const).map(([k, label]) => (
+          <button key={k} className={view === k ? 'active' : ''} aria-current={view === k ? 'page' : undefined}
+                  onClick={() => { setView(k); if (k !== 'customers') setOpenCustomer(null); }}>
             {label}
           </button>
         ))}
@@ -54,12 +68,20 @@ export default function App() {
             onClick={() => setTokens(null)}>Sign out</button></div>
         </div>
       </nav>
-      <main className="main">
+      <main className="main" id="main">
+        {view === 'brief' && <BriefView onOpenCustomer={goCustomer} />}
+        {view === 'approvals' && <ApprovalsView />}
+        {view === 'inbox' && <InboxView onOpenCustomer={goCustomer} />}
         {view === 'chat' && <ChatView />}
         {view === 'skin' && <SkinView />}
-        {view === 'customers' && <CustomersView />}
+        {view === 'customers' && (openCustomer
+          ? <CustomerDetail customer={openCustomer} onBack={() => setOpenCustomer(null)} />
+          : <CustomersView onOpen={c => setOpenCustomer(c)} />)}
         {view === 'billing' && <BillingView />}
-        {view === 'settings' && <SettingsView role={tokens.role} />}
+        {view === 'settings' && (<>
+          <SettingsView role={tokens.role} />
+          <GovernanceSettings role={tokens.role} userId={me?.id ?? ''} />
+        </>)}
       </main>
     </div>
   );

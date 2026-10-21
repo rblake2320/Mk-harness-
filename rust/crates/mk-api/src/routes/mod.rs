@@ -3,6 +3,8 @@ pub mod adapters;
 pub mod approvals;
 pub mod callbacks;
 pub mod consent;
+pub mod human_approval;
+pub mod messaging;
 pub mod ops;
 
 use hmac::{Hmac, Mac};
@@ -63,5 +65,31 @@ pub(crate) fn actor_of<'a>(p: &'a Principal, actor_id: &'a str) -> Actor<'a> {
         actor_id,
         trace_id: Some(&p.request_id),
         policy_version: mk_policy::POLICY_VERSION.0,
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod tests {
+    use super::*;
+
+    /// Cross-language vector: `backend/app/foundation.py::fingerprint` must
+    /// produce the same value so application suppressions line up with the
+    /// kernel's destination hash. Key = 32×0x01, tenant
+    /// 00000000-0000-4000-8000-000000000001, sms, "+1 (555) 555-0100".
+    #[test]
+    fn destination_hash_matches_python_vector() {
+        let master = MasterKey::from_bytes(&[1u8; 32]).unwrap();
+        let tenant = TenantId::from_uuid(
+            uuid::Uuid::parse_str("00000000-0000-4000-8000-000000000001").unwrap(),
+        );
+        assert_eq!(
+            destination_hash(&master, tenant, Channel::Sms, "+1 (555) 555-0100"),
+            "0973a4c021bc296b195a6ab4533e067bebeb6f33f901c3b400cdfb83805de8ed"
+        );
+        assert_eq!(
+            normalize_destination(Channel::Email, "  @Angela@Example.COM "),
+            "angela@example.com"
+        );
     }
 }

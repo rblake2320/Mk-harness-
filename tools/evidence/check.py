@@ -16,7 +16,10 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 SCHEMA = yaml.safe_load((ROOT / "evidence/releases/schema.yaml").read_text())
 
 
-def check_record(path: pathlib.Path) -> list[str]:
+def check_record(path: pathlib.Path, verify_checksums: bool = True) -> list[str]:
+    """Schema + checksum validation. Records under a directory whose name starts
+    with `_` (e.g. `_example`) are schema-checked only: they are templates, not
+    evidence, and readiness.py never counts them."""
     problems = []
     rec = yaml.safe_load(path.read_text())
     try:
@@ -25,7 +28,7 @@ def check_record(path: pathlib.Path) -> list[str]:
         return [f"{path}: schema: {e.message}"]
     if rec["requirement_id"] != path.stem:
         problems.append(f"{path}: requirement_id {rec['requirement_id']} != filename")
-    for ev in rec["evidence"]:
+    for ev in rec["evidence"] if verify_checksums else []:
         loc = ev["location"]
         p = (ROOT / loc) if not loc.startswith(("http://", "https://")) else None
         if p is not None:
@@ -41,7 +44,7 @@ def check_record(path: pathlib.Path) -> list[str]:
 def main() -> int:
     base = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "evidence/releases"
     records = sorted(p for p in base.rglob("*.yaml") if p.name not in ("schema.yaml",))
-    problems = [m for r in records for m in check_record(r)]
+    problems = [m for r in records for m in check_record(r, verify_checksums=not r.parent.name.startswith("_"))]
     for m in problems:
         print("FAIL", m)
     print(f"{len(records)} record(s), {len(problems)} problem(s)")

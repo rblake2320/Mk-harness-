@@ -1,0 +1,160 @@
+# Deployment gates (contract O8). STATUS: Implemented, never run — no AWS
+# account, OIDC role or ECR registry exists yet (see infra/terraform/README.md).
+#
+# Gate order, each a hard stop:
+#   1. CI green on the exact commit (kernel-ci + ci workflows) — enforced by
+#      branch protection on main, not re-checked here.
+#   2. Images built once, pushed by DIGEST, signed (cosign keyless, GitHub OIDC)
+#      with SLSA provenance attestations; the digest is the only thing later
+#      stages may reference (Terraform rejects tags).
+#   3. Staging: terraform plan → apply with those digests; pre-flight
+#      (`scripts/kernel-preflight.sh --for-enable`) and the live smoke run
+#      against the deployed environment; the restore gate runs in report mode.
+#   4. Production: a protected GitHub environment with required reviewers (the
+#      release owner) → terraform plan is posted for review → apply. Dispatch
+#      stays DISABLED after apply; enabling is the operator's passkey step in
+#      deploy/kernel/README.md and is never done by this workflow.
+name: Deploy
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: commit SHA that passed CI
+        required: true
+      target:
+        description: staging | production
+        required: true
+        default: staging
+
+permissions:
+  contents: read
+  id-token: write      # cosign keyless + AWS OIDC
+  attestations: write
+  packages: write
+
+env:
+  AWS_REGION: us-east-1
+
+jobs:
+  build-sign:
+    runs-on: ubuntu-latest
+    outputs:
+      kernel_digest: ${{ steps.kernel.outputs.digest }}
+      app_digest: ${{ steps.app.outputs.digest }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with: { ref: "${{ inputs.ref }}" }
+      - name: Refuse a ref that is not a full SHA
+        run: '[[ "${{ inputs.ref }}" =~ ^[0-9a-f]{40}$ ]] || { echo "ref must be a 40-char commit SHA"; exit 1; }'
+      - uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502 # v4.0.2
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}   # OIDC; no long-lived keys
+          aws-region: ${{ env.AWS_REGION }}
+      - uses: aws-actions/amazon-ecr-login@062b18b96a7aff071d4dc91bc00c4c1a7945b076 # v2.0.1
+        id: ecr
+      - uses: docker/setup-buildx-action@c47758b77c9736f4b2ef4073d4d51994fabfe349 # v3.7.1
+      - name: Build + push kernel image by digest
+        id: kernel
+        uses: docker/build-push-action@4f58ea79222b3b9dc2c8bbdd6debcef730109a75 # v6.9.0
+        with:
+          context: .
+          file: deploy/kernel/Dockerfile
+          push: true
+          provenance: mode=max
+          sbom: true
+          tags: ${{ steps.ecr.outputs.registry }}/mk-action-kernel:${{ inputs.ref }}
+      - name: Build + push application image by digest
+        id: app
+        uses: docker/build-push-action@4f58ea79222b3b9dc2c8bbdd6debcef730109a75 # v6.9.0
+        with:
+          context: backend
+          push: true
+          provenance: mode=max
+          sbom: true
+          tags: ${{ steps.ecr.outputs.registry }}/mk-app:${{ inputs.ref }}
+      - uses: sigstore/cosign-installer@dc72c7d5c4d10cd6bcb8cf6e3fd625a9e5e537da # v3.7.0
+      - name: Sign both images (keyless) and attest provenance
+        run: |
+          set -euo pipefail
+          for ref in \
+            "${{ steps.ecr.outputs.registry }}/mk-action-kernel@${{ steps.kernel.outputs.digest }}" \
+            "${{ steps.ecr.outputs.registry }}/mk-app@${{ steps.app.outputs.digest }}"; do
+            cosign sign --yes "$ref"
+          done
+      - uses: actions/attest-build-provenance@7668571508540a607bdfd90a87a560489fe372eb # v2.1.0
+        with:
+          subject-name: ${{ steps.ecr.outputs.registry }}/mk-action-kernel
+          subject-digest: ${{ steps.kernel.outputs.digest }}
+          push-to-registry: true
+
+  staging:
+    needs: build-sign
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with: { ref: "${{ inputs.ref }}" }
+      - uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502 # v4.0.2
+        with:
+          role-to-assume: ${{ secrets.AWS_STAGING_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - uses: opentofu/setup-opentofu@592200bd4b9bbf4772ace78f887668b1aee8f716 # v1.0.5
+        with: { tofu_version: 1.10.6 }
+      - name: Verify image signatures before deploying them
+        uses: sigstore/cosign-installer@dc72c7d5c4d10cd6bcb8cf6e3fd625a9e5e537da # v3.7.0
+      - run: |
+          set -euo pipefail
+          REG="${{ secrets.ECR_REGISTRY }}"
+          for img in "mk-action-kernel@${{ needs.build-sign.outputs.kernel_digest }}" "mk-app@${{ needs.build-sign.outputs.app_digest }}"; do
+            cosign verify "$REG/$img" \
+              --certificate-identity-regexp "^https://github.com/${{ github.repository }}/.github/workflows/deploy.yml@" \
+              --certificate-oidc-issuer https://token.actions.githubusercontent.com >/dev/null
+          done
+      - name: Plan + apply staging with digest-pinned images
+        working-directory: infra/terraform/envs/staging
+        run: |
+          set -euo pipefail
+          tofu init -input=false
+          tofu plan -input=false -out plan.bin \
+            -var "kernel_image=${{ secrets.ECR_REGISTRY }}/mk-action-kernel@${{ needs.build-sign.outputs.kernel_digest }}" \
+            -var "app_image=${{ secrets.ECR_REGISTRY }}/mk-app@${{ needs.build-sign.outputs.app_digest }}" \
+            -var "alert_email=${{ secrets.ALERT_EMAIL }}"
+          tofu apply -input=false plan.bin
+      - name: Pre-flight + live smoke against staging + restore gate (report mode)
+        run: |
+          set -euo pipefail
+          echo "scripts/kernel-preflight.sh --for-enable (PR #32) and scripts/kernel-live-smoke.sh must be pointed at the deployed endpoints;"
+          echo "the smoke currently assumes a local stack — adapting it to a remote target is part of the first real staging run."
+          exit 1   # deliberately failing until the remote-target smoke exists: this gate must not pass by omission
+
+  production:
+    needs: [build-sign, staging]
+    if: inputs.target == 'production'
+    runs-on: ubuntu-latest
+    environment: production      # protected: required reviewer = release owner; wait timer
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with: { ref: "${{ inputs.ref }}" }
+      - uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502 # v4.0.2
+        with:
+          role-to-assume: ${{ secrets.AWS_PRODUCTION_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - uses: opentofu/setup-opentofu@592200bd4b9bbf4772ace78f887668b1aee8f716 # v1.0.5
+        with: { tofu_version: 1.10.6 }
+      - name: Plan production (reviewed as a job artifact before apply)
+        working-directory: infra/terraform/envs/production
+        run: |
+          set -euo pipefail
+          tofu init -input=false
+          tofu plan -input=false -out plan.bin \
+            -var "kernel_image=${{ secrets.ECR_REGISTRY }}/mk-action-kernel@${{ needs.build-sign.outputs.kernel_digest }}" \
+            -var "app_image=${{ secrets.ECR_REGISTRY }}/mk-app@${{ needs.build-sign.outputs.app_digest }}" \
+            -var "alert_email=${{ secrets.ALERT_EMAIL }}" \
+            -var "audit_root_bucket_arn=${{ secrets.AUDIT_ROOT_BUCKET_ARN }}" \
+            -var "audit_root_kms_key_arn=${{ secrets.AUDIT_ROOT_KMS_KEY_ARN }}"
+          tofu show -no-color plan.bin > plan.txt
+      - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with: { name: production-plan, path: infra/terraform/envs/production/plan.txt }
+      - name: Apply (dispatch remains disabled; enabling is the operator's passkey step)
+        working-directory: infra/terraform/envs/production
+        run: tofu apply -input=false plan.bin

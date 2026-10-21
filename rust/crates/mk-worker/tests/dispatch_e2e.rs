@@ -87,6 +87,7 @@ async fn world(mode: SimMode) -> Option<World> {
         registry: AdapterRegistry {
             internal: InternalRecordAdapter,
             mobile: Some(mobile),
+            twilio: None,
         },
         tools: ToolAllowlist::v1(),
         worker_id: "worker-e2e".into(),
@@ -130,6 +131,7 @@ async fn queued_outreach(w: &World) -> mk_domain::ActionId {
         now - chrono::Duration::hours(1),
         now + chrono::Duration::days(1),
         w.user,
+        "dest-hash",
         ACTOR,
         now,
     )
@@ -169,6 +171,7 @@ async fn queued_outreach(w: &World) -> mk_domain::ActionId {
         None,
         None,
         now,
+        mk_store::approvals::HumanBinding::Unbound,
     )
     .await
     .unwrap_or_else(|e| panic!("{e:?}"));
@@ -554,5 +557,105 @@ async fn frequency_cap_is_enforced_at_dispatch_not_only_at_proposal() {
     assert!(
         w.sim.received.try_recv().is_err(),
         "second send never reaches the device"
+    );
+}
+
+#[tokio::test]
+async fn metrics_sampler_reports_queue_lease_and_switch_state_without_identifiers() {
+    use mk_worker::metrics::{WorkerMetrics, sample};
+    let Some(mut w) = world(SimMode::Accept).await else {
+        eprintln!("skipping");
+        return;
+    };
+    pin_contact_hours(&w).await;
+    let m = WorkerMetrics::new();
+    let id = queued_outreach(&w).await;
+    // Queued, outbox row available → depth 1, eligible age > 0, one pending approval.
+    sample(
+        &w.store,
+        &[w.tenant],
+        &m,
+        Utc::now() + chrono::Duration::seconds(5),
+    )
+    .await;
+    let text = m.encode();
+    assert!(text.contains("mk_queue_depth 1"), "{text}");
+    assert!(text.contains("mk_approvals_pending 1"), "{text}");
+    assert!(text.contains("mk_tenants_total 1"), "{text}");
+    assert!(text.contains("mk_actions_dispatching 0"), "{text}");
+    let age: f64 = text
+        .lines()
+        .find_map(|l| l.strip_prefix("mk_queue_oldest_eligible_age_seconds "))
+        .and_then(|v| v.parse().ok())
+        .unwrap_or_else(|| panic!("no age gauge in {text}"));
+    assert!(age >= 5.0, "oldest eligible age {age}");
+    // No identifiers in the exposition: tenant, action, contact, worker ids never appear.
+    for needle in [
+        w.tenant.to_string(),
+        id.to_string(),
+        w.contact.to_string(),
+        w.user.to_string(),
+    ] {
+        assert!(
+            !text.contains(&needle),
+            "identifier leaked into metrics: {needle}"
+        );
+    }
+
+    // Dispatch → dispatching with a live lease; the inline counters move too.
+    let started = std::time::Instant::now();
+    let out = dispatch_one(&w.ctx, &msg(&w, id), now_in_hours()).await;
+    m.record_outcome(&out, started.elapsed());
+    let _ = w.sim.received.recv().await;
+    sample(&w.store, &[w.tenant], &m, Utc::now()).await;
+    let text = m.encode();
+    assert!(text.contains("mk_queue_depth 0"), "{text}");
+    assert!(text.contains("mk_actions_dispatching 1"), "{text}");
+    assert!(text.contains("mk_leases_active 1"), "{text}");
+    assert!(text.contains("mk_approvals_pending 0"), "{text}");
+    assert!(
+        text.contains("mk_dispatch_outcomes_total{outcome=\"PendingCallback\"} 1"),
+        "{text}"
+    );
+    assert!(
+        text.contains("mk_dispatch_duration_seconds_count 1"),
+        "{text}"
+    );
+    assert!(text.contains("mk_metrics_sampler_errors_total 0"), "{text}");
+
+    // Tenant kill switch off → counted; global switch state reported as 0/1.
+    {
+        let mut tx = w
+            .store
+            .begin(w.tenant)
+            .await
+            .unwrap_or_else(|e| panic!("{e:?}"));
+        mk_store::policy::set_tenant_dispatch(&mut tx, false, ACTOR, Utc::now())
+            .await
+            .unwrap_or_else(|e| panic!("{e:?}"));
+        tx.commit().await.unwrap_or_else(|e| panic!("{e:?}"));
+    }
+    sample(&w.store, &[w.tenant], &m, Utc::now()).await;
+    let text = m.encode();
+    assert!(text.contains("mk_tenants_dispatch_disabled 1"), "{text}");
+    assert!(
+        text.contains("mk_kill_switch_global_enabled 0")
+            || text.contains("mk_kill_switch_global_enabled 1"),
+        "{text}"
+    );
+    assert!(text.contains("mk_audit_head_mismatches 0"), "{text}");
+
+    // Tamper with the audit head (owner connection, as an attacker with DB access would): the
+    // tail check reports the tenant on the next sample.
+    sqlx::query("UPDATE kernel.audit_heads SET count = count + 1 WHERE tenant_id = $1")
+        .bind(w.tenant.0)
+        .execute(w.store.pool())
+        .await
+        .unwrap_or_else(|e| panic!("{e:?}"));
+    sample(&w.store, &[w.tenant], &m, Utc::now()).await;
+    assert!(
+        m.encode().contains("mk_audit_head_mismatches 1"),
+        "{}",
+        m.encode()
     );
 }

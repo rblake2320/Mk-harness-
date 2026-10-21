@@ -183,6 +183,13 @@ pub struct ActionResult {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub replay_of: Option<ActionId>,
     pub updated_at: DateTime<Utc>,
+    /// Contract C3 vocabulary; present for customer-message actions.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message_state: Option<crate::message_state::MessageState>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub read_status: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider_message_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
@@ -207,6 +214,15 @@ pub struct ApprovalRecord {
     pub revoked_at: Option<DateTime<Utc>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session_id: Option<String>,
+    /// `webauthn` or `unbound` (see approval.schema.json).
+    #[serde(default = "default_binding")]
+    pub human_binding: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub approval_credential_row_id: Option<uuid::Uuid>,
+}
+
+fn default_binding() -> String {
+    "unbound".into()
 }
 
 #[cfg(test)]

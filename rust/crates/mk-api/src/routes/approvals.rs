@@ -7,6 +7,7 @@ use chrono::Utc;
 use mk_contracts::{ActionResult, ApprovalRecord};
 use mk_domain::{ActionId, ApprovalDecision, ApprovalId, Transition};
 use mk_policy::{ApproverContext, Decision, check_approver};
+use mk_store::approvals::HumanBinding;
 use mk_store::{actions, approvals, outbox, policy};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -24,6 +25,11 @@ pub struct DecisionBody {
     /// The digest the approver saw in the UI. Must equal the stored digest;
     /// this defends against approving a row that changed under the UI.
     pub action_digest: mk_crypto::Digest,
+    /// Transaction-bound WebAuthn assertion over the kernel-issued challenge
+    /// for this exact action digest. Required for `approve` whenever the
+    /// kernel is configured with `MK_APPROVAL_RP_ID`; optional for `reject`.
+    #[serde(default)]
+    pub webauthn: Option<super::human_approval::WebAuthnAssertionBody>,
 }
 
 #[derive(Debug, Serialize)]
@@ -62,6 +68,33 @@ async fn decide(
             "The action changed since it was displayed",
         )));
     }
+    // Row H6: approval authority is the human's authenticator, not the
+    // proposal service's assertion key. A missing or invalid WebAuthn
+    // assertion fails closed unless the kernel explicitly runs unbound.
+    let binding = match (decision, st.approval_rp.is_some(), body.webauthn.as_ref()) {
+        (ApprovalDecision::Approved, true, None) => {
+            return Err(rid(ApiError::new(
+                StatusCode::FORBIDDEN,
+                "WEBAUTHN_REQUIRED",
+                "Approval requires a transaction-bound WebAuthn assertion",
+            )));
+        }
+        (_, true, Some(w)) => HumanBinding::WebAuthn(
+            super::human_approval::verify_for_approval(
+                st, &mut tx, p, action_id, &a.digest, w, now,
+            )
+            .await
+            .map_err(rid)?,
+        ),
+        (_, false, Some(_)) => {
+            return Err(rid(ApiError::new(
+                StatusCode::NOT_IMPLEMENTED,
+                "HUMAN_APPROVAL_NOT_CONFIGURED",
+                "Kernel runs without MK_APPROVAL_RP_ID",
+            )));
+        }
+        _ => HumanBinding::Unbound,
+    };
     let (tenant_policy, _) = policy::load(&mut tx).await.map_err(|e| rid(e.into()))?;
     check_approver(&ApproverContext {
         tenant_id: p.tenant,
@@ -85,6 +118,7 @@ async fn decide(
         Some(&p.session_id),
         None,
         now,
+        binding,
     )
     .await
     .map_err(|e| rid(e.into()))?;

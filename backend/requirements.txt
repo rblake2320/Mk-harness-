@@ -14,3 +14,4 @@ Pillow==11.2.1
 pytest==8.3.5
 pytest-asyncio==0.26.0
 respx==0.22.0
+jsonschema==4.23.0  # tests: contract validation of kernel-bound payloads
