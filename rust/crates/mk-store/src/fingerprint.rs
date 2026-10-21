@@ -304,12 +304,12 @@ pub async fn status(
     let mut out = Vec::new();
     for (table, _, hash_col) in FINGERPRINT_TABLES {
         let filter = dest_filter(table, hash_col) + &tenant_filter(tenant);
-        let (lacking, orphaned): (i64, i64) = sqlx::query_as(&format!(
+        let (lacking, orphaned): (i64, i64) = sqlx::query_as(sqlx::AssertSqlSafe(format!(
             "SELECT
                count(*) FILTER (WHERE NOT EXISTS (SELECT 1 FROM unnest(destination_fingerprints) x WHERE split_part(x, ':', 1) = $1)),
                count(*) FILTER (WHERE NOT EXISTS (SELECT 1 FROM unnest(destination_fingerprints) x WHERE split_part(x, ':', 1) = ANY($2)))
              FROM kernel.{table} WHERE {filter}"
-        ))
+        )))
         .bind(keys.current_kid())
         .bind(&kids)
         .fetch_one(pool)
@@ -359,10 +359,10 @@ pub async fn rekey(
     };
 
     // Pass 1: actions.
-    let rows = sqlx::query(&format!(
+    let rows = sqlx::query(sqlx::AssertSqlSafe(format!(
         "SELECT tenant_id, action_id, channel, canonical_request, destination_fingerprints FROM kernel.actions
          WHERE destination_hash IS NOT NULL AND channel IS NOT NULL{tf}"
-    ))
+    )))
     .fetch_all(pool)
     .await?;
     for r in rows {
@@ -394,10 +394,10 @@ pub async fn rekey(
         .await?;
     }
     // Pass 2: inbound events (sms).
-    let rows = sqlx::query(&format!(
+    let rows = sqlx::query(sqlx::AssertSqlSafe(format!(
         "SELECT tenant_id, event_id, destination_sealed, destination_fingerprints FROM kernel.inbound_events
          WHERE source_destination_hash IS NOT NULL{tf}"
-    ))
+    )))
     .fetch_all(pool)
     .await?;
     for r in rows {
@@ -442,10 +442,10 @@ pub async fn rekey(
         ),
         ("contact_permissions", "permission_id", "destination_hash"),
     ] {
-        let rows = sqlx::query(&format!(
+        let rows = sqlx::query(sqlx::AssertSqlSafe(format!(
             "SELECT tenant_id, {pk} AS id, channel, destination_sealed, destination_fingerprints FROM kernel.{table}
              WHERE {hash_col} IS NOT NULL AND channel IS NOT NULL{tf}"
-        ))
+        )))
         .fetch_all(pool)
         .await?;
         for r in rows {
@@ -502,14 +502,14 @@ pub async fn prune(
     let mut n = 0;
     for (table, _, hash_col) in FINGERPRINT_TABLES {
         let filter = dest_filter(table, hash_col) + &tenant_filter(tenant);
-        n += sqlx::query(&format!(
+        n += sqlx::query(sqlx::AssertSqlSafe(format!(
             "UPDATE kernel.{table} SET
                destination_fingerprints = ARRAY(SELECT x FROM unnest(destination_fingerprints) x WHERE split_part(x, ':', 1) <> $1),
                {hash_col} = (SELECT split_part(x, ':', 2) FROM unnest(destination_fingerprints) x WHERE split_part(x, ':', 1) = $2 LIMIT 1)
              WHERE {filter} AND (
                EXISTS (SELECT 1 FROM unnest(destination_fingerprints) x WHERE split_part(x, ':', 1) = $1)
                OR {hash_col} IS DISTINCT FROM (SELECT split_part(x, ':', 2) FROM unnest(destination_fingerprints) x WHERE split_part(x, ':', 1) = $2 LIMIT 1))"
-        ))
+        )))
         .bind(kid)
         .bind(keys.current_kid())
         .execute(pool)
@@ -560,9 +560,9 @@ async fn apply(
     }
     .union(&fresh.tagged);
     if merged.len() != tags.len() {
-        sqlx::query(&format!(
+        sqlx::query(sqlx::AssertSqlSafe(format!(
             "UPDATE kernel.{table} SET destination_fingerprints = $3 WHERE tenant_id = $1 AND {pk} = $2"
-        ))
+        )))
         .bind(tenant)
         .bind(id)
         .bind(&merged)

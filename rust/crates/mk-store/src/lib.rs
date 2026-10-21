@@ -148,7 +148,7 @@ pub fn migrator() -> sqlx::migrate::Migrator {
                 *version,
                 Cow::Borrowed(description),
                 MigrationType::Simple,
-                Cow::Borrowed(sql),
+                sqlx::SqlStr::from_static(sql),
                 false,
             )
         })

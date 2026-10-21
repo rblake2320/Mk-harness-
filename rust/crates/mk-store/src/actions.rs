@@ -214,7 +214,7 @@ pub async fn get_for_update(
 ) -> Result<StoredAction, StoreError> {
     let tenant = tx.tenant();
     let q = format!("{SELECT} FOR UPDATE");
-    let r = sqlx::query(&q)
+    let r = sqlx::query(sqlx::AssertSqlSafe(q))
         .bind(tenant.0)
         .bind(action_id.0)
         .fetch_optional(tx.conn())

@@ -384,7 +384,7 @@ pub async fn delivery_for_action(
     let q = format!(
         "SELECT {DCOLS} FROM kernel.message_deliveries WHERE tenant_id = $1 AND action_id = $2 ORDER BY attempt DESC LIMIT 1"
     );
-    let r = sqlx::query(&q)
+    let r = sqlx::query(sqlx::AssertSqlSafe(q))
         .bind(tx.tenant().0)
         .bind(action_id.0)
         .fetch_optional(tx.conn())
@@ -400,7 +400,7 @@ pub async fn delivery_by_provider_id(
     let q = format!(
         "SELECT {DCOLS} FROM kernel.message_deliveries WHERE tenant_id = $1 AND provider = 'twilio' AND provider_message_id = $2 FOR UPDATE"
     );
-    let r = sqlx::query(&q)
+    let r = sqlx::query(sqlx::AssertSqlSafe(q))
         .bind(tx.tenant().0)
         .bind(provider_message_id)
         .fetch_optional(tx.conn())

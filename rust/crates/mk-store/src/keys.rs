@@ -151,9 +151,9 @@ pub async fn stale_counts(
     let mut out = Vec::new();
     let filter = tenant.map_or(String::new(), |t| format!(" AND tenant_id = '{}'", t.0));
     for (table, pk, col) in SEALED_COLUMNS {
-        let rows = sqlx::query(&format!(
+        let rows = sqlx::query(sqlx::AssertSqlSafe(format!(
             "SELECT {pk}::text AS id, {col} AS sealed FROM {table} WHERE {col} IS NOT NULL{filter}"
-        ))
+        )))
         .fetch_all(pool)
         .await?;
         let stale = rows
@@ -184,9 +184,9 @@ pub async fn retire(
         return Err(StoreError::Conflict("cannot retire the active version"));
     }
     for (table, pk, col) in SEALED_COLUMNS {
-        let rows = sqlx::query(&format!(
+        let rows = sqlx::query(sqlx::AssertSqlSafe(format!(
             "SELECT {pk}::text AS id, {col} AS sealed FROM {table} WHERE {col} IS NOT NULL"
-        ))
+        )))
         .fetch_all(pool)
         .await?;
         if rows.iter().any(|r| {
@@ -255,7 +255,7 @@ pub async fn reencrypt(
     let mut rep = ReencryptReport::default();
     let filter = tenant.map_or(String::new(), |t| format!(" WHERE tenant_id = '{}'", t.0));
     // adapter_credentials: AAD = tenant:adapter:credential (see adapters::aad)
-    let rows = sqlx::query(&format!("SELECT tenant_id, adapter_id, credential_id, secret_ciphertext FROM kernel.adapter_credentials{filter}")).fetch_all(pool).await?;
+    let rows = sqlx::query(sqlx::AssertSqlSafe(format!("SELECT tenant_id, adapter_id, credential_id, secret_ciphertext FROM kernel.adapter_credentials{filter}"))).fetch_all(pool).await?;
     for r in rows {
         let (t, a, c): (uuid::Uuid, uuid::Uuid, uuid::Uuid) = (
             r.try_get("tenant_id")?,
@@ -274,7 +274,7 @@ pub async fn reencrypt(
         }
     }
     // sender_identities: AAD = sender:tenant:id
-    let rows = sqlx::query(&format!("SELECT tenant_id, sender_identity_id, auth_token_sealed FROM kernel.sender_identities{filter}")).fetch_all(pool).await?;
+    let rows = sqlx::query(sqlx::AssertSqlSafe(format!("SELECT tenant_id, sender_identity_id, auth_token_sealed FROM kernel.sender_identities{filter}"))).fetch_all(pool).await?;
     for r in rows {
         let (t, id): (uuid::Uuid, uuid::Uuid) =
             (r.try_get("tenant_id")?, r.try_get("sender_identity_id")?);
@@ -290,9 +290,9 @@ pub async fn reencrypt(
         }
     }
     // inbound_events: AAD = inbound:tenant:event
-    let rows = sqlx::query(&format!(
+    let rows = sqlx::query(sqlx::AssertSqlSafe(format!(
         "SELECT tenant_id, event_id, content_sealed FROM kernel.inbound_events{filter}"
-    ))
+    )))
     .fetch_all(pool)
     .await?;
     for r in rows {
@@ -315,9 +315,9 @@ pub async fn reencrypt(
         ("contact_permissions", "permission_id"),
     ] {
         let tf = tenant.map_or(String::new(), |t| format!(" AND tenant_id = '{}'", t.0));
-        let rows = sqlx::query(&format!(
+        let rows = sqlx::query(sqlx::AssertSqlSafe(format!(
             "SELECT tenant_id, {pk} AS id, destination_sealed FROM kernel.{table} WHERE destination_sealed IS NOT NULL{tf}"
-        ))
+        )))
         .fetch_all(pool)
         .await?;
         for r in rows {
@@ -327,9 +327,9 @@ pub async fn reencrypt(
                 crate::fingerprint::destination_aad(table, mk_domain::TenantId::from_uuid(t), id);
             match keyring.reseal(&aad, &sealed) {
                 Ok(Some(new)) => {
-                    sqlx::query(&format!(
+                    sqlx::query(sqlx::AssertSqlSafe(format!(
                         "UPDATE kernel.{table} SET destination_sealed = $3 WHERE tenant_id = $1 AND {pk} = $2"
-                    ))
+                    )))
                     .bind(t)
                     .bind(id)
                     .bind(new)

@@ -58,9 +58,12 @@ impl Store {
     pub async fn begin(&self, tenant: TenantId) -> Result<TenantTx<'_>, StoreError> {
         let mut tx = self.pool.begin().await?;
         // SET LOCAL cannot take a bind parameter; the value is a validated UUID.
-        sqlx::query(&format!("SET LOCAL kernel.tenant_id = '{}'", tenant.0))
-            .execute(&mut *tx)
-            .await?;
+        sqlx::query(sqlx::AssertSqlSafe(format!(
+            "SET LOCAL kernel.tenant_id = '{}'",
+            tenant.0
+        )))
+        .execute(&mut *tx)
+        .await?;
         Ok(TenantTx { tx, tenant })
     }
 }

@@ -60,7 +60,7 @@ jobs:
           MK_TEST_REDIS_URL: redis://127.0.0.1:6379
       - run: cargo test --doc --workspace
       - run: cargo deny check
-      - run: cargo audit --ignore RUSTSEC-2023-0071 --ignore RUSTSEC-2026-0381  # both justified in deny.toml (unused sqlx-mysql; webpki-roots via sqlx-core with pinned DB root cert)
+      - run: cargo audit --ignore RUSTSEC-2023-0071  # justified in deny.toml (rsa: public-key verification only)
       - name: SBOM
         run: cargo cyclonedx --format json --all
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

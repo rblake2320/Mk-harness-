@@ -49,7 +49,7 @@ async fn ensure_member<'e, E>(exec: E, role: &str)
 where
     E: sqlx::PgExecutor<'e> + Copy,
 {
-    let _ = sqlx::query(&format!("GRANT {role} TO CURRENT_USER"))
+    let _ = sqlx::query(sqlx::AssertSqlSafe(format!("GRANT {role} TO CURRENT_USER")))
         .execute(exec)
         .await;
     let ok: bool = sqlx::query_scalar("SELECT pg_has_role(current_user, $1, 'MEMBER')")
@@ -373,20 +373,26 @@ async fn cross_tenant_access_is_invisible_even_with_raw_sql() {
         .execute(&mut *raw)
         .await
         .unwrap_or_else(|e| panic!("{e:?}"));
-    sqlx::query(&format!("SET LOCAL kernel.tenant_id = '{}'", tb.0))
-        .execute(&mut *raw)
-        .await
-        .unwrap_or_else(|e| panic!("{e:?}"));
+    sqlx::query(sqlx::AssertSqlSafe(format!(
+        "SET LOCAL kernel.tenant_id = '{}'",
+        tb.0
+    )))
+    .execute(&mut *raw)
+    .await
+    .unwrap_or_else(|e| panic!("{e:?}"));
     let n: i64 = sqlx::query_scalar("SELECT count(*) FROM kernel.actions WHERE action_id = $1")
         .bind(id.0)
         .fetch_one(&mut *raw)
         .await
         .unwrap_or_else(|e| panic!("{e:?}"));
     assert_eq!(n, 0, "RLS must hide tenant A's row from tenant B context");
-    sqlx::query(&format!("SET LOCAL kernel.tenant_id = '{}'", ta.0))
-        .execute(&mut *raw)
-        .await
-        .unwrap_or_else(|e| panic!("{e:?}"));
+    sqlx::query(sqlx::AssertSqlSafe(format!(
+        "SET LOCAL kernel.tenant_id = '{}'",
+        ta.0
+    )))
+    .execute(&mut *raw)
+    .await
+    .unwrap_or_else(|e| panic!("{e:?}"));
     let n: i64 = sqlx::query_scalar("SELECT count(*) FROM kernel.actions WHERE action_id = $1")
         .bind(id.0)
         .fetch_one(&mut *raw)
@@ -1013,7 +1019,7 @@ async fn role_pool(url: &str, role: &'static str) -> sqlx::PgPool {
         .max_connections(4)
         .after_connect(move |conn, _| {
             Box::pin(async move {
-                sqlx::query(&format!("SET ROLE {role}"))
+                sqlx::query(sqlx::AssertSqlSafe(format!("SET ROLE {role}")))
                     .execute(conn)
                     .await?;
                 Ok(())
