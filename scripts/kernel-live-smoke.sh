@@ -412,9 +412,24 @@ Negative runs: revoke-before-dispatch = yes; tenant kill switch = yes
 Reviewer: smoke harness — looked at $TID.png and the receiving phone
 Result: ACCEPTED
 REC
-MK_ACCEPTANCE_RECORD="$WORK/ACCEPTANCE.md" bash "$ROOT/scripts/kernel-preflight.sh" --for-enable > "$WORK/preflight-accepted.log" 2>&1 || { cat "$WORK/preflight-accepted.log"; die "pre-flight --for-enable rejected a complete record"; }
+# This dev stack's own environment is NOT production-configured: --for-enable
+# must refuse it, naming each missing production control (negative case).
+if MK_ACCEPTANCE_RECORD="$WORK/ACCEPTANCE.md" bash "$ROOT/scripts/kernel-preflight.sh" --for-enable > "$WORK/preflight-devenv.log" 2>&1; then
+  die "pre-flight --for-enable accepted a development environment"; fi
+for why in "MK_APPROVAL_RP_ID" "MK_LEGACY_SEAL_RETIRED" "MK_DB_SSLROOTCERT" "MK_PUBLIC_WEBHOOK_BASE" "MK_TWILIO_API_BASE"; do
+  grep "FAIL" "$WORK/preflight-devenv.log" | grep -q "$why" || die "pre-flight --for-enable did not name missing $why"; done
+# With the production-shaped environment the tasks would receive (values only —
+# pre-flight checks presence/shape; nothing here contacts the provider), the
+# complete record passes.
+printf 'smoke CA placeholder\n' > "$WORK/ca.pem"
+MK_ACCEPTANCE_RECORD="$WORK/ACCEPTANCE.md" MK_APPROVAL_RP_ID=app.smoke.invalid MK_APPROVAL_ORIGINS=https://app.smoke.invalid \
+  MK_ALLOW_UNBOUND_APPROVAL=0 MK_LEGACY_SEAL_RETIRED=1 MK_DB_SSLROOTCERT="$WORK/ca.pem" \
+  MK_PUBLIC_WEBHOOK_BASE=https://hooks.smoke.invalid MK_TWILIO_API_BASE=https://api.twilio.com \
+  bash "$ROOT/scripts/kernel-preflight.sh" --for-enable > "$WORK/preflight-accepted.log" 2>&1 || { cat "$WORK/preflight-accepted.log"; die "pre-flight --for-enable rejected a complete record"; }
 sed -i 's/^Result: ACCEPTED$/Result: REJECTED (screenshot missing)/' "$WORK/ACCEPTANCE.md"
-if MK_ACCEPTANCE_RECORD="$WORK/ACCEPTANCE.md" bash "$ROOT/scripts/kernel-preflight.sh" --for-enable > "$WORK/preflight-rejected.log" 2>&1; then
+if MK_ACCEPTANCE_RECORD="$WORK/ACCEPTANCE.md" MK_APPROVAL_RP_ID=app.smoke.invalid MK_APPROVAL_ORIGINS=https://app.smoke.invalid \
+  MK_LEGACY_SEAL_RETIRED=1 MK_DB_SSLROOTCERT="$WORK/ca.pem" MK_PUBLIC_WEBHOOK_BASE=https://hooks.smoke.invalid \
+  MK_TWILIO_API_BASE=https://api.twilio.com bash "$ROOT/scripts/kernel-preflight.sh" --for-enable > "$WORK/preflight-rejected.log" 2>&1; then
   die "pre-flight --for-enable accepted a REJECTED record"; fi
 log "  $(grep -E 'passed, . failed' "$WORK/preflight.log")"
 
