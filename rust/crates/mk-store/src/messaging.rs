@@ -350,6 +350,26 @@ pub async fn record_provider_accepted(
     Ok(())
 }
 
+/// True when the provider has accepted this attempt (a provider message id was
+/// recorded). Such an attempt is not ambiguous: the message exists exactly
+/// once at the provider; only its delivery outcome is still pending.
+pub async fn provider_accepted(
+    tx: &mut TenantTx<'_>,
+    action_id: ActionId,
+    attempt: i32,
+) -> Result<bool, StoreError> {
+    let n: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM kernel.message_deliveries
+         WHERE tenant_id = $1 AND action_id = $2 AND attempt = $3 AND provider_message_id IS NOT NULL",
+    )
+    .bind(tx.tenant().0)
+    .bind(action_id.0)
+    .bind(attempt)
+    .fetch_one(tx.conn())
+    .await?;
+    Ok(n > 0)
+}
+
 /// The provider request failed or its outcome is unknown.
 pub async fn record_submission_outcome(
     tx: &mut TenantTx<'_>,

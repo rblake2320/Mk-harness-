@@ -2304,3 +2304,94 @@ async fn per_tenant_limits_and_graceful_rejection_above_capacity() {
     );
     assert!(metrics.contains("mk_requests_rejected_total{code=\"over_capacity\"}"));
 }
+
+/// C3/C4: a provider-accepted submission whose status callbacks outlive the
+/// lease is completed (the message exists exactly once at the provider; the
+/// delivery record keeps following callbacks) — it is NOT sent to
+/// reconciliation. A Dispatching action with no provider message id at lease
+/// expiry still is (the effect may or may not have happened).
+#[tokio::test]
+async fn lease_expiry_completes_provider_accepted_and_reconciles_only_the_unknown() {
+    let Some(h) = harness().await else {
+        eprintln!("skipping");
+        return;
+    };
+    let mut r = provider_rig(&h, mk_adapters::twilio_sim::TwilioSimMode::Accept).await;
+    health_ok(&h, r.admin).await;
+    let (aid, _) = approved_action(
+        &h,
+        &mut r,
+        "Hi! Your order shipped. Reply STOP to opt out.",
+        "+15555550100",
+    )
+    .await;
+    assert_eq!(
+        run_dispatch(&r, h.tenant, &aid).await,
+        DispatchOutcome::Dispatched {
+            pending_callback: true
+        }
+    );
+    let (aid2, _) = approved_action(
+        &h,
+        &mut r,
+        "Hi! A second note. Reply STOP to opt out.",
+        "+15555550100",
+    )
+    .await;
+    let pool = h.state.store.pool();
+    // aid2: dispatching with submission started and no provider id (worker died mid-call).
+    sqlx::query("UPDATE kernel.actions SET state = 'dispatching' WHERE action_id = $1::uuid")
+        .bind(&aid2)
+        .execute(pool)
+        .await
+        .unwrap_or_else(|e| panic!("{e:?}"));
+    sqlx::query(
+        "INSERT INTO kernel.execution_leases (tenant_id, action_id, worker_id, lease_token, acquired_at, expires_at)
+         VALUES ($1, $2::uuid, 'dead-worker', gen_random_uuid(), now() - interval '10 minutes', now() - interval '5 minutes')",
+    )
+    .bind(h.tenant.0)
+    .bind(&aid2)
+    .execute(pool)
+    .await
+    .unwrap_or_else(|e| panic!("{e:?}"));
+    sqlx::query("UPDATE kernel.execution_leases SET expires_at = now() - interval '1 minute' WHERE action_id = $1::uuid")
+        .bind(&aid)
+        .execute(pool)
+        .await
+        .unwrap_or_else(|e| panic!("{e:?}"));
+    let stats = mk_worker::housekeeping::run_once(
+        &h.state.store,
+        &[h.tenant],
+        "hk-test",
+        chrono::Utc::now(),
+    )
+    .await
+    .unwrap_or_else(|e| panic!("{e:?}"));
+    assert_eq!(stats.accepted_completed, 1, "{stats:?}");
+    assert!(stats.leases_recovered >= 2, "{stats:?}");
+    let get = |id: String| {
+        let h = &h;
+        let tok = h.token(r.manager, &["manager"]);
+        async move {
+            h.call(
+                "GET",
+                &format!("/internal/v1/actions/{id}"),
+                Some(&tok),
+                None,
+            )
+            .await
+            .1
+        }
+    };
+    let v = get(aid.clone()).await;
+    assert_eq!(v["state"], json!("completed"), "{v}");
+    assert_eq!(
+        v["message_state"],
+        json!("provider_accepted"),
+        "delivery truth is still pending: {v}"
+    );
+    let v2 = get(aid2.clone()).await;
+    assert_eq!(v2["state"], json!("reconciliation_required"), "{v2}");
+    // Exactly one provider message for the accepted action; nothing re-sent.
+    assert_eq!(r.sim.created_messages().await.len(), 1);
+}

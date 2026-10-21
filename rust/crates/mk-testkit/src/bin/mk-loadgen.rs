@@ -493,8 +493,9 @@ impl Rig {
         // Observe: dispatch start = first state past queued; delivered = provider callbacks applied.
         let mut started: Option<f64> = None;
         let deadline = Instant::now() + Duration::from_secs(90);
+        let mut poll = Duration::from_millis(250);
         while Instant::now() < deadline {
-            tokio::time::sleep(Duration::from_millis(100)).await;
+            tokio::time::sleep(poll).await;
             let Ok((s, v)) = self
                 .call(
                     reqwest::Method::GET,
@@ -506,9 +507,15 @@ impl Rig {
             else {
                 continue;
             };
+            if Self::is_capacity(s, &v) {
+                // Honour the kernel's refusal like a well-behaved client: back off.
+                poll = Duration::from_secs(1);
+                continue;
+            }
             if s != 200 {
                 continue;
             }
+            poll = Duration::from_millis(250);
             let ms = v["message_state"].as_str().unwrap_or("");
             if started.is_none() && ms != "queued" && ms != "awaiting_approval" {
                 started = Some(approved_at.elapsed().as_secs_f64());
@@ -832,7 +839,7 @@ async fn main() -> anyhow::Result<()> {
             target: "10 / 60",
             measured: json!({"p95": start.p95, "p99": start.p99, "count": start.count}),
             pass: Some(start.count > 0 && start.p95 <= 10.0 && start.p99 <= 60.0),
-            note: "observed by polling at 100 ms; includes outbox relay + stream + worker lease",
+            note: "observed by polling at 250 ms (1 s after a capacity refusal); includes outbox relay + stream + worker lease",
         },
         SloRow {
             id: "O3-delivered",
