@@ -90,6 +90,11 @@ curl -fsS "$APP/api/auth/members" "${H[@]}" -d '{"email":"approver@smoke.example
 TOK2=$(curl -fsS "$APP/api/auth/login" -H 'content-type: application/json' -d '{"email":"approver@smoke.example.com","password":"superSecret123!"}' | python3 -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')
 H2=(-H "authorization: Bearer $TOK2" -H 'content-type: application/json')
 TENANT=$(python3 -c "import jwt,sys,uuid;print(uuid.UUID(jwt.decode('$TOK',options={'verify_signature':False})['tid']))")
+# The default tenant policy evaluates contact hours (08–21) in America/Chicago, which made
+# this smoke fail every evening. Pin the smoke tenant to a zone where it is ~noon now
+# (test-environment setup with the owner identity; every other policy field stays default).
+NOON_TZ=$(python3 -c 'import datetime;o=max(-12,min(14,12-datetime.datetime.now(datetime.timezone.utc).hour));print("Etc/UTC" if o==0 else ("Etc/GMT-%d"%o if o>0 else "Etc/GMT+%d"%-o))')
+psql -q "$PGURL" -c "INSERT INTO kernel.policy_versions (tenant_id, version, contact_tz) VALUES ('$TENANT', 'smoke-noon', '$NOON_TZ')" >/dev/null
 ops() { curl -sS -o "$WORK/out.json" -w '%{http_code}' "${H[@]}" "$@"; }
 j() { python3 -c "import json,sys;d=json.load(open('$WORK/out.json'));print(eval(sys.argv[1]))" "$1"; }
 
