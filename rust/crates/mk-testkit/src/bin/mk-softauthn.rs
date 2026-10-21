@@ -12,7 +12,9 @@ use mk_crypto::webauthn::softauthn::SoftAuthenticator;
 use mk_crypto::webauthn::{b64url, b64url_decode};
 
 fn usage() -> ! {
-    eprintln!("usage: mk-softauthn new <state> [es256|ed25519] | register <state> <challenge> <rp> <origin> | assert <state> <challenge> <rp> <origin>");
+    eprintln!(
+        "usage: mk-softauthn new <state> [es256|ed25519] | register <state> <challenge> <rp> <origin> | assert <state> <challenge> <rp> <origin>"
+    );
     std::process::exit(2)
 }
 
@@ -47,7 +49,12 @@ fn main() {
             println!("{}", b64url(&a.credential_id));
         }
         Some(cmd @ ("register" | "assert")) => {
-            let Some([path, challenge, rp, origin]) = args.get(2..6).and_then(|s| <&[String; 4]>::try_from(s).ok()) else { usage() };
+            let Some([path, challenge, rp, origin]) = args
+                .get(2..6)
+                .and_then(|s| <&[String; 4]>::try_from(s).ok())
+            else {
+                usage()
+            };
             let challenge = b64url_decode(challenge).unwrap_or_else(|e| {
                 eprintln!("challenge: {e}");
                 std::process::exit(2)

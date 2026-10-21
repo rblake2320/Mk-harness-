@@ -46,21 +46,30 @@ pub async fn list(pool: &PgPool) -> Result<Vec<KeyVersionRow>, StoreError> {
 /// With no rows at all, the keyring is the legacy master key alone (pre-S6
 /// deployments keep working; pre-flight refuses that configuration for
 /// production enablement).
-pub async fn load_keyring(pool: &PgPool, kek: Option<&dyn Kek>, master: &MasterKey, include_legacy: bool) -> Result<Keyring, StoreError> {
+pub async fn load_keyring(
+    pool: &PgPool,
+    kek: Option<&dyn Kek>,
+    master: &MasterKey,
+    include_legacy: bool,
+) -> Result<Keyring, StoreError> {
     let rows = sqlx::query("SELECT version, kek_id, wrapped_dek, status FROM kernel.key_versions WHERE status <> 'retired' ORDER BY version")
         .fetch_all(pool)
         .await?;
     if rows.is_empty() {
         return Ok(Keyring::legacy(master));
     }
-    let kek = kek.ok_or(StoreError::Corrupt("key versions exist but no KEK is configured (MK_KEK)"))?;
+    let kek = kek.ok_or(StoreError::Corrupt(
+        "key versions exist but no KEK is configured (MK_KEK)",
+    ))?;
     let mut deks = BTreeMap::new();
     let mut current = None;
     for r in &rows {
         let version: i32 = r.try_get("version")?;
         let kek_id: String = r.try_get("kek_id")?;
         if kek_id != kek.kek_id() {
-            return Err(StoreError::Corrupt("key version wrapped by a different KEK than the one configured"));
+            return Err(StoreError::Corrupt(
+                "key version wrapped by a different KEK than the one configured",
+            ));
         }
         let wrapped: Vec<u8> = r.try_get("wrapped_dek")?;
         let v = u32::try_from(version).map_err(|_| StoreError::Corrupt("key version"))?;
@@ -83,9 +92,18 @@ pub async fn load_keyring(pool: &PgPool, kek: Option<&dyn Kek>, master: &MasterK
 /// previous active version becomes `retiring` (still readable).
 pub async fn rotate(pool: &PgPool, kek: &dyn Kek, by: &str, note: &str) -> Result<i32, StoreError> {
     let mut tx = pool.begin().await?;
-    let next: i32 = sqlx::query_scalar("SELECT COALESCE(max(version), 0) + 1 FROM kernel.key_versions").fetch_one(&mut *tx).await?;
-    let wrapped = Keyring::new_wrapped_version(kek, u32::try_from(next).map_err(|_| StoreError::Corrupt("version"))?).map_err(|_| StoreError::Crypto)?;
-    sqlx::query("UPDATE kernel.key_versions SET status = 'retiring' WHERE status = 'active'").execute(&mut *tx).await?;
+    let next: i32 =
+        sqlx::query_scalar("SELECT COALESCE(max(version), 0) + 1 FROM kernel.key_versions")
+            .fetch_one(&mut *tx)
+            .await?;
+    let wrapped = Keyring::new_wrapped_version(
+        kek,
+        u32::try_from(next).map_err(|_| StoreError::Corrupt("version"))?,
+    )
+    .map_err(|_| StoreError::Crypto)?;
+    sqlx::query("UPDATE kernel.key_versions SET status = 'retiring' WHERE status = 'active'")
+        .execute(&mut *tx)
+        .await?;
     sqlx::query("INSERT INTO kernel.key_versions (version, kek_id, wrapped_dek, status, created_by, note) VALUES ($1,$2,$3,'active',$4,$5)")
         .bind(next)
         .bind(kek.kek_id())
@@ -100,36 +118,73 @@ pub async fn rotate(pool: &PgPool, kek: &dyn Kek, by: &str, note: &str) -> Resul
 
 /// Sealed columns that participate in re-encryption: (table, pk column, sealed column, aad builder).
 pub const SEALED_COLUMNS: &[(&str, &str, &str)] = &[
-    ("kernel.adapter_credentials", "credential_id", "secret_ciphertext"),
-    ("kernel.sender_identities", "sender_identity_id", "auth_token_sealed"),
+    (
+        "kernel.adapter_credentials",
+        "credential_id",
+        "secret_ciphertext",
+    ),
+    (
+        "kernel.sender_identities",
+        "sender_identity_id",
+        "auth_token_sealed",
+    ),
     ("kernel.inbound_events", "event_id", "content_sealed"),
 ];
 
 /// Operator: count rows still sealed under versions other than the current one.
-pub async fn stale_counts(pool: &PgPool, keyring: &Keyring, tenant: Option<mk_domain::TenantId>) -> Result<Vec<(String, u64)>, StoreError> {
+pub async fn stale_counts(
+    pool: &PgPool,
+    keyring: &Keyring,
+    tenant: Option<mk_domain::TenantId>,
+) -> Result<Vec<(String, u64)>, StoreError> {
     let mut out = Vec::new();
     let filter = tenant.map_or(String::new(), |t| format!(" WHERE tenant_id = '{}'", t.0));
     for (table, pk, col) in SEALED_COLUMNS {
-        let rows = sqlx::query(&format!("SELECT {pk}::text AS id, {col} AS sealed FROM {table}{filter}")).fetch_all(pool).await?;
+        let rows = sqlx::query(&format!(
+            "SELECT {pk}::text AS id, {col} AS sealed FROM {table}{filter}"
+        ))
+        .fetch_all(pool)
+        .await?;
         let stale = rows
             .iter()
-            .filter(|r| r.try_get::<Vec<u8>, _>("sealed").map_or(true, |b| Keyring::version_of(&b) != keyring.current_version()))
+            .filter(|r| {
+                r.try_get::<Vec<u8>, _>("sealed").map_or(true, |b| {
+                    Keyring::version_of(&b) != keyring.current_version()
+                })
+            })
             .count();
-        out.push(((*table).to_owned(), u64::try_from(stale).unwrap_or(u64::MAX)));
+        out.push((
+            (*table).to_owned(),
+            u64::try_from(stale).unwrap_or(u64::MAX),
+        ));
     }
     Ok(out)
 }
 
 /// Operator: retire a version. Refused while any row is still sealed under it.
-pub async fn retire(pool: &PgPool, keyring: &Keyring, version: i32, now: DateTime<Utc>) -> Result<(), StoreError> {
+pub async fn retire(
+    pool: &PgPool,
+    keyring: &Keyring,
+    version: i32,
+    now: DateTime<Utc>,
+) -> Result<(), StoreError> {
     let v = u32::try_from(version).map_err(|_| StoreError::Corrupt("version"))?;
     if v == keyring.current_version() {
         return Err(StoreError::Conflict("cannot retire the active version"));
     }
     for (table, pk, col) in SEALED_COLUMNS {
-        let rows = sqlx::query(&format!("SELECT {pk}::text AS id, {col} AS sealed FROM {table}")).fetch_all(pool).await?;
-        if rows.iter().any(|r| r.try_get::<Vec<u8>, _>("sealed").is_ok_and(|b| Keyring::version_of(&b) == v)) {
-            return Err(StoreError::Conflict("rows are still sealed under this version; run reencrypt first"));
+        let rows = sqlx::query(&format!(
+            "SELECT {pk}::text AS id, {col} AS sealed FROM {table}"
+        ))
+        .fetch_all(pool)
+        .await?;
+        if rows.iter().any(|r| {
+            r.try_get::<Vec<u8>, _>("sealed")
+                .is_ok_and(|b| Keyring::version_of(&b) == v)
+        }) {
+            return Err(StoreError::Conflict(
+                "rows are still sealed under this version; run reencrypt first",
+            ));
         }
     }
     let n = sqlx::query("UPDATE kernel.key_versions SET status = 'retired', retired_at = $2 WHERE version = $1 AND status = 'retiring'")
@@ -144,20 +199,28 @@ pub async fn retire(pool: &PgPool, keyring: &Keyring, version: i32, now: DateTim
     Ok(())
 }
 
-
 /// Process start-up: build the KEK from `MK_KEK` (base64 32 bytes) / `MK_KEK_ID`
 /// (default `kek-1`) and load the keyring. Without a KEK the keyring is the
 /// legacy master key only — allowed, logged, and refused by production pre-flight.
 pub async fn keyring_from_env(pool: &PgPool, master: &MasterKey) -> Result<Keyring, StoreError> {
     let kek = match std::env::var("MK_KEK") {
         Ok(b64) if !b64.trim().is_empty() => Some(
-            mk_crypto::EnvKek::from_base64(std::env::var("MK_KEK_ID").unwrap_or_else(|_| "kek-1".into()), &b64)
-                .map_err(|_| StoreError::Corrupt("MK_KEK must be base64 of 32 bytes"))?,
+            mk_crypto::EnvKek::from_base64(
+                std::env::var("MK_KEK_ID").unwrap_or_else(|_| "kek-1".into()),
+                &b64,
+            )
+            .map_err(|_| StoreError::Corrupt("MK_KEK must be base64 of 32 bytes"))?,
         ),
         _ => None,
     };
     let include_legacy = !std::env::var("MK_LEGACY_SEAL_RETIRED").is_ok_and(|v| v == "1");
-    load_keyring(pool, kek.as_ref().map(|k| k as &dyn Kek), master, include_legacy).await
+    load_keyring(
+        pool,
+        kek.as_ref().map(|k| k as &dyn Kek),
+        master,
+        include_legacy,
+    )
+    .await
 }
 
 /// Outcome of a re-encryption pass. `unreadable` rows could not be unsealed
@@ -173,13 +236,21 @@ pub struct ReencryptReport {
 /// updated in its own statement with the AAD the owning module uses, so a
 /// crash mid-way leaves a mix of versions that is still fully readable (the
 /// old version stays `retiring` until `retire`).
-pub async fn reencrypt(pool: &PgPool, keyring: &Keyring, tenant: Option<mk_domain::TenantId>) -> Result<ReencryptReport, StoreError> {
+pub async fn reencrypt(
+    pool: &PgPool,
+    keyring: &Keyring,
+    tenant: Option<mk_domain::TenantId>,
+) -> Result<ReencryptReport, StoreError> {
     let mut rep = ReencryptReport::default();
     let filter = tenant.map_or(String::new(), |t| format!(" WHERE tenant_id = '{}'", t.0));
     // adapter_credentials: AAD = tenant:adapter:credential (see adapters::aad)
     let rows = sqlx::query(&format!("SELECT tenant_id, adapter_id, credential_id, secret_ciphertext FROM kernel.adapter_credentials{filter}")).fetch_all(pool).await?;
     for r in rows {
-        let (t, a, c): (uuid::Uuid, uuid::Uuid, uuid::Uuid) = (r.try_get("tenant_id")?, r.try_get("adapter_id")?, r.try_get("credential_id")?);
+        let (t, a, c): (uuid::Uuid, uuid::Uuid, uuid::Uuid) = (
+            r.try_get("tenant_id")?,
+            r.try_get("adapter_id")?,
+            r.try_get("credential_id")?,
+        );
         let sealed: Vec<u8> = r.try_get("secret_ciphertext")?;
         match keyring.reseal(&format!("mk-adapter-credential:{t}:{a}:{c}"), &sealed) {
             Ok(Some(new)) => {
@@ -194,7 +265,8 @@ pub async fn reencrypt(pool: &PgPool, keyring: &Keyring, tenant: Option<mk_domai
     // sender_identities: AAD = sender:tenant:id
     let rows = sqlx::query(&format!("SELECT tenant_id, sender_identity_id, auth_token_sealed FROM kernel.sender_identities{filter}")).fetch_all(pool).await?;
     for r in rows {
-        let (t, id): (uuid::Uuid, uuid::Uuid) = (r.try_get("tenant_id")?, r.try_get("sender_identity_id")?);
+        let (t, id): (uuid::Uuid, uuid::Uuid) =
+            (r.try_get("tenant_id")?, r.try_get("sender_identity_id")?);
         let sealed: Vec<u8> = r.try_get("auth_token_sealed")?;
         match keyring.reseal(&format!("sender:{t}:{id}"), &sealed) {
             Ok(Some(new)) => {
@@ -207,7 +279,11 @@ pub async fn reencrypt(pool: &PgPool, keyring: &Keyring, tenant: Option<mk_domai
         }
     }
     // inbound_events: AAD = inbound:tenant:event
-    let rows = sqlx::query(&format!("SELECT tenant_id, event_id, content_sealed FROM kernel.inbound_events{filter}")).fetch_all(pool).await?;
+    let rows = sqlx::query(&format!(
+        "SELECT tenant_id, event_id, content_sealed FROM kernel.inbound_events{filter}"
+    ))
+    .fetch_all(pool)
+    .await?;
     for r in rows {
         let (t, id): (uuid::Uuid, uuid::Uuid) = (r.try_get("tenant_id")?, r.try_get("event_id")?);
         let sealed: Vec<u8> = r.try_get("content_sealed")?;

@@ -323,5 +323,7 @@ pub async fn stranded_queued(
     .bind(tx.tenant().0)
     .fetch_all(tx.conn())
     .await?;
-    rows.into_iter().map(|r| Ok(ActionId::from_uuid(r.try_get("action_id")?))).collect()
+    rows.into_iter()
+        .map(|r| Ok(ActionId::from_uuid(r.try_get("action_id")?)))
+        .collect()
 }

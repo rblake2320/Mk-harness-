@@ -11,7 +11,10 @@ use mk_crypto::AdapterSecret;
 async fn main() -> anyhow::Result<()> {
     let account = std::env::var("MK_TWSIM_ACCOUNT_SID")?;
     let token = AdapterSecret::new(std::env::var("MK_TWSIM_AUTH_TOKEN")?);
-    let mode = match std::env::var("MK_TWSIM_MODE").unwrap_or_else(|_| "accept".into()).as_str() {
+    let mode = match std::env::var("MK_TWSIM_MODE")
+        .unwrap_or_else(|_| "accept".into())
+        .as_str()
+    {
         "opted_out" => TwilioSimMode::RecipientOptedOut,
         "invalid" => TwilioSimMode::InvalidDestination,
         "rate_limited" => TwilioSimMode::RateLimited,

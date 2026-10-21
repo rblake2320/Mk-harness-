@@ -19,6 +19,10 @@ pub struct Config {
     pub allow_loopback_http: bool,
     pub batch: usize,
     pub lease_secs: u64,
+    /// `/metrics` listener (`MK_METRICS_BIND`, default loopback :9100; empty disables).
+    pub metrics_bind: String,
+    /// Gauge sampler period in seconds (`MK_METRICS_SAMPLE_SECS`, default 15).
+    pub metrics_sample_secs: u64,
 }
 
 impl Config {
@@ -49,6 +53,12 @@ impl Config {
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(120),
+            metrics_bind: std::env::var("MK_METRICS_BIND")
+                .unwrap_or_else(|_| "127.0.0.1:9100".into()),
+            metrics_sample_secs: std::env::var("MK_METRICS_SAMPLE_SECS")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(15),
         })
     }
 }

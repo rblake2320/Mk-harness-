@@ -42,7 +42,9 @@ async fn main() -> anyhow::Result<()> {
     }
     let keyring = mk_store::keys::keyring_from_env(store.pool(), &master).await?;
     if keyring.versions() == [mk_crypto::LEGACY_VERSION] {
-        tracing::warn!("sealing with the legacy single master key (no MK_KEK / key versions); pre-flight refuses this for production");
+        tracing::warn!(
+            "sealing with the legacy single master key (no MK_KEK / key versions); pre-flight refuses this for production"
+        );
     } else {
         tracing::info!(current = keyring.current_version(), versions = ?keyring.versions(), "envelope keyring loaded");
     }
@@ -59,16 +61,26 @@ async fn main() -> anyhow::Result<()> {
             .unwrap_or(120),
         rust_kernel_enabled: std::env::var("RUST_ACTION_KERNEL_ENABLED").is_ok_and(|v| v == "1"),
         approval_rp: mk_api::ApprovalRp::from_env().map_err(|e| anyhow::anyhow!(e))?,
-        public_webhook_base: std::env::var("MK_PUBLIC_WEBHOOK_BASE").ok().filter(|s| !s.trim().is_empty()).map(|s| {
-            let s = s.trim().trim_end_matches('/').to_owned();
-            if !(s.starts_with("https://") || s.starts_with("http://localhost") || s.starts_with("http://127.0.0.1")) {
-                tracing::warn!("MK_PUBLIC_WEBHOOK_BASE is not https; acceptable only for local testing");
-            }
-            s
-        }),
+        public_webhook_base: std::env::var("MK_PUBLIC_WEBHOOK_BASE")
+            .ok()
+            .filter(|s| !s.trim().is_empty())
+            .map(|s| {
+                let s = s.trim().trim_end_matches('/').to_owned();
+                if !(s.starts_with("https://")
+                    || s.starts_with("http://localhost")
+                    || s.starts_with("http://127.0.0.1"))
+                {
+                    tracing::warn!(
+                        "MK_PUBLIC_WEBHOOK_BASE is not https; acceptable only for local testing"
+                    );
+                }
+                s
+            }),
     };
     if state.approval_rp.is_none() {
-        tracing::warn!("MK_ALLOW_UNBOUND_APPROVAL=1: approvals are NOT human-bound; never run production like this");
+        tracing::warn!(
+            "MK_ALLOW_UNBOUND_APPROVAL=1: approvals are NOT human-bound; never run production like this"
+        );
     }
     let bind = std::env::var("MK_BIND").unwrap_or_else(|_| "127.0.0.1:8090".into());
     let listener = tokio::net::TcpListener::bind(&bind).await?;

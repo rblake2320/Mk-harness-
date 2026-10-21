@@ -4,8 +4,8 @@
 
 use chrono::{DateTime, Duration, Utc};
 use mk_audit::{ActorType, EventType, NewEvent};
-use mk_crypto::webauthn::{CoseAlg, CredentialPublicKey, RegisteredCredential, approval_challenge};
 use mk_crypto::Digest;
+use mk_crypto::webauthn::{CoseAlg, CredentialPublicKey, RegisteredCredential, approval_challenge};
 use mk_domain::{ActionId, TenantId, UserId};
 use serde::Serialize;
 use serde_json::json;
@@ -83,7 +83,11 @@ pub async fn issue_register_challenge(
     .bind(expires_at)
     .fetch_one(tx.conn())
     .await?;
-    Ok(IssuedChallenge { challenge_id: id, challenge, expires_at })
+    Ok(IssuedChallenge {
+        challenge_id: id,
+        challenge,
+        expires_at,
+    })
 }
 
 /// Issue an approval challenge bound to `(tenant, user, action, digest)`.
@@ -119,7 +123,11 @@ pub async fn issue_approve_challenge(
     .bind(expires_at)
     .fetch_one(tx.conn())
     .await?;
-    Ok(IssuedChallenge { challenge_id: id, challenge, expires_at })
+    Ok(IssuedChallenge {
+        challenge_id: id,
+        challenge,
+        expires_at,
+    })
 }
 
 /// Atomically consume a live challenge of `kind` for `user`. For `Approve`, the
@@ -154,22 +162,31 @@ pub async fn consume_challenge(
     .bind(challenge)
     .fetch_optional(tx.conn())
     .await?
-    .ok_or(StoreError::Conflict("challenge unknown, expired, or already consumed"))?;
+    .ok_or(StoreError::Conflict(
+        "challenge unknown, expired, or already consumed",
+    ))?;
     let stored_action: Option<Uuid> = row.try_get("action_id")?;
     let stored_digest: Option<String> = row.try_get("action_digest")?;
     match (kind, bound) {
-        (ChallengeKind::Register, None) if stored_action.is_none() && stored_digest.is_none() => Ok(()),
+        (ChallengeKind::Register, None) if stored_action.is_none() && stored_digest.is_none() => {
+            Ok(())
+        }
         (ChallengeKind::Approve, Some((a, d)))
-            if stored_action == Some(a.0) && stored_digest.as_deref() == Some(d.to_string().as_str()) =>
+            if stored_action == Some(a.0)
+                && stored_digest.as_deref() == Some(d.to_string().as_str()) =>
         {
             Ok(())
         }
         (ChallengeKind::Operator, Some((a, d)))
-            if a.0.is_nil() && stored_action.is_none() && stored_digest.as_deref() == Some(d.to_string().as_str()) =>
+            if a.0.is_nil()
+                && stored_action.is_none()
+                && stored_digest.as_deref() == Some(d.to_string().as_str()) =>
         {
             Ok(())
         }
-        _ => Err(StoreError::Conflict("challenge is bound to a different action or operation")),
+        _ => Err(StoreError::Conflict(
+            "challenge is bound to a different action or operation",
+        )),
     }
 }
 
@@ -183,7 +200,14 @@ pub async fn issue_operator_challenge(
 ) -> Result<IssuedChallenge, StoreError> {
     let nonce = random32();
     let tenant = tx.tenant();
-    let challenge = approval_challenge(tenant.0.as_bytes(), user.0.as_bytes(), Uuid::nil().as_bytes(), op_digest, &nonce).to_vec();
+    let challenge = approval_challenge(
+        tenant.0.as_bytes(),
+        user.0.as_bytes(),
+        Uuid::nil().as_bytes(),
+        op_digest,
+        &nonce,
+    )
+    .to_vec();
     let expires_at = now + Duration::seconds(APPROVE_CHALLENGE_TTL_SECS);
     let id: Uuid = sqlx::query_scalar(
         "INSERT INTO kernel.approval_challenges (tenant_id, user_id, kind, action_digest, nonce, challenge, created_at, expires_at)
@@ -198,9 +222,12 @@ pub async fn issue_operator_challenge(
     .bind(expires_at)
     .fetch_one(tx.conn())
     .await?;
-    Ok(IssuedChallenge { challenge_id: id, challenge, expires_at })
+    Ok(IssuedChallenge {
+        challenge_id: id,
+        challenge,
+        expires_at,
+    })
 }
-
 
 pub async fn insert_credential(
     tx: &mut TenantTx<'_>,
@@ -265,13 +292,18 @@ pub async fn credential_for_update(
     .fetch_optional(tx.conn())
     .await?
     .ok_or(StoreError::NotFound)?;
-    let alg = CoseAlg::parse(&r.try_get::<String, _>("alg")?).map_err(|_| StoreError::Corrupt("alg"))?;
+    let alg =
+        CoseAlg::parse(&r.try_get::<String, _>("alg")?).map_err(|_| StoreError::Corrupt("alg"))?;
     Ok(StoredCredential {
         credential_row_id: r.try_get("credential_row_id")?,
         user_id: UserId::from_uuid(r.try_get("user_id")?),
         credential_id: r.try_get("credential_id")?,
-        public_key: CredentialPublicKey { alg, key: r.try_get("public_key")? },
-        sign_count: u32::try_from(r.try_get::<i64, _>("sign_count")?).map_err(|_| StoreError::Corrupt("sign_count"))?,
+        public_key: CredentialPublicKey {
+            alg,
+            key: r.try_get("public_key")?,
+        },
+        sign_count: u32::try_from(r.try_get::<i64, _>("sign_count")?)
+            .map_err(|_| StoreError::Corrupt("sign_count"))?,
     })
 }
 
@@ -293,7 +325,10 @@ pub async fn record_use(
     Ok(())
 }
 
-pub async fn list_credentials(tx: &mut TenantTx<'_>, user: UserId) -> Result<Vec<CredentialView>, StoreError> {
+pub async fn list_credentials(
+    tx: &mut TenantTx<'_>,
+    user: UserId,
+) -> Result<Vec<CredentialView>, StoreError> {
     use base64::Engine as _;
     let rows = sqlx::query(
         "SELECT credential_row_id, user_id, credential_id, alg, label, created_at, last_used_at, revoked_at

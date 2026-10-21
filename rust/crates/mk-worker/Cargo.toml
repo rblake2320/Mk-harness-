@@ -43,6 +43,8 @@ anyhow = { workspace = true }
 async-trait = { workspace = true }
 rand = { workspace = true }
 secrecy = { workspace = true }
+prometheus-client = { workspace = true }
+axum = { workspace = true }
 
 [dev-dependencies]
 mk-testkit = { workspace = true }

@@ -127,7 +127,11 @@ pub async fn register_finish(
     human_only(&p, "credential registration").map_err(rid)?;
     let rp = rp_or_unbound(&st).map_err(rid)?.clone();
     if body.label.chars().count() > 80 {
-        return Err(rid(ApiError::new(StatusCode::UNPROCESSABLE_ENTITY, "LABEL_TOO_LONG", "label > 80 chars")));
+        return Err(rid(ApiError::new(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "LABEL_TOO_LONG",
+            "label > 80 chars",
+        )));
     }
     let cdj = b64url_decode(&body.client_data_json).map_err(|e| rid(webauthn_err(e)))?;
     let att = b64url_decode(&body.attestation_object).map_err(|e| rid(webauthn_err(e)))?;
@@ -135,11 +139,25 @@ pub async fn register_finish(
     let challenge = extract_challenge(&cdj).map_err(rid)?;
     let now = Utc::now();
     let mut tx = st.store.begin(p.tenant).await.map_err(|e| rid(e.into()))?;
-    ha::consume_challenge(&mut tx, p.user, ChallengeKind::Register, &challenge, None, now)
-        .await
-        .map_err(|e| rid(e.into()))?;
-    let cred = webauthn::verify_registration(&cdj, &att, &challenge, &rp.rp_id, &rp.origins, rp.require_uv)
-        .map_err(|e| rid(webauthn_err(e)))?;
+    ha::consume_challenge(
+        &mut tx,
+        p.user,
+        ChallengeKind::Register,
+        &challenge,
+        None,
+        now,
+    )
+    .await
+    .map_err(|e| rid(e.into()))?;
+    let cred = webauthn::verify_registration(
+        &cdj,
+        &att,
+        &challenge,
+        &rp.rp_id,
+        &rp.origins,
+        rp.require_uv,
+    )
+    .map_err(|e| rid(webauthn_err(e)))?;
     let row = ha::insert_credential(&mut tx, p.user, &cred, &body.label, now)
         .await
         .map_err(|e| rid(e.into()))?;
@@ -173,7 +191,9 @@ pub async fn list(
 ) -> Result<Json<Vec<ha::CredentialView>>, ApiError> {
     let rid = |e: ApiError| e.with_request_id(&headers);
     let mut tx = st.store.begin(p.tenant).await.map_err(|e| rid(e.into()))?;
-    let v = ha::list_credentials(&mut tx, p.user).await.map_err(|e| rid(e.into()))?;
+    let v = ha::list_credentials(&mut tx, p.user)
+        .await
+        .map_err(|e| rid(e.into()))?;
     Ok(Json(v))
 }
 
@@ -190,12 +210,20 @@ pub async fn revoke_credential(
     let now = Utc::now();
     let mut tx = st.store.begin(p.tenant).await.map_err(|e| rid(e.into()))?;
     if !p.has_role("tenant_admin") {
-        let mine = ha::list_credentials(&mut tx, p.user).await.map_err(|e| rid(e.into()))?;
+        let mine = ha::list_credentials(&mut tx, p.user)
+            .await
+            .map_err(|e| rid(e.into()))?;
         if !mine.iter().any(|c| c.credential_row_id == row) {
-            return Err(rid(ApiError::new(StatusCode::NOT_FOUND, "NOT_FOUND", "Not found")));
+            return Err(rid(ApiError::new(
+                StatusCode::NOT_FOUND,
+                "NOT_FOUND",
+                "Not found",
+            )));
         }
     }
-    ha::revoke_credential(&mut tx, row, p.user, now).await.map_err(|e| rid(e.into()))?;
+    ha::revoke_credential(&mut tx, row, p.user, now)
+        .await
+        .map_err(|e| rid(e.into()))?;
     tx.commit().await.map_err(|e| rid(e.into()))?;
     Ok(Json(json!({"credential_row_id": row, "revoked_at": now})))
 }
@@ -229,9 +257,17 @@ pub async fn approval_challenge(
     let rp = rp_or_unbound(&st).map_err(rid)?.clone();
     let now = Utc::now();
     let mut tx = st.store.begin(p.tenant).await.map_err(|e| rid(e.into()))?;
-    let a = actions::get(&mut tx, action_id).await.map_err(|e| rid(e.into()))?;
-    let creds = ha::list_credentials(&mut tx, p.user).await.map_err(|e| rid(e.into()))?;
-    let live: Vec<String> = creds.into_iter().filter(|c| c.revoked_at.is_none()).map(|c| c.credential_id_b64).collect();
+    let a = actions::get(&mut tx, action_id)
+        .await
+        .map_err(|e| rid(e.into()))?;
+    let creds = ha::list_credentials(&mut tx, p.user)
+        .await
+        .map_err(|e| rid(e.into()))?;
+    let live: Vec<String> = creds
+        .into_iter()
+        .filter(|c| c.revoked_at.is_none())
+        .map(|c| c.credential_id_b64)
+        .collect();
     if live.is_empty() {
         return Err(rid(ApiError::new(
             StatusCode::PRECONDITION_FAILED,
@@ -250,7 +286,11 @@ pub async fn approval_challenge(
         action_digest: a.digest.to_string(),
         expires_at: ch.expires_at,
         allow_credentials: live,
-        user_verification: if rp.require_uv { "required" } else { "preferred" },
+        user_verification: if rp.require_uv {
+            "required"
+        } else {
+            "preferred"
+        },
     }))
 }
 
@@ -275,7 +315,17 @@ pub async fn verify_for_approval(
     body: &WebAuthnAssertionBody,
     now: chrono::DateTime<Utc>,
 ) -> Result<Uuid, ApiError> {
-    verify_step_up(st, tx, p, ChallengeKind::Approve, action_id, digest, body, now).await
+    verify_step_up(
+        st,
+        tx,
+        p,
+        ChallengeKind::Approve,
+        action_id,
+        digest,
+        body,
+        now,
+    )
+    .await
 }
 
 /// Platform-operator step-up: same verification, challenge bound to an
@@ -288,7 +338,17 @@ pub async fn verify_operator_step_up(
     body: &WebAuthnAssertionBody,
     now: chrono::DateTime<Utc>,
 ) -> Result<Uuid, ApiError> {
-    verify_step_up(st, tx, p, ChallengeKind::Operator, ActionId::from_uuid(Uuid::nil()), op_digest, body, now).await
+    verify_step_up(
+        st,
+        tx,
+        p,
+        ChallengeKind::Operator,
+        ActionId::from_uuid(Uuid::nil()),
+        op_digest,
+        body,
+        now,
+    )
+    .await
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -312,20 +372,29 @@ async fn verify_step_up(
     // must still burn the challenge (the caller's transaction will roll back).
     {
         let mut burn = st.store.begin(p.tenant).await?;
-        let outcome =
-            ha::consume_challenge(&mut burn, p.user, kind, &challenge, Some((action_id, digest)), now).await;
+        let outcome = ha::consume_challenge(
+            &mut burn,
+            p.user,
+            kind,
+            &challenge,
+            Some((action_id, digest)),
+            now,
+        )
+        .await;
         // Commit the burn even when the binding check failed.
         burn.commit().await?;
         outcome?;
     }
-    let cred = ha::credential_for_update(tx, p.user, &cred_id).await.map_err(|e| match e {
-        mk_store::StoreError::NotFound => ApiError::new(
-            StatusCode::FORBIDDEN,
-            "WEBAUTHN_CREDENTIAL_MISMATCH",
-            "Credential is not registered to this user",
-        ),
-        other => other.into(),
-    })?;
+    let cred = ha::credential_for_update(tx, p.user, &cred_id)
+        .await
+        .map_err(|e| match e {
+            mk_store::StoreError::NotFound => ApiError::new(
+                StatusCode::FORBIDDEN,
+                "WEBAUTHN_CREDENTIAL_MISMATCH",
+                "Credential is not registered to this user",
+            ),
+            other => other.into(),
+        })?;
     let new_count = webauthn::verify_assertion(
         &cdj,
         &ad,
@@ -367,17 +436,29 @@ pub async fn revoke_principal(
     let rid = |e: ApiError| e.with_request_id(&headers);
     human_only(&p, "revocation").map_err(rid)?;
     if body.reason.chars().count() > 500 {
-        return Err(rid(ApiError::new(StatusCode::UNPROCESSABLE_ENTITY, "REASON_TOO_LONG", "reason > 500 chars")));
+        return Err(rid(ApiError::new(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "REASON_TOO_LONG",
+            "reason > 500 chars",
+        )));
     }
     // Target user defaults to the caller; naming another user needs tenant_admin.
     let target_user = body.user_id.unwrap_or(p.user);
     if target_user != p.user && !p.has_role("tenant_admin") {
-        return Err(rid(ApiError::new(StatusCode::FORBIDDEN, "ROLE_REQUIRED", "tenant_admin required to revoke another user")));
+        return Err(rid(ApiError::new(
+            StatusCode::FORBIDDEN,
+            "ROLE_REQUIRED",
+            "tenant_admin required to revoke another user",
+        )));
     }
     let target = match &body.session_id {
         Some(s) if !s.is_empty() && s.len() <= 128 => RevocationTarget::Session(target_user, s),
         Some(_) => {
-            return Err(rid(ApiError::new(StatusCode::UNPROCESSABLE_ENTITY, "REVOCATION_TARGET", "session_id must be 1..128 chars")));
+            return Err(rid(ApiError::new(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "REVOCATION_TARGET",
+                "session_id must be 1..128 chars",
+            )));
         }
         None if body.user_id.is_some() => RevocationTarget::User(target_user),
         None => {
@@ -390,18 +471,26 @@ pub async fn revoke_principal(
     };
     let now = Utc::now();
     let mut tx = st.store.begin(p.tenant).await.map_err(|e| rid(e.into()))?;
-    let id = ha::revoke(&mut tx, target, p.user, &body.reason, now).await.map_err(|e| rid(e.into()))?;
+    let id = ha::revoke(&mut tx, target, p.user, &body.reason, now)
+        .await
+        .map_err(|e| rid(e.into()))?;
     // Any live approval by a revoked user/session is revoked too (H9: blocks
     // dispatch even if the worker has not yet re-checked).
     let revoked_approvals = match target {
-        RevocationTarget::User(u) => approvals::revoke_live_by_approver(&mut tx, u, None, p.user, now).await,
-        RevocationTarget::Session(u, s) => approvals::revoke_live_by_approver(&mut tx, u, Some(s), p.user, now).await,
+        RevocationTarget::User(u) => {
+            approvals::revoke_live_by_approver(&mut tx, u, None, p.user, now).await
+        }
+        RevocationTarget::Session(u, s) => {
+            approvals::revoke_live_by_approver(&mut tx, u, Some(s), p.user, now).await
+        }
     }
     .map_err(|e| rid(e.into()))?;
     tx.commit().await.map_err(|e| rid(e.into()))?;
     Ok((
         StatusCode::CREATED,
-        Json(json!({"revocation_id": id, "revoked_at": now, "approvals_revoked": revoked_approvals})),
+        Json(
+            json!({"revocation_id": id, "revoked_at": now, "approvals_revoked": revoked_approvals}),
+        ),
     ))
 }
 
@@ -426,11 +515,22 @@ pub async fn global_enable_challenge(
     let rp = rp_or_unbound(&st).map_err(rid)?.clone();
     let now = Utc::now();
     let mut tx = st.store.begin(p.tenant).await.map_err(|e| rid(e.into()))?;
-    if !ha::has_live_credential(&mut tx, p.user).await.map_err(|e| rid(e.into()))? {
-        return Err(rid(ApiError::new(StatusCode::PRECONDITION_FAILED, "NO_APPROVAL_CREDENTIAL", "Register a passkey first")));
+    if !ha::has_live_credential(&mut tx, p.user)
+        .await
+        .map_err(|e| rid(e.into()))?
+    {
+        return Err(rid(ApiError::new(
+            StatusCode::PRECONDITION_FAILED,
+            "NO_APPROVAL_CREDENTIAL",
+            "Register a passkey first",
+        )));
     }
-    let ch = ha::issue_operator_challenge(&mut tx, p.user, &global_enable_op_digest(), now).await.map_err(|e| rid(e.into()))?;
+    let ch = ha::issue_operator_challenge(&mut tx, p.user, &global_enable_op_digest(), now)
+        .await
+        .map_err(|e| rid(e.into()))?;
     tx.commit().await.map_err(|e| rid(e.into()))?;
-    Ok(Json(json!({"challenge": b64url(&ch.challenge), "rp_id": rp.rp_id, "expires_at": ch.expires_at,
-                   "operation": "global-kill-switch:enable", "user_verification": if rp.require_uv { "required" } else { "preferred" }})))
+    Ok(Json(
+        json!({"challenge": b64url(&ch.challenge), "rp_id": rp.rp_id, "expires_at": ch.expires_at,
+                   "operation": "global-kill-switch:enable", "user_verification": if rp.require_uv { "required" } else { "preferred" }}),
+    ))
 }

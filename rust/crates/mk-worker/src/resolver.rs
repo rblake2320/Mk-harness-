@@ -5,10 +5,10 @@ use async_trait::async_trait;
 use mk_adapters::mobile::{AgentResolver, AgentTarget};
 use mk_adapters::twilio::{SenderResolver, TwilioSender};
 use mk_crypto::AdapterSecret;
-use secrecy::ExposeSecret as _;
 use mk_crypto::Keyring;
 use mk_domain::TenantId;
 use mk_store::{Store, adapters};
+use secrecy::ExposeSecret as _;
 
 #[derive(Debug)]
 pub struct StoreResolver {
@@ -59,9 +59,15 @@ pub struct StoreSenderResolver {
 
 #[async_trait]
 impl SenderResolver for StoreSenderResolver {
-    async fn resolve(&self, tenant: TenantId, sender_identity_id: uuid::Uuid) -> Option<TwilioSender> {
+    async fn resolve(
+        &self,
+        tenant: TenantId,
+        sender_identity_id: uuid::Uuid,
+    ) -> Option<TwilioSender> {
         let mut tx = self.store.begin(tenant).await.ok()?;
-        let s = mk_store::messaging::sender_secret(&mut tx, &self.keyring, sender_identity_id).await.ok()?;
+        let s = mk_store::messaging::sender_secret(&mut tx, &self.keyring, sender_identity_id)
+            .await
+            .ok()?;
         tx.commit().await.ok()?;
         Some(TwilioSender {
             sender_identity_id,
@@ -69,7 +75,10 @@ impl SenderResolver for StoreSenderResolver {
             auth_token: AdapterSecret::new(s.auth_token.expose_secret()),
             from_number: s.from_number,
             messaging_service_sid: s.messaging_service_sid,
-            status_callback_url: format!("{}/webhooks/twilio/status/{sender_identity_id}", self.public_webhook_base.trim_end_matches('/')),
+            status_callback_url: format!(
+                "{}/webhooks/twilio/status/{sender_identity_id}",
+                self.public_webhook_base.trim_end_matches('/')
+            ),
         })
     }
 }

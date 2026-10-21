@@ -1796,6 +1796,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "axum",
  "chrono",
  "mk-adapters",
  "mk-audit",
@@ -1806,6 +1807,7 @@ dependencies = [
  "mk-queue",
  "mk-store",
  "mk-testkit",
+ "prometheus-client",
  "rand 0.8.8",
  "secrecy",
  "serde",

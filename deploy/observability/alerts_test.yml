@@ -1,0 +1,194 @@
+# promtool unit tests for alerts.yml — "alert rules tested by injection" (O7).
+# Run: promtool test rules deploy/observability/alerts_test.yml  (CI does this)
+rule_files:
+  - alerts.yml
+evaluation_interval: 15s
+tests:
+  - interval: 15s
+    name: unapproved send while switch off pages immediately; not when switch on
+    input_series:
+      - series: 'mk_dispatch_outcomes_total{outcome="Dispatched",job="mk-worker"}'
+        values: '0 0 0 0 0 1 1 1 1 1'
+      - series: 'mk_kill_switch_global_enabled{job="mk-worker"}'
+        values: '0 0 0 0 0 0 0 0 0 0'
+      - series: 'mk_policy_decisions_total{decision="RequireApproval",job="mk-api"}'
+        values: '5 6 7 8 9 10 11 12 13 14'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: MKUnapprovedSendSuspected
+        exp_alerts:
+          - exp_labels: { severity: page }
+            exp_annotations:
+              summary: "Sends recorded while global dispatch was disabled"
+              runbook: docs/runbooks/incident-unapproved-or-duplicate-send.md
+      - eval_time: 2m
+        alertname: MKSendsWithoutApprovalRequirement
+        exp_alerts: []
+  - interval: 15s
+    name: normal sends with switch on do not page
+    input_series:
+      - series: 'mk_dispatch_outcomes_total{outcome="Dispatched",job="mk-worker"}'
+        values: '0 1 2 3 4 5 6 7 8 9'
+      - series: 'mk_kill_switch_global_enabled{job="mk-worker"}'
+        values: '1 1 1 1 1 1 1 1 1 1'
+      - series: 'mk_policy_decisions_total{decision="RequireApproval",job="mk-api"}'
+        values: '0 1 2 3 4 5 6 7 8 9'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: MKUnapprovedSendSuspected
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: MKSendsWithoutApprovalRequirement
+        exp_alerts: []
+  - interval: 15s
+    name: sends while no approval was ever required pages
+    input_series:
+      - series: 'mk_dispatch_outcomes_total{outcome="PendingCallback",job="mk-worker"}'
+        values: '0 1 2 3 4 5 6 7 8 9'
+      - series: 'mk_kill_switch_global_enabled{job="mk-worker"}'
+        values: '1 1 1 1 1 1 1 1 1 1'
+      - series: 'mk_policy_decisions_total{decision="RequireApproval",job="mk-api"}'
+        values: '7 7 7 7 7 7 7 7 7 7'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: MKSendsWithoutApprovalRequirement
+        exp_alerts:
+          - exp_labels: { severity: page }
+            exp_annotations:
+              summary: "Sends completed without any approval having been required in the last day"
+              runbook: docs/runbooks/incident-unapproved-or-duplicate-send.md
+  - interval: 15s
+    name: audit head mismatch pages at once
+    input_series:
+      - series: 'mk_audit_head_mismatches{job="mk-worker"}'
+        values: '0 0 0 1'
+    alert_rule_test:
+      - eval_time: 30s
+        alertname: MKAuditIntegrityFailure
+        exp_alerts: []
+      - eval_time: 45s
+        alertname: MKAuditIntegrityFailure
+        exp_alerts:
+          - exp_labels: { severity: page, job: mk-worker }
+            exp_annotations:
+              summary: "Audit hash chain failed verification"
+              runbook: docs/runbooks/incident-unapproved-or-duplicate-send.md
+  - interval: 15s
+    name: inbound outage pages after 60 s; opt-out backlog pages at 5 min
+    input_series:
+      - series: 'mk_tenants_inbound_blocked{job="mk-worker"}'
+        values: '0 1 1 1 1 1 1 1'
+      - series: 'mk_inbound_oldest_pending_age_seconds{job="mk-worker"}'
+        values: '0 60 120 180 240 299 301 400'
+    alert_rule_test:
+      - eval_time: 30s
+        alertname: MKInboundOutage
+        exp_alerts: []
+      - eval_time: 1m30s
+        alertname: MKInboundOutage
+        exp_alerts:
+          - exp_labels: { severity: page, job: mk-worker }
+            exp_annotations:
+              summary: "Inbound path unverified/stale/paused for at least one tenant >60 s — dispatch is deferred"
+              runbook: docs/runbooks/inbound-outage.md
+      - eval_time: 1m15s
+        alertname: MKOptOutProcessingFailure
+        exp_alerts: []
+      - eval_time: 1m30s
+        alertname: MKOptOutProcessingFailure
+        exp_alerts:
+          - exp_labels: { severity: page, job: mk-worker }
+            exp_annotations:
+              summary: "Inbound customer messages (possibly opt-outs) unprocessed for >5 min"
+              runbook: docs/runbooks/inbound-outage.md
+  - interval: 15s
+    name: eligible queue age >60 s must persist 5 min before paging
+    input_series:
+      - series: 'mk_queue_oldest_eligible_age_seconds{job="mk-worker"}'
+        values: '0 70 80 90 100 110 120 130 140 150 160 170 180 190 200 210 220 230 240 250 260 270 280 290 300 310 320 330'
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: MKEligibleQueueAge
+        exp_alerts: []
+      - eval_time: 6m15s
+        alertname: MKEligibleQueueAge
+        exp_alerts:
+          - exp_labels: { severity: page, job: mk-worker }
+            exp_annotations:
+              summary: "Eligible actions waiting >60 s for 5 min"
+              runbook: deploy/kernel/README.md
+  - interval: 15s
+    name: 5xx error rate >5% for 5 min pages; 4% does not
+    input_series:
+      - series: 'mk_requests_total{route="/internal/v1/actions",status="202",job="mk-api"}'
+        values: '0+90x40'
+      - series: 'mk_requests_total{route="/internal/v1/actions",status="500",job="mk-api"}'
+        values: '0+10x40'
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: MKErrorRate
+        exp_alerts:
+          - exp_labels: { severity: page }
+            exp_annotations:
+              summary: "API 5xx error rate >5% for 5 min"
+              runbook: deploy/kernel/README.md
+  - interval: 15s
+    name: 4% error rate does not page
+    input_series:
+      - series: 'mk_requests_total{route="/internal/v1/actions",status="202",job="mk-api"}'
+        values: '0+96x40'
+      - series: 'mk_requests_total{route="/internal/v1/actions",status="500",job="mk-api"}'
+        values: '0+4x40'
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: MKErrorRate
+        exp_alerts: []
+  - interval: 15s
+    name: key management failure pages after 24 h of legacy seal
+    input_series:
+      - series: 'mk_sealed_with_legacy_key{job="mk-worker"}'
+        values: '1x5800'
+      - series: 'mk_key_versions_retiring{job="mk-worker"}'
+        values: '0x5800'
+    alert_rule_test:
+      - eval_time: 23h
+        alertname: MKKeyManagementFailure
+        exp_alerts: []
+      - eval_time: 24h1m
+        alertname: MKKeyManagementFailure
+        exp_alerts:
+          - exp_labels: { severity: page, job: mk-worker }
+            exp_annotations:
+              summary: "Envelope key rotation incomplete for 24 h (legacy seal active or a version left retiring)"
+              runbook: docs/runbooks/key-compromise.md
+  - interval: 15s
+    name: staging with live provider and dispatch enabled pages
+    input_series:
+      - series: 'mk_kill_switch_global_enabled{job="mk-worker",environment="staging"}'
+        values: '1 1'
+      - series: 'mk_provider_live{job="mk-worker",environment="staging"}'
+        values: '1 1'
+    alert_rule_test:
+      - eval_time: 15s
+        alertname: MKDispatchEnabledOnStaging
+        exp_alerts:
+          - exp_labels: { severity: page, job: mk-worker, environment: staging }
+            exp_annotations:
+              summary: "Staging has dispatch enabled against the live provider"
+              runbook: deploy/kernel/README.md
+  - interval: 15s
+    name: worker absent pages after 2 min
+    input_series:
+      - series: 'up{job="mk-api"}'
+        values: '1x20'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: MKWorkerDown
+        exp_alerts:
+          - exp_labels: { severity: page, job: mk-worker }
+            exp_annotations:
+              summary: "No worker is reporting"
+              runbook: deploy/kernel/README.md
+      - eval_time: 3m
+        alertname: MKApiDown
+        exp_alerts: []

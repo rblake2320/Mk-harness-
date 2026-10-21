@@ -150,7 +150,11 @@ struct AuthData<'a> {
     rp_id_hash: [u8; 32],
     flags: u8,
     sign_count: u32,
-    attested: Option<(/*aaguid*/ [u8; 16], /*cred id*/ &'a [u8], /*cose key*/ &'a [u8])>,
+    attested: Option<(
+        /*aaguid*/ [u8; 16],
+        /*cred id*/ &'a [u8],
+        /*cose key*/ &'a [u8],
+    )>,
 }
 
 fn parse_auth_data(bytes: &[u8]) -> Result<AuthData<'_>, WebAuthnError> {
@@ -187,7 +191,9 @@ fn parse_auth_data(bytes: &[u8]) -> Result<AuthData<'_>, WebAuthnError> {
         rest = &rest[n..];
     }
     if !rest.is_empty() {
-        return Err(WebAuthnError::Malformed("trailing bytes in authenticatorData"));
+        return Err(WebAuthnError::Malformed(
+            "trailing bytes in authenticatorData",
+        ));
     }
     Ok(AuthData {
         rp_id_hash,
@@ -224,7 +230,10 @@ fn cbor_get(map: &[(ciborium::Value, ciborium::Value)], key: i128) -> Option<&ci
         .map(|(_, v)| v)
 }
 
-fn cbor_get_text<'v>(map: &'v [(ciborium::Value, ciborium::Value)], key: &str) -> Option<&'v ciborium::Value> {
+fn cbor_get_text<'v>(
+    map: &'v [(ciborium::Value, ciborium::Value)],
+    key: &str,
+) -> Option<&'v ciborium::Value> {
     map.iter()
         .find(|(k, _)| matches!(k, ciborium::Value::Text(t) if t == key))
         .map(|(_, v)| v)
@@ -232,7 +241,8 @@ fn cbor_get_text<'v>(map: &'v [(ciborium::Value, ciborium::Value)], key: &str) -
 
 /// Parse a COSE_Key into one of the supported public keys.
 pub fn parse_cose_key(cose: &[u8]) -> Result<CredentialPublicKey, WebAuthnError> {
-    let v: ciborium::Value = ciborium::from_reader(cose).map_err(|_| WebAuthnError::Malformed("cose key cbor"))?;
+    let v: ciborium::Value =
+        ciborium::from_reader(cose).map_err(|_| WebAuthnError::Malformed("cose key cbor"))?;
     let ciborium::Value::Map(m) = v else {
         return Err(WebAuthnError::Malformed("cose key not a map"));
     };
@@ -266,17 +276,27 @@ pub fn parse_cose_key(cose: &[u8]) -> Result<CredentialPublicKey, WebAuthnError>
             sec1.extend_from_slice(x);
             sec1.extend_from_slice(y);
             // Reject points not on the curve now rather than at verify time.
-            p256::ecdsa::VerifyingKey::from_sec1_bytes(&sec1).map_err(|_| WebAuthnError::Malformed("EC point"))?;
-            Ok(CredentialPublicKey { alg: CoseAlg::Es256, key: sec1 })
+            p256::ecdsa::VerifyingKey::from_sec1_bytes(&sec1)
+                .map_err(|_| WebAuthnError::Malformed("EC point"))?;
+            Ok(CredentialPublicKey {
+                alg: CoseAlg::Es256,
+                key: sec1,
+            })
         }
         (1, -8) => {
             if int(-1) != Some(6) {
                 return Err(WebAuthnError::Unsupported("OKP curve"));
             }
             let x = bytes(-2).ok_or(WebAuthnError::Malformed("cose x"))?;
-            let arr: [u8; 32] = x.try_into().map_err(|_| WebAuthnError::Malformed("ed25519 length"))?;
-            ed25519_dalek::VerifyingKey::from_bytes(&arr).map_err(|_| WebAuthnError::Malformed("ed25519 point"))?;
-            Ok(CredentialPublicKey { alg: CoseAlg::EdDsa, key: arr.to_vec() })
+            let arr: [u8; 32] = x
+                .try_into()
+                .map_err(|_| WebAuthnError::Malformed("ed25519 length"))?;
+            ed25519_dalek::VerifyingKey::from_bytes(&arr)
+                .map_err(|_| WebAuthnError::Malformed("ed25519 point"))?;
+            Ok(CredentialPublicKey {
+                alg: CoseAlg::EdDsa,
+                key: arr.to_vec(),
+            })
         }
         (3, -257) => {
             let n = bytes(-1).ok_or(WebAuthnError::Malformed("rsa n"))?;
@@ -289,8 +309,13 @@ pub fn parse_cose_key(cose: &[u8]) -> Result<CredentialPublicKey, WebAuthnError>
                 rsa::BigUint::from_bytes_be(e),
             )
             .map_err(|_| WebAuthnError::Malformed("rsa key"))?;
-            let der = pk.to_pkcs1_der().map_err(|_| WebAuthnError::Malformed("rsa der"))?;
-            Ok(CredentialPublicKey { alg: CoseAlg::Rs256, key: der.as_bytes().to_vec() })
+            let der = pk
+                .to_pkcs1_der()
+                .map_err(|_| WebAuthnError::Malformed("rsa der"))?;
+            Ok(CredentialPublicKey {
+                alg: CoseAlg::Rs256,
+                key: der.as_bytes().to_vec(),
+            })
         }
         _ => Err(WebAuthnError::Unsupported("algorithm")),
     }
@@ -300,36 +325,54 @@ fn verify_sig(pk: &CredentialPublicKey, msg: &[u8], sig: &[u8]) -> Result<(), We
     match pk.alg {
         CoseAlg::Es256 => {
             use p256::ecdsa::signature::Verifier as _;
-            let vk = p256::ecdsa::VerifyingKey::from_sec1_bytes(&pk.key).map_err(|_| WebAuthnError::Malformed("EC key"))?;
+            let vk = p256::ecdsa::VerifyingKey::from_sec1_bytes(&pk.key)
+                .map_err(|_| WebAuthnError::Malformed("EC key"))?;
             // WebAuthn ES256 signatures are ASN.1 DER.
-            let s = p256::ecdsa::Signature::from_der(sig).map_err(|_| WebAuthnError::BadSignature)?;
+            let s =
+                p256::ecdsa::Signature::from_der(sig).map_err(|_| WebAuthnError::BadSignature)?;
             vk.verify(msg, &s).map_err(|_| WebAuthnError::BadSignature)
         }
         CoseAlg::EdDsa => {
             use ed25519_dalek::Verifier as _;
-            let arr: [u8; 32] = pk.key.as_slice().try_into().map_err(|_| WebAuthnError::Malformed("ed key"))?;
-            let vk = ed25519_dalek::VerifyingKey::from_bytes(&arr).map_err(|_| WebAuthnError::Malformed("ed key"))?;
-            let s = ed25519_dalek::Signature::from_slice(sig).map_err(|_| WebAuthnError::BadSignature)?;
+            let arr: [u8; 32] = pk
+                .key
+                .as_slice()
+                .try_into()
+                .map_err(|_| WebAuthnError::Malformed("ed key"))?;
+            let vk = ed25519_dalek::VerifyingKey::from_bytes(&arr)
+                .map_err(|_| WebAuthnError::Malformed("ed key"))?;
+            let s = ed25519_dalek::Signature::from_slice(sig)
+                .map_err(|_| WebAuthnError::BadSignature)?;
             vk.verify(msg, &s).map_err(|_| WebAuthnError::BadSignature)
         }
         CoseAlg::Rs256 => {
             use rsa::pkcs1::DecodeRsaPublicKey as _;
-            let pk = rsa::RsaPublicKey::from_pkcs1_der(&pk.key).map_err(|_| WebAuthnError::Malformed("rsa key"))?;
+            let pk = rsa::RsaPublicKey::from_pkcs1_der(&pk.key)
+                .map_err(|_| WebAuthnError::Malformed("rsa key"))?;
             let hashed = Sha256::digest(msg);
-            pk.verify(rsa::Pkcs1v15Sign::new::<Sha256>(), &hashed, sig).map_err(|_| WebAuthnError::BadSignature)
+            pk.verify(rsa::Pkcs1v15Sign::new::<Sha256>(), &hashed, sig)
+                .map_err(|_| WebAuthnError::BadSignature)
         }
     }
 }
 
-fn parse_client_data(raw: &[u8], expected_type: &str, expected_challenge: &[u8], allowed_origins: &[String]) -> Result<[u8; 32], WebAuthnError> {
+fn parse_client_data(
+    raw: &[u8],
+    expected_type: &str,
+    expected_challenge: &[u8],
+    allowed_origins: &[String],
+) -> Result<[u8; 32], WebAuthnError> {
     if raw.len() > MAX_BLOB {
         return Err(WebAuthnError::Malformed("clientDataJSON length"));
     }
-    let cd: ClientData = serde_json::from_slice(raw).map_err(|_| WebAuthnError::Malformed("clientDataJSON"))?;
+    let cd: ClientData =
+        serde_json::from_slice(raw).map_err(|_| WebAuthnError::Malformed("clientDataJSON"))?;
     if cd.typ != expected_type {
         return Err(WebAuthnError::WrongType);
     }
-    let got = B64.decode(cd.challenge.as_bytes()).map_err(|_| WebAuthnError::Malformed("challenge encoding"))?;
+    let got = B64
+        .decode(cd.challenge.as_bytes())
+        .map_err(|_| WebAuthnError::Malformed("challenge encoding"))?;
     if !crate::secret::constant_time_eq(&got, expected_challenge) {
         return Err(WebAuthnError::ChallengeMismatch);
     }
@@ -364,8 +407,14 @@ pub fn verify_registration(
     if attestation_object.len() > MAX_BLOB {
         return Err(WebAuthnError::Malformed("attestationObject length"));
     }
-    let client_hash = parse_client_data(client_data_json, "webauthn.create", expected_challenge, allowed_origins)?;
-    let v: ciborium::Value = ciborium::from_reader(attestation_object).map_err(|_| WebAuthnError::Malformed("attestationObject cbor"))?;
+    let client_hash = parse_client_data(
+        client_data_json,
+        "webauthn.create",
+        expected_challenge,
+        allowed_origins,
+    )?;
+    let v: ciborium::Value = ciborium::from_reader(attestation_object)
+        .map_err(|_| WebAuthnError::Malformed("attestationObject cbor"))?;
     let ciborium::Value::Map(m) = v else {
         return Err(WebAuthnError::Malformed("attestationObject not a map"));
     };
@@ -385,23 +434,31 @@ pub fn verify_registration(
     if require_uv && ad.flags & FLAG_UV == 0 {
         return Err(WebAuthnError::UserNotVerified);
     }
-    let (aaguid, cred_id, cose) = ad.attested.ok_or(WebAuthnError::Malformed("no attested credential data"))?;
+    let (aaguid, cred_id, cose) = ad
+        .attested
+        .ok_or(WebAuthnError::Malformed("no attested credential data"))?;
     let public_key = parse_cose_key(cose)?;
     match fmt.as_str() {
         "none" => {}
         "packed" => {
-            let ciborium::Value::Map(st) = cbor_get_text(&m, "attStmt").ok_or(WebAuthnError::Malformed("attStmt"))? else {
+            let ciborium::Value::Map(st) =
+                cbor_get_text(&m, "attStmt").ok_or(WebAuthnError::Malformed("attStmt"))?
+            else {
                 return Err(WebAuthnError::Malformed("attStmt"));
             };
             if cbor_get_text(st, "x5c").is_some() || cbor_get_text(st, "ecdaaKeyId").is_some() {
-                return Err(WebAuthnError::Unsupported("packed attestation with certificate chain"));
+                return Err(WebAuthnError::Unsupported(
+                    "packed attestation with certificate chain",
+                ));
             }
             let alg = match cbor_get_text(st, "alg") {
                 Some(ciborium::Value::Integer(i)) => i128::from(*i),
                 _ => return Err(WebAuthnError::Malformed("attStmt alg")),
             };
             if alg != i128::from(public_key.alg.cose_id()) {
-                return Err(WebAuthnError::Malformed("attStmt alg differs from credential alg"));
+                return Err(WebAuthnError::Malformed(
+                    "attStmt alg differs from credential alg",
+                ));
             }
             let sig = match cbor_get_text(st, "sig") {
                 Some(ciborium::Value::Bytes(b)) => b.as_slice(),
@@ -437,7 +494,12 @@ pub fn verify_assertion(
     stored_sign_count: u32,
     require_uv: bool,
 ) -> Result<u32, WebAuthnError> {
-    let client_hash = parse_client_data(client_data_json, "webauthn.get", expected_challenge, allowed_origins)?;
+    let client_hash = parse_client_data(
+        client_data_json,
+        "webauthn.get",
+        expected_challenge,
+        allowed_origins,
+    )?;
     let ad = parse_auth_data(authenticator_data)?;
     check_rp(&ad, rp_id)?;
     if ad.flags & FLAG_UP == 0 {
@@ -463,7 +525,13 @@ pub fn verify_assertion(
 /// Binding the digest into the challenge means a signature over it cannot be
 /// transplanted to another action or to the same action after any edit.
 #[must_use]
-pub fn approval_challenge(tenant_id: &[u8; 16], user_id: &[u8; 16], action_id: &[u8; 16], action_digest: &Digest, nonce: &[u8; 32]) -> [u8; 32] {
+pub fn approval_challenge(
+    tenant_id: &[u8; 16],
+    user_id: &[u8; 16],
+    action_id: &[u8; 16],
+    action_digest: &Digest,
+    nonce: &[u8; 32],
+) -> [u8; 32] {
     let mut h = Sha256::new();
     h.update(CHALLENGE_DOMAIN);
     h.update(tenant_id);
@@ -484,7 +552,8 @@ pub fn b64url_decode(s: &str) -> Result<Vec<u8>, WebAuthnError> {
     if s.len() > MAX_BLOB {
         return Err(WebAuthnError::Malformed("base64url length"));
     }
-    B64.decode(s.as_bytes()).map_err(|_| WebAuthnError::Malformed("base64url"))
+    B64.decode(s.as_bytes())
+        .map_err(|_| WebAuthnError::Malformed("base64url"))
 }
 
 // ---------------------------------------------------------------------------
@@ -513,7 +582,12 @@ pub mod softauthn {
 
     impl std::fmt::Debug for SoftAuthenticator {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            write!(f, "SoftAuthenticator(cred={}, counter={})", hex::encode(&self.credential_id), self.counter)
+            write!(
+                f,
+                "SoftAuthenticator(cred={}, counter={})",
+                hex::encode(&self.credential_id),
+                self.counter
+            )
         }
     }
 
@@ -529,17 +603,27 @@ pub mod softauthn {
     impl SoftAuthenticator {
         #[must_use]
         pub fn new_es256() -> Self {
-            Self::with_key(Key::Es256(p256::ecdsa::SigningKey::random(&mut rand::rngs::OsRng)))
+            Self::with_key(Key::Es256(p256::ecdsa::SigningKey::random(
+                &mut rand::rngs::OsRng,
+            )))
         }
         #[must_use]
         pub fn new_ed25519() -> Self {
-            Self::with_key(Key::EdDsa(ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng)))
+            Self::with_key(Key::EdDsa(ed25519_dalek::SigningKey::generate(
+                &mut rand::rngs::OsRng,
+            )))
         }
         fn with_key(key: Key) -> Self {
             use rand::RngCore as _;
             let mut id = vec![0u8; 32];
             rand::rngs::OsRng.fill_bytes(&mut id);
-            Self { credential_id: id, aaguid: [0xA5; 16], counter: 0, uv: true, key }
+            Self {
+                credential_id: id,
+                aaguid: [0xA5; 16],
+                counter: 0,
+                uv: true,
+                key,
+            }
         }
 
         /// Serialise for a multi-invocation CLI (test equipment only; the
@@ -556,18 +640,27 @@ pub mod softauthn {
         }
 
         pub fn import(state: &str) -> Result<Self, WebAuthnError> {
-            let v: serde_json::Value = serde_json::from_str(state).map_err(|_| WebAuthnError::Malformed("state"))?;
-            let secret = hex::decode(v["secret_hex"].as_str().unwrap_or("")).map_err(|_| WebAuthnError::Malformed("state secret"))?;
+            let v: serde_json::Value =
+                serde_json::from_str(state).map_err(|_| WebAuthnError::Malformed("state"))?;
+            let secret = hex::decode(v["secret_hex"].as_str().unwrap_or(""))
+                .map_err(|_| WebAuthnError::Malformed("state secret"))?;
             let key = match v["alg"].as_str() {
-                Some("ES256") => Key::Es256(p256::ecdsa::SigningKey::from_slice(&secret).map_err(|_| WebAuthnError::Malformed("state key"))?),
+                Some("ES256") => Key::Es256(
+                    p256::ecdsa::SigningKey::from_slice(&secret)
+                        .map_err(|_| WebAuthnError::Malformed("state key"))?,
+                ),
                 Some("EdDSA") => {
-                    let arr: [u8; 32] = secret.as_slice().try_into().map_err(|_| WebAuthnError::Malformed("state key"))?;
+                    let arr: [u8; 32] = secret
+                        .as_slice()
+                        .try_into()
+                        .map_err(|_| WebAuthnError::Malformed("state key"))?;
                     Key::EdDsa(ed25519_dalek::SigningKey::from_bytes(&arr))
                 }
                 _ => return Err(WebAuthnError::Unsupported("state alg")),
             };
             Ok(Self {
-                credential_id: hex::decode(v["credential_id_hex"].as_str().unwrap_or("")).map_err(|_| WebAuthnError::Malformed("state cred"))?,
+                credential_id: hex::decode(v["credential_id_hex"].as_str().unwrap_or(""))
+                    .map_err(|_| WebAuthnError::Malformed("state cred"))?,
                 aaguid: [0xA5; 16],
                 counter: u32::try_from(v["counter"].as_u64().unwrap_or(0)).unwrap_or(0),
                 uv: v["uv"].as_bool().unwrap_or(true),
@@ -584,15 +677,24 @@ pub mod softauthn {
                         (V::Integer(1.into()), V::Integer(2.into())),
                         (V::Integer(3.into()), V::Integer((-7).into())),
                         (V::Integer((-1).into()), V::Integer(1.into())),
-                        (V::Integer((-2).into()), V::Bytes(p.x().map(|x| x.to_vec()).unwrap_or_default())),
-                        (V::Integer((-3).into()), V::Bytes(p.y().map(|y| y.to_vec()).unwrap_or_default())),
+                        (
+                            V::Integer((-2).into()),
+                            V::Bytes(p.x().map(|x| x.to_vec()).unwrap_or_default()),
+                        ),
+                        (
+                            V::Integer((-3).into()),
+                            V::Bytes(p.y().map(|y| y.to_vec()).unwrap_or_default()),
+                        ),
                     ])
                 }
                 Key::EdDsa(sk) => V::Map(vec![
                     (V::Integer(1.into()), V::Integer(1.into())),
                     (V::Integer(3.into()), V::Integer((-8).into())),
                     (V::Integer((-1).into()), V::Integer(6.into())),
-                    (V::Integer((-2).into()), V::Bytes(sk.verifying_key().to_bytes().to_vec())),
+                    (
+                        V::Integer((-2).into()),
+                        V::Bytes(sk.verifying_key().to_bytes().to_vec()),
+                    ),
                 ]),
             }
         }
@@ -629,7 +731,12 @@ pub mod softauthn {
         }
 
         /// `(clientDataJSON, attestationObject)` for a `none`-format registration.
-        pub fn register(&mut self, challenge: &[u8], rp_id: &str, origin: &str) -> (Vec<u8>, Vec<u8>) {
+        pub fn register(
+            &mut self,
+            challenge: &[u8],
+            rp_id: &str,
+            origin: &str,
+        ) -> (Vec<u8>, Vec<u8>) {
             use ciborium::Value as V;
             self.counter += 1;
             let cd = Self::client_data("webauthn.create", challenge, origin);
@@ -638,7 +745,11 @@ pub mod softauthn {
             ad.push(self.flags(true));
             ad.extend_from_slice(&self.counter.to_be_bytes());
             ad.extend_from_slice(&self.aaguid);
-            ad.extend_from_slice(&u16::try_from(self.credential_id.len()).unwrap_or(0).to_be_bytes());
+            ad.extend_from_slice(
+                &u16::try_from(self.credential_id.len())
+                    .unwrap_or(0)
+                    .to_be_bytes(),
+            );
             ad.extend_from_slice(&self.credential_id);
             ad.extend_from_slice(&cbor_bytes(&self.cose_key()));
             let att = V::Map(vec![
@@ -650,7 +761,12 @@ pub mod softauthn {
         }
 
         /// `(clientDataJSON, authenticatorData, signature)` for an assertion.
-        pub fn assert(&mut self, challenge: &[u8], rp_id: &str, origin: &str) -> (Vec<u8>, Vec<u8>, Vec<u8>) {
+        pub fn assert(
+            &mut self,
+            challenge: &[u8],
+            rp_id: &str,
+            origin: &str,
+        ) -> (Vec<u8>, Vec<u8>, Vec<u8>) {
             self.counter += 1;
             let cd = Self::client_data("webauthn.get", challenge, origin);
             let mut ad = Vec::new();
@@ -684,12 +800,26 @@ mod tests {
 
     #[test]
     fn register_and_assert_es256_and_ed25519() {
-        for mut a in [SoftAuthenticator::new_es256(), SoftAuthenticator::new_ed25519()] {
+        for mut a in [
+            SoftAuthenticator::new_es256(),
+            SoftAuthenticator::new_ed25519(),
+        ] {
             let cred = registered(&mut a);
             assert_eq!(cred.credential_id, a.credential_id);
             let ch = [9u8; 32];
             let (cd, ad, sig) = a.assert(&ch, RP, "https://approve.example.com");
-            let n = verify_assertion(&cd, &ad, &sig, &ch, RP, &origins(), &cred.public_key, cred.sign_count, true).unwrap();
+            let n = verify_assertion(
+                &cd,
+                &ad,
+                &sig,
+                &ch,
+                RP,
+                &origins(),
+                &cred.public_key,
+                cred.sign_count,
+                true,
+            )
+            .unwrap();
             assert_eq!(n, cred.sign_count + 1);
         }
     }
@@ -700,7 +830,17 @@ mod tests {
         let cred = registered(&mut a);
         let (cd, ad, sig) = a.assert(&[1u8; 32], RP, "https://approve.example.com");
         assert_eq!(
-            verify_assertion(&cd, &ad, &sig, &[2u8; 32], RP, &origins(), &cred.public_key, cred.sign_count, true),
+            verify_assertion(
+                &cd,
+                &ad,
+                &sig,
+                &[2u8; 32],
+                RP,
+                &origins(),
+                &cred.public_key,
+                cred.sign_count,
+                true
+            ),
             Err(WebAuthnError::ChallengeMismatch)
         );
     }
@@ -710,8 +850,14 @@ mod tests {
         let t = [1u8; 16];
         let d1 = Digest::of(b"hello");
         let d2 = Digest::of(b"hellp");
-        assert_ne!(approval_challenge(&t, &t, &t, &d1, &[0; 32]), approval_challenge(&t, &t, &t, &d2, &[0; 32]));
-        assert_ne!(approval_challenge(&t, &t, &t, &d1, &[0; 32]), approval_challenge(&t, &t, &t, &d1, &[1; 32]));
+        assert_ne!(
+            approval_challenge(&t, &t, &t, &d1, &[0; 32]),
+            approval_challenge(&t, &t, &t, &d2, &[0; 32])
+        );
+        assert_ne!(
+            approval_challenge(&t, &t, &t, &d1, &[0; 32]),
+            approval_challenge(&t, &t, &t, &d1, &[1; 32])
+        );
     }
 
     #[test]
@@ -721,25 +867,65 @@ mod tests {
         let ch = [3u8; 32];
         let (cd, ad, sig) = a.assert(&ch, RP, "https://evil.example.com");
         assert_eq!(
-            verify_assertion(&cd, &ad, &sig, &ch, RP, &origins(), &cred.public_key, 1, true),
+            verify_assertion(
+                &cd,
+                &ad,
+                &sig,
+                &ch,
+                RP,
+                &origins(),
+                &cred.public_key,
+                1,
+                true
+            ),
             Err(WebAuthnError::OriginNotAllowed)
         );
         let (cd, ad, sig) = a.assert(&ch, "other.example.com", "https://approve.example.com");
         assert_eq!(
-            verify_assertion(&cd, &ad, &sig, &ch, RP, &origins(), &cred.public_key, 1, true),
+            verify_assertion(
+                &cd,
+                &ad,
+                &sig,
+                &ch,
+                RP,
+                &origins(),
+                &cred.public_key,
+                1,
+                true
+            ),
             Err(WebAuthnError::RpIdMismatch)
         );
         // Registration clientData presented as an assertion → wrong type.
         let (cd, att) = a.register(&ch, RP, "https://approve.example.com");
         assert_eq!(
-            verify_assertion(&cd, &att, &[0u8; 8], &ch, RP, &origins(), &cred.public_key, 1, true),
+            verify_assertion(
+                &cd,
+                &att,
+                &[0u8; 8],
+                &ch,
+                RP,
+                &origins(),
+                &cred.public_key,
+                1,
+                true
+            ),
             Err(WebAuthnError::WrongType)
         );
         // No UV when required.
         a.uv = false;
         let (cd, ad, sig) = a.assert(&ch, RP, "https://approve.example.com");
         assert_eq!(
-            verify_assertion(&cd, &ad, &sig, &ch, RP, &origins(), &cred.public_key, 1, true),
+            verify_assertion(
+                &cd,
+                &ad,
+                &sig,
+                &ch,
+                RP,
+                &origins(),
+                &cred.public_key,
+                1,
+                true
+            ),
             Err(WebAuthnError::UserNotVerified)
         );
     }
@@ -751,12 +937,35 @@ mod tests {
         let ch = [4u8; 32];
         let (cd, mut ad, sig) = a.assert(&ch, RP, "https://approve.example.com");
         ad[33] ^= FLAG_ED; // flip a flag bit after signing → trailing/sig failure
-        assert!(verify_assertion(&cd, &ad, &sig, &ch, RP, &origins(), &cred.public_key, 1, true).is_err());
+        assert!(
+            verify_assertion(
+                &cd,
+                &ad,
+                &sig,
+                &ch,
+                RP,
+                &origins(),
+                &cred.public_key,
+                1,
+                true
+            )
+            .is_err()
+        );
         let mut b = SoftAuthenticator::new_es256();
         let other = registered(&mut b);
         let (cd, ad, sig) = a.assert(&ch, RP, "https://approve.example.com");
         assert_eq!(
-            verify_assertion(&cd, &ad, &sig, &ch, RP, &origins(), &other.public_key, 1, true),
+            verify_assertion(
+                &cd,
+                &ad,
+                &sig,
+                &ch,
+                RP,
+                &origins(),
+                &other.public_key,
+                1,
+                true
+            ),
             Err(WebAuthnError::BadSignature)
         );
     }
@@ -767,10 +976,31 @@ mod tests {
         let cred = registered(&mut a);
         let ch = [5u8; 32];
         let (cd, ad, sig) = a.assert(&ch, RP, "https://approve.example.com");
-        let n = verify_assertion(&cd, &ad, &sig, &ch, RP, &origins(), &cred.public_key, cred.sign_count, true).unwrap();
+        let n = verify_assertion(
+            &cd,
+            &ad,
+            &sig,
+            &ch,
+            RP,
+            &origins(),
+            &cred.public_key,
+            cred.sign_count,
+            true,
+        )
+        .unwrap();
         // Replaying the same assertion against the updated counter fails.
         assert_eq!(
-            verify_assertion(&cd, &ad, &sig, &ch, RP, &origins(), &cred.public_key, n, true),
+            verify_assertion(
+                &cd,
+                &ad,
+                &sig,
+                &ch,
+                RP,
+                &origins(),
+                &cred.public_key,
+                n,
+                true
+            ),
             Err(WebAuthnError::CounterRegression)
         );
     }
@@ -797,23 +1027,52 @@ mod tests {
         // RS1 / ES384 keys are refused at parse time.
         let mut k = Vec::new();
         ciborium::into_writer(
-            &V::Map(vec![(V::Integer(1.into()), V::Integer(2.into())), (V::Integer(3.into()), V::Integer((-35).into()))]),
+            &V::Map(vec![
+                (V::Integer(1.into()), V::Integer(2.into())),
+                (V::Integer(3.into()), V::Integer((-35).into())),
+            ]),
             &mut k,
         )
         .unwrap();
-        assert_eq!(parse_cose_key(&k), Err(WebAuthnError::Unsupported("algorithm")));
+        assert_eq!(
+            parse_cose_key(&k),
+            Err(WebAuthnError::Unsupported("algorithm"))
+        );
     }
 
     #[test]
     fn oversized_and_truncated_inputs_are_malformed() {
-        let cred = CredentialPublicKey { alg: CoseAlg::EdDsa, key: vec![0; 32] };
+        let cred = CredentialPublicKey {
+            alg: CoseAlg::EdDsa,
+            key: vec![0; 32],
+        };
         assert!(matches!(
-            verify_assertion(b"{}", &[0u8; 10], b"", &[0; 32], RP, &origins(), &cred, 0, true),
+            verify_assertion(
+                b"{}",
+                &[0u8; 10],
+                b"",
+                &[0; 32],
+                RP,
+                &origins(),
+                &cred,
+                0,
+                true
+            ),
             Err(WebAuthnError::Malformed(_))
         ));
         let big = vec![b'a'; MAX_BLOB + 1];
         assert!(matches!(
-            verify_assertion(&big, &[0u8; 37], b"", &[0; 32], RP, &origins(), &cred, 0, true),
+            verify_assertion(
+                &big,
+                &[0u8; 37],
+                b"",
+                &[0; 32],
+                RP,
+                &origins(),
+                &cred,
+                0,
+                true
+            ),
             Err(WebAuthnError::Malformed(_))
         ));
     }

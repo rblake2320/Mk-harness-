@@ -33,7 +33,11 @@ const MAX_FORM_BYTES: usize = 64 * 1024;
 
 fn public_url(st: &AppState, uri: &Uri) -> Result<String, ApiError> {
     let base = st.public_webhook_base.as_deref().ok_or_else(|| {
-        ApiError::new(StatusCode::NOT_IMPLEMENTED, "WEBHOOKS_NOT_CONFIGURED", "MK_PUBLIC_WEBHOOK_BASE is not set")
+        ApiError::new(
+            StatusCode::NOT_IMPLEMENTED,
+            "WEBHOOKS_NOT_CONFIGURED",
+            "MK_PUBLIC_WEBHOOK_BASE is not set",
+        )
     })?;
     let mut url = format!("{}{}", base.trim_end_matches('/'), uri.path());
     if let Some(q) = uri.query() {
@@ -45,13 +49,19 @@ fn public_url(st: &AppState, uri: &Uri) -> Result<String, ApiError> {
 
 fn parse_form(body: &[u8]) -> Result<Vec<(String, String)>, ApiError> {
     if body.len() > MAX_FORM_BYTES {
-        return Err(ApiError::new(StatusCode::PAYLOAD_TOO_LARGE, "WEBHOOK_TOO_LARGE", "form body too large"));
+        return Err(ApiError::new(
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "WEBHOOK_TOO_LARGE",
+            "form body too large",
+        ));
     }
     Ok(url::form_urlencoded::parse(body).into_owned().collect())
 }
 
 fn field<'a>(form: &'a [(String, String)], k: &str) -> Option<&'a str> {
-    form.iter().find(|(key, _)| key == k).map(|(_, v)| v.as_str())
+    form.iter()
+        .find(|(key, _)| key == k)
+        .map(|(_, v)| v.as_str())
 }
 
 fn forbidden(code: &str, title: &str) -> ApiError {
@@ -70,26 +80,37 @@ async fn authenticate(
 ) -> Result<(ms::SenderIdentitySecret, Vec<(String, String)>), ApiError> {
     let url = public_url(st, uri)?;
     let form = parse_form(body)?;
-    let sig = headers.get("x-twilio-signature").and_then(|v| v.to_str().ok()).unwrap_or_default();
+    let sig = headers
+        .get("x-twilio-signature")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or_default();
     if sig.is_empty() {
         return Err(forbidden("WEBHOOK_UNSIGNED", "missing X-Twilio-Signature"));
     }
-    let sender = match ms::sender_secret_by_id(st.store.pool(), &st.keyring, sender_identity_id).await {
-        Ok(s) => s,
-        // Unknown sender: same answer as a bad signature, so the path cannot be probed.
-        Err(mk_store::StoreError::NotFound) => return Err(forbidden("WEBHOOK_SIGNATURE_INVALID", "signature invalid")),
-        Err(e) => return Err(e.into()),
-    };
+    let sender =
+        match ms::sender_secret_by_id(st.store.pool(), &st.keyring, sender_identity_id).await {
+            Ok(s) => s,
+            // Unknown sender: same answer as a bad signature, so the path cannot be probed.
+            Err(mk_store::StoreError::NotFound) => {
+                return Err(forbidden("WEBHOOK_SIGNATURE_INVALID", "signature invalid"));
+            }
+            Err(e) => return Err(e.into()),
+        };
     let token = AdapterSecret::new(sender.auth_token.expose_secret());
     if !verify_twilio_signature(&token, &url, &form, sig) {
         st.metrics
             .assertion_failures
-            .get_or_create(&crate::metrics::AuthFailLabels { code: "webhook_signature_invalid".into() })
+            .get_or_create(&crate::metrics::AuthFailLabels {
+                code: "webhook_signature_invalid".into(),
+            })
             .inc();
         return Err(forbidden("WEBHOOK_SIGNATURE_INVALID", "signature invalid"));
     }
     if field(&form, "AccountSid").is_some_and(|a| a != sender.account_sid) {
-        return Err(forbidden("WEBHOOK_ACCOUNT_MISMATCH", "AccountSid does not belong to this sender"));
+        return Err(forbidden(
+            "WEBHOOK_ACCOUNT_MISMATCH",
+            "AccountSid does not belong to this sender",
+        ));
     }
     if sender.status != "active" {
         return Err(forbidden("SENDER_DISABLED", "sender identity disabled"));
@@ -98,7 +119,11 @@ async fn authenticate(
 }
 
 fn twiml_ok() -> Response {
-    ([(axum::http::header::CONTENT_TYPE, "text/xml")], TWIML_EMPTY).into_response()
+    (
+        [(axum::http::header::CONTENT_TYPE, "text/xml")],
+        TWIML_EMPTY,
+    )
+        .into_response()
 }
 
 // ------------------------------------------------------------ status callback
@@ -112,18 +137,39 @@ pub async fn twilio_status(
     body: Bytes,
 ) -> Result<Response, ApiError> {
     let rid = |e: ApiError| e.with_request_id(&headers);
-    let (sender, form) = authenticate(&st, &uri, &headers, sender_identity_id, &body).await.map_err(rid)?;
-    let message_sid = field(&form, "MessageSid").or_else(|| field(&form, "SmsSid")).unwrap_or_default().to_owned();
-    let status = field(&form, "MessageStatus").or_else(|| field(&form, "SmsStatus")).unwrap_or_default().to_owned();
+    let (sender, form) = authenticate(&st, &uri, &headers, sender_identity_id, &body)
+        .await
+        .map_err(rid)?;
+    let message_sid = field(&form, "MessageSid")
+        .or_else(|| field(&form, "SmsSid"))
+        .unwrap_or_default()
+        .to_owned();
+    let status = field(&form, "MessageStatus")
+        .or_else(|| field(&form, "SmsStatus"))
+        .unwrap_or_default()
+        .to_owned();
     let error_code = field(&form, "ErrorCode").map(ToOwned::to_owned);
     if message_sid.is_empty() || status.is_empty() {
-        return Err(rid(ApiError::new(StatusCode::UNPROCESSABLE_ENTITY, "WEBHOOK_FIELDS", "MessageSid and MessageStatus required")));
+        return Err(rid(ApiError::new(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "WEBHOOK_FIELDS",
+            "MessageSid and MessageStatus required",
+        )));
     }
     let now = Utc::now();
     let raw_digest = Digest::of(&body);
-    let mut tx = st.store.begin(sender.tenant_id).await.map_err(|e| rid(e.into()))?;
-    ms::inbound_ok(&mut tx, now).await.map_err(|e| rid(e.into()))?;
-    let Some(delivery) = ms::delivery_by_provider_id(&mut tx, &message_sid).await.map_err(|e| rid(e.into()))? else {
+    let mut tx = st
+        .store
+        .begin(sender.tenant_id)
+        .await
+        .map_err(|e| rid(e.into()))?;
+    ms::inbound_ok(&mut tx, now)
+        .await
+        .map_err(|e| rid(e.into()))?;
+    let Some(delivery) = ms::delivery_by_provider_id(&mut tx, &message_sid)
+        .await
+        .map_err(|e| rid(e.into()))?
+    else {
         // A callback for a message we never recorded as submitted: preserve
         // the fact (audit), do nothing else. Could be a reconciliation clue.
         mk_store::audit::append_event(
@@ -164,7 +210,9 @@ pub async fn twilio_status(
     .map_err(|e| rid(e.into()))?;
     if let EventOutcome::Recorded { .. } = outcome {
         // Drive the kernel action lifecycle from provider evidence.
-        let action = actions::get_for_update(&mut tx, delivery.action_id).await.map_err(|e| rid(e.into()))?;
+        let action = actions::get_for_update(&mut tx, delivery.action_id)
+            .await
+            .map_err(|e| rid(e.into()))?;
         let actor = actions::Actor {
             actor_type: mk_audit::ActorType::System,
             actor_id: "twilio-webhook",
@@ -174,22 +222,74 @@ pub async fn twilio_status(
         if action.state == ActionState::Dispatching {
             match folded {
                 DeliveryState::Sent | DeliveryState::Delivered => {
-                    actions::transition(&mut tx, delivery.action_id, Transition::Complete, None, actor, now).await.map_err(|e| rid(e.into()))?;
-                    outbox::record_attempt_end(&mut tx, delivery.action_id, action.attempt, "completed", None, Some(sender_identity_id), Some(&message_sid), Some(&raw_digest.to_string()), now)
+                    actions::transition(
+                        &mut tx,
+                        delivery.action_id,
+                        Transition::Complete,
+                        None,
+                        actor,
+                        now,
+                    )
+                    .await
+                    .map_err(|e| rid(e.into()))?;
+                    outbox::record_attempt_end(
+                        &mut tx,
+                        delivery.action_id,
+                        action.attempt,
+                        "completed",
+                        None,
+                        Some(sender_identity_id),
+                        Some(&message_sid),
+                        Some(&raw_digest.to_string()),
+                        now,
+                    )
+                    .await
+                    .map_err(|e| rid(e.into()))?;
+                    outbox::release_lease_any(&mut tx, delivery.action_id)
                         .await
                         .map_err(|e| rid(e.into()))?;
-                    outbox::release_lease_any(&mut tx, delivery.action_id).await.map_err(|e| rid(e.into()))?;
                 }
                 DeliveryState::Failed => {
-                    let code = error_code.clone().map_or_else(|| "provider_failed".to_owned(), |c| format!("provider_{c}"));
-                    actions::transition(&mut tx, delivery.action_id, Transition::FailFinal, Some(&code), actor, now).await.map_err(|e| rid(e.into()))?;
-                    outbox::record_attempt_end(&mut tx, delivery.action_id, action.attempt, "failed_final", Some(&code), Some(sender_identity_id), Some(&message_sid), Some(&raw_digest.to_string()), now)
+                    let code = error_code
+                        .clone()
+                        .map_or_else(|| "provider_failed".to_owned(), |c| format!("provider_{c}"));
+                    actions::transition(
+                        &mut tx,
+                        delivery.action_id,
+                        Transition::FailFinal,
+                        Some(&code),
+                        actor,
+                        now,
+                    )
+                    .await
+                    .map_err(|e| rid(e.into()))?;
+                    outbox::record_attempt_end(
+                        &mut tx,
+                        delivery.action_id,
+                        action.attempt,
+                        "failed_final",
+                        Some(&code),
+                        Some(sender_identity_id),
+                        Some(&message_sid),
+                        Some(&raw_digest.to_string()),
+                        now,
+                    )
+                    .await
+                    .map_err(|e| rid(e.into()))?;
+                    outbox::dead_letter(
+                        &mut tx,
+                        delivery.action_id,
+                        "failed_final",
+                        action.attempt,
+                        Some(&code),
+                        json!({"source": "twilio_status", "status": status}),
+                        now,
+                    )
+                    .await
+                    .map_err(|e| rid(e.into()))?;
+                    outbox::release_lease_any(&mut tx, delivery.action_id)
                         .await
                         .map_err(|e| rid(e.into()))?;
-                    outbox::dead_letter(&mut tx, delivery.action_id, "failed_final", action.attempt, Some(&code), json!({"source": "twilio_status", "status": status}), now)
-                        .await
-                        .map_err(|e| rid(e.into()))?;
-                    outbox::release_lease_any(&mut tx, delivery.action_id).await.map_err(|e| rid(e.into()))?;
                 }
                 _ => {}
             }
@@ -241,19 +341,31 @@ pub async fn twilio_inbound(
     body: Bytes,
 ) -> Result<Response, ApiError> {
     let rid = |e: ApiError| e.with_request_id(&headers);
-    let (sender, form) = authenticate(&st, &uri, &headers, sender_identity_id, &body).await.map_err(rid)?;
-    let message_sid = field(&form, "MessageSid").or_else(|| field(&form, "SmsSid")).unwrap_or_default().to_owned();
+    let (sender, form) = authenticate(&st, &uri, &headers, sender_identity_id, &body)
+        .await
+        .map_err(rid)?;
+    let message_sid = field(&form, "MessageSid")
+        .or_else(|| field(&form, "SmsSid"))
+        .unwrap_or_default()
+        .to_owned();
     let from = field(&form, "From").unwrap_or_default().to_owned();
     let to = field(&form, "To").unwrap_or_default().to_owned();
     let text = field(&form, "Body").unwrap_or_default().to_owned();
     if message_sid.is_empty() || from.is_empty() {
-        return Err(rid(ApiError::new(StatusCode::UNPROCESSABLE_ENTITY, "WEBHOOK_FIELDS", "MessageSid and From required")));
+        return Err(rid(ApiError::new(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "WEBHOOK_FIELDS",
+            "MessageSid and From required",
+        )));
     }
     // Bind: the message must be addressed to this sender's own number.
     if let Some(num) = &sender.from_number
         && &to != num
     {
-        return Err(rid(forbidden("WEBHOOK_SENDER_MISMATCH", "To does not match the sender identity")));
+        return Err(rid(forbidden(
+            "WEBHOOK_SENDER_MISMATCH",
+            "To does not match the sender identity",
+        )));
     }
     let now = Utc::now();
     let raw_digest = Digest::of(&body);
@@ -264,10 +376,18 @@ pub async fn twilio_inbound(
         OptOutSignal::Possible => ("possible", "held"),
         OptOutSignal::None => ("none", "queued_for_meaning"),
     };
-    let mut tx = st.store.begin(sender.tenant_id).await.map_err(|e| rid(e.into()))?;
-    ms::inbound_ok(&mut tx, now).await.map_err(|e| rid(e.into()))?;
+    let mut tx = st
+        .store
+        .begin(sender.tenant_id)
+        .await
+        .map_err(|e| rid(e.into()))?;
+    ms::inbound_ok(&mut tx, now)
+        .await
+        .map_err(|e| rid(e.into()))?;
     // C6: the same control path dispatch authorization takes.
-    ms::lock_control_path(&mut tx, Channel::Sms.as_str(), &dest).await.map_err(|e| rid(e.into()))?;
+    ms::lock_control_path(&mut tx, Channel::Sms.as_str(), &dest)
+        .await
+        .map_err(|e| rid(e.into()))?;
     let rec = ms::record_inbound(
         &mut tx,
         &st.keyring,
@@ -288,10 +408,22 @@ pub async fn twilio_inbound(
             // Redelivery: no new suppression, no new hold, no new task.
             tx.commit().await.map_err(|e| rid(e.into()))?;
             let _ = id;
+            st.metrics
+                .inbound_events
+                .get_or_create(&crate::metrics::DispositionLabels {
+                    disposition: "duplicate".into(),
+                })
+                .inc();
             return Ok(twiml_ok());
         }
         InboundOutcome::Recorded(id) => id,
     };
+    st.metrics
+        .inbound_events
+        .get_or_create(&crate::metrics::DispositionLabels {
+            disposition: disposition.into(),
+        })
+        .inc();
     let actor = actions::Actor {
         actor_type: mk_audit::ActorType::System,
         actor_id: "twilio-inbound",
@@ -300,29 +432,79 @@ pub async fn twilio_inbound(
     };
     match signal {
         OptOutSignal::Explicit => {
-            consent::add_suppression(&mut tx, Some(Channel::Sms), Some(&dest), "destination", "sms_opt_out", true, "sms_reply", actor, now)
+            consent::add_suppression(
+                &mut tx,
+                Some(Channel::Sms),
+                Some(&dest),
+                "destination",
+                "sms_opt_out",
+                true,
+                "sms_reply",
+                actor,
+                now,
+            )
+            .await
+            .map_err(|e| rid(e.into()))?;
+            cancel_pending(&mut tx, &dest, "opt_out", actor, now)
                 .await
-                .map_err(|e| rid(e.into()))?;
-            cancel_pending(&mut tx, &dest, "opt_out", actor, now).await.map_err(rid)?;
-            audit_inbound(&mut tx, sender.tenant_id, mk_audit::EventType::InboundOptOut, event_id, "explicit", now).await.map_err(rid)?;
+                .map_err(rid)?;
+            audit_inbound(
+                &mut tx,
+                sender.tenant_id,
+                mk_audit::EventType::InboundOptOut,
+                event_id,
+                "explicit",
+                now,
+            )
+            .await
+            .map_err(rid)?;
         }
         OptOutSignal::Possible => {
             // A hold is a non-permanent suppression a human must lift; it blocks
             // dispatch exactly like an opt-out until then.
-            consent::add_suppression(&mut tx, Some(Channel::Sms), Some(&dest), "destination", "possible_opt_out_hold", false, "sms_reply", actor, now)
+            consent::add_suppression(
+                &mut tx,
+                Some(Channel::Sms),
+                Some(&dest),
+                "destination",
+                "possible_opt_out_hold",
+                false,
+                "sms_reply",
+                actor,
+                now,
+            )
+            .await
+            .map_err(|e| rid(e.into()))?;
+            cancel_pending(&mut tx, &dest, "possible_opt_out_hold", actor, now)
                 .await
-                .map_err(|e| rid(e.into()))?;
-            cancel_pending(&mut tx, &dest, "possible_opt_out_hold", actor, now).await.map_err(rid)?;
-            audit_inbound(&mut tx, sender.tenant_id, mk_audit::EventType::InboundHeld, event_id, "possible", now).await.map_err(rid)?;
+                .map_err(rid)?;
+            audit_inbound(
+                &mut tx,
+                sender.tenant_id,
+                mk_audit::EventType::InboundHeld,
+                event_id,
+                "possible",
+                now,
+            )
+            .await
+            .map_err(rid)?;
         }
         OptOutSignal::None => {}
     }
-    ms::mark_inbound_acknowledged(&mut tx, event_id, now).await.map_err(|e| rid(e.into()))?;
+    ms::mark_inbound_acknowledged(&mut tx, event_id, now)
+        .await
+        .map_err(|e| rid(e.into()))?;
     tx.commit().await.map_err(|e| rid(e.into()))?;
     Ok(twiml_ok())
 }
 
-async fn cancel_pending(tx: &mut mk_store::TenantTx<'_>, dest: &str, reason: &str, actor: actions::Actor<'_>, now: DateTime<Utc>) -> Result<u32, ApiError> {
+async fn cancel_pending(
+    tx: &mut mk_store::TenantTx<'_>,
+    dest: &str,
+    reason: &str,
+    actor: actions::Actor<'_>,
+    now: DateTime<Utc>,
+) -> Result<u32, ApiError> {
     let mut n = 0;
     for id in actions::pending_for_destination(tx, Some(Channel::Sms), Some(dest)).await? {
         let a = actions::get_for_update(tx, id).await?;
@@ -334,7 +516,14 @@ async fn cancel_pending(tx: &mut mk_store::TenantTx<'_>, dest: &str, reason: &st
     Ok(n)
 }
 
-async fn audit_inbound(tx: &mut mk_store::TenantTx<'_>, tenant: mk_domain::TenantId, et: mk_audit::EventType, event_id: Uuid, signal: &str, now: DateTime<Utc>) -> Result<(), ApiError> {
+async fn audit_inbound(
+    tx: &mut mk_store::TenantTx<'_>,
+    tenant: mk_domain::TenantId,
+    et: mk_audit::EventType,
+    event_id: Uuid,
+    signal: &str,
+    now: DateTime<Utc>,
+) -> Result<(), ApiError> {
     mk_store::audit::append_event(
         tx,
         mk_audit::NewEvent {
@@ -377,15 +566,32 @@ pub async fn register_sender(
 ) -> Result<(StatusCode, Json<Value>), ApiError> {
     let rid = |e: ApiError| e.with_request_id(&headers);
     p.require_role("tenant_admin").map_err(rid)?;
-    if b.display_name.is_empty() || b.display_name.chars().count() > 120 || b.auth_token.expose_secret().len() < 16 {
-        return Err(rid(ApiError::new(StatusCode::UNPROCESSABLE_ENTITY, "SENDER_FIELDS", "display_name 1..120 chars; auth_token ≥16 chars")));
+    if b.display_name.is_empty()
+        || b.display_name.chars().count() > 120
+        || b.auth_token.expose_secret().len() < 16
+    {
+        return Err(rid(ApiError::new(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "SENDER_FIELDS",
+            "display_name 1..120 chars; auth_token ≥16 chars",
+        )));
     }
     let now = Utc::now();
     let mut tx = st.store.begin(p.tenant).await.map_err(|e| rid(e.into()))?;
-    let id = ms::register_sender(&mut tx, &st.keyring, b.owner_user_id, &b.display_name, &b.account_sid, &b.auth_token,
-                                 b.from_number.as_deref(), b.messaging_service_sid.as_deref(), p.user, now)
-        .await
-        .map_err(|e| rid(e.into()))?;
+    let id = ms::register_sender(
+        &mut tx,
+        &st.keyring,
+        b.owner_user_id,
+        &b.display_name,
+        &b.account_sid,
+        &b.auth_token,
+        b.from_number.as_deref(),
+        b.messaging_service_sid.as_deref(),
+        p.user,
+        now,
+    )
+    .await
+    .map_err(|e| rid(e.into()))?;
     tx.commit().await.map_err(|e| rid(e.into()))?;
     let base = st.public_webhook_base.clone().unwrap_or_default();
     Ok((
@@ -402,10 +608,16 @@ pub async fn register_sender(
 }
 
 /// `GET /internal/v1/senders`
-pub async fn list_senders(State(st): State<AppState>, p: Principal, headers: HeaderMap) -> Result<Json<Vec<ms::SenderIdentityView>>, ApiError> {
+pub async fn list_senders(
+    State(st): State<AppState>,
+    p: Principal,
+    headers: HeaderMap,
+) -> Result<Json<Vec<ms::SenderIdentityView>>, ApiError> {
     let rid = |e: ApiError| e.with_request_id(&headers);
     let mut tx = st.store.begin(p.tenant).await.map_err(|e| rid(e.into()))?;
-    Ok(Json(ms::list_senders(&mut tx).await.map_err(|e| rid(e.into()))?))
+    Ok(Json(
+        ms::list_senders(&mut tx).await.map_err(|e| rid(e.into()))?,
+    ))
 }
 
 #[derive(Debug, Deserialize)]
@@ -429,12 +641,29 @@ pub async fn set_registration(
 ) -> Result<StatusCode, ApiError> {
     let rid = |e: ApiError| e.with_request_id(&headers);
     p.require_role("tenant_admin").map_err(rid)?;
-    if !matches!(b.registration_status.as_str(), "unverified" | "pending" | "registered" | "rejected") || b.reference.len() > 200 {
-        return Err(rid(ApiError::new(StatusCode::UNPROCESSABLE_ENTITY, "REGISTRATION_FIELDS", "bad status or reference")));
+    if !matches!(
+        b.registration_status.as_str(),
+        "unverified" | "pending" | "registered" | "rejected"
+    ) || b.reference.len() > 200
+    {
+        return Err(rid(ApiError::new(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "REGISTRATION_FIELDS",
+            "bad status or reference",
+        )));
     }
     let now = Utc::now();
     let mut tx = st.store.begin(p.tenant).await.map_err(|e| rid(e.into()))?;
-    ms::set_registration_status(&mut tx, id, &b.registration_status, &b.reference, p.user, now).await.map_err(|e| rid(e.into()))?;
+    ms::set_registration_status(
+        &mut tx,
+        id,
+        &b.registration_status,
+        &b.reference,
+        p.user,
+        now,
+    )
+    .await
+    .map_err(|e| rid(e.into()))?;
     tx.commit().await.map_err(|e| rid(e.into()))?;
     Ok(StatusCode::NO_CONTENT)
 }
@@ -457,32 +686,64 @@ pub async fn inbound_pending(
 ) -> Result<Json<Vec<ms::InboundView>>, ApiError> {
     let rid = |e: ApiError| e.with_request_id(&headers);
     if p.has_role("agent") && p.roles.len() == 1 {
-        return Err(rid(forbidden("AGENT_CANNOT_READ_INBOUND", "customer messages are not available to agent principals")));
+        return Err(rid(forbidden(
+            "AGENT_CANNOT_READ_INBOUND",
+            "customer messages are not available to agent principals",
+        )));
     }
     let mut tx = st.store.begin(p.tenant).await.map_err(|e| rid(e.into()))?;
-    let v = ms::pending_inbound(&mut tx, &st.keyring, q.limit.unwrap_or(50).clamp(1, 200)).await.map_err(|e| rid(e.into()))?;
+    let v = ms::pending_inbound(&mut tx, &st.keyring, q.limit.unwrap_or(50).clamp(1, 200))
+        .await
+        .map_err(|e| rid(e.into()))?;
     Ok(Json(v))
 }
 
 /// `POST /internal/v1/inbound/{event_id}/processed`
-pub async fn inbound_processed(State(st): State<AppState>, p: Principal, headers: HeaderMap, Path(event_id): Path<Uuid>) -> Result<StatusCode, ApiError> {
+pub async fn inbound_processed(
+    State(st): State<AppState>,
+    p: Principal,
+    headers: HeaderMap,
+    Path(event_id): Path<Uuid>,
+) -> Result<StatusCode, ApiError> {
     let rid = |e: ApiError| e.with_request_id(&headers);
     let now = Utc::now();
     let mut tx = st.store.begin(p.tenant).await.map_err(|e| rid(e.into()))?;
-    let ok = ms::mark_inbound_processed(&mut tx, event_id, now).await.map_err(|e| rid(e.into()))?;
+    let ok = ms::mark_inbound_processed(&mut tx, event_id, now)
+        .await
+        .map_err(|e| rid(e.into()))?;
     tx.commit().await.map_err(|e| rid(e.into()))?;
-    if ok { Ok(StatusCode::NO_CONTENT) } else { Err(rid(ApiError::new(StatusCode::NOT_FOUND, "NOT_FOUND", "no unprocessed event"))) }
+    if ok {
+        Ok(StatusCode::NO_CONTENT)
+    } else {
+        Err(rid(ApiError::new(
+            StatusCode::NOT_FOUND,
+            "NOT_FOUND",
+            "no unprocessed event",
+        )))
+    }
 }
 
 /// `GET /internal/v1/inbound/health`
-pub async fn inbound_health(State(st): State<AppState>, p: Principal, headers: HeaderMap) -> Result<Json<Value>, ApiError> {
+pub async fn inbound_health(
+    State(st): State<AppState>,
+    p: Principal,
+    headers: HeaderMap,
+) -> Result<Json<Value>, ApiError> {
     let rid = |e: ApiError| e.with_request_id(&headers);
     let now = Utc::now();
     let mut tx = st.store.begin(p.tenant).await.map_err(|e| rid(e.into()))?;
-    let h = ms::inbound_health(&mut tx).await.map_err(|e| rid(e.into()))?;
-    let block = ms::inbound_dispatch_block(&mut tx, now).await.map_err(|e| rid(e.into()))?;
-    let pending = ms::pending_inbound_count(&mut tx).await.map_err(|e| rid(e.into()))?;
-    Ok(Json(json!({"health": h, "dispatch_blocked": block, "pending_events": pending, "stale_after_secs": ms::INBOUND_STALE_SECS})))
+    let h = ms::inbound_health(&mut tx)
+        .await
+        .map_err(|e| rid(e.into()))?;
+    let block = ms::inbound_dispatch_block(&mut tx, now)
+        .await
+        .map_err(|e| rid(e.into()))?;
+    let pending = ms::pending_inbound_count(&mut tx)
+        .await
+        .map_err(|e| rid(e.into()))?;
+    Ok(Json(
+        json!({"health": h, "dispatch_blocked": block, "pending_events": pending, "stale_after_secs": ms::INBOUND_STALE_SECS}),
+    ))
 }
 
 #[derive(Debug, Deserialize)]
@@ -496,51 +757,98 @@ pub struct HealthBody {
 /// `POST /internal/v1/inbound/health` (tenant_admin) — record a probe result.
 /// Probes run outside the kernel (ops job that exercises the public webhook
 /// URL end to end); the kernel only records and enforces.
-pub async fn inbound_health_report(State(st): State<AppState>, p: Principal, headers: HeaderMap, Json(b): Json<HealthBody>) -> Result<StatusCode, ApiError> {
+pub async fn inbound_health_report(
+    State(st): State<AppState>,
+    p: Principal,
+    headers: HeaderMap,
+    Json(b): Json<HealthBody>,
+) -> Result<StatusCode, ApiError> {
     let rid = |e: ApiError| e.with_request_id(&headers);
     p.require_role("tenant_admin").map_err(rid)?;
     let now = Utc::now();
     let mut tx = st.store.begin(p.tenant).await.map_err(|e| rid(e.into()))?;
     if b.ok {
-        ms::inbound_ok(&mut tx, now).await.map_err(|e| rid(e.into()))?;
+        ms::inbound_ok(&mut tx, now)
+            .await
+            .map_err(|e| rid(e.into()))?;
     } else {
-        ms::inbound_failure(&mut tx, &b.reason, now).await.map_err(|e| rid(e.into()))?;
+        ms::inbound_failure(&mut tx, &b.reason, now)
+            .await
+            .map_err(|e| rid(e.into()))?;
     }
     tx.commit().await.map_err(|e| rid(e.into()))?;
     Ok(StatusCode::NO_CONTENT)
 }
 
 /// `POST /internal/v1/inbound/pause` / `POST /internal/v1/inbound/resume` (tenant_admin).
-pub async fn inbound_pause(State(st): State<AppState>, p: Principal, headers: HeaderMap) -> Result<StatusCode, ApiError> {
+pub async fn inbound_pause(
+    State(st): State<AppState>,
+    p: Principal,
+    headers: HeaderMap,
+) -> Result<StatusCode, ApiError> {
     let rid = |e: ApiError| e.with_request_id(&headers);
     p.require_role("tenant_admin").map_err(rid)?;
     let now = Utc::now();
     let mut tx = st.store.begin(p.tenant).await.map_err(|e| rid(e.into()))?;
-    ms::pause_inbound(&mut tx, now).await.map_err(|e| rid(e.into()))?;
-    audit_inbound(&mut tx, p.tenant, mk_audit::EventType::InboundPaused, Uuid::nil(), "manual", now).await.map_err(rid)?;
+    ms::pause_inbound(&mut tx, now)
+        .await
+        .map_err(|e| rid(e.into()))?;
+    audit_inbound(
+        &mut tx,
+        p.tenant,
+        mk_audit::EventType::InboundPaused,
+        Uuid::nil(),
+        "manual",
+        now,
+    )
+    .await
+    .map_err(rid)?;
     tx.commit().await.map_err(|e| rid(e.into()))?;
     Ok(StatusCode::NO_CONTENT)
 }
 
-pub async fn inbound_resume(State(st): State<AppState>, p: Principal, headers: HeaderMap) -> Result<Json<Value>, ApiError> {
+pub async fn inbound_resume(
+    State(st): State<AppState>,
+    p: Principal,
+    headers: HeaderMap,
+) -> Result<Json<Value>, ApiError> {
     let rid = |e: ApiError| e.with_request_id(&headers);
     p.require_role("tenant_admin").map_err(rid)?;
     let now = Utc::now();
     let mut tx = st.store.begin(p.tenant).await.map_err(|e| rid(e.into()))?;
-    let resumed = ms::resume_inbound(&mut tx, now).await.map_err(|e| rid(e.into()))?;
+    let resumed = ms::resume_inbound(&mut tx, now)
+        .await
+        .map_err(|e| rid(e.into()))?;
     if resumed {
-        audit_inbound(&mut tx, p.tenant, mk_audit::EventType::InboundResumed, Uuid::nil(), "manual", now).await.map_err(rid)?;
+        audit_inbound(
+            &mut tx,
+            p.tenant,
+            mk_audit::EventType::InboundResumed,
+            Uuid::nil(),
+            "manual",
+            now,
+        )
+        .await
+        .map_err(rid)?;
     }
-    let pending = ms::pending_inbound_count(&mut tx).await.map_err(|e| rid(e.into()))?;
+    let pending = ms::pending_inbound_count(&mut tx)
+        .await
+        .map_err(|e| rid(e.into()))?;
     tx.commit().await.map_err(|e| rid(e.into()))?;
     Ok(Json(json!({"resumed": resumed, "pending_events": pending,
                    "note": if resumed { "" } else { "resume requires a successful inbound check within the stale window and zero pending events" }})))
 }
 
 /// Attach provider delivery details to an action result (GET /actions/{id}).
-pub async fn enrich_result(tx: &mut mk_store::TenantTx<'_>, result: &mut mk_contracts::ActionResult) -> Result<(), ApiError> {
+pub async fn enrich_result(
+    tx: &mut mk_store::TenantTx<'_>,
+    result: &mut mk_contracts::ActionResult,
+) -> Result<(), ApiError> {
     if let Some(d) = ms::delivery_for_action(tx, result.action_id).await? {
-        result.message_state = Some(mk_contracts::MessageState::derive(result.state, Some(&d.state)));
+        result.message_state = Some(mk_contracts::MessageState::derive(
+            result.state,
+            Some(&d.state),
+        ));
         result.read_status = Some(d.read_status);
         result.provider_message_id = d.provider_message_id;
     }

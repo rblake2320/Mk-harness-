@@ -49,7 +49,11 @@ impl StoredAction {
                 .action_kind
                 .is_outreach()
                 .then(|| mk_contracts::MessageState::derive(self.state, None)),
-            read_status: self.request.action_kind.is_outreach().then(|| "unknown".to_owned()),
+            read_status: self
+                .request
+                .action_kind
+                .is_outreach()
+                .then(|| "unknown".to_owned()),
             provider_message_id: None,
         }
     }

@@ -35,6 +35,8 @@ Environment:
 | `MK_MOBILE_INTAKE_URL` | worker | template, e.g. `https://adapters.internal/agents/{agent_id}/work-orders` |
 | `MK_EGRESS_AUTHORITIES` | worker | comma list of `host[:port]` the worker may call |
 | `MK_WORKER_ID`, `MK_WORKER_BATCH`, `MK_LEASE_SECS` | worker, relay | identity and tuning |
+| `MK_METRICS_BIND` | worker | `/metrics` listener, default `127.0.0.1:9100`; empty disables. Aggregates only, no identifiers (`deploy/observability/README.md`) |
+| `MK_METRICS_SAMPLE_SECS` | worker | gauge sampler period, default 15 (min 5); one tenant transaction per tenant per sample |
 | `MK_KERNEL_URL`, `MK_ASSERTION_FILE`, `MK_KNOWLEDGE_URL` | mcp | API base, path to a host-refreshed assertion, optional read-only KB |
 
 Hardening expected from the orchestrator: read-only root filesystem,

@@ -15,6 +15,7 @@
 pub mod config;
 pub mod dispatch;
 pub mod housekeeping;
+pub mod metrics;
 pub mod resolver;
 
-pub use dispatch::{DispatchOutcome, WorkerContext, dispatch_one};
+pub use dispatch::{DispatchError, DispatchOutcome, WorkerContext, dispatch_one};

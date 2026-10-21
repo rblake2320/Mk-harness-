@@ -60,13 +60,22 @@ pub struct TwilioSender {
 
 impl std::fmt::Debug for TwilioSender {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "TwilioSender(id={}, account={}…)", self.sender_identity_id, &self.account_sid[..self.account_sid.len().min(6)])
+        write!(
+            f,
+            "TwilioSender(id={}, account={}…)",
+            self.sender_identity_id,
+            &self.account_sid[..self.account_sid.len().min(6)]
+        )
     }
 }
 
 #[async_trait]
 pub trait SenderResolver: Send + Sync + std::fmt::Debug {
-    async fn resolve(&self, tenant: TenantId, sender_identity_id: uuid::Uuid) -> Option<TwilioSender>;
+    async fn resolve(
+        &self,
+        tenant: TenantId,
+        sender_identity_id: uuid::Uuid,
+    ) -> Option<TwilioSender>;
 }
 
 #[derive(Debug)]
@@ -126,7 +135,8 @@ impl TwilioAdapter {
         api_base: &str,
         resolver: Box<dyn SenderResolver>,
     ) -> Result<Self, AdapterError> {
-        let api_base = url::Url::parse(api_base).map_err(|_| AdapterError::permanent("api_base_invalid"))?;
+        let api_base =
+            url::Url::parse(api_base).map_err(|_| AdapterError::permanent("api_base_invalid"))?;
         egress
             .check(api_base.as_str())
             .map_err(|_| AdapterError::permanent("api_base_not_allowlisted"))?;
@@ -137,11 +147,19 @@ impl TwilioAdapter {
             .user_agent("mk-action-kernel/twilio-sms-v1")
             .build()
             .map_err(|_| AdapterError::permanent("client_build"))?;
-        Ok(Self { client, egress, api_base, resolver })
+        Ok(Self {
+            client,
+            egress,
+            api_base,
+            resolver,
+        })
     }
 
     fn messages_url(&self, account_sid: &str) -> Result<url::Url, AdapterError> {
-        if !account_sid.starts_with("AC") || account_sid.len() != 34 || !account_sid[2..].bytes().all(|b| b.is_ascii_hexdigit()) {
+        if !account_sid.starts_with("AC")
+            || account_sid.len() != 34
+            || !account_sid[2..].bytes().all(|b| b.is_ascii_hexdigit())
+        {
             return Err(AdapterError::permanent("account_sid_invalid"));
         }
         self.api_base
@@ -150,18 +168,28 @@ impl TwilioAdapter {
     }
 
     /// Form body for a send. Pure: unit-tested without the network.
-    pub fn build_form(sender: &TwilioSender, to: &str, body: &str) -> Result<Vec<(&'static str, String)>, AdapterError> {
+    pub fn build_form(
+        sender: &TwilioSender,
+        to: &str,
+        body: &str,
+    ) -> Result<Vec<(&'static str, String)>, AdapterError> {
         validate_e164(to)?;
         if body.is_empty() || body.chars().count() > MAX_BODY_CHARS {
             return Err(AdapterError::permanent("body_length"));
         }
-        let mut form = vec![("To", to.to_owned()), ("Body", body.to_owned()), ("StatusCallback", sender.status_callback_url.clone())];
+        let mut form = vec![
+            ("To", to.to_owned()),
+            ("Body", body.to_owned()),
+            ("StatusCallback", sender.status_callback_url.clone()),
+        ];
         match (&sender.from_number, &sender.messaging_service_sid) {
             (Some(f), None) => {
                 validate_e164(f)?;
                 form.push(("From", f.clone()));
             }
-            (None, Some(m)) if m.starts_with("MG") && m.len() == 34 => form.push(("MessagingServiceSid", m.clone())),
+            (None, Some(m)) if m.starts_with("MG") && m.len() == 34 => {
+                form.push(("MessagingServiceSid", m.clone()));
+            }
             _ => return Err(AdapterError::permanent("sender_misconfigured")),
         }
         Ok(form)
@@ -174,7 +202,9 @@ impl TwilioAdapter {
             401 | 403 => ProviderOutcome::AuthFailed,
             429 => ProviderOutcome::RateLimited,
             400..=499 => {
-                let code = serde_json::from_slice::<TwilioError>(body).ok().and_then(|e| e.code);
+                let code = serde_json::from_slice::<TwilioError>(body)
+                    .ok()
+                    .and_then(|e| e.code);
                 match code {
                     Some(21610) => ProviderOutcome::RecipientOptedOut,
                     Some(21211 | 21614 | 21217 | 21408) => ProviderOutcome::InvalidDestination,
@@ -188,8 +218,16 @@ impl TwilioAdapter {
 }
 
 fn validate_e164(s: &str) -> Result<(), AdapterError> {
-    let ok = s.len() >= 9 && s.len() <= 16 && s.starts_with('+') && s[1..].bytes().all(|b| b.is_ascii_digit()) && !s.starts_with("+0");
-    if ok { Ok(()) } else { Err(AdapterError::permanent("destination_not_e164")) }
+    let ok = s.len() >= 9
+        && s.len() <= 16
+        && s.starts_with('+')
+        && s[1..].bytes().all(|b| b.is_ascii_digit())
+        && !s.starts_with("+0");
+    if ok {
+        Ok(())
+    } else {
+        Err(AdapterError::permanent("destination_not_e164"))
+    }
 }
 
 /// Twilio request validation: `X-Twilio-Signature` =
@@ -197,7 +235,11 @@ fn validate_e164(s: &str) -> Result<(), AdapterError> {
 /// exact public URL Twilio was configured to call (scheme, host, port if
 /// non-default, path, and query string). Compared in constant time.
 #[must_use]
-pub fn twilio_signature(auth_token: &AdapterSecret, public_url: &str, form: &[(String, String)]) -> String {
+pub fn twilio_signature(
+    auth_token: &AdapterSecret,
+    public_url: &str,
+    form: &[(String, String)],
+) -> String {
     let mut sorted: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
     for (k, v) in form {
         sorted.entry(k.as_str()).or_default().push(v.as_str());
@@ -211,10 +253,11 @@ pub fn twilio_signature(auth_token: &AdapterSecret, public_url: &str, form: &[(S
             data.push_str(v);
         }
     }
-    let mut mac = <Hmac<Sha1> as Mac>::new_from_slice(auth_token.expose_bytes()).unwrap_or_else(|_| {
-        // HMAC accepts any key length; unreachable, but never panic in an adapter.
-        <Hmac<Sha1> as Mac>::new_from_slice(b"").unwrap_or_else(|_| unreachable_mac())
-    });
+    let mut mac =
+        <Hmac<Sha1> as Mac>::new_from_slice(auth_token.expose_bytes()).unwrap_or_else(|_| {
+            // HMAC accepts any key length; unreachable, but never panic in an adapter.
+            <Hmac<Sha1> as Mac>::new_from_slice(b"").unwrap_or_else(|_| unreachable_mac())
+        });
     mac.update(data.as_bytes());
     base64::engine::general_purpose::STANDARD.encode(mac.finalize().into_bytes())
 }
@@ -311,9 +354,14 @@ impl ActionAdapter for TwilioAdapter {
             return Err(AdapterError::permanent("kind_not_supported"));
         }
         let args = &action.request.arguments;
-        let to = args.get("to").and_then(Value::as_str).ok_or(AdapterError::permanent("missing_destination"))?;
+        let to = args
+            .get("to")
+            .and_then(Value::as_str)
+            .ok_or(AdapterError::permanent("missing_destination"))?;
         validate_e164(to)?;
-        args.get("rendered_text").and_then(Value::as_str).ok_or(AdapterError::permanent("missing_rendered_text"))?;
+        args.get("rendered_text")
+            .and_then(Value::as_str)
+            .ok_or(AdapterError::permanent("missing_rendered_text"))?;
         args.get("sender_identity_id")
             .and_then(Value::as_str)
             .and_then(|s| s.parse::<uuid::Uuid>().ok())
@@ -325,27 +373,41 @@ impl ActionAdapter for TwilioAdapter {
         self.validate(action).await?;
         let args = &action.request.arguments;
         let to = args.get("to").and_then(Value::as_str).unwrap_or_default();
-        let text = args.get("rendered_text").and_then(Value::as_str).unwrap_or_default();
-        let sid: uuid::Uuid = args.get("sender_identity_id").and_then(Value::as_str).and_then(|s| s.parse().ok()).unwrap_or_default();
+        let text = args
+            .get("rendered_text")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        let sid: uuid::Uuid = args
+            .get("sender_identity_id")
+            .and_then(Value::as_str)
+            .and_then(|s| s.parse().ok())
+            .unwrap_or_default();
         let sender = self
             .resolver
             .resolve(action.tenant_id, sid)
             .await
             .ok_or(AdapterError::permanent("sender_not_registered"))?;
         let url = self.messages_url(&sender.account_sid)?;
-        self.egress.check(url.as_str()).map_err(|_| AdapterError::permanent("egress_not_allowlisted"))?;
+        self.egress
+            .check(url.as_str())
+            .map_err(|_| AdapterError::permanent("egress_not_allowlisted"))?;
         let form = Self::build_form(&sender, to, text)?;
         let resp = self
             .client
             .post(url)
-            .basic_auth(&sender.account_sid, Some(std::str::from_utf8(sender.auth_token.expose_bytes()).unwrap_or_default()))
+            .basic_auth(
+                &sender.account_sid,
+                Some(std::str::from_utf8(sender.auth_token.expose_bytes()).unwrap_or_default()),
+            )
             .form(&form)
             .send()
             .await;
         let resp = match resp {
             Ok(r) => r,
             // Could not connect: the request never left. Safe to retry.
-            Err(e) if e.is_connect() => return Err(AdapterError::transient("provider_unreachable")),
+            Err(e) if e.is_connect() => {
+                return Err(AdapterError::transient("provider_unreachable"));
+            }
             // Request may have been received: the message may exist. Never retry blindly.
             Err(_) => return Err(AdapterError::ambiguous("response_lost")),
         };
@@ -357,7 +419,8 @@ impl ActionAdapter for TwilioAdapter {
         };
         match Self::classify(status, &bytes) {
             ProviderOutcome::Accepted => {
-                let m: TwilioMessage = serde_json::from_slice(&bytes).map_err(|_| AdapterError::ambiguous("response_unparseable"))?;
+                let m: TwilioMessage = serde_json::from_slice(&bytes)
+                    .map_err(|_| AdapterError::ambiguous("response_unparseable"))?;
                 if !m.sid.starts_with("SM") && !m.sid.starts_with("MM") {
                     return Err(AdapterError::ambiguous("message_sid_invalid"));
                 }
@@ -370,10 +433,17 @@ impl ActionAdapter for TwilioAdapter {
                 })
             }
             ProviderOutcome::RecipientOptedOut => Err(AdapterError::permanent("provider_opt_out")),
-            ProviderOutcome::InvalidDestination => Err(AdapterError::permanent("destination_invalid")),
+            ProviderOutcome::InvalidDestination => {
+                Err(AdapterError::permanent("destination_invalid"))
+            }
             ProviderOutcome::SenderNotCapable => Err(AdapterError::permanent("sender_not_capable")),
             ProviderOutcome::AuthFailed => Err(AdapterError::permanent("provider_auth_failed")),
-            ProviderOutcome::RateLimited => Err(AdapterError { class: RetryClass::RateLimited { retry_after_secs: 30 }, code: "provider_rate_limited" }),
+            ProviderOutcome::RateLimited => Err(AdapterError {
+                class: RetryClass::RateLimited {
+                    retry_after_secs: 30,
+                },
+                code: "provider_rate_limited",
+            }),
             ProviderOutcome::Other4xx => Err(AdapterError::permanent("provider_rejected")),
             // A 5xx after the request was received may or may not have created the message.
             ProviderOutcome::Server5xx => Err(AdapterError::ambiguous("provider_5xx")),
@@ -401,11 +471,17 @@ impl TwilioAdapter {
         body: &str,
         date_sent_utc: chrono::NaiveDate,
     ) -> Result<Reconciled, AdapterError> {
-        let sender = self.resolver.resolve(tenant, sender_identity_id).await.ok_or(AdapterError::permanent("sender_not_registered"))?;
+        let sender = self
+            .resolver
+            .resolve(tenant, sender_identity_id)
+            .await
+            .ok_or(AdapterError::permanent("sender_not_registered"))?;
         let mut url = self.messages_url(&sender.account_sid)?;
         {
             let mut q = url.query_pairs_mut();
-            q.append_pair("To", to).append_pair("DateSent", &date_sent_utc.format("%Y-%m-%d").to_string()).append_pair("PageSize", "50");
+            q.append_pair("To", to)
+                .append_pair("DateSent", &date_sent_utc.format("%Y-%m-%d").to_string())
+                .append_pair("PageSize", "50");
             if let Some(f) = &sender.from_number {
                 q.append_pair("From", f);
             }
@@ -413,24 +489,41 @@ impl TwilioAdapter {
         let resp = self
             .client
             .get(url)
-            .basic_auth(&sender.account_sid, Some(std::str::from_utf8(sender.auth_token.expose_bytes()).unwrap_or_default()))
+            .basic_auth(
+                &sender.account_sid,
+                Some(std::str::from_utf8(sender.auth_token.expose_bytes()).unwrap_or_default()),
+            )
             .send()
             .await
             .map_err(|_| AdapterError::transient("provider_unreachable"))?;
         if !resp.status().is_success() {
             return Err(AdapterError::transient("provider_list_failed"));
         }
-        let bytes = resp.bytes().await.map_err(|_| AdapterError::transient("provider_list_failed"))?;
-        let list: TwilioList = serde_json::from_slice(&bytes).map_err(|_| AdapterError::transient("provider_list_unparseable"))?;
+        let bytes = resp
+            .bytes()
+            .await
+            .map_err(|_| AdapterError::transient("provider_list_failed"))?;
+        let list: TwilioList = serde_json::from_slice(&bytes)
+            .map_err(|_| AdapterError::transient("provider_list_unparseable"))?;
         let want = Digest::of(body.as_bytes());
         let matches: Vec<&TwilioMessage> = list
             .messages
             .iter()
-            .filter(|m| m.to.as_deref() == Some(to) && m.body.as_deref().is_some_and(|b| Digest::of(b.as_bytes()).ct_eq(&want)))
+            .filter(|m| {
+                m.to.as_deref() == Some(to)
+                    && m.body
+                        .as_deref()
+                        .is_some_and(|b| Digest::of(b.as_bytes()).ct_eq(&want))
+            })
             .collect();
         Ok(match matches.as_slice() {
             [] => Reconciled::NotFound,
-            [m] => Reconciled::Found { provider_message_id: m.sid.clone(), status: m.status.clone(), error_code: m.error_code, date_created: m.date_created.clone() },
+            [m] => Reconciled::Found {
+                provider_message_id: m.sid.clone(),
+                status: m.status.clone(),
+                error_code: m.error_code,
+                date_created: m.date_created.clone(),
+            },
             _ => Reconciled::Multiple(matches.len()),
         })
     }
@@ -441,7 +534,12 @@ pub enum Reconciled {
     /// No matching message exists at the provider: the submission did not happen.
     NotFound,
     /// Exactly one matching message exists.
-    Found { provider_message_id: String, status: String, error_code: Option<i64>, date_created: Option<String> },
+    Found {
+        provider_message_id: String,
+        status: String,
+        error_code: Option<i64>,
+        date_created: Option<String>,
+    },
     /// More than one match: a human must resolve; never pick one.
     Multiple(usize),
 }
@@ -461,19 +559,62 @@ pub enum OptOutSignal {
 /// Standard English opt-out keywords honoured by US carriers / Twilio
 /// Advanced Opt-Out. Matched on the trimmed, case-folded whole message, or
 /// as the first word followed only by punctuation.
-const EXPLICIT: &[&str] = &["stop", "stopall", "unsubscribe", "cancel", "end", "quit", "revoke", "optout", "opt-out", "opt out"];
+const EXPLICIT: &[&str] = &[
+    "stop",
+    "stopall",
+    "unsubscribe",
+    "cancel",
+    "end",
+    "quit",
+    "revoke",
+    "optout",
+    "opt-out",
+    "opt out",
+];
 /// Clear natural-language stop requests: not carrier keywords, but unambiguous.
 /// Mirrored in `backend/app/inbound.py::_EXPLICIT_PHRASES`; keep both in sync.
 const EXPLICIT_PHRASES: &[&str] = &[
-    "stop texting", "stop messaging", "don't text", "dont text", "do not text", "don't message", "do not message",
-    "remove me", "take me off", "no more texts", "no more messages", "unsubscribe me", "stop sending", "stop contacting",
-    "lose my number", "please stop",
+    "stop texting",
+    "stop messaging",
+    "don't text",
+    "dont text",
+    "do not text",
+    "don't message",
+    "do not message",
+    "remove me",
+    "take me off",
+    "no more texts",
+    "no more messages",
+    "unsubscribe me",
+    "stop sending",
+    "stop contacting",
+    "lose my number",
+    "please stop",
 ];
-const POSSIBLE: &[&str] = &["leave me alone", "not interested", "wrong number", "unsub", "stop it", "go away", "no thanks", "no thank you"];
+const POSSIBLE: &[&str] = &[
+    "leave me alone",
+    "not interested",
+    "wrong number",
+    "unsub",
+    "stop it",
+    "go away",
+    "no thanks",
+    "no thank you",
+];
 
 #[must_use]
 pub fn detect_opt_out(body: &str) -> OptOutSignal {
-    let norm: String = body.trim().to_lowercase().chars().filter(|c| !matches!(c, '.' | '!' | '?' | ',' | '"' | '\'' | '\u{201c}' | '\u{201d}')).collect();
+    let norm: String = body
+        .trim()
+        .to_lowercase()
+        .chars()
+        .filter(|c| {
+            !matches!(
+                c,
+                '.' | '!' | '?' | ',' | '"' | '\'' | '\u{201c}' | '\u{201d}'
+            )
+        })
+        .collect();
     let norm = norm.split_whitespace().collect::<Vec<_>>().join(" ");
     if EXPLICIT.contains(&norm.as_str()) {
         return OptOutSignal::Explicit;
@@ -485,7 +626,12 @@ pub fn detect_opt_out(body: &str) -> OptOutSignal {
     if EXPLICIT_PHRASES.iter().any(|p| norm.contains(p)) {
         return OptOutSignal::Explicit;
     }
-    if POSSIBLE.iter().any(|p| norm.contains(p)) || (norm.contains("stop") && !norm.contains("stop by") && !norm.contains("nonstop") && !norm.contains("non-stop")) {
+    if POSSIBLE.iter().any(|p| norm.contains(p))
+        || (norm.contains("stop")
+            && !norm.contains("stop by")
+            && !norm.contains("nonstop")
+            && !norm.contains("non-stop"))
+    {
         return OptOutSignal::Possible;
     }
     OptOutSignal::None
@@ -515,46 +661,110 @@ mod tests {
         let token = AdapterSecret::new("12345");
         let url = "https://mycompany.com/myapp.php?foo=1&bar=2";
         let form: Vec<(String, String)> = [
-            ("CallSid", "CA1234567890ABCDE"), ("Caller", "+14158675309"), ("Digits", "1234"),
-            ("From", "+14158675309"), ("To", "+18005551212"),
-        ].iter().map(|(k, v)| ((*k).to_owned(), (*v).to_owned())).collect();
-        assert_eq!(twilio_signature(&token, url, &form), "RSOYDt4T1cUTdK1PDd93/VVr8B8=");
-        assert!(verify_twilio_signature(&token, url, &form, "RSOYDt4T1cUTdK1PDd93/VVr8B8="));
+            ("CallSid", "CA1234567890ABCDE"),
+            ("Caller", "+14158675309"),
+            ("Digits", "1234"),
+            ("From", "+14158675309"),
+            ("To", "+18005551212"),
+        ]
+        .iter()
+        .map(|(k, v)| ((*k).to_owned(), (*v).to_owned()))
+        .collect();
+        assert_eq!(
+            twilio_signature(&token, url, &form),
+            "RSOYDt4T1cUTdK1PDd93/VVr8B8="
+        );
+        assert!(verify_twilio_signature(
+            &token,
+            url,
+            &form,
+            "RSOYDt4T1cUTdK1PDd93/VVr8B8="
+        ));
         // Forged Host / different configured URL → invalid.
-        assert!(!verify_twilio_signature(&token, "https://attacker.example/myapp.php?foo=1&bar=2", &form, "RSOYDt4T1cUTdK1PDd93/VVr8B8="));
+        assert!(!verify_twilio_signature(
+            &token,
+            "https://attacker.example/myapp.php?foo=1&bar=2",
+            &form,
+            "RSOYDt4T1cUTdK1PDd93/VVr8B8="
+        ));
         // One changed param → invalid.
         let mut tampered = form.clone();
         tampered[2].1 = "1235".into();
-        assert!(!verify_twilio_signature(&token, url, &tampered, "RSOYDt4T1cUTdK1PDd93/VVr8B8="));
+        assert!(!verify_twilio_signature(
+            &token,
+            url,
+            &tampered,
+            "RSOYDt4T1cUTdK1PDd93/VVr8B8="
+        ));
         assert!(!verify_twilio_signature(&token, url, &form, ""));
     }
 
     #[test]
     fn form_requires_exactly_one_sender_and_e164() {
         let s = sender();
-        let f = TwilioAdapter::build_form(&s, "+15555550100", "Hi. Reply STOP to opt out.").unwrap();
+        let f =
+            TwilioAdapter::build_form(&s, "+15555550100", "Hi. Reply STOP to opt out.").unwrap();
         assert!(f.iter().any(|(k, v)| *k == "From" && v == "+15005550006"));
         assert!(f.iter().any(|(k, _)| *k == "StatusCallback"));
         assert!(TwilioAdapter::build_form(&s, "5555550100", "x").is_err());
         let mut both = sender();
         both.messaging_service_sid = Some(format!("MG{}", "b".repeat(32)));
-        assert_eq!(TwilioAdapter::build_form(&both, "+15555550100", "x").unwrap_err().code, "sender_misconfigured");
+        assert_eq!(
+            TwilioAdapter::build_form(&both, "+15555550100", "x")
+                .unwrap_err()
+                .code,
+            "sender_misconfigured"
+        );
         let mut none = sender();
         none.from_number = None;
-        assert_eq!(TwilioAdapter::build_form(&none, "+15555550100", "x").unwrap_err().code, "sender_misconfigured");
-        assert_eq!(TwilioAdapter::build_form(&s, "+15555550100", &"x".repeat(1601)).unwrap_err().code, "body_length");
+        assert_eq!(
+            TwilioAdapter::build_form(&none, "+15555550100", "x")
+                .unwrap_err()
+                .code,
+            "sender_misconfigured"
+        );
+        assert_eq!(
+            TwilioAdapter::build_form(&s, "+15555550100", &"x".repeat(1601))
+                .unwrap_err()
+                .code,
+            "body_length"
+        );
     }
 
     #[test]
     fn classification_is_conservative() {
-        assert_eq!(TwilioAdapter::classify(201, b"{}"), ProviderOutcome::Accepted);
-        assert_eq!(TwilioAdapter::classify(400, br#"{"code":21610,"message":"unsubscribed"}"#), ProviderOutcome::RecipientOptedOut);
-        assert_eq!(TwilioAdapter::classify(400, br#"{"code":21211}"#), ProviderOutcome::InvalidDestination);
-        assert_eq!(TwilioAdapter::classify(400, br#"{"code":99999}"#), ProviderOutcome::Other4xx);
-        assert_eq!(TwilioAdapter::classify(401, b""), ProviderOutcome::AuthFailed);
-        assert_eq!(TwilioAdapter::classify(429, b""), ProviderOutcome::RateLimited);
-        assert_eq!(TwilioAdapter::classify(500, b""), ProviderOutcome::Server5xx);
-        assert_eq!(TwilioAdapter::classify(503, b"not json"), ProviderOutcome::Server5xx);
+        assert_eq!(
+            TwilioAdapter::classify(201, b"{}"),
+            ProviderOutcome::Accepted
+        );
+        assert_eq!(
+            TwilioAdapter::classify(400, br#"{"code":21610,"message":"unsubscribed"}"#),
+            ProviderOutcome::RecipientOptedOut
+        );
+        assert_eq!(
+            TwilioAdapter::classify(400, br#"{"code":21211}"#),
+            ProviderOutcome::InvalidDestination
+        );
+        assert_eq!(
+            TwilioAdapter::classify(400, br#"{"code":99999}"#),
+            ProviderOutcome::Other4xx
+        );
+        assert_eq!(
+            TwilioAdapter::classify(401, b""),
+            ProviderOutcome::AuthFailed
+        );
+        assert_eq!(
+            TwilioAdapter::classify(429, b""),
+            ProviderOutcome::RateLimited
+        );
+        assert_eq!(
+            TwilioAdapter::classify(500, b""),
+            ProviderOutcome::Server5xx
+        );
+        assert_eq!(
+            TwilioAdapter::classify(503, b"not json"),
+            ProviderOutcome::Server5xx
+        );
     }
 
     #[test]
@@ -580,17 +790,44 @@ mod tests {
     #[test]
     fn opt_out_detection_separates_explicit_from_possible() {
         use OptOutSignal as O;
-        for s in ["STOP", "stop", " Stop. ", "UNSUBSCRIBE", "Stop!", "quit", "END", "opt out", "STOP please",
-                  "please stop texting me", "I'm not interested, remove me", "Can you stop sending these"] {
+        for s in [
+            "STOP",
+            "stop",
+            " Stop. ",
+            "UNSUBSCRIBE",
+            "Stop!",
+            "quit",
+            "END",
+            "opt out",
+            "STOP please",
+            "please stop texting me",
+            "I'm not interested, remove me",
+            "Can you stop sending these",
+        ] {
             assert_eq!(detect_opt_out(s), O::Explicit, "{s}");
         }
-        for s in ["wrong number", "stop it already", "leave me alone", "not interested", "no thanks"] {
+        for s in [
+            "wrong number",
+            "stop it already",
+            "leave me alone",
+            "not interested",
+            "no thanks",
+        ] {
             assert_eq!(detect_opt_out(s), O::Possible, "{s}");
         }
-        for s in ["Stop by anytime, I'd love a sample!", "yes Thursday works", "I can't stop by today but Friday is good", "nonstop fun", "Thanks!"] {
+        for s in [
+            "Stop by anytime, I'd love a sample!",
+            "yes Thursday works",
+            "I can't stop by today but Friday is good",
+            "nonstop fun",
+            "Thanks!",
+        ] {
             assert_ne!(detect_opt_out(s), O::Explicit, "{s}");
         }
-        assert_eq!(detect_opt_out("Stop by anytime, I'd love a sample!"), O::None);
+        assert_eq!(
+            detect_opt_out("Stop by anytime, I'd love a sample!"),
+            O::None
+        );
         assert_eq!(detect_opt_out("yes Thursday works"), O::None);
     }
 }

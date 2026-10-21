@@ -24,8 +24,8 @@ pub use digest::{Digest, sha256_hex};
 pub use hmac_sig::{
     HmacError, SignedHeaders, VerifyParams, canonical_signing_input, sign_hmac, verify_hmac,
 };
-pub use nonce::{NonceError, NonceWindow, ReplayGuard};
 pub use keyring::{EnvKek, Kek, Keyring, LEGACY_VERSION};
+pub use nonce::{NonceError, NonceWindow, ReplayGuard};
 pub use seal::{MasterKey, SealError, seal, unseal};
 pub use secret::{AdapterSecret, constant_time_eq, generate_secret};
 pub use webauthn::{CoseAlg, CredentialPublicKey, RegisteredCredential, WebAuthnError};

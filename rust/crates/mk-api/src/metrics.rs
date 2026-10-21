@@ -4,6 +4,7 @@ use prometheus_client::encoding::{EncodeLabelSet, EncodeLabelValue};
 use prometheus_client::metrics::counter::Counter;
 use prometheus_client::metrics::family::Family;
 use prometheus_client::metrics::gauge::Gauge;
+use prometheus_client::metrics::histogram::{Histogram, exponential_buckets};
 use prometheus_client::registry::Registry;
 use std::sync::Mutex;
 
@@ -32,10 +33,23 @@ pub struct AuthFailLabels {
     pub code: String,
 }
 
+#[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
+pub struct PathLabels {
+    /// The matched route template (never the concrete path: no ids).
+    pub route: String,
+}
+
+#[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
+pub struct DispositionLabels {
+    pub disposition: String,
+}
+
 #[derive(Debug)]
 pub struct Metrics {
     registry: Mutex<Registry>,
     pub requests: Family<RouteLabels, Counter>,
+    pub request_duration: Family<PathLabels, Histogram>,
+    pub inbound_events: Family<DispositionLabels, Counter>,
     pub decisions: Family<DecisionLabels, Counter>,
     pub assertion_failures: Family<AuthFailLabels, Counter>,
     pub hmac_failures: Family<AuthFailLabels, Counter>,
@@ -55,6 +69,10 @@ impl Metrics {
     pub fn new() -> Self {
         let mut registry = Registry::default();
         let requests = Family::<RouteLabels, Counter>::default();
+        let request_duration = Family::<PathLabels, Histogram>::new_with_constructor(|| {
+            Histogram::new(exponential_buckets(0.002, 2.0, 14))
+        });
+        let inbound_events = Family::<DispositionLabels, Counter>::default();
         let decisions = Family::<DecisionLabels, Counter>::default();
         let assertion_failures = Family::<AuthFailLabels, Counter>::default();
         let hmac_failures = Family::<AuthFailLabels, Counter>::default();
@@ -65,6 +83,16 @@ impl Metrics {
             "mk_requests",
             "Requests by route and status",
             requests.clone(),
+        );
+        registry.register(
+            "mk_request_duration_seconds",
+            "Request latency by matched route template",
+            request_duration.clone(),
+        );
+        registry.register(
+            "mk_inbound_events",
+            "Authenticated inbound customer messages recorded, by disposition (suppressed/held/queued_for_meaning/duplicate)",
+            inbound_events.clone(),
         );
         registry.register(
             "mk_policy_decisions",
@@ -99,6 +127,8 @@ impl Metrics {
         Self {
             registry: Mutex::new(registry),
             requests,
+            request_duration,
+            inbound_events,
             decisions,
             assertion_failures,
             hmac_failures,

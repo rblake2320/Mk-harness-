@@ -1,0 +1,181 @@
+# Prometheus alerting rules for the MK action kernel — contract row O7.
+#
+# Every rule carries `runbook` pointing at docs/runbooks/ and a `severity`:
+#   page     → critical, 24/7, acknowledge within 15 min (primary + backup operator)
+#   ticket   → next business day
+# Rules are unit-tested by `deploy/observability/alerts_test.yml`
+# (`promtool test rules`); CI runs that test, so a rule that cannot fire from
+# the metrics the binaries actually export fails the build.
+#
+# Metric sources: mk-action-api `/metrics` (job="mk-api"), mk-action-worker
+# `MK_METRICS_BIND` (job="mk-worker"). No per-tenant labels exist by design.
+groups:
+  - name: mk-kernel-integrity
+    rules:
+      - alert: MKUnapprovedSendSuspected
+        # Dispatch outcomes recorded while the global switch was off for the
+        # whole window: impossible by construction (the worker rechecks the
+        # switch inside the dispatch transaction), so any count is a bypass
+        # signal and is paged immediately.
+        expr: |
+          sum(increase(mk_dispatch_outcomes_total{outcome=~"Dispatched|PendingCallback"}[10m])) > 0
+          and on()
+          max_over_time(mk_kill_switch_global_enabled[10m]) == 0
+        for: 0m
+        labels: { severity: page }
+        annotations:
+          summary: "Sends recorded while global dispatch was disabled"
+          runbook: docs/runbooks/incident-unapproved-or-duplicate-send.md
+      - alert: MKSendsWithoutApprovalRequirement
+        # Every outreach proposal is RequireApproval under policy v1. Sends
+        # completing while no proposal has required approval all day means the
+        # policy or the approval gate changed underneath production.
+        expr: |
+          sum(increase(mk_dispatch_outcomes_total{outcome=~"Dispatched|PendingCallback"}[10m])) > 0
+          and on()
+          sum(increase(mk_policy_decisions_total{decision="RequireApproval"}[1d])) == 0
+        for: 0m
+        labels: { severity: page }
+        annotations:
+          summary: "Sends completed without any approval having been required in the last day"
+          runbook: docs/runbooks/incident-unapproved-or-duplicate-send.md
+      - alert: MKDuplicateSendSuspected
+        # A second provider submission for one action is impossible (one
+        # delivery row per attempt; ambiguous → submission_unknown, never retry).
+        # Dead letters with error_code duplicate_submission would show here.
+        expr: increase(mk_housekeeping_total{kind="stranded_requeued"}[15m]) > 0 and on() mk_actions_dispatching > 0 and on() increase(mk_dispatch_outcomes_total{outcome="ReconciliationRequired"}[15m]) == 0
+        for: 5m
+        labels: { severity: page }
+        annotations:
+          summary: "Queue-loss republish overlapped with in-flight dispatch and no reconciliation was recorded — verify no action was submitted twice"
+          runbook: docs/runbooks/incident-unapproved-or-duplicate-send.md
+      - alert: MKAuditIntegrityFailure
+        # Tail check from the worker sampler (head vs last event, every 15 s).
+        # The full-chain verifier (`mk-audit-verifier`, daily) exits non-zero
+        # and is alerted through the job scheduler, not through this rule.
+        expr: mk_audit_head_mismatches > 0
+        for: 0m
+        labels: { severity: page }
+        annotations:
+          summary: "Audit hash chain failed verification"
+          runbook: docs/runbooks/incident-unapproved-or-duplicate-send.md
+      - alert: MKCrossTenantExposureSuspected
+        # Any 5xx on a tenant-scoped internal route while RLS is in force is
+        # investigated as a possible isolation fault; 403/404 are the expected
+        # cross-tenant answers and are not alerted.
+        expr: sum(increase(mk_requests_total{route=~"/internal/v1/.*", status=~"5.."}[5m])) > 0
+        for: 0m
+        labels: { severity: page }
+        annotations:
+          summary: "Server errors on tenant-scoped routes"
+          runbook: docs/runbooks/incident-unapproved-or-duplicate-send.md
+
+  - name: mk-kernel-consent
+    rules:
+      - alert: MKOptOutProcessingFailure
+        # Inbound events are recorded; the application must process each for
+        # meaning. An unprocessed opt-out older than 5 minutes is a failure.
+        expr: mk_inbound_oldest_pending_age_seconds > 300
+        for: 0m
+        labels: { severity: page }
+        annotations:
+          summary: "Inbound customer messages (possibly opt-outs) unprocessed for >5 min"
+          runbook: docs/runbooks/inbound-outage.md
+      - alert: MKInboundOutage
+        expr: mk_tenants_inbound_blocked > 0
+        for: 1m
+        labels: { severity: page }
+        annotations:
+          summary: "Inbound path unverified/stale/paused for at least one tenant >60 s — dispatch is deferred"
+          runbook: docs/runbooks/inbound-outage.md
+      - alert: MKWebhookAuthFailures
+        expr: sum(increase(mk_assertion_failures_total{code=~"WEBHOOK_.*"}[5m])) > 10
+        for: 5m
+        labels: { severity: ticket }
+        annotations:
+          summary: "Provider webhook signature failures — check MK_PUBLIC_WEBHOOK_BASE and ingress rewrites"
+          runbook: docs/runbooks/inbound-outage.md
+
+  - name: mk-kernel-flow
+    rules:
+      - alert: MKEligibleQueueAge
+        expr: mk_queue_oldest_eligible_age_seconds > 60
+        for: 5m
+        labels: { severity: page }
+        annotations:
+          summary: "Eligible actions waiting >60 s for 5 min"
+          runbook: deploy/kernel/README.md
+      - alert: MKOutboxLag
+        expr: mk_outbox_lag_seconds > 30
+        for: 5m
+        labels: { severity: page }
+        annotations:
+          summary: "Outbox relay is not publishing (Redis or relay down)"
+          runbook: deploy/kernel/README.md
+      - alert: MKErrorRate
+        expr: |
+          sum(rate(mk_requests_total{status=~"5.."}[5m])) / clamp_min(sum(rate(mk_requests_total[5m])), 0.001) > 0.05
+        for: 5m
+        labels: { severity: page }
+        annotations:
+          summary: "API 5xx error rate >5% for 5 min"
+          runbook: deploy/kernel/README.md
+      - alert: MKReconciliationBacklog
+        expr: mk_actions_reconciliation_required > 0
+        for: 30m
+        labels: { severity: ticket }
+        annotations:
+          summary: "Uncertain submissions awaiting human reconciliation for 30 min"
+          runbook: docs/runbooks/restore-without-resend.md
+      - alert: MKStaleLease
+        expr: mk_lease_oldest_age_seconds > 600
+        for: 0m
+        labels: { severity: ticket }
+        annotations:
+          summary: "A dispatch lease is older than 10 min (worker stuck?)"
+          runbook: deploy/kernel/README.md
+      - alert: MKApprovalsExpiringUnused
+        expr: mk_approvals_expiring_1h > 0 and on() mk_kill_switch_global_enabled == 1
+        for: 30m
+        labels: { severity: ticket }
+        annotations:
+          summary: "Approved actions will expire unsent within the hour while dispatch is enabled"
+          runbook: deploy/kernel/README.md
+
+  - name: mk-kernel-platform
+    rules:
+      - alert: MKKeyManagementFailure
+        expr: mk_sealed_with_legacy_key == 1 or mk_key_versions_retiring > 0
+        for: 24h
+        labels: { severity: page }
+        annotations:
+          summary: "Envelope key rotation incomplete for 24 h (legacy seal active or a version left retiring)"
+          runbook: docs/runbooks/key-compromise.md
+      - alert: MKMetricsSamplerFailing
+        expr: increase(mk_metrics_sampler_errors_total[15m]) > 3
+        for: 0m
+        labels: { severity: ticket }
+        annotations:
+          summary: "Worker gauge sampler failing — the gauges above may be stale"
+          runbook: deploy/kernel/README.md
+      - alert: MKWorkerDown
+        expr: up{job="mk-worker"} == 0 or absent(up{job="mk-worker"})
+        for: 2m
+        labels: { severity: page }
+        annotations:
+          summary: "No worker is reporting"
+          runbook: deploy/kernel/README.md
+      - alert: MKApiDown
+        expr: up{job="mk-api"} == 0 or absent(up{job="mk-api"})
+        for: 2m
+        labels: { severity: page }
+        annotations:
+          summary: "Kernel API is not reporting"
+          runbook: deploy/kernel/README.md
+      - alert: MKDispatchEnabledOnStaging
+        expr: mk_kill_switch_global_enabled{environment="staging"} == 1 and on() mk_provider_live{environment="staging"} == 1
+        for: 0m
+        labels: { severity: page }
+        annotations:
+          summary: "Staging has dispatch enabled against the live provider"
+          runbook: deploy/kernel/README.md

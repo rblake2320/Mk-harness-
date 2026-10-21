@@ -588,7 +588,13 @@ async fn adapter_rotation_overlap_and_revocation() {
     ));
     // Wrong master key cannot unseal.
     assert!(matches!(
-        adapters::live_secrets(&mut tx, &mk_crypto::Keyring::legacy(&MasterKey::generate()), reg.adapter_id, now).await,
+        adapters::live_secrets(
+            &mut tx,
+            &mk_crypto::Keyring::legacy(&MasterKey::generate()),
+            reg.adapter_id,
+            now
+        )
+        .await,
         Err(StoreError::Crypto) | Ok(_)
     ));
 }
@@ -1102,76 +1108,166 @@ async fn envelope_key_rotation_drill() {
     use mk_store::keys;
     let s = require_db!();
     // Isolated key table state: this test owns kernel.key_versions for its duration.
-    sqlx::query("DELETE FROM kernel.key_versions").execute(s.pool()).await.unwrap_or_else(|e| panic!("{e:?}"));
+    sqlx::query("DELETE FROM kernel.key_versions")
+        .execute(s.pool())
+        .await
+        .unwrap_or_else(|e| panic!("{e:?}"));
     let tenant = TenantId::new();
     let master = MasterKey::generate();
     let legacy = Keyring::legacy(&master);
     let now = t0();
     // Seal one adapter credential under the legacy key.
     let mut tx = s.begin(tenant).await.unwrap_or_else(|e| panic!("{e:?}"));
-    let (reg, secret) = adapters::register(&mut tx, &legacy, "sim-k", "Sim", "android", "1.0", &[], &[], "kernel.internal", ACTOR, now)
-        .await
-        .unwrap_or_else(|e| panic!("{e:?}"));
+    let (reg, secret) = adapters::register(
+        &mut tx,
+        &legacy,
+        "sim-k",
+        "Sim",
+        "android",
+        "1.0",
+        &[],
+        &[],
+        "kernel.internal",
+        ACTOR,
+        now,
+    )
+    .await
+    .unwrap_or_else(|e| panic!("{e:?}"));
     tx.commit().await.unwrap_or_else(|e| panic!("{e:?}"));
     // No key rows → keyring is legacy only.
-    let ring0 = keys::load_keyring(s.pool(), None, &master, true).await.unwrap_or_else(|e| panic!("{e:?}"));
+    let ring0 = keys::load_keyring(s.pool(), None, &master, true)
+        .await
+        .unwrap_or_else(|e| panic!("{e:?}"));
     assert_eq!(ring0.versions(), vec![LEGACY_VERSION]);
 
     // Rotate under a KEK: version 1 active; legacy rows still readable.
     let kek = EnvKek::new("kek-test", &[3u8; 32]).unwrap_or_else(|e| panic!("{e:?}"));
-    let v1 = keys::rotate(s.pool(), &kek, "drill", "initial envelope key").await.unwrap_or_else(|e| panic!("{e:?}"));
+    let v1 = keys::rotate(s.pool(), &kek, "drill", "initial envelope key")
+        .await
+        .unwrap_or_else(|e| panic!("{e:?}"));
     assert_eq!(v1, 1);
-    assert!(keys::load_keyring(s.pool(), None, &master, true).await.is_err(), "versions exist but no KEK → refuse to start");
+    assert!(
+        keys::load_keyring(s.pool(), None, &master, true)
+            .await
+            .is_err(),
+        "versions exist but no KEK → refuse to start"
+    );
     let wrong = EnvKek::new("kek-test", &[4u8; 32]).unwrap_or_else(|e| panic!("{e:?}"));
-    assert!(keys::load_keyring(s.pool(), Some(&wrong), &master, true).await.is_err(), "wrong KEK material → refuse");
-    let ring1 = keys::load_keyring(s.pool(), Some(&kek), &master, true).await.unwrap_or_else(|e| panic!("{e:?}"));
+    assert!(
+        keys::load_keyring(s.pool(), Some(&wrong), &master, true)
+            .await
+            .is_err(),
+        "wrong KEK material → refuse"
+    );
+    let ring1 = keys::load_keyring(s.pool(), Some(&kek), &master, true)
+        .await
+        .unwrap_or_else(|e| panic!("{e:?}"));
     assert_eq!(ring1.current_version(), 1);
     assert_eq!(ring1.versions(), vec![0, 1]);
     let mut tx = s.begin(tenant).await.unwrap_or_else(|e| panic!("{e:?}"));
-    let live = adapters::live_secrets(&mut tx, &ring1, reg.adapter_id, now).await.unwrap_or_else(|e| panic!("{e:?}"));
-    assert_eq!(live[0].expose_bytes(), secret.expose_secret().as_bytes(), "legacy row readable through the new ring");
+    let live = adapters::live_secrets(&mut tx, &ring1, reg.adapter_id, now)
+        .await
+        .unwrap_or_else(|e| panic!("{e:?}"));
+    assert_eq!(
+        live[0].expose_bytes(),
+        secret.expose_secret().as_bytes(),
+        "legacy row readable through the new ring"
+    );
     drop(tx);
     // Stale rows reported; retiring legacy is impossible (it has no row) but retiring v... let's rotate again to exercise retire.
     // Scoped to this test's tenant: other tests seal rows under their own random keys,
     // which the operator path reports as `unreadable` rather than aborting on.
-    let stale = keys::stale_counts(s.pool(), &ring1, Some(tenant)).await.unwrap_or_else(|e| panic!("{e:?}"));
-    assert!(stale.iter().any(|(t, n)| t == "kernel.adapter_credentials" && *n >= 1));
-    let rep = keys::reencrypt(s.pool(), &ring1, Some(tenant)).await.unwrap_or_else(|e| panic!("{e:?}"));
+    let stale = keys::stale_counts(s.pool(), &ring1, Some(tenant))
+        .await
+        .unwrap_or_else(|e| panic!("{e:?}"));
+    assert!(
+        stale
+            .iter()
+            .any(|(t, n)| t == "kernel.adapter_credentials" && *n >= 1)
+    );
+    let rep = keys::reencrypt(s.pool(), &ring1, Some(tenant))
+        .await
+        .unwrap_or_else(|e| panic!("{e:?}"));
     assert!(rep.resealed >= 1 && rep.unreadable == 0, "{rep:?}");
-    let stale = keys::stale_counts(s.pool(), &ring1, Some(tenant)).await.unwrap_or_else(|e| panic!("{e:?}"));
+    let stale = keys::stale_counts(s.pool(), &ring1, Some(tenant))
+        .await
+        .unwrap_or_else(|e| panic!("{e:?}"));
     assert!(stale.iter().all(|(_, n)| *n == 0), "{stale:?}");
     // Across all tenants, foreign-key rows are reported, not destroyed.
-    let all = keys::reencrypt(s.pool(), &ring1, None).await.unwrap_or_else(|e| panic!("{e:?}"));
+    let all = keys::reencrypt(s.pool(), &ring1, None)
+        .await
+        .unwrap_or_else(|e| panic!("{e:?}"));
     assert_eq!(all.resealed, 0);
     // Now the legacy key can be dropped from the ring and rows still read.
-    let ring1_only = keys::load_keyring(s.pool(), Some(&kek), &master, false).await.unwrap_or_else(|e| panic!("{e:?}"));
+    let ring1_only = keys::load_keyring(s.pool(), Some(&kek), &master, false)
+        .await
+        .unwrap_or_else(|e| panic!("{e:?}"));
     assert_eq!(ring1_only.versions(), vec![1]);
     let mut tx = s.begin(tenant).await.unwrap_or_else(|e| panic!("{e:?}"));
-    let live = adapters::live_secrets(&mut tx, &ring1_only, reg.adapter_id, now).await.unwrap_or_else(|e| panic!("{e:?}"));
+    let live = adapters::live_secrets(&mut tx, &ring1_only, reg.adapter_id, now)
+        .await
+        .unwrap_or_else(|e| panic!("{e:?}"));
     assert_eq!(live[0].expose_bytes(), secret.expose_secret().as_bytes());
     // A fresh credential is sealed under v1 (not legacy).
-    let s2 = adapters::rotate(&mut tx, &ring1_only, reg.adapter_id, Duration::hours(1), ACTOR, now).await.unwrap_or_else(|e| panic!("{e:?}"));
+    let s2 = adapters::rotate(
+        &mut tx,
+        &ring1_only,
+        reg.adapter_id,
+        Duration::hours(1),
+        ACTOR,
+        now,
+    )
+    .await
+    .unwrap_or_else(|e| panic!("{e:?}"));
     assert!(!s2.expose_secret().is_empty());
     tx.commit().await.unwrap_or_else(|e| panic!("{e:?}"));
     // Rotate to v2; retire v1 is refused while rows use it; after reencrypt it succeeds.
-    let v2 = keys::rotate(s.pool(), &kek, "drill", "second rotation").await.unwrap_or_else(|e| panic!("{e:?}"));
+    let v2 = keys::rotate(s.pool(), &kek, "drill", "second rotation")
+        .await
+        .unwrap_or_else(|e| panic!("{e:?}"));
     assert_eq!(v2, 2);
-    let ring2 = keys::load_keyring(s.pool(), Some(&kek), &master, false).await.unwrap_or_else(|e| panic!("{e:?}"));
+    let ring2 = keys::load_keyring(s.pool(), Some(&kek), &master, false)
+        .await
+        .unwrap_or_else(|e| panic!("{e:?}"));
     assert_eq!(ring2.versions(), vec![1, 2]);
-    assert!(matches!(keys::retire(s.pool(), &ring2, 1, now).await, Err(StoreError::Conflict(_))), "rows still under v1");
-    assert!(matches!(keys::retire(s.pool(), &ring2, 2, now).await, Err(StoreError::Conflict(_))), "cannot retire active");
-    keys::reencrypt(s.pool(), &ring2, Some(tenant)).await.unwrap_or_else(|e| panic!("{e:?}"));
-    keys::retire(s.pool(), &ring2, 1, now).await.unwrap_or_else(|e| panic!("{e:?}"));
-    let ring_final = keys::load_keyring(s.pool(), Some(&kek), &master, false).await.unwrap_or_else(|e| panic!("{e:?}"));
+    assert!(
+        matches!(
+            keys::retire(s.pool(), &ring2, 1, now).await,
+            Err(StoreError::Conflict(_))
+        ),
+        "rows still under v1"
+    );
+    assert!(
+        matches!(
+            keys::retire(s.pool(), &ring2, 2, now).await,
+            Err(StoreError::Conflict(_))
+        ),
+        "cannot retire active"
+    );
+    keys::reencrypt(s.pool(), &ring2, Some(tenant))
+        .await
+        .unwrap_or_else(|e| panic!("{e:?}"));
+    keys::retire(s.pool(), &ring2, 1, now)
+        .await
+        .unwrap_or_else(|e| panic!("{e:?}"));
+    let ring_final = keys::load_keyring(s.pool(), Some(&kek), &master, false)
+        .await
+        .unwrap_or_else(|e| panic!("{e:?}"));
     assert_eq!(ring_final.versions(), vec![2]);
     let mut tx = s.begin(tenant).await.unwrap_or_else(|e| panic!("{e:?}"));
-    let live = adapters::live_secrets(&mut tx, &ring_final, reg.adapter_id, now).await.unwrap_or_else(|e| panic!("{e:?}"));
+    let live = adapters::live_secrets(&mut tx, &ring_final, reg.adapter_id, now)
+        .await
+        .unwrap_or_else(|e| panic!("{e:?}"));
     assert_eq!(live.len(), 2);
     drop(tx);
     // Containment: a ring that lost v2 (compromised → removed) cannot read anything — rows fail closed.
     let legacy_only = Keyring::legacy(&master);
     let mut tx = s.begin(tenant).await.unwrap_or_else(|e| panic!("{e:?}"));
-    assert!(adapters::live_secrets(&mut tx, &legacy_only, reg.adapter_id, now).await.is_err());
+    assert!(
+        adapters::live_secrets(&mut tx, &legacy_only, reg.adapter_id, now)
+            .await
+            .is_err()
+    );
     drop(tx);
     // Runtime identities cannot mint or retire keys (owner-only table).
     ensure_member(s.pool(), "mk_kernel_api").await;
@@ -1180,5 +1276,8 @@ async fn envelope_key_rotation_drill() {
         .await;
     assert!(denied.is_err(), "runtime login must not mint key versions");
     sqlx::query("RESET ROLE").execute(s.pool()).await.ok();
-    sqlx::query("DELETE FROM kernel.key_versions").execute(s.pool()).await.unwrap_or_else(|e| panic!("{e:?}"));
+    sqlx::query("DELETE FROM kernel.key_versions")
+        .execute(s.pool())
+        .await
+        .unwrap_or_else(|e| panic!("{e:?}"));
 }

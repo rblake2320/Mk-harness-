@@ -359,7 +359,10 @@ pub fn recheck_at_dispatch(input: &RecheckInput<'_>) -> Result<(), DenyCode> {
 /// recorded preference) when present and valid, else the tenant's zone.
 /// An invalid contact zone is a hard refusal at the caller (never a silent
 /// fallback to the business's hours).
-pub fn contact_zone<'a>(args: &'a serde_json::Map<String, serde_json::Value>, tenant_tz: &'a str) -> Result<&'a str, &'static str> {
+pub fn contact_zone<'a>(
+    args: &'a serde_json::Map<String, serde_json::Value>,
+    tenant_tz: &'a str,
+) -> Result<&'a str, &'static str> {
     match args.get("contact_tz").and_then(serde_json::Value::as_str) {
         None => Ok(tenant_tz),
         Some(z) if z.parse::<chrono_tz::Tz>().is_ok() => Ok(z),
@@ -888,13 +891,27 @@ mod tests {
     #[test]
     fn contact_zone_prefers_contact_and_refuses_garbage() {
         let mut args = serde_json::Map::new();
-        assert_eq!(contact_zone(&args, "America/Chicago"), Ok("America/Chicago"));
-        args.insert("contact_tz".into(), serde_json::json!("America/Los_Angeles"));
-        assert_eq!(contact_zone(&args, "America/Chicago"), Ok("America/Los_Angeles"));
+        assert_eq!(
+            contact_zone(&args, "America/Chicago"),
+            Ok("America/Chicago")
+        );
+        args.insert(
+            "contact_tz".into(),
+            serde_json::json!("America/Los_Angeles"),
+        );
+        assert_eq!(
+            contact_zone(&args, "America/Chicago"),
+            Ok("America/Los_Angeles")
+        );
         args.insert("contact_tz".into(), serde_json::json!("Mars/Olympus"));
-        assert_eq!(contact_zone(&args, "America/Chicago"), Err("contact_tz_invalid"));
+        assert_eq!(
+            contact_zone(&args, "America/Chicago"),
+            Err("contact_tz_invalid")
+        );
         // 21:00 Chicago is 19:00 Los Angeles: inside hours for the contact, outside for the business.
-        let now = chrono::DateTime::parse_from_rfc3339("2026-10-20T02:00:00Z").map(|d| d.with_timezone(&Utc)).unwrap_or_default();
+        let now = chrono::DateTime::parse_from_rfc3339("2026-10-20T02:00:00Z")
+            .map(|d| d.with_timezone(&Utc))
+            .unwrap_or_default();
         assert_eq!(local_hour_in_zone(now, "America/Chicago", 0), 21);
         assert_eq!(local_hour_in_zone(now, "America/Los_Angeles", 0), 19);
     }

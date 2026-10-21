@@ -106,11 +106,9 @@ async fn insert_credential(
 ) -> Result<SecretString, StoreError> {
     let credential_id = Uuid::now_v7();
     let secret = generate_secret();
-    let sealed = keyring.seal(
-        &aad(tx.tenant(), adapter_id, credential_id),
-        &secret,
-    )
-    .map_err(|_| StoreError::Crypto)?;
+    let sealed = keyring
+        .seal(&aad(tx.tenant(), adapter_id, credential_id), &secret)
+        .map_err(|_| StoreError::Crypto)?;
     let fp = AdapterSecret::new(secret.expose_secret().to_string()).fingerprint();
     sqlx::query(
         "INSERT INTO kernel.adapter_credentials (credential_id, tenant_id, adapter_id, secret_ciphertext, secret_fingerprint, created_at)
@@ -288,7 +286,8 @@ pub async fn live_secrets(
         .map(|r| {
             let cid: Uuid = r.try_get("credential_id")?;
             let ct: Vec<u8> = r.try_get("secret_ciphertext")?;
-            let s = keyring.unseal( &aad(tenant, adapter_id, cid), &ct)
+            let s = keyring
+                .unseal(&aad(tenant, adapter_id, cid), &ct)
                 .map_err(|_| StoreError::Crypto)?;
             Ok(AdapterSecret::new(s.expose_secret().to_string()))
         })

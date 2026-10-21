@@ -305,7 +305,15 @@ pub async fn revoke_live_by_approver(
         .await?;
         let a = actions::get_for_update(tx, action_id).await?;
         if a.state.is_cancellable() {
-            actions::transition(tx, action_id, mk_domain::Transition::Cancel, Some("approver_revoked"), actor, now).await?;
+            actions::transition(
+                tx,
+                action_id,
+                mk_domain::Transition::Cancel,
+                Some("approver_revoked"),
+                actor,
+                now,
+            )
+            .await?;
         }
     }
     Ok(u64::try_from(rows.len()).unwrap_or(u64::MAX))

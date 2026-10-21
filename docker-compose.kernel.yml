@@ -99,6 +99,9 @@ services:
       # Production SMS transport (WP07). Empty disables the provider adapter.
       MK_TWILIO_API_BASE: ${MK_TWILIO_API_BASE:-https://api.twilio.com}
       MK_PUBLIC_WEBHOOK_BASE: ${MK_PUBLIC_WEBHOOK_BASE:?e.g. https://hooks.example.com}
+      # Prometheus scrape target (deploy/observability); private network only.
+      MK_METRICS_BIND: "0.0.0.0:9100"
+      MK_METRICS_SAMPLE_SECS: "15"
     read_only: true
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]

@@ -75,14 +75,22 @@ impl MessageState {
             Self::AwaitingApproval => "Waiting for an explicit human approval gesture.",
             Self::Approved => "Approved by a human; not yet queued for execution.",
             Self::Queued => "Queued for execution; policy will be re-evaluated before any send.",
-            Self::DispatchAuthorized => "Dispatch authorization obtained; no provider request has been made.",
-            Self::SubmissionStarted => "The provider request is in flight or its outcome is not yet recorded.",
+            Self::DispatchAuthorized => {
+                "Dispatch authorization obtained; no provider request has been made."
+            }
+            Self::SubmissionStarted => {
+                "The provider request is in flight or its outcome is not yet recorded."
+            }
             Self::ProviderAccepted => "Provider acknowledged submission.",
             Self::Sent => "Provider reports outbound network submission.",
             Self::Delivered => "Supported provider/carrier receipt reports delivery.",
             Self::Failed => "Provider reported a terminal failure.",
-            Self::DeliveryUnknown => "Evidence is insufficient to say whether the message was delivered.",
-            Self::SubmissionUnknown => "Evidence is insufficient to say whether the message was submitted; a human must resolve before any replacement.",
+            Self::DeliveryUnknown => {
+                "Evidence is insufficient to say whether the message was delivered."
+            }
+            Self::SubmissionUnknown => {
+                "Evidence is insufficient to say whether the message was submitted; a human must resolve before any replacement."
+            }
             Self::Cancelled => "Cancelled before any provider submission.",
             Self::Denied => "Refused by policy; nothing was sent.",
             Self::Expired => "The authorization window elapsed before execution.",
@@ -129,8 +137,10 @@ mod tests {
 
     #[test]
     fn vocabulary_matches_contract_exactly() {
-        let schema: serde_json::Value =
-            serde_json::from_str(include_str!("../../../../contracts/action/v1/action-result.schema.json")).unwrap();
+        let schema: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../../contracts/action/v1/action-result.schema.json"
+        ))
+        .unwrap();
         let listed: Vec<&str> = schema["properties"]["message_state"]["enum"]
             .as_array()
             .unwrap()
@@ -140,7 +150,10 @@ mod tests {
         let ours: Vec<&str> = MessageState::ALL.iter().map(|s| s.as_str()).collect();
         assert_eq!(listed, ours);
         for s in MessageState::ALL {
-            assert_eq!(serde_json::to_value(s).unwrap(), serde_json::json!(s.as_str()));
+            assert_eq!(
+                serde_json::to_value(s).unwrap(),
+                serde_json::json!(s.as_str())
+            );
             assert!(!s.definition().is_empty());
         }
     }
@@ -149,12 +162,23 @@ mod tests {
     fn derivation_never_overclaims() {
         use ActionState as A;
         use MessageState as M;
-        assert_eq!(M::derive(A::Completed, None), M::DeliveryUnknown, "no provider evidence → unknown, not sent");
+        assert_eq!(
+            M::derive(A::Completed, None),
+            M::DeliveryUnknown,
+            "no provider evidence → unknown, not sent"
+        );
         assert_eq!(M::derive(A::Completed, Some("sent")), M::Sent);
         assert_eq!(M::derive(A::Completed, Some("delivered")), M::Delivered);
         assert_eq!(M::derive(A::Dispatching, None), M::DispatchAuthorized);
-        assert_eq!(M::derive(A::Dispatching, Some("submission_started")), M::SubmissionStarted);
-        assert_eq!(M::derive(A::ReconciliationRequired, Some("sent")), M::SubmissionUnknown, "kernel uncertainty wins");
+        assert_eq!(
+            M::derive(A::Dispatching, Some("submission_started")),
+            M::SubmissionStarted
+        );
+        assert_eq!(
+            M::derive(A::ReconciliationRequired, Some("sent")),
+            M::SubmissionUnknown,
+            "kernel uncertainty wins"
+        );
         assert_eq!(M::derive(A::Suppressed, Some("delivered")), M::Cancelled);
         assert_eq!(M::derive(A::FailedFinal, None), M::Failed);
     }

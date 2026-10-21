@@ -113,11 +113,24 @@ pub async fn global_kill_switch(
             .with_request_id(&headers));
         };
         let now = Utc::now();
-        let mut tx = st.store.begin(p.tenant).await.map_err(|e| ApiError::from(e).with_request_id(&headers))?;
-        super::human_approval::verify_operator_step_up(&st, &mut tx, &p, &super::human_approval::global_enable_op_digest(), w, now)
+        let mut tx = st
+            .store
+            .begin(p.tenant)
             .await
-            .map_err(|e| e.with_request_id(&headers))?;
-        tx.commit().await.map_err(|e| ApiError::from(e).with_request_id(&headers))?;
+            .map_err(|e| ApiError::from(e).with_request_id(&headers))?;
+        super::human_approval::verify_operator_step_up(
+            &st,
+            &mut tx,
+            &p,
+            &super::human_approval::global_enable_op_digest(),
+            w,
+            now,
+        )
+        .await
+        .map_err(|e| e.with_request_id(&headers))?;
+        tx.commit()
+            .await
+            .map_err(|e| ApiError::from(e).with_request_id(&headers))?;
     }
     policy::set_global_dispatch(st.store.pool(), b.dispatch_enabled, &p.user.to_string())
         .await

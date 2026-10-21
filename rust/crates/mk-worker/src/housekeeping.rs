@@ -86,7 +86,14 @@ pub async fn run_once(
         for action_id in outbox::stranded_queued(&mut tx, now, STRANDED_AFTER_SECS, 100).await? {
             let a = actions::get_for_update(&mut tx, action_id).await?;
             if a.state == ActionState::Queued {
-                outbox::enqueue(&mut tx, action_id, "dispatch", now, serde_json::json!({"requeued": "stranded"})).await?;
+                outbox::enqueue(
+                    &mut tx,
+                    action_id,
+                    "dispatch",
+                    now,
+                    serde_json::json!({"requeued": "stranded"}),
+                )
+                .await?;
                 stats.stranded_requeued += 1;
             }
         }

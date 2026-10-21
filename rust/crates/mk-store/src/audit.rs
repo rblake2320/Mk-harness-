@@ -159,6 +159,31 @@ pub async fn verify_tenant(tx: &mut TenantTx<'_>) -> Result<i64, StoreError> {
     Ok(mk_audit::verify_chain(tx.tenant(), &all, &h)?)
 }
 
+/// O(1) tail check for monitoring: the stored head must equal the last
+/// event's hash and the event count. Catches truncation, head tampering and a
+/// head/events split-brain without walking the chain (that is `verify_tenant`,
+/// run by `mk-audit-verifier`). Returns `Ok(true)` when consistent.
+pub async fn head_consistent(tx: &mut TenantTx<'_>) -> Result<bool, StoreError> {
+    let h = head(tx).await?;
+    let last: Option<(i64, String)> = sqlx::query(
+        "SELECT tenant_sequence, event_hash FROM kernel.audit_events WHERE tenant_id = $1 ORDER BY tenant_sequence DESC LIMIT 1",
+    )
+    .bind(tx.tenant().0)
+    .fetch_optional(tx.conn())
+    .await?
+    .map(|r| Ok::<_, StoreError>((r.try_get("tenant_sequence")?, r.try_get("event_hash")?)))
+    .transpose()?;
+    let n: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM kernel.audit_events WHERE tenant_id = $1")
+            .bind(tx.tenant().0)
+            .fetch_one(tx.conn())
+            .await?;
+    Ok(match last {
+        None => h.count == 0 && n == 0,
+        Some((seq, hash)) => h.count == seq && n == seq && h.last_hash == hash,
+    })
+}
+
 /// List tenant ids that have an audit head (verifier iterates these). Runs
 /// outside a tenant transaction under the read-only role policy.
 pub async fn all_tenants(pool: &sqlx::PgPool) -> Result<Vec<TenantId>, StoreError> {

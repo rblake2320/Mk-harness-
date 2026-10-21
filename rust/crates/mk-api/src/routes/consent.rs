@@ -180,7 +180,12 @@ pub async fn add_suppression(
     if let Some(h) = &b.destination_hash
         && (h.len() != 64 || !h.bytes().all(|c| c.is_ascii_hexdigit()))
     {
-        return Err(ApiError::new(StatusCode::UNPROCESSABLE_ENTITY, "INVALID_SUPPRESSION", "destination_hash must be 64 hex chars").with_request_id(&headers));
+        return Err(ApiError::new(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "INVALID_SUPPRESSION",
+            "destination_hash must be 64 hex chars",
+        )
+        .with_request_id(&headers));
     }
     if (b.destination.is_some() || b.destination_hash.is_some()) && b.channel.is_none() {
         return Err(ApiError::new(

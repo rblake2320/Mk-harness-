@@ -17,9 +17,9 @@ pub use action::{
     ACTION_SCHEMA_VERSION, APPROVAL_SCHEMA_VERSION, ActionRequest, ActionResult, ApprovalRecord,
     Evidence, Origin, Receipt, Resource,
 };
+pub use message_state::MessageState;
 pub use mobile::{
     MOBILE_WORK_ORDER_SCHEMA, MobileCallback, MobilePing, MobileWorkOrder, WorkOrderStep,
 };
-pub use message_state::MessageState;
 pub use problem::ProblemDetails;
 pub use schema::{ContractError, SchemaId, validate};

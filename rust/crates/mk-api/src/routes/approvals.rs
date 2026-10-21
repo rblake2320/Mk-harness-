@@ -80,9 +80,11 @@ async fn decide(
             )));
         }
         (_, true, Some(w)) => HumanBinding::WebAuthn(
-            super::human_approval::verify_for_approval(st, &mut tx, p, action_id, &a.digest, w, now)
-                .await
-                .map_err(rid)?,
+            super::human_approval::verify_for_approval(
+                st, &mut tx, p, action_id, &a.digest, w, now,
+            )
+            .await
+            .map_err(rid)?,
         ),
         (_, false, Some(_)) => {
             return Err(rid(ApiError::new(

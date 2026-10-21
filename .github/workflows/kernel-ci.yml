@@ -3,9 +3,9 @@ name: Rust action kernel
 on:
   push:
     branches: [main]
-    paths: ["rust/**", "contracts/**", "migrations/**", "deploy/kernel/**", "evidence/**", "tools/**", ".github/workflows/kernel-ci.yml"]
+    paths: ["rust/**", "contracts/**", "migrations/**", "deploy/**", "evidence/**", "tools/**", "scripts/**", ".github/workflows/kernel-ci.yml"]
   pull_request:
-    paths: ["rust/**", "contracts/**", "migrations/**", "deploy/kernel/**", "evidence/**", "tools/**", ".github/workflows/kernel-ci.yml"]
+    paths: ["rust/**", "contracts/**", "migrations/**", "deploy/**", "evidence/**", "tools/**", "scripts/**", ".github/workflows/kernel-ci.yml"]
 
 permissions:
   contents: read
@@ -75,6 +75,23 @@ jobs:
       - run: pip install pyyaml==6.0.2
       - name: Evidence records validate (schema + checksums)
         run: python -I tools/evidence/check.py
+
+  observability:
+    # Alert rules must parse and every paging rule must fire on injected series
+    # (contract O7 "alert rules tested by injection"); a rule referencing a metric
+    # the binaries do not export is caught by the metric-name cross-check.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - name: Install promtool
+        run: |
+          set -euo pipefail
+          V=3.5.0
+          curl -sSL -o p.tgz "https://github.com/prometheus/prometheus/releases/download/v${V}/prometheus-${V}.linux-amd64.tar.gz"
+          echo "e811827af26d822afb09a4f28314f61b618b12cff5369835a67f674d8b46f39a  p.tgz" | sha256sum -c -
+          tar xzf p.tgz
+          sudo install "prometheus-${V}.linux-amd64/promtool" /usr/local/bin/promtool
+      - run: bash scripts/observability-check.sh
 
   kernel-image:
     runs-on: ubuntu-latest

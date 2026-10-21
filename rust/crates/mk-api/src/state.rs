@@ -44,7 +44,9 @@ pub struct ApprovalRp {
 impl ApprovalRp {
     /// Parse `MK_APPROVAL_RP_ID` / `MK_APPROVAL_ORIGINS` (comma-separated).
     pub fn from_env() -> Result<Option<Self>, String> {
-        let rp_id = std::env::var("MK_APPROVAL_RP_ID").ok().filter(|s| !s.trim().is_empty());
+        let rp_id = std::env::var("MK_APPROVAL_RP_ID")
+            .ok()
+            .filter(|s| !s.trim().is_empty());
         let allow_unbound = std::env::var("MK_ALLOW_UNBOUND_APPROVAL").is_ok_and(|v| v == "1");
         match rp_id {
             None if allow_unbound => Ok(None),

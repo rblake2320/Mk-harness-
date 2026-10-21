@@ -60,11 +60,16 @@ impl std::fmt::Debug for EnvKek {
 impl EnvKek {
     pub fn new(id: impl Into<String>, key: &[u8]) -> Result<Self, SealError> {
         let arr: [u8; 32] = key.try_into().map_err(|_| SealError::BadKey)?;
-        Ok(Self { id: id.into(), key: Zeroizing::new(arr) })
+        Ok(Self {
+            id: id.into(),
+            key: Zeroizing::new(arr),
+        })
     }
     pub fn from_base64(id: impl Into<String>, b64: &str) -> Result<Self, SealError> {
         use base64::Engine as _;
-        let raw = base64::engine::general_purpose::STANDARD.decode(b64.trim()).map_err(|_| SealError::BadKey)?;
+        let raw = base64::engine::general_purpose::STANDARD
+            .decode(b64.trim())
+            .map_err(|_| SealError::BadKey)?;
         Self::new(id, &raw)
     }
 }
@@ -79,7 +84,13 @@ impl Kek for EnvKek {
         rand::rngs::OsRng.fill_bytes(&mut nonce);
         let aad = format!("{}:{version}", self.id);
         let ct = cipher
-            .encrypt(Nonce::from_slice(&nonce), Payload { msg: dek, aad: aad.as_bytes() })
+            .encrypt(
+                Nonce::from_slice(&nonce),
+                Payload {
+                    msg: dek,
+                    aad: aad.as_bytes(),
+                },
+            )
             .map_err(|_| SealError::Unseal)?;
         let mut out = nonce.to_vec();
         out.extend_from_slice(&ct);
@@ -93,7 +104,13 @@ impl Kek for EnvKek {
         let (nonce, ct) = wrapped.split_at(NONCE_LEN);
         let aad = format!("{}:{version}", self.id);
         let pt = cipher
-            .decrypt(Nonce::from_slice(nonce), Payload { msg: ct, aad: aad.as_bytes() })
+            .decrypt(
+                Nonce::from_slice(nonce),
+                Payload {
+                    msg: ct,
+                    aad: aad.as_bytes(),
+                },
+            )
             .map_err(|_| SealError::Unseal)?;
         let arr: [u8; 32] = pt.as_slice().try_into().map_err(|_| SealError::Unseal)?;
         Ok(Zeroizing::new(arr))
@@ -109,7 +126,12 @@ pub struct Keyring {
 
 impl std::fmt::Debug for Keyring {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Keyring(versions={:?}, current={})", self.deks.keys().collect::<Vec<_>>(), self.current)
+        write!(
+            f,
+            "Keyring(versions={:?}, current={})",
+            self.deks.keys().collect::<Vec<_>>(),
+            self.current
+        )
     }
 }
 
@@ -121,13 +143,19 @@ impl Keyring {
         let mut k = Zeroizing::new([0u8; 32]);
         k.copy_from_slice(master.as_bytes());
         deks.insert(LEGACY_VERSION, k);
-        Self { deks, current: LEGACY_VERSION }
+        Self {
+            deks,
+            current: LEGACY_VERSION,
+        }
     }
 
     /// Build from unwrapped versions. `current` must be present and non-legacy
     /// unless it is the only version. Version 0 (legacy master) may be included
     /// so old rows remain readable during migration.
-    pub fn from_versions(deks: BTreeMap<u32, Zeroizing<[u8; 32]>>, current: u32) -> Result<Self, SealError> {
+    pub fn from_versions(
+        deks: BTreeMap<u32, Zeroizing<[u8; 32]>>,
+        current: u32,
+    ) -> Result<Self, SealError> {
         if !deks.contains_key(&current) {
             return Err(SealError::BadKey);
         }
@@ -158,7 +186,13 @@ impl Keyring {
         let mut nonce = [0u8; NONCE_LEN];
         rand::rngs::OsRng.fill_bytes(&mut nonce);
         let ct = cipher
-            .encrypt(Nonce::from_slice(&nonce), Payload { msg: plaintext.expose_secret().as_bytes(), aad: aad.as_bytes() })
+            .encrypt(
+                Nonce::from_slice(&nonce),
+                Payload {
+                    msg: plaintext.expose_secret().as_bytes(),
+                    aad: aad.as_bytes(),
+                },
+            )
             .map_err(|_| SealError::Unseal)?;
         let mut out = Vec::with_capacity(4 + 4 + NONCE_LEN + ct.len());
         out.extend_from_slice(MAGIC);
@@ -180,7 +214,10 @@ impl Keyring {
 
     pub fn unseal(&self, aad: &str, sealed: &[u8]) -> Result<SecretString, SealError> {
         let (version, body) = if sealed.len() >= 8 + NONCE_LEN + 16 && &sealed[..4] == MAGIC {
-            (u32::from_be_bytes([sealed[4], sealed[5], sealed[6], sealed[7]]), &sealed[8..])
+            (
+                u32::from_be_bytes([sealed[4], sealed[5], sealed[6], sealed[7]]),
+                &sealed[8..],
+            )
         } else {
             (LEGACY_VERSION, sealed)
         };
@@ -191,10 +228,18 @@ impl Keyring {
         let cipher = Aes256Gcm::new_from_slice(dek.as_ref()).map_err(|_| SealError::BadKey)?;
         let (nonce, ct) = body.split_at(NONCE_LEN);
         let pt = cipher
-            .decrypt(Nonce::from_slice(nonce), Payload { msg: ct, aad: aad.as_bytes() })
+            .decrypt(
+                Nonce::from_slice(nonce),
+                Payload {
+                    msg: ct,
+                    aad: aad.as_bytes(),
+                },
+            )
             .map_err(|_| SealError::Unseal)?;
         let pt = Zeroizing::new(pt);
-        String::from_utf8(pt.to_vec()).map(SecretString::from).map_err(|_| SealError::Unseal)
+        String::from_utf8(pt.to_vec())
+            .map(SecretString::from)
+            .map_err(|_| SealError::Unseal)
     }
 
     /// Re-seal under the current version if sealed under an older one.
@@ -216,7 +261,8 @@ mod tests {
     #[test]
     fn legacy_blobs_remain_readable_and_upgrade_on_reseal() {
         let master = MasterKey::generate();
-        let legacy_blob = crate::seal::seal(&master, "t:a", &SecretString::from("secret".to_string())).unwrap();
+        let legacy_blob =
+            crate::seal::seal(&master, "t:a", &SecretString::from("secret".to_string())).unwrap();
         let kek = EnvKek::new("kek-test", &[9u8; 32]).unwrap();
         let wrapped = Keyring::new_wrapped_version(&kek, 1).unwrap();
         let mut deks = BTreeMap::new();
@@ -226,17 +272,32 @@ mod tests {
         deks.insert(1, kek.unwrap(1, &wrapped).unwrap());
         let ring = Keyring::from_versions(deks, 1).unwrap();
         assert_eq!(Keyring::version_of(&legacy_blob), 0);
-        assert_eq!(ring.unseal("t:a", &legacy_blob).unwrap().expose_secret(), "secret");
+        assert_eq!(
+            ring.unseal("t:a", &legacy_blob).unwrap().expose_secret(),
+            "secret"
+        );
         let upgraded = ring.reseal("t:a", &legacy_blob).unwrap().unwrap();
         assert_eq!(Keyring::version_of(&upgraded), 1);
-        assert_eq!(ring.unseal("t:a", &upgraded).unwrap().expose_secret(), "secret");
-        assert!(ring.reseal("t:a", &upgraded).unwrap().is_none(), "already current");
+        assert_eq!(
+            ring.unseal("t:a", &upgraded).unwrap().expose_secret(),
+            "secret"
+        );
+        assert!(
+            ring.reseal("t:a", &upgraded).unwrap().is_none(),
+            "already current"
+        );
         // A ring without version 0 cannot read legacy rows: retiring too early is loud, not silent.
         let mut only1 = BTreeMap::new();
         only1.insert(1, kek.unwrap(1, &wrapped).unwrap());
         let ring1 = Keyring::from_versions(only1, 1).unwrap();
-        assert_eq!(ring1.unseal("t:a", &legacy_blob).err(), Some(SealError::Unseal));
-        assert_eq!(ring1.unseal("t:a", &upgraded).unwrap().expose_secret(), "secret");
+        assert_eq!(
+            ring1.unseal("t:a", &legacy_blob).err(),
+            Some(SealError::Unseal)
+        );
+        assert_eq!(
+            ring1.unseal("t:a", &upgraded).unwrap().expose_secret(),
+            "secret"
+        );
     }
 
     #[test]
@@ -244,9 +305,17 @@ mod tests {
         let kek = EnvKek::new("kek-a", &[1u8; 32]).unwrap();
         let wrapped = Keyring::new_wrapped_version(&kek, 3).unwrap();
         assert!(kek.unwrap(3, &wrapped).is_ok());
-        assert_eq!(kek.unwrap(4, &wrapped).err(), Some(SealError::Unseal), "version transplant");
+        assert_eq!(
+            kek.unwrap(4, &wrapped).err(),
+            Some(SealError::Unseal),
+            "version transplant"
+        );
         let other = EnvKek::new("kek-b", &[1u8; 32]).unwrap();
-        assert_eq!(other.unwrap(3, &wrapped).err(), Some(SealError::Unseal), "kek id transplant");
+        assert_eq!(
+            other.unwrap(3, &wrapped).err(),
+            Some(SealError::Unseal),
+            "kek id transplant"
+        );
         let wrong = EnvKek::new("kek-a", &[2u8; 32]).unwrap();
         assert_eq!(wrong.unwrap(3, &wrapped).err(), Some(SealError::Unseal));
         let mut t = wrapped.clone();
@@ -260,13 +329,22 @@ mod tests {
         let mut deks = BTreeMap::new();
         deks.insert(7, Zeroizing::new([5u8; 32]));
         let ring7 = Keyring::from_versions(deks, 7).unwrap();
-        let s = ring7.seal("tenant:x", &SecretString::from("body".to_string())).unwrap();
+        let s = ring7
+            .seal("tenant:x", &SecretString::from("body".to_string()))
+            .unwrap();
         assert_eq!(&s[..4], b"MKS2");
         assert_eq!(ring7.unseal("tenant:y", &s).err(), Some(SealError::Unseal));
         let mut tampered = s.clone();
         *tampered.last_mut().unwrap() ^= 1;
-        assert_eq!(ring7.unseal("tenant:x", &tampered).err(), Some(SealError::Unseal));
-        assert_eq!(ring.unseal("tenant:x", &s).err(), Some(SealError::Unseal), "unknown version");
+        assert_eq!(
+            ring7.unseal("tenant:x", &tampered).err(),
+            Some(SealError::Unseal)
+        );
+        assert_eq!(
+            ring.unseal("tenant:x", &s).err(),
+            Some(SealError::Unseal),
+            "unknown version"
+        );
         assert!(Keyring::from_versions(BTreeMap::new(), 1).is_err());
     }
 }

@@ -139,7 +139,13 @@ pub async fn dispatch_one(
     // revoked after approving must not dispatch, even if the approval row was
     // not yet marked revoked. Treated exactly like a revoked approval.
     if let Some(a) = &approval
-        && human_approval::approver_revoked_since(&mut tx, a.approver_id, a.session_id.as_deref(), a.created_at).await?
+        && human_approval::approver_revoked_since(
+            &mut tx,
+            a.approver_id,
+            a.session_id.as_deref(),
+            a.created_at,
+        )
+        .await?
     {
         let t = actions::transition(
             &mut tx,
@@ -159,11 +165,21 @@ pub async fn dispatch_one(
     }
     // C8: a stale or paused inbound path defers provider dispatch for this
     // tenant. The action stays queued; it is re-delivered later.
-    let adapter_kind_early = ctx.tools.get(&action.request.tool_id).map_or("", |t| t.adapter_kind);
+    let adapter_kind_early = ctx
+        .tools
+        .get(&action.request.tool_id)
+        .map_or("", |t| t.adapter_kind);
     if adapter_kind_early == mk_adapters::twilio::ADAPTER_KIND
         && let Some(reason) = messaging::inbound_dispatch_block(&mut tx, now).await?
     {
-        outbox::enqueue(&mut tx, action_id, "retry", now + chrono::Duration::seconds(30), json!({"deferred": reason})).await?;
+        outbox::enqueue(
+            &mut tx,
+            action_id,
+            "retry",
+            now + chrono::Duration::seconds(30),
+            json!({"deferred": reason}),
+        )
+        .await?;
         outbox::release_lease(&mut tx, action_id, lease).await?;
         tx.commit().await?;
         return Ok(DispatchOutcome::Deferred { reason });
@@ -183,7 +199,8 @@ pub async fn dispatch_one(
         suppressions: &suppressions,
         local_hour: local_hour_in_zone(
             now,
-            mk_policy::contact_zone(&action.request.arguments, &tenant_policy.contact_tz).unwrap_or(&tenant_policy.contact_tz),
+            mk_policy::contact_zone(&action.request.arguments, &tenant_policy.contact_tz)
+                .unwrap_or(&tenant_policy.contact_tz),
             tz_offset,
         ),
         sends_last_24h,
@@ -284,7 +301,8 @@ pub async fn dispatch_one(
             if sender_identity_id.is_some()
                 && let Some(pmid) = receipt.external_ref.as_deref()
             {
-                messaging::record_provider_accepted(&mut tx, action_id, attempt_no, pmid, now2).await?;
+                messaging::record_provider_accepted(&mut tx, action_id, attempt_no, pmid, now2)
+                    .await?;
             }
             let st = if receipt.pending_callback {
                 "started"
@@ -337,8 +355,20 @@ pub async fn dispatch_one(
         }
         Err(e) => {
             if sender_identity_id.is_some() {
-                let st = if e.class == mk_queue::RetryClass::Ambiguous { "submission_unknown" } else { "failed" };
-                messaging::record_submission_outcome(&mut tx, action_id, attempt_no, st, Some(e.code), now2).await?;
+                let st = if e.class == mk_queue::RetryClass::Ambiguous {
+                    "submission_unknown"
+                } else {
+                    "failed"
+                };
+                messaging::record_submission_outcome(
+                    &mut tx,
+                    action_id,
+                    attempt_no,
+                    st,
+                    Some(e.code),
+                    now2,
+                )
+                .await?;
             }
             // Provider-side opt-out (e.g. Twilio 21610): the recipient told the
             // carrier to stop. Record the suppression here, under the control
@@ -347,7 +377,18 @@ pub async fn dispatch_one(
                 && let (Some(ch), Some(dest)) = (action.channel, action.destination_hash.as_deref())
             {
                 messaging::lock_control_path(&mut tx, ch.as_str(), dest).await?;
-                consent::add_suppression(&mut tx, Some(ch), Some(dest), "destination", "provider_opt_out", true, "provider", worker_actor, now2).await?;
+                consent::add_suppression(
+                    &mut tx,
+                    Some(ch),
+                    Some(dest),
+                    "destination",
+                    "provider_opt_out",
+                    true,
+                    "provider",
+                    worker_actor,
+                    now2,
+                )
+                .await?;
             }
             let jitter: f64 = rand::random();
             match classify(

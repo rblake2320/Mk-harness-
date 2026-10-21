@@ -153,7 +153,11 @@ pub async fn propose(
     let contact_tz = match mk_policy::contact_zone(&req.arguments, &tenant_policy.contact_tz) {
         Ok(z) => z,
         Err(code) => {
-            return Err(rid(ApiError::new(StatusCode::UNPROCESSABLE_ENTITY, "CONTACT_TZ_INVALID", code)));
+            return Err(rid(ApiError::new(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "CONTACT_TZ_INVALID",
+                code,
+            )));
         }
     };
     let decision = evaluate(&PolicyInput {

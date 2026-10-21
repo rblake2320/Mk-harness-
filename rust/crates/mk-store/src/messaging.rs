@@ -25,7 +25,11 @@ pub const INBOUND_STALE_SECS: i64 = 60;
 /// Both dispatch authorization and suppression recording take this lock inside
 /// their transaction, so whichever commits first is visible to the other's
 /// re-check. Transaction-scoped: released at commit/rollback.
-pub async fn lock_control_path(tx: &mut TenantTx<'_>, channel: &str, destination_hash: &str) -> Result<(), StoreError> {
+pub async fn lock_control_path(
+    tx: &mut TenantTx<'_>,
+    channel: &str,
+    destination_hash: &str,
+) -> Result<(), StoreError> {
     // hashtext() → int4; two int4 keys keep tenant and destination separate.
     sqlx::query("SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))")
         .bind(tx.tenant().0.to_string())
@@ -87,7 +91,9 @@ pub async fn register_sender(
     now: DateTime<Utc>,
 ) -> Result<Uuid, StoreError> {
     let id = Uuid::now_v7();
-    let sealed = keyring.seal( &aad(tx.tenant(), id), auth_token).map_err(|_| StoreError::Crypto)?;
+    let sealed = keyring
+        .seal(&aad(tx.tenant(), id), auth_token)
+        .map_err(|_| StoreError::Crypto)?;
     sqlx::query(
         "INSERT INTO kernel.sender_identities (sender_identity_id, tenant_id, owner_user_id, provider, display_name, account_sid,
            auth_token_sealed, from_number, messaging_service_sid, created_at, updated_at)
@@ -197,7 +203,11 @@ pub async fn list_senders(tx: &mut TenantTx<'_>) -> Result<Vec<SenderIdentityVie
 
 /// Pool-level (pre-tenant) lookup used by webhooks to bind a URL path to a
 /// tenant. Returns the sealed secret; the caller unseals with the master key.
-pub async fn sender_secret_by_id(pool: &PgPool, keyring: &Keyring, id: Uuid) -> Result<SenderIdentitySecret, StoreError> {
+pub async fn sender_secret_by_id(
+    pool: &PgPool,
+    keyring: &Keyring,
+    id: Uuid,
+) -> Result<SenderIdentitySecret, StoreError> {
     let r = sqlx::query(
         "SELECT tenant_id, owner_user_id, account_sid, auth_token_sealed, from_number, messaging_service_sid, status
          FROM kernel.sender_identities WHERE sender_identity_id = $1",
@@ -208,7 +218,9 @@ pub async fn sender_secret_by_id(pool: &PgPool, keyring: &Keyring, id: Uuid) -> 
     .ok_or(StoreError::NotFound)?;
     let tenant = TenantId::from_uuid(r.try_get("tenant_id")?);
     let sealed: Vec<u8> = r.try_get("auth_token_sealed")?;
-    let auth_token = keyring.unseal( &aad(tenant, id), &sealed).map_err(|_| StoreError::Crypto)?;
+    let auth_token = keyring
+        .unseal(&aad(tenant, id), &sealed)
+        .map_err(|_| StoreError::Crypto)?;
     Ok(SenderIdentitySecret {
         sender_identity_id: id,
         tenant_id: tenant,
@@ -222,7 +234,11 @@ pub async fn sender_secret_by_id(pool: &PgPool, keyring: &Keyring, id: Uuid) -> 
 }
 
 /// Tenant-scoped secret lookup for the worker's sender resolver.
-pub async fn sender_secret(tx: &mut TenantTx<'_>, keyring: &Keyring, id: Uuid) -> Result<SenderIdentitySecret, StoreError> {
+pub async fn sender_secret(
+    tx: &mut TenantTx<'_>,
+    keyring: &Keyring,
+    id: Uuid,
+) -> Result<SenderIdentitySecret, StoreError> {
     let r = sqlx::query(
         "SELECT owner_user_id, account_sid, auth_token_sealed, from_number, messaging_service_sid, status
          FROM kernel.sender_identities WHERE tenant_id = $1 AND sender_identity_id = $2 AND status = 'active'",
@@ -233,7 +249,9 @@ pub async fn sender_secret(tx: &mut TenantTx<'_>, keyring: &Keyring, id: Uuid) -
     .await?
     .ok_or(StoreError::NotFound)?;
     let sealed: Vec<u8> = r.try_get("auth_token_sealed")?;
-    let auth_token = keyring.unseal( &aad(tx.tenant(), id), &sealed).map_err(|_| StoreError::Crypto)?;
+    let auth_token = keyring
+        .unseal(&aad(tx.tenant(), id), &sealed)
+        .map_err(|_| StoreError::Crypto)?;
     Ok(SenderIdentitySecret {
         sender_identity_id: id,
         tenant_id: tx.tenant(),
@@ -355,16 +373,34 @@ pub async fn record_submission_outcome(
     Ok(())
 }
 
-pub async fn delivery_for_action(tx: &mut TenantTx<'_>, action_id: ActionId) -> Result<Option<DeliveryRecord>, StoreError> {
-    let q = format!("SELECT {DCOLS} FROM kernel.message_deliveries WHERE tenant_id = $1 AND action_id = $2 ORDER BY attempt DESC LIMIT 1");
-    let r = sqlx::query(&q).bind(tx.tenant().0).bind(action_id.0).fetch_optional(tx.conn()).await?;
+pub async fn delivery_for_action(
+    tx: &mut TenantTx<'_>,
+    action_id: ActionId,
+) -> Result<Option<DeliveryRecord>, StoreError> {
+    let q = format!(
+        "SELECT {DCOLS} FROM kernel.message_deliveries WHERE tenant_id = $1 AND action_id = $2 ORDER BY attempt DESC LIMIT 1"
+    );
+    let r = sqlx::query(&q)
+        .bind(tx.tenant().0)
+        .bind(action_id.0)
+        .fetch_optional(tx.conn())
+        .await?;
     r.as_ref().map(row_to_delivery).transpose()
 }
 
 /// Delivery by provider message id, locked for update (callbacks fold into it).
-pub async fn delivery_by_provider_id(tx: &mut TenantTx<'_>, provider_message_id: &str) -> Result<Option<DeliveryRecord>, StoreError> {
-    let q = format!("SELECT {DCOLS} FROM kernel.message_deliveries WHERE tenant_id = $1 AND provider = 'twilio' AND provider_message_id = $2 FOR UPDATE");
-    let r = sqlx::query(&q).bind(tx.tenant().0).bind(provider_message_id).fetch_optional(tx.conn()).await?;
+pub async fn delivery_by_provider_id(
+    tx: &mut TenantTx<'_>,
+    provider_message_id: &str,
+) -> Result<Option<DeliveryRecord>, StoreError> {
+    let q = format!(
+        "SELECT {DCOLS} FROM kernel.message_deliveries WHERE tenant_id = $1 AND provider = 'twilio' AND provider_message_id = $2 FOR UPDATE"
+    );
+    let r = sqlx::query(&q)
+        .bind(tx.tenant().0)
+        .bind(provider_message_id)
+        .fetch_optional(tx.conn())
+        .await?;
     r.as_ref().map(row_to_delivery).transpose()
 }
 
@@ -422,7 +458,9 @@ pub async fn record_delivery_event(
     .bind(now)
     .execute(tx.conn())
     .await?;
-    Ok(EventOutcome::Recorded { state_changed: changed })
+    Ok(EventOutcome::Recorded {
+        state_changed: changed,
+    })
 }
 
 pub async fn record_reconciliation(
@@ -474,7 +512,9 @@ pub async fn record_inbound(
     now: DateTime<Utc>,
 ) -> Result<InboundOutcome, StoreError> {
     let id = Uuid::now_v7();
-    let sealed = keyring.seal( &format!("inbound:{}:{}", tx.tenant().0, id), body).map_err(|_| StoreError::Crypto)?;
+    let sealed = keyring
+        .seal(&format!("inbound:{}:{}", tx.tenant().0, id), body)
+        .map_err(|_| StoreError::Crypto)?;
     let inserted: Option<Uuid> = sqlx::query_scalar(
         "INSERT INTO kernel.inbound_events (event_id, tenant_id, provider, provider_event_id, sender_identity_id, source_destination_hash,
            received_at, provider_timestamp, content_sealed, content_reference, authentication_result, raw_event_digest, opt_out_signal, disposition)
@@ -522,7 +562,11 @@ pub async fn record_inbound(
     Ok(InboundOutcome::Recorded(e))
 }
 
-pub async fn mark_inbound_acknowledged(tx: &mut TenantTx<'_>, event_id: Uuid, now: DateTime<Utc>) -> Result<(), StoreError> {
+pub async fn mark_inbound_acknowledged(
+    tx: &mut TenantTx<'_>,
+    event_id: Uuid,
+    now: DateTime<Utc>,
+) -> Result<(), StoreError> {
     sqlx::query("UPDATE kernel.inbound_events SET acknowledged_at = $3 WHERE tenant_id = $1 AND event_id = $2 AND acknowledged_at IS NULL")
         .bind(tx.tenant().0)
         .bind(event_id)
@@ -547,7 +591,11 @@ pub struct InboundView {
 }
 
 /// Unprocessed inbound events for async meaning processing (C5 step 7).
-pub async fn pending_inbound(tx: &mut TenantTx<'_>, keyring: &Keyring, limit: i64) -> Result<Vec<InboundView>, StoreError> {
+pub async fn pending_inbound(
+    tx: &mut TenantTx<'_>,
+    keyring: &Keyring,
+    limit: i64,
+) -> Result<Vec<InboundView>, StoreError> {
     let rows = sqlx::query(
         "SELECT event_id, provider_event_id, sender_identity_id, source_destination_hash, received_at, provider_timestamp,
                 content_sealed, opt_out_signal, disposition
@@ -562,7 +610,9 @@ pub async fn pending_inbound(tx: &mut TenantTx<'_>, keyring: &Keyring, limit: i6
         .map(|r| {
             let id: Uuid = r.try_get("event_id")?;
             let sealed: Vec<u8> = r.try_get("content_sealed")?;
-            let body = keyring.unseal( &format!("inbound:{}:{}", tenant.0, id), &sealed).map_err(|_| StoreError::Crypto)?;
+            let body = keyring
+                .unseal(&format!("inbound:{}:{}", tenant.0, id), &sealed)
+                .map_err(|_| StoreError::Crypto)?;
             Ok(InboundView {
                 event_id: id,
                 provider_event_id: r.try_get("provider_event_id")?,
@@ -578,7 +628,11 @@ pub async fn pending_inbound(tx: &mut TenantTx<'_>, keyring: &Keyring, limit: i6
         .collect()
 }
 
-pub async fn mark_inbound_processed(tx: &mut TenantTx<'_>, event_id: Uuid, now: DateTime<Utc>) -> Result<bool, StoreError> {
+pub async fn mark_inbound_processed(
+    tx: &mut TenantTx<'_>,
+    event_id: Uuid,
+    now: DateTime<Utc>,
+) -> Result<bool, StoreError> {
     let n = sqlx::query("UPDATE kernel.inbound_events SET processed_at = $3 WHERE tenant_id = $1 AND event_id = $2 AND processed_at IS NULL")
         .bind(tx.tenant().0)
         .bind(event_id)
@@ -590,10 +644,12 @@ pub async fn mark_inbound_processed(tx: &mut TenantTx<'_>, event_id: Uuid, now: 
 }
 
 pub async fn pending_inbound_count(tx: &mut TenantTx<'_>) -> Result<i64, StoreError> {
-    Ok(sqlx::query_scalar("SELECT count(*) FROM kernel.inbound_events WHERE tenant_id = $1 AND processed_at IS NULL")
-        .bind(tx.tenant().0)
-        .fetch_one(tx.conn())
-        .await?)
+    Ok(sqlx::query_scalar(
+        "SELECT count(*) FROM kernel.inbound_events WHERE tenant_id = $1 AND processed_at IS NULL",
+    )
+    .bind(tx.tenant().0)
+    .fetch_one(tx.conn())
+    .await?)
 }
 
 // ------------------------------------------------------------ inbound health
@@ -638,7 +694,11 @@ pub async fn inbound_ok(tx: &mut TenantTx<'_>, now: DateTime<Utc>) -> Result<(),
     Ok(())
 }
 
-pub async fn inbound_failure(tx: &mut TenantTx<'_>, reason: &str, now: DateTime<Utc>) -> Result<(), StoreError> {
+pub async fn inbound_failure(
+    tx: &mut TenantTx<'_>,
+    reason: &str,
+    now: DateTime<Utc>,
+) -> Result<(), StoreError> {
     sqlx::query(
         "INSERT INTO kernel.inbound_health (tenant_id, last_failure_at, last_failure_reason, updated_at) VALUES ($1,$2,$3,$2)
          ON CONFLICT (tenant_id) DO UPDATE SET last_failure_at = EXCLUDED.last_failure_at, last_failure_reason = EXCLUDED.last_failure_reason, updated_at = EXCLUDED.updated_at",
@@ -654,7 +714,10 @@ pub async fn inbound_failure(tx: &mut TenantTx<'_>, reason: &str, now: DateTime<
 /// Dispatch gate (C8): paused explicitly, or no successful check within the
 /// stale window after at least one failure, or never checked at all when a
 /// sender identity exists. Returns the reason when dispatch must not proceed.
-pub async fn inbound_dispatch_block(tx: &mut TenantTx<'_>, now: DateTime<Utc>) -> Result<Option<&'static str>, StoreError> {
+pub async fn inbound_dispatch_block(
+    tx: &mut TenantTx<'_>,
+    now: DateTime<Utc>,
+) -> Result<Option<&'static str>, StoreError> {
     let Some(h) = inbound_health(tx).await? else {
         // No health row yet: only block if this tenant actually uses provider messaging.
         let n: i64 = sqlx::query_scalar("SELECT count(*) FROM kernel.sender_identities WHERE tenant_id = $1 AND status = 'active'")
@@ -663,11 +726,16 @@ pub async fn inbound_dispatch_block(tx: &mut TenantTx<'_>, now: DateTime<Utc>) -
             .await?;
         return Ok((n > 0).then_some("inbound_unverified"));
     };
-    if h.paused_since.is_some() && h.resumed_at.is_none_or(|r| h.paused_since.is_some_and(|p| r < p)) {
+    if h.paused_since.is_some()
+        && h.resumed_at
+            .is_none_or(|r| h.paused_since.is_some_and(|p| r < p))
+    {
         return Ok(Some("inbound_paused"));
     }
     match (h.last_ok_at, h.last_failure_at) {
-        (Some(ok), Some(f)) if f > ok && (now - ok).num_seconds() > INBOUND_STALE_SECS => Ok(Some("inbound_stale")),
+        (Some(ok), Some(f)) if f > ok && (now - ok).num_seconds() > INBOUND_STALE_SECS => {
+            Ok(Some("inbound_stale"))
+        }
         (None, Some(_)) => Ok(Some("inbound_stale")),
         (None, None) => Ok(Some("inbound_unverified")),
         _ => Ok(None),
@@ -689,8 +757,12 @@ pub async fn pause_inbound(tx: &mut TenantTx<'_>, now: DateTime<Utc>) -> Result<
 /// Resume only when a recent check succeeded *and* no inbound events are
 /// pending (C8). Returns false (and changes nothing) otherwise.
 pub async fn resume_inbound(tx: &mut TenantTx<'_>, now: DateTime<Utc>) -> Result<bool, StoreError> {
-    let Some(h) = inbound_health(tx).await? else { return Ok(false) };
-    let fresh = h.last_ok_at.is_some_and(|ok| (now - ok).num_seconds() <= INBOUND_STALE_SECS);
+    let Some(h) = inbound_health(tx).await? else {
+        return Ok(false);
+    };
+    let fresh = h
+        .last_ok_at
+        .is_some_and(|ok| (now - ok).num_seconds() <= INBOUND_STALE_SECS);
     let pending = pending_inbound_count(tx).await?;
     if !fresh || pending > 0 {
         return Ok(false);

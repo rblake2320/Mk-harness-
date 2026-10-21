@@ -63,15 +63,29 @@ impl Drop for TwilioSimulator {
 }
 
 fn basic_ok(headers: &HeaderMap, sid: &str, token: &AdapterSecret) -> bool {
-    let Some(h) = headers.get(axum::http::header::AUTHORIZATION).and_then(|v| v.to_str().ok()) else { return false };
-    let Some(b64) = h.strip_prefix("Basic ") else { return false };
-    let Ok(raw) = base64::engine::general_purpose::STANDARD.decode(b64) else { return false };
-    let want = format!("{sid}:{}", std::str::from_utf8(token.expose_bytes()).unwrap_or_default());
+    let Some(h) = headers
+        .get(axum::http::header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+    else {
+        return false;
+    };
+    let Some(b64) = h.strip_prefix("Basic ") else {
+        return false;
+    };
+    let Ok(raw) = base64::engine::general_purpose::STANDARD.decode(b64) else {
+        return false;
+    };
+    let want = format!(
+        "{sid}:{}",
+        std::str::from_utf8(token.expose_bytes()).unwrap_or_default()
+    );
     mk_crypto::constant_time_eq(&raw, want.as_bytes())
 }
 
 fn parse_form(body: &str) -> HashMap<String, String> {
-    url::form_urlencoded::parse(body.as_bytes()).into_owned().collect()
+    url::form_urlencoded::parse(body.as_bytes())
+        .into_owned()
+        .collect()
 }
 
 async fn create_message(
@@ -82,22 +96,46 @@ async fn create_message(
 ) -> axum::response::Response {
     use axum::response::IntoResponse as _;
     if account != st.account_sid || !basic_ok(&headers, &st.account_sid, &st.auth_token) {
-        return (StatusCode::UNAUTHORIZED, axum::Json(json!({"code": 20003, "message": "Authenticate", "status": 401}))).into_response();
+        return (
+            StatusCode::UNAUTHORIZED,
+            axum::Json(json!({"code": 20003, "message": "Authenticate", "status": 401})),
+        )
+            .into_response();
     }
     let n = st.calls.fetch_add(1, Ordering::SeqCst);
     let form = parse_form(&body);
     let to = form.get("To").cloned().unwrap_or_default();
-    let from = form.get("From").cloned().or_else(|| form.get("MessagingServiceSid").cloned()).unwrap_or_default();
+    let from = form
+        .get("From")
+        .cloned()
+        .or_else(|| form.get("MessagingServiceSid").cloned())
+        .unwrap_or_default();
     let text = form.get("Body").cloned().unwrap_or_default();
     if !form.contains_key("StatusCallback") {
         return (StatusCode::BAD_REQUEST, axum::Json(json!({"code": 21609, "message": "StatusCallback required by simulator", "status": 400}))).into_response();
     }
-    let reject = |code: i64, msg: &str| (StatusCode::BAD_REQUEST, axum::Json(json!({"code": code, "message": msg, "status": 400}))).into_response();
+    let reject = |code: i64, msg: &str| {
+        (
+            StatusCode::BAD_REQUEST,
+            axum::Json(json!({"code": code, "message": msg, "status": 400})),
+        )
+            .into_response()
+    };
     match st.mode {
-        TwilioSimMode::RecipientOptedOut => return reject(21610, "Attempt to send to unsubscribed recipient"),
+        TwilioSimMode::RecipientOptedOut => {
+            return reject(21610, "Attempt to send to unsubscribed recipient");
+        }
         TwilioSimMode::InvalidDestination => return reject(21211, "Invalid 'To' Phone Number"),
-        TwilioSimMode::RateLimited => return (StatusCode::TOO_MANY_REQUESTS, axum::Json(json!({"code": 20429, "status": 429}))).into_response(),
-        TwilioSimMode::ServerErrorThenAccept(k) if n < k => return (StatusCode::INTERNAL_SERVER_ERROR, "internal").into_response(),
+        TwilioSimMode::RateLimited => {
+            return (
+                StatusCode::TOO_MANY_REQUESTS,
+                axum::Json(json!({"code": 20429, "status": 429})),
+            )
+                .into_response();
+        }
+        TwilioSimMode::ServerErrorThenAccept(k) if n < k => {
+            return (StatusCode::INTERNAL_SERVER_ERROR, "internal").into_response();
+        }
         _ => {}
     }
     let sid = format!("SM{}", uuid::Uuid::now_v7().simple());
@@ -111,14 +149,16 @@ async fn create_message(
     if st.mode == TwilioSimMode::AcceptButDropResponse {
         // Simulate a connection cut after the provider committed the message:
         // return an invalid, truncated body so the client sees a body error.
-        let mut r = axum::response::Response::new(axum::body::Body::from_stream(futures_stream_err()));
+        let mut r =
+            axum::response::Response::new(axum::body::Body::from_stream(futures_stream_err()));
         *r.status_mut() = StatusCode::CREATED;
         return r;
     }
     (StatusCode::CREATED, axum::Json(msg)).into_response()
 }
 
-fn futures_stream_err() -> impl futures_core::Stream<Item = Result<axum::body::Bytes, std::io::Error>> {
+fn futures_stream_err()
+-> impl futures_core::Stream<Item = Result<axum::body::Bytes, std::io::Error>> {
     // One chunk then an error: the client sees a body read failure.
     tokio_stream::iter(vec![
         Ok(axum::body::Bytes::from_static(b"{\"sid\":\"SM")),
@@ -147,11 +187,20 @@ async fn list_messages(
 }
 
 impl TwilioSimulator {
-    pub async fn start(account_sid: &str, auth_token: AdapterSecret, mode: TwilioSimMode) -> std::io::Result<Self> {
+    pub async fn start(
+        account_sid: &str,
+        auth_token: AdapterSecret,
+        mode: TwilioSimMode,
+    ) -> std::io::Result<Self> {
         Self::start_on("127.0.0.1:0", account_sid, auth_token, mode).await
     }
 
-    pub async fn start_on(bind: &str, account_sid: &str, auth_token: AdapterSecret, mode: TwilioSimMode) -> std::io::Result<Self> {
+    pub async fn start_on(
+        bind: &str,
+        account_sid: &str,
+        auth_token: AdapterSecret,
+        mode: TwilioSimMode,
+    ) -> std::io::Result<Self> {
         let state = Arc::new(SimState {
             account_sid: account_sid.to_owned(),
             auth_token,
@@ -160,14 +209,21 @@ impl TwilioSimulator {
             messages: Mutex::new(Vec::new()),
         });
         let app = Router::new()
-            .route("/2010-04-01/Accounts/{account}/Messages.json", post(create_message).get(list_messages))
+            .route(
+                "/2010-04-01/Accounts/{account}/Messages.json",
+                post(create_message).get(list_messages),
+            )
             .with_state(state.clone());
         let listener = tokio::net::TcpListener::bind(bind).await?;
         let addr = listener.local_addr()?;
         let handle = tokio::spawn(async move {
             let _ = axum::serve(listener, app).await;
         });
-        Ok(Self { addr, state, handle })
+        Ok(Self {
+            addr,
+            state,
+            handle,
+        })
     }
 
     #[must_use]
@@ -200,15 +256,31 @@ impl TwilioSimulator {
     /// Status-callback post for a message created through this simulator,
     /// using the `StatusCallback` URL the kernel supplied on submission as the
     /// public URL (what Twilio signs over) and `deliver_base` to reach it.
-    pub async fn post_status_for(&self, msg: &Value, deliver_base: &str, status: &str) -> Result<(u16, String), String> {
-        let public = msg["status_callback"].as_str().unwrap_or_default().to_owned();
-        let path = url::Url::parse(&public).map(|u| u.path().to_owned()).unwrap_or_default();
+    pub async fn post_status_for(
+        &self,
+        msg: &Value,
+        deliver_base: &str,
+        status: &str,
+    ) -> Result<(u16, String), String> {
+        let public = msg["status_callback"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned();
+        let path = url::Url::parse(&public)
+            .map(|u| u.path().to_owned())
+            .unwrap_or_default();
         let deliver = format!("{}{}", deliver_base.trim_end_matches('/'), path);
         let form: Vec<(String, String)> = vec![
-            ("MessageSid".into(), msg["sid"].as_str().unwrap_or_default().into()),
+            (
+                "MessageSid".into(),
+                msg["sid"].as_str().unwrap_or_default().into(),
+            ),
             ("MessageStatus".into(), status.into()),
             ("AccountSid".into(), self.state.account_sid.clone()),
-            ("From".into(), msg["from"].as_str().unwrap_or_default().into()),
+            (
+                "From".into(),
+                msg["from"].as_str().unwrap_or_default().into(),
+            ),
             ("To".into(), msg["to"].as_str().unwrap_or_default().into()),
             ("ApiVersion".into(), "2010-04-01".into()),
         ];
@@ -243,7 +315,8 @@ impl TwilioSimulator {
         if let Some(e) = error_code {
             form.push(("ErrorCode".into(), e.into()));
         }
-        self.post_signed(public_url, deliver_to, form, tamper_signature).await
+        self.post_signed(public_url, deliver_to, form, tamper_signature)
+            .await
     }
 
     /// Post an inbound message webhook as Twilio would.
@@ -268,7 +341,8 @@ impl TwilioSimulator {
             ("NumSegments".into(), "1".into()),
             ("ApiVersion".into(), "2010-04-01".into()),
         ];
-        self.post_signed(public_url, deliver_to, form, tamper_signature).await
+        self.post_signed(public_url, deliver_to, form, tamper_signature)
+            .await
     }
 
     async fn post_signed(
@@ -280,9 +354,16 @@ impl TwilioSimulator {
     ) -> Result<(u16, String), String> {
         let mut sig = twilio_signature(&self.state.auth_token, public_url, &form);
         if tamper_signature {
-            sig = format!("{}{}", &sig[..sig.len() - 2], if sig.ends_with("A=") { "B=" } else { "A=" });
+            sig = format!(
+                "{}{}",
+                &sig[..sig.len() - 2],
+                if sig.ends_with("A=") { "B=" } else { "A=" }
+            );
         }
-        let client = reqwest::Client::builder().redirect(reqwest::redirect::Policy::none()).build().map_err(|e| e.to_string())?;
+        let client = reqwest::Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
+            .build()
+            .map_err(|e| e.to_string())?;
         let resp = client
             .post(deliver_to)
             .header("x-twilio-signature", sig)
