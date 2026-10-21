@@ -15,6 +15,8 @@ Environment:
 | Variable | Used by | Notes |
 |---|---|---|
 | `MK_DATABASE_URL` | all | `postgres://role:pw@host/db`; role per process type |
+| `MK_DB_HOST`, `MK_DB_USER`, `MK_DB_PASSWORD`, `MK_DB_NAME`, `MK_DB_PORT` | all | alternative to `MK_DATABASE_URL` (composed in-process, `sslmode=require`); the orchestrator injects these so no password-bearing URL is written anywhere |
+| `MK_DB_SSLROOTCERT` | all | path to the database CA bundle (RDS global bundle). **Required in production**: switches to `sslmode=verify-full` and makes the client trust that CA alone instead of the bundled webpki roots (see `rust/deny.toml`, RUSTSEC-2026-0381) |
 | `MK_REDIS_URL` | relay, worker | `redis://host:6379` |
 | `MK_MASTER_KEY` | api, worker, keyctl, restore-gate | base64 32 bytes; same key as FastAPI `MASTER_KEY`. Legacy seal (keyring version 0) and HMAC destination fingerprints |
 | `MK_KEK` | api, worker, keyctl, restore-gate | base64 32 bytes key-encryption key (from the secrets manager / KMS data key). Wraps the per-version data keys in `kernel.key_versions` (migration 0005). Empty = legacy master-key-only seal: allowed for development, logged at start, **refused by production pre-flight** |

@@ -38,6 +38,9 @@ locals {
     { name = "MK_LEGACY_SEAL_RETIRED", value = "1" },
     { name = "MK_DB_HOST", value = local.db_host },
     { name = "MK_DB_NAME", value = "mkharness" },
+    # RDS CA bundle baked into the image at this path (deploy/kernel/Dockerfile, RDS_CA_BUNDLE build arg);
+    # with it set the client verifies the server against that CA only (sslmode=verify-full).
+    { name = "MK_DB_SSLROOTCERT", value = "/etc/mk/rds-global-bundle.pem" },
     { name = "RUST_LOG", value = "info" },
   ]
 

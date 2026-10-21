@@ -54,6 +54,12 @@ pub fn database_url_from(lookup: impl Fn(&str) -> Option<String>) -> Result<Stri
     };
     let name = get("MK_DB_NAME").unwrap_or_else(|| "mkharness".into());
     let port = get("MK_DB_PORT").unwrap_or_else(|| "5432".into());
+    // With an explicit root certificate the client verifies the server name against that
+    // CA alone (sqlx-core does not add bundled webpki roots when a root path is given).
+    let ssl = get("MK_DB_SSLROOTCERT").map_or_else(
+        || "sslmode=require".to_owned(),
+        |path| format!("sslmode=verify-full&sslrootcert={}", enc_path(&path)),
+    );
     let enc = |s: &str| {
         let mut out = String::with_capacity(s.len());
         for b in s.bytes() {
@@ -70,10 +76,18 @@ pub fn database_url_from(lookup: impl Fn(&str) -> Option<String>) -> Result<Stri
         out
     };
     Ok(format!(
-        "postgres://{}:{}@{host}:{port}/{name}?sslmode=require",
+        "postgres://{}:{}@{host}:{port}/{name}?{ssl}",
         enc(&user),
         enc(&pw)
     ))
+}
+
+fn enc_path(s: &str) -> String {
+    s.replace('%', "%25")
+        .replace('&', "%26")
+        .replace('?', "%3F")
+        .replace('#', "%23")
+        .replace(' ', "%20")
 }
 
 /// Embedded migrations for the `kernel` schema. Built by hand (no
@@ -193,6 +207,20 @@ mod database_url_tests {
         assert_eq!(
             u.unwrap_or_default(),
             "postgres://mk_api_login:p%40ss%2Fw%3Ard%231%20%C3%A9@pg.internal:5432/mkharness?sslmode=require"
+        );
+    }
+
+    #[test]
+    fn explicit_root_cert_switches_to_verify_full() {
+        let u = database_url_from(env(&[
+            ("MK_DB_HOST", "pg"),
+            ("MK_DB_USER", "u"),
+            ("MK_DB_PASSWORD", "p"),
+            ("MK_DB_SSLROOTCERT", "/etc/mk/rds global.pem"),
+        ]));
+        assert_eq!(
+            u.unwrap_or_default(),
+            "postgres://u:p@pg:5432/mkharness?sslmode=verify-full&sslrootcert=/etc/mk/rds%20global.pem"
         );
     }
 

@@ -56,7 +56,14 @@ jobs:
           set -o pipefail
           npm run test:a11y 2>&1 | tee a11y.log
           rc=${PIPESTATUS[0]}
-          grep -E "✘|failed|Error:" a11y.log | head -40 | sed 's/^/::error title=a11y::/' || true
+          if [ "$rc" != 0 ]; then
+            tail -60 a11y.log | sed 's/^/::error title=a11y-log::/'
+            node -e '
+              const fs=require("fs"); if(!fs.existsSync("test-results/a11y.json")) process.exit(0);
+              const r=JSON.parse(fs.readFileSync("test-results/a11y.json","utf8"));
+              const walk=s=>{(s.specs||[]).forEach(sp=>sp.tests.forEach(t=>t.results.filter(x=>x.status!=="passed").forEach(x=>console.log("::error title=a11y::"+sp.title+" :: "+(x.error&&x.error.message||x.status).replace(/\n/g," ").slice(0,400)))));(s.suites||[]).forEach(walk)};
+              r.suites.forEach(walk);' || true
+          fi
           exit $rc
       - uses: actions/upload-artifact@v4
         if: always()

@@ -132,7 +132,13 @@ jobs:
     needs: [kernel, contracts, secret-scan]
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - run: docker build -f deploy/kernel/Dockerfile -t mk-action-kernel:ci .
+      - name: Build image (CI computes the RDS CA bundle checksum it builds with and reports it; a production build must pass the operator-pinned value)
+        run: |
+          set -euo pipefail
+          curl -fsSL -o rds.pem https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
+          SHA=$(sha256sum rds.pem | cut -c1-64)
+          echo "::notice title=RDS CA bundle::sha256 of the bundle fetched for this CI build: $SHA"
+          docker build -f deploy/kernel/Dockerfile --build-arg RDS_CA_BUNDLE_SHA256="$SHA" -t mk-action-kernel:ci .
       - name: Scan image
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
