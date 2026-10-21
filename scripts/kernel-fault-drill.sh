@@ -23,6 +23,8 @@
 # *Implemented* evidence; an independently run drill record is needed to close O5.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# Customer timezone where it is ~noon now, so contact-hours policy (08–21 local) passes at any UTC hour.
+NOON_TZ=$(python3 -c 'import datetime;o=max(-12,min(14,12-datetime.datetime.now(datetime.timezone.utc).hour));print("Etc/UTC" if o==0 else ("Etc/GMT-%d"%o if o>0 else "Etc/GMT+%d"%-o))')
 WORK="${WORK:-$(mktemp -d)}"
 PGURL="${PGURL:-postgres://postgres:kernel@127.0.0.1:5433/mk_kernel_drill}"
 REDIS_URL="${REDIS_URL:-redis://127.0.0.1:6380}"
@@ -85,9 +87,9 @@ ops2 -X POST "$APP/api/agent-ops/approval-credentials/register/begin" >/dev/null
 NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ); LATER=$(date -u -d '+30 min' +%Y-%m-%dT%H:%M:%SZ)
 new_customer() { local c; c=$(curl -fsS "$APP/api/customers" "${H[@]}" -d "{\"name\":\"Drill $1\",\"phone\":\"$2\"}" | python3 -c 'import sys,json;print(json.load(sys.stdin)["id"])')
   curl -fsS "$APP/api/customers/$c/destinations" "${H[@]}" -d "{\"channel\":\"sms\",\"value\":\"$2\"}" >/dev/null
-  curl -fsS -X PUT "$APP/api/customers/$c/preferences" "${H[@]}" -d '{"timezone":"America/Chicago"}' >/dev/null
+  curl -fsS -X PUT "$APP/api/customers/$c/preferences" "${H[@]}" -d "{\"timezone\":\"$NOON_TZ\"}" >/dev/null
   python3 -c "import uuid;print(uuid.UUID('$c'))"; }
-grant() { ops -X POST "$APP/api/agent-ops/contacts/$1/permissions" -d "{\"channel\":\"sms\",\"scope\":[\"customer_requested_follow_up\"],\"source\":\"web_form\",\"proof_digest\":\"sha256:$(printf consent-%s "$1" | sha256sum | cut -c1-64)\",\"granted_at\":\"$NOW\",\"expires_at\":\"2027-01-01T00:00:00Z\"}" >/dev/null; }
+grant() { ops -X POST "$APP/api/agent-ops/contacts/$1/permissions" -d "{\"channel\":\"sms\",\"destination\":\"$2\",\"scope\":[\"customer_requested_follow_up\"],\"source\":\"web_form\",\"proof_digest\":\"sha256:$(printf consent-%s "$1" | sha256sum | cut -c1-64)\",\"granted_at\":\"$NOW\",\"expires_at\":\"2027-01-01T00:00:00Z\"}" >/dev/null; }
 propose() { ops -X POST "$APP/api/agent-ops/actions" -d "{\"origin\":\"agent\",\"request\":{\"workflow\":\"customer_follow_up\",\"action_kind\":\"send_sms\",\"tool_id\":\"sms.provider.send.v1\",\"resource\":{\"type\":\"contact\",\"id\":\"$1\"},\"arguments\":{\"contact_id\":\"$1\",\"to\":\"$2\",\"template_id\":\"t.v1\",\"rendered_text\":\"$3 Reply STOP to opt out.\"},\"purpose\":\"customer_requested_follow_up\",\"risk\":\"high\",\"requested_at\":\"$NOW\",\"expires_at\":\"$LATER\",\"idempotency_key\":\"$4\",\"evidence\":[]}}" >/dev/null; j 'd["result"]["action_id"]+" "+d["result"]["action_digest"]'; }
 approve() { ops2 -X POST "$APP/api/agent-ops/actions/$1/approval-challenge" >/dev/null; local wa; wa=$("$BIN/mk-softauthn" assert "$SA" "$(j 'd["challenge"]')" "$RP_ID" "$ORIGIN"); ops2 -X POST "$APP/api/agent-ops/actions/$1/approve" -d "{\"action_digest\":\"$2\",\"webauthn\":$wa}"; }
 state() { ops "$APP/api/agent-ops/actions/$1" >/dev/null; j 'd["state"]+" "+str(d.get("message_state"))'; }
@@ -97,7 +99,7 @@ RESULTS=()
 
 # ---------------------------------------------------------------- F1
 log "F1: worker killed while holding the dispatch lease"
-C1=$(new_customer F1 +15555551001); grant "$C1"
+C1=$(new_customer F1 +15555551001); grant "$C1" +15555551001
 read -r A1 D1 <<<"$(propose "$C1" +15555551001 "F1 hello." drill-f1)"
 # Worker not running yet: approve, then start a worker and kill it the instant it leases (SIGSTOP → STOP state proves it has the lease).
 [ "$(approve "$A1" "$D1")" = 200 ] || die "approve F1: $(cat "$WORK/out.json")"
@@ -116,7 +118,7 @@ RESULTS+=("{\"scenario\":\"F1\",\"final\":\"$s\",\"provider_messages\":$BEFORE,\
 # ---------------------------------------------------------------- F2
 log "F2: worker killed after provider accepted, before the outcome was persisted"
 kill "$WORKER_PID" 2>/dev/null || true; wait "$WORKER_PID" 2>/dev/null || true
-C2=$(new_customer F2 +15555551002); grant "$C2"
+C2=$(new_customer F2 +15555551002); grant "$C2" +15555551002
 read -r A2 D2 <<<"$(propose "$C2" +15555551002 "F2 hello." drill-f2)"
 [ "$(approve "$A2" "$D2")" = 200 ] || die "approve F2"
 # Simulator in drop_response mode: provider commits the message, worker sees an ambiguous failure.
@@ -135,7 +137,7 @@ RESULTS+=("{\"scenario\":\"F2\",\"final\":\"$s\",\"submission_unknown\":$N2,\"ok
 # ---------------------------------------------------------------- F3
 log "F3: provider 5xx then accept — ambiguous, not retried; reconciliation finds nothing created"
 kill "$SIM_PID" 2>/dev/null || true; wait "$SIM_PID" 2>/dev/null || true; start_sim error_then_accept; sleep 0.5
-C3=$(new_customer F3 +15555551003); grant "$C3"
+C3=$(new_customer F3 +15555551003); grant "$C3" +15555551003
 read -r A3 D3 <<<"$(propose "$C3" +15555551003 "F3 hello." drill-f3)"
 [ "$(approve "$A3" "$D3")" = 200 ] || die "approve F3"
 s=$(wait_state "$A3" "reconciliation_required" 30) || die "F3: expected reconciliation_required, got $s"
@@ -146,7 +148,7 @@ RESULTS+=("{\"scenario\":\"F3\",\"final\":\"$s\",\"ok\":true}")
 # ---------------------------------------------------------------- F4
 log "F4: Postgres restart mid-run"
 kill "$SIM_PID" 2>/dev/null || true; wait "$SIM_PID" 2>/dev/null || true; start_sim accept; sleep 0.5
-C4=$(new_customer F4 +15555551004); grant "$C4"
+C4=$(new_customer F4 +15555551004); grant "$C4" +15555551004
 read -r A4 D4 <<<"$(propose "$C4" +15555551004 "F4 hello." drill-f4)"
 PGPORT_DRILL=$(python3 -c "from urllib.parse import urlparse;import sys;print(urlparse(sys.argv[1]).port or 5432)" "$PGURL")
 if [ -n "${PG_RESTART_CMD:-}" ]; then eval "$PG_RESTART_CMD"; else pg_ctlcluster $PGCLUSTER stop -m fast || true; sleep 1; pg_ctlcluster $PGCLUSTER start -o "-p $PGPORT_DRILL" >/dev/null 2>&1 || true; fi   # pg_ctlcluster probes the configured port, not -p; connectivity is verified below
@@ -165,7 +167,7 @@ RESULTS+=("{\"scenario\":\"F4\",\"final\":\"$s\",\"ok\":true}")
 # ---------------------------------------------------------------- F5
 log "F5: Redis FLUSHALL (queue loss) — outbox republishes, no duplicate"
 kill "$WORKER_PID" 2>/dev/null || true; wait "$WORKER_PID" 2>/dev/null || true
-C5=$(new_customer F5 +15555551005); grant "$C5"
+C5=$(new_customer F5 +15555551005); grant "$C5" +15555551005
 read -r A5 D5 <<<"$(propose "$C5" +15555551005 "F5 hello." drill-f5)"
 [ "$(approve "$A5" "$D5")" = 200 ] || die "approve F5"
 sleep 1; redis-cli -u "$REDIS_URL" FLUSHALL >/dev/null
@@ -178,7 +180,7 @@ RESULTS+=("{\"scenario\":\"F5\",\"final\":\"$s\",\"ok\":true}")
 # ---------------------------------------------------------------- F6
 log "F6: restore gate on this database (simulating a restore at this instant)"
 # Leave one approved-but-unsent action and one in-flight action behind, then stop everything as a crash would.
-C6=$(new_customer F6 +15555551006); grant "$C6"
+C6=$(new_customer F6 +15555551006); grant "$C6" +15555551006
 read -r A6 D6 <<<"$(propose "$C6" +15555551006 "F6 hello." drill-f6)"
 kill -STOP "$WORKER_PID"; [ "$(approve "$A6" "$D6")" = 200 ] || die "approve F6"
 RESTORED_AT=$(date -u -d '+2 seconds' +%Y-%m-%dT%H:%M:%SZ); sleep 3

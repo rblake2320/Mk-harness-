@@ -25,6 +25,8 @@
 # produce real-device evidence (see docs/real-device-acceptance.md).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# Customer timezone where it is ~noon now, so contact-hours policy (08–21 local) passes at any UTC hour.
+NOON_TZ=$(python3 -c 'import datetime;o=max(-12,min(14,12-datetime.datetime.now(datetime.timezone.utc).hour));print("Etc/UTC" if o==0 else ("Etc/GMT-%d"%o if o>0 else "Etc/GMT+%d"%-o))')
 WORK="${WORK:-$(mktemp -d)}"
 PGURL="${PGURL:-postgres://postgres:kernel@127.0.0.1:5433/mk_kernel_smoke}"
 REDIS_URL="${REDIS_URL:-redis://127.0.0.1:6380}"
@@ -132,10 +134,17 @@ MK_AGENT_ID=moto-1 MK_TENANT_ID="$TENANT" MK_AGENT_SECRET="$SECRET" MK_EXECUTOR=
   python3 "$ROOT/tools/mobile-agent-adb/agent.py" >"$WORK/agent.log" 2>&1 & PIDS+=($!)
 for i in $(seq 1 20); do curl -fsS "$AGENT/health" >/dev/null 2>&1 && break; sleep 0.5; done
 
-CONTACT=$(python3 -c 'import uuid;print(uuid.uuid4())')
-CONTACT2=$(python3 -c 'import uuid;print(uuid.uuid4())')
+# Outreach is only proposable for a customer the application knows, with a destination
+# timezone (F9) — so every contact in this smoke is a real customer record.
+new_customer() { local c; c=$(curl -fsS "$APP/api/customers" "${H[@]}" -d "{\"name\":\"Smoke $1\",\"phone\":\"$2\"}" | python3 -c 'import sys,json;print(json.load(sys.stdin)["id"])')
+  curl -fsS "$APP/api/customers/$c/destinations" "${H[@]}" -d "{\"channel\":\"sms\",\"value\":\"$2\"}" >/dev/null
+  curl -fsS -X PUT "$APP/api/customers/$c/preferences" "${H[@]}" -d "{\"timezone\":\"$NOON_TZ\"}" >/dev/null
+  python3 -c "import uuid;print(uuid.UUID('$c'))"; }
+CONTACT=$(new_customer One +15555550100)
+CONTACT2=$(new_customer Two +15555550199)
 NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ); LATER=$(date -u -d '+30 min' +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -v+30M +%Y-%m-%dT%H:%M:%SZ)
-grant() { ops -X POST "$APP/api/agent-ops/contacts/$1/permissions" -d "{\"channel\":\"sms\",\"scope\":[\"customer_requested_follow_up\"],\"source\":\"web_form\",\"proof_digest\":\"sha256:$(printf consent-%s "$1" | sha256sum | cut -c1-64)\",\"granted_at\":\"$NOW\",\"expires_at\":\"2027-01-01T00:00:00Z\"}"; }
+# grant <contact> <destination>: consent is bound to the destination the evidence covers (migration 0007).
+grant() { ops -X POST "$APP/api/agent-ops/contacts/$1/permissions" -d "{\"channel\":\"sms\",\"destination\":\"$2\",\"scope\":[\"customer_requested_follow_up\"],\"source\":\"web_form\",\"proof_digest\":\"sha256:$(printf consent-%s "$1" | sha256sum | cut -c1-64)\",\"granted_at\":\"$NOW\",\"expires_at\":\"2027-01-01T00:00:00Z\"}"; }
 propose_raw() { # $1 contact $2 to $3 idem
   ops -X POST "$APP/api/agent-ops/actions" -d "{\"origin\":\"agent\",\"request\":{\"workflow\":\"customer_follow_up\",\"action_kind\":\"send_sms\",\"tool_id\":\"mobile.sms.send.v1\",\"resource\":{\"type\":\"contact\",\"id\":\"$1\"},\"arguments\":{\"contact_id\":\"$1\",\"agent_id\":\"moto-1\",\"to\":\"$2\",\"template_id\":\"reorder_followup.v1\",\"rendered_text\":\"Hi! Your order shipped. Reply STOP to opt out.\"},\"purpose\":\"customer_requested_follow_up\",\"risk\":\"high\",\"requested_at\":\"$NOW\",\"expires_at\":\"$LATER\",\"idempotency_key\":\"$3\",\"evidence\":[]}}"; }
 propose() { local c; c=$(propose_raw "$@"); case "$c" in 201|202) echo 201;; *) echo "$c";; esac; }
@@ -147,13 +156,13 @@ approve_unbound() { curl -sS -o "$WORK/out.json" -w '%{http_code}' "${H2[@]}" -X
 state() { ops "$APP/api/agent-ops/actions/$1" >/dev/null; j 'd["state"]'; }
 
 log "gate 2: suppressed contact is refused at proposal"
-[ "$(grant "$CONTACT2")" = 201 ] || die "grant2"
+[ "$(grant "$CONTACT2" +15555550199)" = 201 ] || die "grant2"
 [ "$(ops -X POST "$APP/api/agent-ops/suppressions" -d '{"channel":"sms","destination":"+15555550199","reason":"stop","permanent":true,"source":"sms_reply"}')" = 201 ] || die "suppress"
 code=$(propose "$CONTACT2" "+15555550199" "smoke-suppressed-1"); [ "$code" = 403 ] || die "suppressed proposal should be 403, got $code: $(cat "$WORK/out.json")"
 log "  403 $(j 'd.get("code") or d["decision"]["code"]')"
 
 log "gate 5: idempotent proposal + shared jti"
-[ "$(grant "$CONTACT")" = 201 ] || die "grant"
+[ "$(grant "$CONTACT" +15555550100)" = 201 ] || die "grant"
 [ "$(propose "$CONTACT" "+15555550100" "smoke-idempotent-1")" = 201 ] || die "propose: $(cat "$WORK/out.json")"
 A1=$(j 'd["result"]["action_id"]'); D1=$(j 'd["result"]["action_digest"]')
 c=$(propose_raw "$CONTACT" "+15555550100" "smoke-idempotent-1"); case "$c" in 200|201|202) ;; *) die "idempotent replay status $c";; esac
@@ -274,9 +283,9 @@ CONTACT3=$(python3 -c 'import uuid;print(uuid.uuid4())')
 # The application customer record (timezone known → F9 passes; contact tz travels to the kernel).
 CUST=$(curl -fsS "$APP/api/customers" "${H[@]}" -d '{"name":"Smoke Customer","phone":"+15555550123"}' | python3 -c 'import sys,json;print(json.load(sys.stdin)["id"])')
 curl -fsS "$APP/api/customers/$CUST/destinations" "${H[@]}" -d '{"channel":"sms","value":"+15555550123"}' >/dev/null
-curl -fsS -X PUT "$APP/api/customers/$CUST/preferences" "${H[@]}" -d '{"timezone":"America/Chicago"}' >/dev/null
+curl -fsS -X PUT "$APP/api/customers/$CUST/preferences" "${H[@]}" -d "{\"timezone\":\"$NOON_TZ\"}" >/dev/null
 CONTACT3=$(python3 -c "import uuid;print(uuid.UUID('$CUST'))")
-[ "$(grant "$CONTACT3")" = 201 ] || die "grant3"
+[ "$(grant "$CONTACT3" +15555550123)" = 201 ] || die "grant3"
 propose_provider() { ops -X POST "$APP/api/agent-ops/actions" -d "{\"origin\":\"agent\",\"request\":{\"workflow\":\"customer_follow_up\",\"action_kind\":\"send_sms\",\"tool_id\":\"sms.provider.send.v1\",\"resource\":{\"type\":\"contact\",\"id\":\"$CONTACT3\"},\"arguments\":{\"contact_id\":\"$CONTACT3\",\"to\":\"+15555550123\",\"template_id\":\"reorder_followup.v1\",\"rendered_text\":\"$1 Reply STOP to opt out.\"},\"purpose\":\"customer_requested_follow_up\",\"risk\":\"high\",\"requested_at\":\"$NOW\",\"expires_at\":\"$LATER\",\"idempotency_key\":\"$2\",\"evidence\":[]}}"; }
 c=$(propose_provider "Hi! Your order shipped." "smoke-provider-1"); [ "$c" = 202 ] || die "propose provider ($c): $(cat "$WORK/out.json")"
 A5=$(j 'd["result"]["action_id"]'); D5=$(j 'd["result"]["action_digest"]')
@@ -341,8 +350,8 @@ EOF2
 # A new provider send still works end to end under the rotated key (the worker unseals the sender token).
 CUST2=$(curl -fsS "$APP/api/customers" "${H[@]}" -d '{"name":"Smoke Customer Two","phone":"+15555550124"}' | python3 -c 'import sys,json;print(json.load(sys.stdin)["id"])')
 curl -fsS "$APP/api/customers/$CUST2/destinations" "${H[@]}" -d '{"channel":"sms","value":"+15555550124"}' >/dev/null
-curl -fsS -X PUT "$APP/api/customers/$CUST2/preferences" "${H[@]}" -d '{"timezone":"America/Chicago"}' >/dev/null
-CONTACT4=$(python3 -c "import uuid;print(uuid.UUID('$CUST2'))"); [ "$(grant "$CONTACT4")" = 201 ] || die "grant4"
+curl -fsS -X PUT "$APP/api/customers/$CUST2/preferences" "${H[@]}" -d "{\"timezone\":\"$NOON_TZ\"}" >/dev/null
+CONTACT4=$(python3 -c "import uuid;print(uuid.UUID('$CUST2'))"); [ "$(grant "$CONTACT4" +15555550124)" = 201 ] || die "grant4"
 c=$(ops -X POST "$APP/api/agent-ops/actions" -d "{\"origin\":\"agent\",\"request\":{\"workflow\":\"customer_follow_up\",\"action_kind\":\"send_sms\",\"tool_id\":\"sms.provider.send.v1\",\"resource\":{\"type\":\"contact\",\"id\":\"$CONTACT4\"},\"arguments\":{\"contact_id\":\"$CONTACT4\",\"to\":\"+15555550124\",\"template_id\":\"reorder_followup.v1\",\"rendered_text\":\"Hi! Your refill is ready. Reply STOP to opt out.\"},\"purpose\":\"customer_requested_follow_up\",\"risk\":\"high\",\"requested_at\":\"$NOW\",\"expires_at\":\"$LATER\",\"idempotency_key\":\"smoke-provider-rotated\",\"evidence\":[]}}")
 [ "$c" = 202 ] || die "propose after rotation ($c): $(cat "$WORK/out.json")"
 A6=$(j 'd["result"]["action_id"]'); D6=$(j 'd["result"]["action_digest"]')

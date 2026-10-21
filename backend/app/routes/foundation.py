@@ -170,7 +170,7 @@ async def record_consent(cid: str, body: ConsentIn, request: Request, user: User
     db.flush()
     # Kernel grant — the execution-time authority. Fail → nothing recorded.
     r = await _kernel(client, user, request, "POST", f"/contacts/{uuid.UUID(c.id)}/permissions", {
-        "channel": d.channel, "scope": body.purposes, "source": body.source,
+        "channel": d.channel, "destination": destination_value(d), "scope": body.purposes, "source": body.source,
         "proof_digest": digest, "granted_at": effective.isoformat().replace("+00:00", "Z"),
         "expires_at": expires.isoformat().replace("+00:00", "Z")})
     if r.status_code != 201:
@@ -250,7 +250,13 @@ async def add_suppression(body: SuppressIn, request: Request, user: User = Depen
     if not d or d.tenant_id != user.tenant_id:
         raise HTTPException(404, "Destination not found")
     c = own_customer(db, user.tenant_id, user.id, d.customer_id)
-    channel = body.channel or d.channel
+    # The channel is the destination's. A caller-supplied channel that differs would file the
+    # fingerprint under the wrong channel (locally and in the kernel) and leave the real
+    # destination contactable — refused, never reinterpreted.
+    if body.channel is not None and body.channel != d.channel:
+        raise HTTPException(422, {"code": "channel_mismatch",
+                                  "detail": f"destination is {d.channel}; a suppression cannot be filed as {body.channel}"})
+    channel = d.channel
     aref = audit(db, user.tenant_id, user.id, "suppression.add",
                  {"customer_id": c.id, "destination_fingerprint": d.fingerprint, "channel": channel,
                   "reason": body.reason, "source": body.source})
@@ -318,16 +324,18 @@ def import_preview(body: ImportPreviewIn, user: User = Depends(check_rate), db: 
     db.add(job)
     db.flush()
     # Existing fingerprints for this consultant → duplicates.
+    # Fingerprints are channel-keyed, so one set covers both sms and email destinations.
     known_fps = {fp for (fp,) in db.execute(
         select(CustomerDestination.fingerprint).join(Customer, Customer.id == CustomerDestination.customer_id)
-        .where(Customer.user_id == user.id, CustomerDestination.channel == "sms",
-               CustomerDestination.retired_at.is_(None)))}
+        .where(Customer.user_id == user.id, CustomerDestination.retired_at.is_(None)))}
     seen_in_file: set[str] = set()
     for i, r in enumerate(rows):
         name = (r.get(body.mapping["name"]) or "").strip()
         phone_raw = (r.get(body.mapping["phone"]) or "").strip() if "phone" in body.mapping else ""
         email_raw = (r.get(body.mapping["email"]) or "").strip() if "email" in body.mapping else ""
-        row = ImportRow(tenant_id=user.tenant_id, job_id=job.id, row_index=i, name=name[:120], status="create")
+        notes_raw = (r.get(body.mapping["notes"]) or "").strip() if "notes" in body.mapping else ""
+        row = ImportRow(tenant_id=user.tenant_id, job_id=job.id, row_index=i, name=name[:120], status="create",
+                        notes=notes_raw[:4000])
         try:
             if not name:
                 raise HTTPException(422, "name is required")
@@ -339,7 +347,12 @@ def import_preview(body: ImportPreviewIn, user: User = Depends(check_rate), db: 
                     row.status = "duplicate"
                 seen_in_file.add(fp)
             if email_raw:
-                row.email_enc = seal(user.tenant_id, "destination", normalize("email", email_raw))
+                enorm = normalize("email", email_raw)
+                efp = fingerprint(user.tenant_id, "email", enorm)
+                row.email_enc, row.email_fingerprint = seal(user.tenant_id, "destination", enorm), efp
+                if efp in known_fps or efp in seen_in_file:
+                    row.status = "duplicate"
+                seen_in_file.add(efp)
             if not phone_raw and not email_raw:
                 raise HTTPException(422, "a phone or email is required")
         except HTTPException as e:
@@ -390,7 +403,7 @@ def import_commit(job_id: str, user: User = Depends(check_rate), db: Session = D
     created = 0
     for r in db.scalars(select(ImportRow).where(ImportRow.job_id == job.id, ImportRow.status == "create")
                         .order_by(ImportRow.row_index)):
-        c = Customer(tenant_id=user.tenant_id, user_id=user.id, name=r.name)
+        c = Customer(tenant_id=user.tenant_id, user_id=user.id, name=r.name, notes=r.notes or "")
         db.add(c)
         db.flush()
         if r.phone_fingerprint:

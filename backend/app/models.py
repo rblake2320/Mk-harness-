@@ -394,6 +394,8 @@ class ImportRow(Base):
     phone_enc: Mapped[str] = mapped_column(Text, default="")
     phone_fingerprint: Mapped[str] = mapped_column(String(64), default="")
     email_enc: Mapped[str] = mapped_column(Text, default="")
+    email_fingerprint: Mapped[str] = mapped_column(String(64), default="")
+    notes: Mapped[str] = mapped_column(Text, default="")
     customer_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
 

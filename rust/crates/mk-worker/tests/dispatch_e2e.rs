@@ -131,6 +131,7 @@ async fn queued_outreach(w: &World) -> mk_domain::ActionId {
         now - chrono::Duration::hours(1),
         now + chrono::Duration::days(1),
         w.user,
+        "dest-hash",
         ACTOR,
         now,
     )

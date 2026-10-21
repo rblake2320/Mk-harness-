@@ -471,6 +471,7 @@ mod tests {
             granted_at: t(1),
             expires_at: t(23),
             revoked_at: None,
+            destination_hash: Some("dest".into()),
         }];
         Fx {
             tenant,

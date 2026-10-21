@@ -327,3 +327,69 @@ def test_unknown_timezone_blocks_send_until_set(client, kernel_env):
         cid2, _, _ = _customer(client, h, name="NoTZ", phone="+15555550199")
         up["arguments"]["contact_id"] = str(uuid.UUID(cid2)); up["resource"]["id"] = str(uuid.UUID(cid2))
         assert client.post("/api/agent-ops/actions", json={"origin": "agent", "request": up}, headers=h).status_code == 202
+
+
+def test_timezone_gate_covers_every_outreach_kind_and_trusts_only_resource_id(client, kernel_env):
+    """Codex findings on WP03: the gate applied only to send_sms/send_dm and preferred
+    arguments.contact_id over resource.id. Every outreach kind the kernel classifies as
+    outreach is gated, the authoritative id is resource.id, and a proposal naming two
+    different customers is refused instead of being checked against the convenient one."""
+    h = _user(client)
+    no_tz, _, _ = _customer(client, h, name="NoTZ", phone="+15555550177")
+    with_tz, _, _ = _customer(client, h, name="HasTZ", phone="+15555550166")
+    assert client.put(f"/api/customers/{with_tz}/preferences", json={"timezone": "America/Chicago"}, headers=h).status_code == 200
+    with kernel_ok() as m:
+        for kind, tool in (("send_email", "email.send.v1"), ("send_dm", "social.dm.send.v1"), ("mobile_work_order", "mobile.sms.send.v1")):
+            req = sms_request(no_tz)
+            req["action_kind"] = kind; req["tool_id"] = tool
+            r = client.post("/api/agent-ops/actions", json={"origin": "agent", "request": req}, headers=h)
+            assert r.status_code == 422 and r.json()["detail"]["code"] == "TIMEZONE_UNKNOWN", (kind, r.text)
+        # resource.id is the customer without a timezone; arguments.contact_id names one with a timezone.
+        req = sms_request(no_tz)
+        req["arguments"]["contact_id"] = str(uuid.UUID(with_tz))
+        r = client.post("/api/agent-ops/actions", json={"origin": "agent", "request": req}, headers=h)
+        assert r.status_code == 422 and r.json()["detail"]["code"] == "contact_mismatch", r.text
+        # A customer this tenant does not have cannot have a known timezone: refused, not skipped.
+        req = sms_request(uuid.uuid4().hex)
+        r = client.post("/api/agent-ops/actions", json={"origin": "agent", "request": req}, headers=h)
+        assert r.status_code == 404 and r.json()["detail"]["code"] == "customer_not_found", r.text
+        # Outreach must name a contact resource at all.
+        req = sms_request(with_tz); req["resource"] = {"type": "campaign", "id": str(uuid.uuid4())}
+        r = client.post("/api/agent-ops/actions", json={"origin": "agent", "request": req}, headers=h)
+        assert r.status_code == 422 and r.json()["detail"]["code"] == "outreach_resource_required", r.text
+        assert not m.routes[3].called
+
+
+def test_suppression_channel_must_match_the_destination(client, kernel_env):
+    """Codex finding: channel=email on an SMS destination filed the phone fingerprint under
+    email (locally and in the kernel) and left the number contactable. Refused now."""
+    h = _user(client)
+    cid, did, fp = _customer(client, h, phone="+15555550144")
+    with kernel_ok() as m:
+        r = client.post("/api/suppressions", json={"destination_id": did, "channel": "email", "reason": "STOP", "source": "sms_reply"}, headers=h)
+        assert r.status_code == 422 and r.json()["detail"]["code"] == "channel_mismatch", r.text
+        assert not m.routes[2].called, "nothing reached the kernel"
+        r = client.post("/api/suppressions", json={"destination_id": did, "channel": "sms", "reason": "STOP", "source": "sms_reply"}, headers=h)
+        assert r.status_code == 201 and r.json()["channel"] == "sms" and r.json()["fingerprint"] == fp
+
+
+def test_import_keeps_notes_and_dedupes_email_only_rows(client, kernel_env):
+    """Codex findings: mapped notes were discarded at commit; email-only rows were never
+    deduplicated (in-file or against existing customers)."""
+    h = _user(client)
+    # An existing email-only customer.
+    r = client.post("/api/customers", json={"name": "Existing", "phone": ""}, headers=h)
+    assert r.status_code == 201, r.text
+    assert client.post(f"/api/customers/{r.json()['id']}/destinations", json={"channel": "email", "value": "Existing@Example.com"}, headers=h).status_code == 201
+    csv_text = "Name,Email,Notes\nA,a@example.com,likes matte\nA again,A@EXAMPLE.COM,dup in file\nE,existing@example.com,already a customer\nB,b@example.com,\n"
+    j = client.post("/api/customers/import/preview", json={"idempotency_key": "imp-" + uuid.uuid4().hex,
+                    "mapping": {"name": "Name", "email": "Email", "notes": "Notes"}, "csv_text": csv_text}, headers=h)
+    assert j.status_code == 201, j.text
+    j = j.json()
+    assert j["will_create"] == 2 and j["duplicates"] == 2, j
+    c = client.post(f"/api/customers/import/{j['job_id']}/commit", headers=h)
+    assert c.status_code == 200, c.text
+    customers = {x["name"]: x for x in client.get("/api/customers", headers=h).json()}
+    assert customers["A"]["notes"] == "likes matte"
+    assert "A again" not in customers and "E" not in customers
+    assert set(customers) == {"Existing", "A", "B"}

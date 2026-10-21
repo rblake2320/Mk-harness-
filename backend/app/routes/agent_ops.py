@@ -124,19 +124,33 @@ class ProposeIn(BaseModel):
     request: dict[str, Any]
 
 
+OUTREACH_KINDS = ("send_sms", "send_email", "send_dm", "mobile_work_order")  # mirrors mk_domain::ActionKind::is_outreach
+
+
 def _contact_customer(db: Session, p: Principal, req: dict) -> Customer | None:
-    """Resolve the action's contact to this consultant's customer, if it names one."""
+    """Resolve the action's contact to this consultant's customer.
+
+    The kernel authorizes against ``resource.id``; that is the only identity this
+    gate trusts. ``arguments.contact_id`` must agree with it when present — a
+    proposal naming two different customers is refused rather than checked
+    against the more convenient one."""
     res = req.get("resource") or {}
-    cid = (req.get("arguments") or {}).get("contact_id") or (res.get("id") if res.get("type") == "contact" else None)
-    if not cid:
-        return None
+    if res.get("type") != "contact" or not res.get("id"):
+        raise HTTPException(status_code=422, detail={"code": "outreach_resource_required",
+                            "message": "Outreach actions must name the customer as resource {type: contact, id}."})
+    arg_cid = (req.get("arguments") or {}).get("contact_id")
     try:
-        hex_id = uuid.UUID(str(cid)).hex
+        hex_id = uuid.UUID(str(res["id"])).hex
+        if arg_cid is not None and uuid.UUID(str(arg_cid)).hex != hex_id:
+            raise HTTPException(status_code=422, detail={"code": "contact_mismatch",
+                                "message": "arguments.contact_id does not match resource.id."})
     except ValueError:
-        return None
+        raise HTTPException(status_code=422, detail={"code": "contact_invalid", "message": "Customer id is not a UUID."}) from None
     c = db.get(Customer, hex_id)
     if not c or c.tenant_id != p.tenant_id:
-        return None
+        # Unknown here ≠ unknown to the kernel; the kernel still enforces consent for its own
+        # contact id. But a timezone cannot be known for a customer this tenant does not have.
+        raise HTTPException(status_code=404, detail={"code": "customer_not_found", "message": "Customer not found."})
     return c
 
 
@@ -144,16 +158,20 @@ def _contact_customer(db: Session, p: Principal, req: dict) -> Customer | None:
 async def propose(body: ProposeIn, p: Principal = Depends(principal),
                   client: KernelClient = Depends(get_kernel_client), db: Session = Depends(get_db)):
     req = dict(body.request)
+    # No kernel → 503 before any local validation runs (never a local send path).
+    try:
+        client._require_configured()  # noqa: SLF001 — same check forward() applies
+    except KernelUnavailable as e:
+        return _problem(503, e.code, "Action kernel unavailable", e.detail)
     # F9: outreach to a customer whose destination timezone is unknown is blocked
     # here, before the kernel ever sees it. Non-outreach kinds are unaffected.
-    if req.get("action_kind") in ("send_sms", "send_dm"):
+    if req.get("action_kind") in OUTREACH_KINDS:
         c = _contact_customer(db, p, req)
-        if c is not None:
-            tz = require_dispatch_timezone(db, c)
-            # The kernel evaluates contact hours in the customer's own zone.
-            args0 = req.get("arguments")
-            if isinstance(args0, dict):
-                args0["contact_tz"] = tz
+        tz = require_dispatch_timezone(db, c)
+        # The kernel evaluates contact hours in the customer's own zone.
+        args0 = req.get("arguments")
+        if isinstance(args0, dict):
+            args0["contact_tz"] = tz
     # Production SMS goes through the business's registered provider sender
     # (WP07). The sender is chosen here from the kernel's registry — never
     # supplied by the model — and bound into the proposal arguments.
@@ -407,6 +425,7 @@ async def inbound_resume(p: Principal = Depends(principal), client: KernelClient
 # --------------------------------------------------------------------------- #
 class GrantIn(BaseModel):
     channel: str
+    destination: str = Field(min_length=1, max_length=320)  # the number/address the evidence covers; kernel hashes it
     scope: list[str]
     source: str
     proof_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")

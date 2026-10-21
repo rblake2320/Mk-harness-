@@ -129,6 +129,11 @@ pub fn migrator() -> sqlx::migrate::Migrator {
             "tenant scoped dedupe",
             include_str!("../../../../migrations/kernel/0006_tenant_scoped_dedupe.sql"),
         ),
+        (
+            7,
+            "permission destination binding",
+            include_str!("../../../../migrations/kernel/0007_permission_destination.sql"),
+        ),
     ];
     let migrations: Vec<Migration> = FILES
         .iter()

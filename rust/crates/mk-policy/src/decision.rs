@@ -21,6 +21,8 @@ pub enum DenyCode {
     ContactPermissionExpired,
     ContactPermissionRevoked,
     ContactPermissionScopeMismatch,
+    /// Consent exists for the contact and channel but not for this destination.
+    ContactPermissionDestinationMismatch,
     Suppressed,
     OutsideContactHours,
     FrequencyLimitExceeded,
@@ -54,6 +56,7 @@ impl DenyCode {
             Self::ContactPermissionExpired => "contact_permission_expired",
             Self::ContactPermissionRevoked => "contact_permission_revoked",
             Self::ContactPermissionScopeMismatch => "contact_permission_scope_mismatch",
+            Self::ContactPermissionDestinationMismatch => "contact_permission_destination_mismatch",
             Self::Suppressed => "suppressed",
             Self::OutsideContactHours => "outside_contact_hours",
             Self::FrequencyLimitExceeded => "frequency_limit_exceeded",

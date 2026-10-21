@@ -20,6 +20,7 @@ const EXPLANATIONS: Record<string, { what: string; next: string }> = {
   NO_SENDER_IDENTITY: { what: 'Your business has no registered sending number yet.', next: 'Ask your admin to register one in Settings → Sending number.' },
   SENDER_NOT_FOUND: { what: 'The requested sending number is not registered to your team.', next: 'Pick a registered sender or ask your admin.' },
   CONTACT_PERMISSION_MISSING: { what: 'This customer has not given permission for this kind of message.', next: 'Record their consent (with evidence) before proposing outreach.' },
+  CONTACT_PERMISSION_DESTINATION_MISMATCH: { what: 'The customer gave permission for a different number or address than this message is addressed to.', next: 'Send to the destination their consent covers, or record consent (with evidence) for this one.' },
   SUPPRESSED: { what: 'This customer asked not to be contacted on this channel.', next: 'Nothing can be sent. Re-consent requires fresh, purpose-specific evidence from the customer.' },
   DISPATCH_DISABLED: { what: 'Sending is paused for your team right now.', next: 'Your admin or the platform operator controls the pause. Nothing was sent.' },
   OUTSIDE_CONTACT_HOURS: { what: "It is outside the customer's contact hours.", next: 'The message will not be sent now. Propose it again inside allowed hours.' },

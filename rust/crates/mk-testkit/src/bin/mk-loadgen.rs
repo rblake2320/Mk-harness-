@@ -320,7 +320,7 @@ impl Rig {
                 reqwest::Method::POST,
                 &format!("/internal/v1/contacts/{contact}/permissions"),
                 &self.token(t.id, t.approver, &["manager"]),
-                Some(json!({"channel": "sms", "scope": ["customer_requested_follow_up"], "source": "web_form",
+                Some(json!({"channel": "sms", "destination": to, "scope": ["customer_requested_follow_up"], "source": "web_form",
                             "proof_digest": format!("sha256:{}", "1".repeat(64)),
                             "granted_at": "2026-10-01T00:00:00Z", "expires_at": "2027-10-01T00:00:00Z"})),
             )

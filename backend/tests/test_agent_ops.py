@@ -87,6 +87,16 @@ def _signup(client, n: str, admin_only=False):
     return t
 
 
+def known_customer(client, tok: str, phone: str = "+15555550100") -> str:
+    """A customer this tenant owns, with a timezone, so the F9 gate lets outreach reach the kernel."""
+    r = client.post("/api/customers", json={"name": "Brenda", "phone": phone}, headers=auth_headers(tok))
+    assert r.status_code in (200, 201), r.text
+    cid = r.json()["id"]
+    r = client.put(f"/api/customers/{cid}/preferences", json={"timezone": "America/Chicago"}, headers=auth_headers(tok))
+    assert r.status_code == 200, r.text
+    return uuid.UUID(cid).hex
+
+
 def sms_request(contact_hex: str) -> dict:
     return {
         "workflow": "customer_follow_up", "action_kind": "send_sms",
@@ -133,7 +143,7 @@ def test_unreachable_kernel_is_503_and_writes_are_not_retried(client, kernel_env
     with respx.mock() as m:
         route = m.post(f"{KERNEL}/internal/v1/actions").mock(side_effect=exc)
         r = client.post("/api/agent-ops/actions",
-                        json={"origin": "human", "request": sms_request(uuid.uuid4().hex)},
+                        json={"origin": "human", "request": sms_request(known_customer(client, tok))},
                         headers=auth_headers(tok))
     assert r.status_code == 503
     assert r.json()["code"] == "KERNEL_UNREACHABLE"
@@ -213,7 +223,7 @@ def test_identity_is_bound_from_jwt_not_body(client, kernel_env):
 
     with respx.mock() as m:
         m.post(f"{KERNEL}/internal/v1/actions").mock(side_effect=handler)
-        req = sms_request(uuid.uuid4().hex)
+        req = sms_request(known_customer(client, tok))
         req["tenant_id"] = str(uuid.uuid4())      # attacker-supplied
         req["requested_by"] = str(uuid.uuid4())   # attacker-supplied
         req["action_id"] = str(uuid.uuid4())      # client may not pick ids
@@ -270,7 +280,7 @@ def test_agent_origin_mints_agent_only_principal(client, kernel_env):
     with respx.mock() as m:
         m.post(f"{KERNEL}/internal/v1/actions").mock(side_effect=handler)
         r = client.post("/api/agent-ops/actions",
-                        json={"origin": "agent", "request": sms_request(uuid.uuid4().hex)},
+                        json={"origin": "agent", "request": sms_request(known_customer(client, tok))},
                         headers=auth_headers(tok))
     assert r.status_code == 201
     assert seen["c"]["roles"] == ["agent"]
@@ -370,7 +380,7 @@ def test_kernel_verdicts_pass_through_unchanged(client, kernel_env, status, body
     with respx.mock() as m:
         m.post(f"{KERNEL}/internal/v1/actions").mock(return_value=httpx.Response(status, json=body))
         r = client.post("/api/agent-ops/actions",
-                        json={"origin": "human", "request": sms_request(uuid.uuid4().hex)},
+                        json={"origin": "human", "request": sms_request(known_customer(client, tok))},
                         headers=auth_headers(tok))
     assert r.status_code == status and r.json() == body
 
@@ -390,7 +400,7 @@ def test_204_passes_through_without_body(client, kernel_env):
 @pytest.mark.parametrize("key", ["callback_url", "password", "api_key", "token", "secret"])
 def test_forbidden_argument_keys_rejected_before_any_call(client, kernel_env, key):
     tok = _signup(client, uuid.uuid4().hex[:6])
-    req = sms_request(uuid.uuid4().hex); req["arguments"][key] = "x"
+    req = sms_request(known_customer(client, tok)); req["arguments"][key] = "x"
     with respx.mock(assert_all_called=False) as m:
         route = m.post(f"{KERNEL}/internal/v1/actions")
         r = client.post("/api/agent-ops/actions", json={"origin": "human", "request": req},
@@ -412,7 +422,7 @@ def test_invalid_ids_are_422_before_any_call(client, kernel_env):
 def test_bad_origin_value_rejected(client, kernel_env):
     tok = _signup(client, uuid.uuid4().hex[:6])
     r = client.post("/api/agent-ops/actions",
-                    json={"origin": "system", "request": sms_request(uuid.uuid4().hex)},
+                    json={"origin": "system", "request": sms_request(known_customer(client, tok))},
                     headers=auth_headers(tok))
     assert r.status_code == 422
 
@@ -456,7 +466,7 @@ def test_forwarded_proposal_matches_published_action_contract(client, kernel_env
     with respx.mock() as m:
         m.post(f"{KERNEL}/internal/v1/actions").mock(side_effect=handler)
         for origin in ("agent", "human"):
-            req = sms_request(uuid.uuid4().hex)
+            req = sms_request(known_customer(client, tok))
             req["arguments"]["agent_id"] = "moto-1"
             r = client.post("/api/agent-ops/actions", json={"origin": origin, "request": req},
                             headers=auth_headers(tok))

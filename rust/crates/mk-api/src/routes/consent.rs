@@ -31,6 +31,9 @@ fn human_only(p: &Principal, headers: &HeaderMap) -> Result<(), ApiError> {
 #[serde(deny_unknown_fields)]
 pub struct GrantBody {
     pub channel: Channel,
+    /// The destination (phone number / address) the consent evidence covers. Hashed
+    /// here with the tenant-keyed fingerprint; the raw value is never stored.
+    pub destination: String,
     pub scope: Vec<String>,
     pub source: String,
     pub proof_digest: mk_crypto::Digest,
@@ -55,6 +58,8 @@ pub async fn grant_permission(
         || b.scope.len() > 16
         || b.expires_at <= b.granted_at
         || b.source.len() > 200
+        || b.destination.trim().is_empty()
+        || b.destination.len() > 320
     {
         return Err(ApiError::new(
             StatusCode::UNPROCESSABLE_ENTITY,
@@ -81,6 +86,7 @@ pub async fn grant_permission(
         b.granted_at,
         b.expires_at,
         p.user,
+        &destination_hash(&st.master, p.tenant, b.channel, &b.destination),
         actor,
         now,
     )
