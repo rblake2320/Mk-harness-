@@ -18,7 +18,14 @@ jobs:
           cache-dependency-path: backend/requirements.txt
       - run: sudo apt-get update -q && sudo apt-get install -y -q redis-server
       - run: pip install -r requirements.txt
-      - run: python -m pytest -v
+      - name: pytest
+        run: |
+          set -o pipefail
+          python -m pytest -q -ra 2>&1 | tee pytest.log
+          rc=${PIPESTATUS[0]}
+          grep -E "^(FAILED|ERROR) " pytest.log | head -40 | sed 's/^/::error title=pytest::/' || true
+          grep -E "^E " pytest.log | head -40 | sed 's/^/::error title=assert::/' || true
+          exit $rc
         env:
           MK_ALLOW_DEV_SECRETS: "1"
 
@@ -33,12 +40,24 @@ jobs:
           cache: npm
           cache-dependency-path: web/package.json
       - run: npm install
-      - run: npm run build   # tsc -b strict typecheck + vite production build
+      - name: npm run build (tsc -b strict typecheck + vite production build)
+        run: |
+          set -o pipefail
+          npm run build 2>&1 | tee build.log
+          rc=${PIPESTATUS[0]}
+          grep -E "error TS|ERROR|Error:" build.log | head -40 | sed 's/^/::error title=web-build::/' || true
+          exit $rc
       # WCAG 2.2 A/AA automated checks (axe-core) on every supported screen, plus the
       # approval-screen contract (H1 fields, explicit per-message passkey gesture).
       # Manual keyboard / screen-reader assessment is a separate human acceptance step.
       - run: npx playwright install --with-deps chromium
-      - run: npm run test:a11y
+      - name: npm run test:a11y
+        run: |
+          set -o pipefail
+          npm run test:a11y 2>&1 | tee a11y.log
+          rc=${PIPESTATUS[0]}
+          grep -E "✘|failed|Error:" a11y.log | head -40 | sed 's/^/::error title=a11y::/' || true
+          exit $rc
       - uses: actions/upload-artifact@v4
         if: always()
         with: { name: web-a11y-results, path: web/test-results/a11y.json, if-no-files-found: ignore }

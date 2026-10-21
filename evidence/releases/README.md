@@ -4,7 +4,9 @@ One YAML record per acceptance-matrix row per release candidate, at
 `evidence/releases/<release-id>/<REQUIREMENT_ID>.yaml`. A row in
 `docs/production-acceptance.md` is closed only by a record here whose `status`
 is at the required level and whose artifact checksum verifies. A planned
-filename is not evidence. `tools/evidence/check.py` validates every record
+filename is not evidence. Directories whose name starts with `_` (such as
+`_example`) hold templates: schema-checked, checksums not verified, never
+counted by `tools/evidence/readiness.py`. `tools/evidence/check.py` validates every record
 against `schema.yaml` and recomputes checksums; it runs in CI.
 
 Required fields (all mandatory; `null` is not permitted for a closed row):
