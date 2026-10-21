@@ -25,7 +25,7 @@
 # produce real-device evidence (see docs/real-device-acceptance.md).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-WORK="${WORK:-$(mktemp -d)}"
+WORK="${WORK:-$(mktemp -d)}"; mkdir -p "$WORK"
 PGURL="${PGURL:-postgres://postgres:kernel@127.0.0.1:5433/mk_kernel_smoke}"
 REDIS_URL="${REDIS_URL:-redis://127.0.0.1:6380}"
 API=http://127.0.0.1:8090
@@ -69,7 +69,7 @@ MK_DATABASE_URL="$(url_for mk_relay_login relay)" MK_RELAY_ID=relay-smoke \
   "$BIN/mk-outbox-relay" >"$WORK/relay.log" 2>&1 & PIDS+=($!)
 MK_DATABASE_URL="$(url_for mk_worker_login worker)" MK_WORKER_ID=worker-smoke MK_LEASE_SECS=60 MK_ALLOW_LOOPBACK_HTTP=1 \
   MK_MOBILE_INTAKE_URL="$AGENT/work-orders" MK_EGRESS_AUTHORITIES=127.0.0.1:8787 \
-  "$BIN/mk-action-worker" >"$WORK/worker.log" 2>&1 & PIDS+=($!)
+  "$BIN/mk-action-worker" >"$WORK/worker.log" 2>&1 & WORKER_PID=$!; PIDS+=($WORKER_PID)
 for i in $(seq 1 30); do curl -fsS "$API/health/ready" >/dev/null 2>&1 && break; sleep 1; done
 curl -fsS "$API/health/ready" >/dev/null || die "kernel api not ready"
 
@@ -90,6 +90,11 @@ curl -fsS "$APP/api/auth/members" "${H[@]}" -d '{"email":"approver@smoke.example
 TOK2=$(curl -fsS "$APP/api/auth/login" -H 'content-type: application/json' -d '{"email":"approver@smoke.example.com","password":"superSecret123!"}' | python3 -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')
 H2=(-H "authorization: Bearer $TOK2" -H 'content-type: application/json')
 TENANT=$(python3 -c "import jwt,sys,uuid;print(uuid.UUID(jwt.decode('$TOK',options={'verify_signature':False})['tid']))")
+# The default tenant policy evaluates contact hours (08–21) in America/Chicago, which made
+# this smoke fail every evening. Pin the smoke tenant to a zone where it is ~noon now
+# (test-environment setup with the owner identity; every other policy field stays default).
+NOON_TZ=$(python3 -c 'import datetime;o=max(-12,min(14,12-datetime.datetime.now(datetime.timezone.utc).hour));print("Etc/UTC" if o==0 else ("Etc/GMT-%d"%o if o>0 else "Etc/GMT+%d"%-o))')
+psql -q "$PGURL" -c "INSERT INTO kernel.policy_versions (tenant_id, version, contact_tz) VALUES ('$TENANT', 'smoke-noon', '$NOON_TZ')" >/dev/null
 ops() { curl -sS -o "$WORK/out.json" -w '%{http_code}' "${H[@]}" "$@"; }
 j() { python3 -c "import json,sys;d=json.load(open('$WORK/out.json'));print(eval(sys.argv[1]))" "$1"; }
 
@@ -137,9 +142,13 @@ c2=$(curl -sS -o /dev/null -w '%{http_code}' -X POST "$API/internal/v1/kill-swit
 log "gate 3: revoked approval is never dispatched"
 [ "$(propose "$CONTACT" "+15555550100" "smoke-revoked-1")" = 201 ] || die "propose rev"
 A2=$(j 'd["result"]["action_id"]'); D2=$(j 'd["result"]["action_digest"]')
+# Freeze the worker so approve→revoke is not racing a sub-second dispatch;
+# the kernel must then refuse the queued action at dispatch time.
+kill -STOP "$WORKER_PID"
 [ "$(approve "$A2" "$D2")" = 200 ] || die "approve rev: $(cat "$WORK/out.json")"
 AP2=$(j 'd["approval"]["approval_id"]')
 [ "$(ops -X POST "$APP/api/agent-ops/approvals/$AP2/revoke")" = 200 ] || die "revoke: $(cat "$WORK/out.json")"
+kill -CONT "$WORKER_PID"
 sleep 6; s=$(state "$A2"); case "$s" in dispatching|completed) die "revoked action dispatched: $s";; esac
 grep -q "$A2" "$WORK/agent.log" && die "revoked action reached the device agent"
 log "  state after revoke: $s"
@@ -179,7 +188,7 @@ EOF
 grep -q "dry_run_no_device\|callback" "$WORK/api.log" || true
 
 log "gate 6: kernel audit chain verifies (read-only identity)"
-MK_DATABASE_URL="$(url_for mk_readonly_login readonly)" "$BIN/mk-audit-verifier" | tail -3
+MK_DATABASE_URL="$(url_for mk_readonly_login readonly)" "$BIN/mk-audit-verifier" 2>&1 | tee "$WORK/verifier.log" | tail -3
 
 log "gate 7: identities are least-privilege (API cannot claim outbox; relay cannot read approvals; readonly cannot write)"
 ! psql -q "$(url_for mk_api_login api)" -c "UPDATE kernel.outbox_events SET leased_by='x' WHERE false" >/dev/null 2>&1 || die "api login can touch outbox claims"
@@ -192,5 +201,42 @@ log "worker log clean under its restricted login (housekeeping under mk_kernel_w
 
 log "no PII in kernel/agent logs"
 ! grep -q "5555550100\|Your order shipped" "$WORK/api.log" "$WORK/worker.log" "$WORK/relay.log" "$WORK/agent.log" || die "PII leaked to logs"
+
+log "gate 8: production pre-flight passes against this stack (and refuses --for-enable without an acceptance record)"
+export KERNEL_URL="$API" APP_URL="$APP" PG_HOST="${HOSTDB%/*}" PG_DB="${HOSTDB##*/}" PG_ADMIN_URL="$PGURL" \
+  MK_DB_API_PASSWORD="api-$PW" MK_DB_WORKER_PASSWORD="worker-$PW" MK_DB_RELAY_PASSWORD="relay-$PW" MK_DB_READONLY_PASSWORD="readonly-$PW" \
+  MK_PREFLIGHT_EMAIL=admin@smoke.example.com MK_PREFLIGHT_PASSWORD='superSecret123!' \
+  MK_AUDIT_VERIFIER="$BIN/mk-audit-verifier" MK_EGRESS_AUTHORITIES=127.0.0.1:8787 MK_MOBILE_INTAKE_URL="https://127.0.0.1:8787/work-orders"
+bash "$ROOT/scripts/kernel-preflight.sh" > "$WORK/preflight.log" 2>&1 || { cat "$WORK/preflight.log"; die "pre-flight failed"; }
+grep -E "passed, 0 failed" "$WORK/preflight.log" >/dev/null || { cat "$WORK/preflight.log"; die "pre-flight"; }
+if MK_ACCEPTANCE_RECORD="$WORK/no-such-record.md" bash "$ROOT/scripts/kernel-preflight.sh" --for-enable > "$WORK/preflight-enable.log" 2>&1; then
+  die "pre-flight --for-enable must fail without an acceptance record"; fi
+grep -q "no real-device acceptance record" "$WORK/preflight-enable.log" || die "pre-flight --for-enable gave the wrong reason"
+# A verbatim copy of the template (placeholders) must be rejected (Codex P1 on #32).
+if MK_ACCEPTANCE_RECORD="$ROOT/deploy/kernel/ACCEPTANCE.template.md" bash "$ROOT/scripts/kernel-preflight.sh" --for-enable > "$WORK/preflight-template.log" 2>&1; then
+  die "pre-flight --for-enable accepted the unfilled template"; fi
+grep -q "placeholder" "$WORK/preflight-template.log" || die "template rejection gave the wrong reason: $(grep FAIL "$WORK/preflight-template.log")"
+# A fully filled record passes; the same record with Result: REJECTED does not.
+EVHEAD=$(python3 -c "import json;print(json.loads(open('$WORK/evidence/evidence-ledger.jsonl').read().splitlines()[-1])['entry_hash'])")
+AROOT=$(grep -o 'sha256:[0-9a-f]\{64\}' "$WORK/verifier.log" 2>/dev/null | tail -1); [ -n "$AROOT" ] || AROOT="sha256:$(printf x | sha256sum | cut -c1-64)"
+cat > "$WORK/ACCEPTANCE.md" <<REC
+Date: 2026-10-20 12:00 America/Chicago
+Device: Moto G Power, serial digest sha256:$(printf serial | sha256sum | cut -c1-64)
+Android: 14 / motorola/x
+Kernel commit: $(git -C "$ROOT" rev-parse HEAD)
+Agent commit: $(git -C "$ROOT" rev-parse HEAD)
+Destination: controlled test phone (never a customer number)
+Task id: $TID
+Evidence chain head: $EVHEAD
+Audit root: $AROOT
+Negative runs: revoke-before-dispatch = yes; tenant kill switch = yes
+Reviewer: smoke harness — looked at $TID.png and the receiving phone
+Result: ACCEPTED
+REC
+MK_ACCEPTANCE_RECORD="$WORK/ACCEPTANCE.md" bash "$ROOT/scripts/kernel-preflight.sh" --for-enable > "$WORK/preflight-accepted.log" 2>&1 || { cat "$WORK/preflight-accepted.log"; die "pre-flight --for-enable rejected a complete record"; }
+sed -i 's/^Result: ACCEPTED$/Result: REJECTED (screenshot missing)/' "$WORK/ACCEPTANCE.md"
+if MK_ACCEPTANCE_RECORD="$WORK/ACCEPTANCE.md" bash "$ROOT/scripts/kernel-preflight.sh" --for-enable > "$WORK/preflight-rejected.log" 2>&1; then
+  die "pre-flight --for-enable accepted a REJECTED record"; fi
+log "  $(grep -E 'passed, . failed' "$WORK/preflight.log")"
 
 log "ALL GATES PASSED — artifacts in $WORK"
