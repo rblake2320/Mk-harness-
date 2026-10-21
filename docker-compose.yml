@@ -17,6 +17,9 @@ services:
       DATABASE_URL: postgresql+psycopg://mk:${POSTGRES_PASSWORD}@db:5432/mkharness
       JWT_SECRET: ${JWT_SECRET:?set in .env}
       MASTER_KEY: ${MASTER_KEY:?set in .env}
+      # Destination-fingerprint keys: MUST be the same value the kernel gets as
+      # MK_FINGERPRINT_KEYS (first = current; empty = master key as m0).
+      FINGERPRINT_KEYS: ${MK_FINGERPRINT_KEYS:-}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}

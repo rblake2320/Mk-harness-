@@ -51,6 +51,7 @@ data "aws_caller_identity" "current" {}
 locals {
   secret_names = {
     master_key             = "MK_MASTER_KEY — base64 32 bytes; shared by FastAPI and kernel (legacy seal + destination fingerprints)"
+    fingerprint_keys       = "Destination-fingerprint keys kid=base64,... (first = current; 'm0=master' = the master key). ONE value, given to the kernel API as MK_FINGERPRINT_KEYS and to FastAPI as FINGERPRINT_KEYS"
     kek                    = "MK_KEK — base64 32 bytes; wraps kernel data-key versions (rotate per docs/runbooks/key-compromise.md)"
     assertion_private      = "KERNEL_ASSERTION_PRIVATE_KEY — FastAPI Ed25519 seed; kernel holds only the public key in MK_ASSERTION_KEYS"
     jwt_secret             = "JWT_SECRET — application sessions"

@@ -63,6 +63,7 @@ locals {
       ])
       secrets = [
         { name = "MK_MASTER_KEY", valueFrom = local.secret["master_key"] },
+        { name = "MK_FINGERPRINT_KEYS", valueFrom = local.secret["fingerprint_keys"] },
         { name = "MK_KEK", valueFrom = local.secret["kek"] },
         { name = "MK_DB_PASSWORD", valueFrom = local.secret["db_api_credential"] },
       ]
@@ -105,6 +106,8 @@ locals {
       ]
       secrets = [
         { name = "MASTER_KEY", valueFrom = local.secret["master_key"] },
+        # Same secret as the kernel's MK_FINGERPRINT_KEYS: one value, never two.
+        { name = "FINGERPRINT_KEYS", valueFrom = local.secret["fingerprint_keys"] },
         { name = "KERNEL_ASSERTION_PRIVATE_KEY", valueFrom = local.secret["assertion_private"] },
         { name = "JWT_SECRET", valueFrom = local.secret["jwt_secret"] },
         { name = "DB_PASSWORD", valueFrom = local.secret["db_app_credential"] },
