@@ -1494,6 +1494,64 @@ async fn fingerprint_key_rotation_never_orphans_suppressions_or_consent() {
             .unwrap()
             .is_empty()
     );
+    drop(tx);
+    // Prune the retired m0: refused while m0 is still configured, then strips
+    // every m0 tag and rewrites the hash columns to the k2 value.
+    assert!(matches!(
+        fingerprint::prune(s.pool(), &k_rot, "m0", Some(tenant)).await,
+        Err(StoreError::Conflict(_))
+    ));
+    let n = fingerprint::prune(s.pool(), &k_only, "m0", Some(tenant))
+        .await
+        .unwrap();
+    assert_eq!(n, 4, "action, permission, two suppressions");
+    let left: i64 = sqlx::query_scalar(
+        "SELECT (SELECT count(*) FROM kernel.suppressions WHERE tenant_id = $1
+                   AND (normalized_destination_hash = $2 OR EXISTS (SELECT 1 FROM unnest(destination_fingerprints) x WHERE x LIKE 'm0:%')))
+              + (SELECT count(*) FROM kernel.contact_permissions WHERE tenant_id = $1
+                   AND (destination_hash = $2 OR EXISTS (SELECT 1 FROM unnest(destination_fingerprints) x WHERE x LIKE 'm0:%')))
+              + (SELECT count(*) FROM kernel.actions WHERE tenant_id = $1
+                   AND (destination_hash = $2 OR EXISTS (SELECT 1 FROM unnest(destination_fingerprints) x WHERE x LIKE 'm0:%')))",
+    )
+    .bind(tenant.0)
+    .bind(&fp0.primary)
+    .fetch_one(s.pool())
+    .await
+    .unwrap();
+    assert_eq!(left, 0, "no m0 HMAC remains in any table");
+    let total: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM kernel.suppressions WHERE tenant_id = $1")
+            .bind(tenant.0)
+            .fetch_one(s.pool())
+            .await
+            .unwrap();
+    assert_eq!(
+        total, 2,
+        "the count query sees this tenant's rows (not vacuous)"
+    );
+    let mut tx = s.begin(tenant).await.unwrap_or_else(|e| panic!("{e:?}"));
+    assert_eq!(
+        consent::suppressions_for(&mut tx, Channel::Sms, &fp_only)
+            .await
+            .unwrap()
+            .len(),
+        2,
+        "opt-outs still block after the old key's HMACs are gone"
+    );
+    let perms = consent::permissions_for(&mut tx, contact, Channel::Sms, Some(&fp_only))
+        .await
+        .unwrap();
+    assert_eq!(
+        perms[0].destination_hash.as_deref(),
+        Some(fp_only.primary.as_str())
+    );
+    assert_eq!(
+        fingerprint::prune(s.pool(), &k_only, "m0", Some(tenant))
+            .await
+            .unwrap(),
+        0,
+        "prune is idempotent"
+    );
 }
 
 /// Rekey refuses to re-point a row: a sealed destination that does not
