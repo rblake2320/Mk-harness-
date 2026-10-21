@@ -57,7 +57,7 @@ locals {
       secrets = [
         { name = "MK_MASTER_KEY", valueFrom = local.secret["master_key"] },
         { name = "MK_KEK", valueFrom = local.secret["kek"] },
-        { name = "MK_DB_PASSWORD", valueFrom = local.secret["db_api_password"] },
+        { name = "MK_DB_PASSWORD", valueFrom = local.secret["db_api_credential"] },
       ]
     }
     kernel_worker = {
@@ -74,7 +74,7 @@ locals {
       secrets = [
         { name = "MK_MASTER_KEY", valueFrom = local.secret["master_key"] },
         { name = "MK_KEK", valueFrom = local.secret["kek"] },
-        { name = "MK_DB_PASSWORD", valueFrom = local.secret["db_worker_password"] },
+        { name = "MK_DB_PASSWORD", valueFrom = local.secret["db_worker_credential"] },
       ]
     }
     kernel_relay = {
@@ -85,7 +85,7 @@ locals {
         { name = "MK_REDIS_URL", value = local.redis_url },
         { name = "MK_DB_USER", value = "mk_relay_login" },
       ])
-      secrets = [{ name = "MK_DB_PASSWORD", valueFrom = local.secret["db_relay_password"] }]
+      secrets = [{ name = "MK_DB_PASSWORD", valueFrom = local.secret["db_relay_credential"] }]
     }
     app = {
       image   = var.app_image
@@ -100,7 +100,7 @@ locals {
         { name = "MASTER_KEY", valueFrom = local.secret["master_key"] },
         { name = "KERNEL_ASSERTION_PRIVATE_KEY", valueFrom = local.secret["assertion_private"] },
         { name = "JWT_SECRET", valueFrom = local.secret["jwt_secret"] },
-        { name = "DB_PASSWORD", valueFrom = local.secret["db_app_password"] },
+        { name = "DB_PASSWORD", valueFrom = local.secret["db_app_credential"] },
       ]
     }
   }
@@ -240,7 +240,7 @@ resource "aws_ecs_task_definition" "verifier" {
     readonlyRootFilesystem = true
     user                   = "65532:65532"
     environment            = concat(local.common_kernel_env, [{ name = "MK_DB_USER", value = "mk_readonly_login" }, { name = "MK_EVIDENCE_BUCKET", value = aws_s3_bucket.evidence.bucket }])
-    secrets                = [{ name = "MK_DB_PASSWORD", valueFrom = local.secret["db_readonly_password"] }]
+    secrets                = [{ name = "MK_DB_PASSWORD", valueFrom = local.secret["db_readonly_credential"] }]
     logConfiguration       = local.log_config
   }])
   tags = local.tags

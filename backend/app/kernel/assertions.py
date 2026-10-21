@@ -65,7 +65,7 @@ class AssertionConfigError(RuntimeError):
 @dataclass(frozen=True)
 class AssertionMinter:
     kid: str
-    _key: Ed25519PrivateKey
+    _key: Ed25519PrivateKey  # gitleaks:allow — type annotation, not a value
 
     @classmethod
     def from_seed_b64url(cls, kid: str, seed_b64url: str) -> "AssertionMinter":

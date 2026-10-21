@@ -12,12 +12,12 @@ data "aws_iam_policy_document" "ecs_assume" {
 locals {
   # process → secrets it may read (keys of local.secret_names)
   process_secrets = {
-    kernel_api    = ["master_key", "kek", "db_api_password"]
-    kernel_worker = ["master_key", "kek", "db_worker_password"]
-    kernel_relay  = ["db_relay_password"]
-    verifier      = ["db_readonly_password"]
-    app           = ["master_key", "assertion_private", "jwt_secret", "db_app_password", "stripe"]
-    migrator      = ["master_key", "kek", "db_api_password", "db_worker_password", "db_relay_password", "db_readonly_password"]
+    kernel_api    = ["master_key", "kek", "db_api_credential"]
+    kernel_worker = ["master_key", "kek", "db_worker_credential"]
+    kernel_relay  = ["db_relay_credential"]
+    verifier      = ["db_readonly_credential"]
+    app           = ["master_key", "assertion_private", "jwt_secret", "db_app_credential", "stripe"]
+    migrator      = ["master_key", "kek", "db_api_credential", "db_worker_credential", "db_relay_credential", "db_readonly_credential"]
   }
 }
 

@@ -50,16 +50,16 @@ data "aws_caller_identity" "current" {}
 # a secret value and the state file therefore never contains one.
 locals {
   secret_names = {
-    master_key           = "MK_MASTER_KEY — base64 32 bytes; shared by FastAPI and kernel (legacy seal + destination fingerprints)"
-    kek                  = "MK_KEK — base64 32 bytes; wraps kernel data-key versions (rotate per docs/runbooks/key-compromise.md)"
-    assertion_private    = "KERNEL_ASSERTION_PRIVATE_KEY — FastAPI Ed25519 seed; kernel holds only the public key in MK_ASSERTION_KEYS"
-    jwt_secret           = "JWT_SECRET — application sessions"
-    db_api_password      = "mk_api_login"
-    db_worker_password   = "mk_worker_login"
-    db_relay_password    = "mk_relay_login"
-    db_readonly_password = "mk_readonly_login"
-    db_app_password      = "application login"
-    stripe               = "STRIPE_SECRET_KEY / STRIPE_WEBHOOK_SECRET"
+    master_key             = "MK_MASTER_KEY — base64 32 bytes; shared by FastAPI and kernel (legacy seal + destination fingerprints)"
+    kek                    = "MK_KEK — base64 32 bytes; wraps kernel data-key versions (rotate per docs/runbooks/key-compromise.md)"
+    assertion_private      = "KERNEL_ASSERTION_PRIVATE_KEY — FastAPI Ed25519 seed; kernel holds only the public key in MK_ASSERTION_KEYS"
+    jwt_secret             = "JWT_SECRET — application sessions"
+    db_api_credential      = "mk_api_login"
+    db_worker_credential   = "mk_worker_login"
+    db_relay_credential    = "mk_relay_login"
+    db_readonly_credential = "mk_readonly_login"
+    db_app_credential      = "application login"
+    stripe                 = "STRIPE_SECRET_KEY / STRIPE_WEBHOOK_SECRET"
   }
 }
 
