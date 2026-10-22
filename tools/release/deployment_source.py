@@ -72,6 +72,19 @@ def assess(snapshot, repo, sha, target, workflow_ref, workflow_sha, now):
     check("main_disallows_delete_and_force_push", {"deletion", "non_fast_forward"} <= {r.get("type") for r in rules})
     prs = [pr for pr in snapshot.get("pull_requests", []) if pr.get("merge_commit_sha") == sha]
     check("exact_source_has_independent_merged_pr_approval", any(approved_review(pr) for pr in prs))
+    names = ("staging", "production-plan", "production") if target == "production" else ("staging",)
+    for name in names:
+        environment = snapshot.get("environments", {}).get(name, {})
+        policy = environment.get("deployment_branch_policy") or {}
+        branches = environment.get("branch_policies", [])
+        check(name + ":existing_main_only_environment", environment.get("name") == name
+            and policy.get("protected_branches") is False and policy.get("custom_branch_policies") is True
+            and len(branches) == 1 and branches[0].get("name") == "main" and branches[0].get("type") == "branch")
+        if name == "production":
+            reviews = [rule for rule in environment.get("protection_rules", []) if rule.get("type") == "required_reviewers"]
+            check("production:independent_environment_approval", any(rule.get("prevent_self_review") is True
+                and any(reviewer.get("type") in {"User", "Team"} and reviewer.get("id")
+                    for reviewer in rule.get("reviewers", [])) for rule in reviews))
     for filename, expected_jobs in WORKFLOWS.items():
         record = snapshot.get("workflows", {}).get(filename, {})
         definition = record.get("definition", {})
@@ -123,13 +136,30 @@ def listed(path):
     raise ValueError("GitHub list exceeded bounded pagination")
 
 
-def collect(repo, sha):
+def collect(repo, sha, target):
     base = f"repos/{repo}"
     branch = api(base + "/branches/main")
     comparison = api(base + f"/compare/{sha}...main")
     snapshot = {"branch": {k: branch[k] for k in ("name", "protected")},
         "comparison": {"status": comparison["status"], "merge_base_sha": comparison["merge_base_commit"]["sha"]},
-        "rules": listed(base + "/rules/branches/main"), "pull_requests": [], "workflows": {}}
+        "rules": listed(base + "/rules/branches/main"), "pull_requests": [], "workflows": {}, "environments": {}}
+    environments = api(base + "/environments?per_page=100")
+    if environments["total_count"] > 100:
+        raise ValueError("Environment count exceeds bounded query")
+    names = {"staging", "production-plan", "production"} if target == "production" else {"staging"}
+    for environment in environments["environments"]:
+        name = environment["name"]
+        if name not in names:
+            continue
+        policies = api(base + f"/environments/{name}/deployment-branch-policies?per_page=100")
+        if policies["total_count"] > 100:
+            raise ValueError("Environment branch policy count exceeds bounded query")
+        snapshot["environments"][name] = {"name": name,
+            "deployment_branch_policy": environment.get("deployment_branch_policy"),
+            "branch_policies": [{"name": policy["name"], "type": policy.get("type")} for policy in policies["branch_policies"]],
+            "protection_rules": [{"type": rule["type"], "prevent_self_review": rule.get("prevent_self_review"),
+                "reviewers": [{"type": reviewer["type"], "id": reviewer["reviewer"]["id"]}
+                    for reviewer in rule.get("reviewers", [])]} for rule in environment.get("protection_rules", [])]}
     for row in listed(base + f"/commits/{sha}/pulls"):
         if row.get("merge_commit_sha") != sha or not row.get("merged_at"):
             continue
@@ -171,7 +201,7 @@ def main():
     try:
         if not valid_inputs(args.repo, args.sha, args.target, args.workflow_ref, args.workflow_sha):
             raise ValueError("Expected repository, full lowercase SHA matching workflow commit, closed target and main workflow")
-        snapshot = collect(args.repo, args.sha)
+        snapshot = collect(args.repo, args.sha, args.target)
         report = assess(snapshot, args.repo, args.sha, args.target, args.workflow_ref, args.workflow_sha, datetime.now(timezone.utc))
         report["evidence"] = snapshot
     except (RuntimeError, ValueError, KeyError, TypeError, OSError, subprocess.TimeoutExpired) as exc:

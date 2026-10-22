@@ -23,7 +23,17 @@ jobs:
       - run: pip install --require-hashes -r requirements.txt
       - name: Image report gate refuses missing and substituted evidence
         working-directory: .
-        run: python -m pytest tools/verification/test_image_security.py tools/release/test_deployment_source.py tools/release/test_deployment_workflow.py tools/release/test_image_provenance.py -q
+        run: python -m pytest tools/verification/test_image_security.py tools/release/test_deployment_source.py tools/release/test_deployment_workflow.py tools/release/test_image_provenance.py tools/release/test_production_plan.py -q
+      - uses: opentofu/setup-opentofu@592200bd4b9bbf4772ace78f887668b1aee8f716
+        if: matrix.python-version == '3.12'
+        with: { tofu_version: 1.10.6, tofu_wrapper: false }
+      - name: Actual local plan sealing, exact-byte apply and stale-plan refusal
+        if: matrix.python-version == '3.12'
+        working-directory: .
+        run: python tools/verification/production_plan_control.py --tofu "$(command -v tofu)" --output deployment-plan-control
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always() && matrix.python-version == '3.12'
+        with: { name: deployment-plan-control, path: deployment-plan-control, if-no-files-found: error }
       - name: pytest
         run: |
           set +e -o pipefail   # GitHub runs bash -e: keep going after the pipeline fails so diagnostics print

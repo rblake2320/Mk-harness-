@@ -22,7 +22,12 @@ def evidence():
         ], "pull_requests": [{"number": 1, "merged_at": NOW.isoformat(), "base": "main",
             "merge_commit_sha": SHA, "head_sha": HEAD, "author_id": 1,
             "reviews": [{"id": 10, "state": "APPROVED", "commit_id": HEAD, "user_id": 2, "user_type": "User"}]}],
-        "workflows": {}}
+        "workflows": {}, "environments": {name: {"name": name,
+            "deployment_branch_policy": {"protected_branches": False, "custom_branch_policies": True},
+            "branch_policies": [{"name": "main", "type": "branch"}],
+            "protection_rules": [{"type": "required_reviewers", "prevent_self_review": True,
+                "reviewers": [{"type": "User", "id": 3}]}]}
+            for name in ("staging", "production-plan", "production")}}
     for identifier, (filename, names) in enumerate(WORKFLOWS.items(), start=1):
         snapshot["workflows"][filename] = {
             "definition": {"id": identifier, "path": ".github/workflows/" + filename, "state": "active"},
@@ -57,6 +62,32 @@ def test_inputs_cannot_select_unreviewed_workflow_or_escape_api_paths(repo, sha,
 
 def test_checkout_must_match_oidc_workflow_commit_for_truthful_provenance():
     assert assess(evidence(), REPO, SHA, "staging", "refs/heads/main", HEAD, NOW)["verdict"] == "REFUSED"
+
+
+def test_production_requires_existing_main_only_reviewed_environments():
+    assert assess(evidence(), REPO, SHA, "production", "refs/heads/main", SHA, NOW)["verdict"] == "PASS"
+
+
+@pytest.mark.parametrize("name", ["staging", "production-plan", "production"])
+@pytest.mark.parametrize("fault", ["absent", "all_branches", "wildcard", "tag", "extra_branch"])
+def test_environment_cannot_be_autocreated_unprotected_or_allow_unreviewed_branch(name, fault):
+    snapshot = evidence(); environment = snapshot["environments"][name]
+    if fault == "absent": del snapshot["environments"][name]
+    if fault == "all_branches": environment["deployment_branch_policy"] = None
+    if fault == "wildcard": environment["branch_policies"][0]["name"] = "*"
+    if fault == "tag": environment["branch_policies"][0]["type"] = "tag"
+    if fault == "extra_branch": environment["branch_policies"].append({"name": "feature", "type": "branch"})
+    assert assess(snapshot, REPO, SHA, "production", "refs/heads/main", SHA, NOW)["verdict"] == "REFUSED"
+
+
+@pytest.mark.parametrize("fault", ["no_rule", "no_reviewers", "self_review", "unknown_reviewer"])
+def test_production_approval_cannot_be_omitted_or_self_approved(fault):
+    snapshot = evidence(); environment = snapshot["environments"]["production"]
+    if fault == "no_rule": environment["protection_rules"] = []
+    if fault == "no_reviewers": environment["protection_rules"][0]["reviewers"] = []
+    if fault == "self_review": environment["protection_rules"][0]["prevent_self_review"] = False
+    if fault == "unknown_reviewer": environment["protection_rules"][0]["reviewers"][0]["type"] = "Bot"
+    assert assess(snapshot, REPO, SHA, "production", "refs/heads/main", SHA, NOW)["verdict"] == "REFUSED"
 
 
 @pytest.mark.parametrize("field,value", [("name", "other"), ("protected", False)])
