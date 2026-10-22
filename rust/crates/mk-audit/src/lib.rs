@@ -87,6 +87,7 @@ pub enum EventType {
     InboundResumed,
     PrivacyRequested,
     ContentErased,
+    ProviderContentErased,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

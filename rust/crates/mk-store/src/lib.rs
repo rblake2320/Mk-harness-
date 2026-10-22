@@ -189,6 +189,16 @@ pub fn migrator() -> sqlx::migrate::Migrator {
             "privacy erasure and subject fences",
             include_str!("../../../../migrations/kernel/0017_privacy_erasure.sql"),
         ),
+        (
+            18,
+            "provider erasure receipts",
+            include_str!("../../../../migrations/kernel/0018_provider_erasure_receipts.sql"),
+        ),
+        (
+            19,
+            "privacy intake privileges",
+            include_str!("../../../../migrations/kernel/0019_privacy_intake_privileges.sql"),
+        ),
     ];
     let migrations: Vec<Migration> = FILES
         .iter()

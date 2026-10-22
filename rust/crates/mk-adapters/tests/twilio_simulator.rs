@@ -13,7 +13,7 @@
 use async_trait::async_trait;
 use mk_adapters::egress::EgressAllowlist;
 use mk_adapters::twilio::{Reconciled, SenderResolver, TwilioAdapter, TwilioSender};
-use mk_adapters::twilio_sim::{TwilioSimMode, TwilioSimulator};
+use mk_adapters::twilio_sim::{ErasureSimMode, TwilioSimMode, TwilioSimulator};
 use mk_adapters::{ActionAdapter, AuthorizedAction};
 use mk_crypto::AdapterSecret;
 use mk_domain::{ContactId, TenantId, UserId};
@@ -94,6 +94,133 @@ async fn accept_returns_provider_message_id_and_pending_callback() {
     assert_eq!(created.len(), 1);
     assert_eq!(created[0]["to"], json!("+15555550100"));
     assert_eq!(created[0]["from"], json!("+15005550006"));
+}
+
+#[tokio::test]
+async fn privacy_delete_requires_absent_readback_and_is_idempotent() {
+    let (sim, adapter, action, tenant, sender) = setup(TwilioSimMode::Accept).await;
+    let sid = adapter
+        .execute(&action)
+        .await
+        .unwrap()
+        .external_ref
+        .unwrap();
+    let receipt = adapter.erase_message(tenant, sender, &sid).await.unwrap();
+    assert_eq!(receipt.delete_status, 204);
+    assert_eq!(receipt.readback_status, 404);
+    assert!(sim.created_messages().await.is_empty());
+    let repeated = adapter.erase_message(tenant, sender, &sid).await.unwrap();
+    assert_eq!(repeated.delete_status, 404);
+    assert_eq!(repeated.readback_status, 404);
+    assert_eq!(sim.calls(), 1, "cleanup must never send a message");
+}
+
+#[tokio::test]
+async fn privacy_delete_refuses_false_success_proxy_errors_auth_and_rate_limits() {
+    for mode in [
+        ErasureSimMode::FalseSuccess,
+        ErasureSimMode::ProxyNotFound,
+        ErasureSimMode::AuthFailed,
+        ErasureSimMode::RateLimited,
+    ] {
+        let (sim, adapter, action, tenant, sender) = setup(TwilioSimMode::Accept).await;
+        let sid = adapter
+            .execute(&action)
+            .await
+            .unwrap()
+            .external_ref
+            .unwrap();
+        sim.set_erasure_mode(mode).await;
+        assert!(
+            adapter.erase_message(tenant, sender, &sid).await.is_err(),
+            "{mode:?}"
+        );
+        assert_eq!(sim.created_messages().await.len(), 1);
+        sim.set_erasure_mode(ErasureSimMode::Delete).await;
+        adapter.erase_message(tenant, sender, &sid).await.unwrap();
+        assert!(sim.created_messages().await.is_empty());
+    }
+}
+
+#[tokio::test]
+async fn privacy_delete_retries_after_provider_deleted_but_response_was_lost() {
+    let (sim, adapter, action, tenant, sender) = setup(TwilioSimMode::Accept).await;
+    let sid = adapter
+        .execute(&action)
+        .await
+        .unwrap()
+        .external_ref
+        .unwrap();
+    sim.set_erasure_mode(ErasureSimMode::DeleteThenUnavailable)
+        .await;
+    assert!(adapter.erase_message(tenant, sender, &sid).await.is_err());
+    assert!(sim.created_messages().await.is_empty());
+    let receipt = adapter.erase_message(tenant, sender, &sid).await.unwrap();
+    assert_eq!(receipt.delete_status, 404);
+    assert_eq!(sim.deletes(), 2);
+    assert_eq!(sim.calls(), 1);
+}
+
+#[tokio::test]
+async fn privacy_delete_binds_tenant_sender_resource_and_rejects_path_injection() {
+    let (sim, adapter, action, tenant, sender) = setup(TwilioSimMode::Accept).await;
+    let sid = adapter
+        .execute(&action)
+        .await
+        .unwrap()
+        .external_ref
+        .unwrap();
+    assert!(
+        adapter
+            .erase_message(TenantId::new(), sender, &sid)
+            .await
+            .is_err()
+    );
+    assert!(
+        adapter
+            .erase_message(tenant, uuid::Uuid::now_v7(), &sid)
+            .await
+            .is_err()
+    );
+    for bad in [
+        "../Accounts.json",
+        "SMé",
+        "SMaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/",
+        "",
+    ] {
+        assert!(adapter.erase_message(tenant, sender, bad).await.is_err());
+    }
+    for fields in [
+        json!({"from":"+15555550999"}),
+        json!({"from":"+15005550006", "account_sid":"ACbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}),
+    ] {
+        sim.patch_message(&sid, fields).await;
+        let e = adapter
+            .erase_message(tenant, sender, &sid)
+            .await
+            .unwrap_err();
+        assert_eq!(e.code, "provider_resource_mismatch");
+    }
+    assert_eq!(sim.deletes(), 0);
+    assert_eq!(sim.created_messages().await.len(), 1);
+}
+
+#[tokio::test]
+async fn privacy_delete_binds_inbound_to_the_receiving_sender() {
+    let (sim, adapter, action, tenant, sender) = setup(TwilioSimMode::Accept).await;
+    let sid = adapter
+        .execute(&action)
+        .await
+        .unwrap()
+        .external_ref
+        .unwrap();
+    sim.patch_message(
+        &sid,
+        json!({"direction":"inbound", "from":"+15555550100", "to":"+15005550006"}),
+    )
+    .await;
+    adapter.erase_message(tenant, sender, &sid).await.unwrap();
+    assert!(sim.created_messages().await.is_empty());
 }
 
 #[tokio::test]

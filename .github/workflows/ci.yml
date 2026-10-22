@@ -108,9 +108,9 @@ jobs:
       - uses: Swatinem/rust-cache@f13886b937689c021905a6b90929199931d60db1 # v2.8.1
         with: {workspaces: rust, key: privacy-bridge}
       - name: Build actual kernel for cross-service erasure acceptance
-        run: cargo build --locked --manifest-path rust/Cargo.toml --bin mk-action-api
+        run: cargo build --locked --manifest-path rust/Cargo.toml --bin mk-action-api --bin mk-action-worker
       - name: Real application-runtime to kernel-runtime erasure and identity formats
-        run: python -m pytest tools/verification/test_privacy_bridge.py -q --tb=short --junitxml=privacy-bridge.xml
+        run: python -m pytest tools/verification/test_privacy_bridge.py tools/verification/test_privacy_process.py -q --tb=short --junitxml=privacy-bridge.xml
         env:
           MK_APP_TEST_ADMIN_URL: postgresql+psycopg://postgres:isolated-ci-app-test-only@127.0.0.1:5432/mk_app_test_admin
           MK_PRIVACY_KERNEL_BINARY: rust/target/debug/mk-action-api

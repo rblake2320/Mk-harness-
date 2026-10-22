@@ -34,7 +34,7 @@ def queue(tmp_path):
 
 def receipt(expected, **updates):
     return {**expected, "active_content_erased": True, "pending_provider_deletions": 0,
-            "blocked_actions": 0, "pending_sender_cleanup": 0, **updates}
+            "pending_provider_retention": 0, "blocked_actions": 0, "pending_sender_cleanup": 0, **updates}
 
 
 @pytest.mark.parametrize("updates", [
@@ -42,6 +42,7 @@ def receipt(expected, **updates):
     {"subject_id":str(uuid.uuid4())}, {"subject_kind":"account"},
     {"active_content_erased":1}, {"pending_provider_deletions":False},
     {"blocked_actions":-1}, {"pending_sender_cleanup":"0"},
+    {"pending_provider_retention": False},
 ])
 def test_crossed_or_malformed_receipt_refused(queue, updates):
     _, _, expected = queue
@@ -76,6 +77,22 @@ def test_pending_receipt_retries_and_confirms_only_bound_zero_counts(queue):
         assert row.confirmed_at and row.status == "confirmed" and row.attempts == 2
         assert asyncio.run(deliver_kernel_erasure(db, kernel, task_id))
         assert len(kernel.calls) == 2
+
+
+def test_provider_backup_retention_and_old_kernel_receipts_cannot_confirm(queue):
+    engine, task_id, expected = queue
+    old = receipt(expected)
+    del old["pending_provider_retention"]
+    assert bound_receipt(201, old, **expected) is None
+    class Kernel:
+        timeout = 2
+        async def call(self, *args, **kwargs):
+            return KernelResponse(201, receipt(expected, pending_provider_retention=1), "synthetic")
+    with Session(engine) as db:
+        assert not asyncio.run(deliver_kernel_erasure(db, Kernel(), task_id))
+        row = db.get(ErasureTask, task_id)
+        assert row.confirmed_at is None and row.status == "pending"
+        assert json.loads(row.receipt_json)["pending_provider_retention"] == 1
 
 
 def test_outbox_identity_and_non_kernel_tasks_cannot_expand_authority(queue):

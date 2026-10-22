@@ -64,10 +64,37 @@ impl SenderResolver for StoreSenderResolver {
         tenant: TenantId,
         sender_identity_id: uuid::Uuid,
     ) -> Option<TwilioSender> {
+        self.resolve_scoped(tenant, sender_identity_id, false).await
+    }
+
+    async fn resolve_for_erasure(
+        &self,
+        tenant: TenantId,
+        sender_identity_id: uuid::Uuid,
+    ) -> Option<TwilioSender> {
+        self.resolve_scoped(tenant, sender_identity_id, true).await
+    }
+}
+
+impl StoreSenderResolver {
+    async fn resolve_scoped(
+        &self,
+        tenant: TenantId,
+        sender_identity_id: uuid::Uuid,
+        erasure: bool,
+    ) -> Option<TwilioSender> {
         let mut tx = self.store.begin(tenant).await.ok()?;
-        let s = mk_store::messaging::sender_secret(&mut tx, &self.keyring, sender_identity_id)
+        let s = if erasure {
+            mk_store::messaging::sender_secret_for_erasure(
+                &mut tx,
+                &self.keyring,
+                sender_identity_id,
+            )
             .await
-            .ok()?;
+        } else {
+            mk_store::messaging::sender_secret(&mut tx, &self.keyring, sender_identity_id).await
+        }
+        .ok()?;
         tx.commit().await.ok()?;
         Some(TwilioSender {
             sender_identity_id,

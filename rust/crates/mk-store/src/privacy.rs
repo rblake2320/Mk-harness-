@@ -39,6 +39,7 @@ pub struct ErasureReceipt {
     pub subject_id: Uuid,
     pub active_content_erased: bool,
     pub pending_provider_deletions: i64,
+    pub pending_provider_retention: i64,
     pub blocked_actions: i64,
     pub pending_sender_cleanup: i64,
 }
@@ -299,6 +300,10 @@ pub async fn erase(
     .bind(request_id)
     .fetch_one(tx.conn())
     .await?;
+    let pending_provider_retention: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM kernel.privacy_provider_deletions
+        WHERE tenant_id=$1 AND request_id=$2 AND confirmed_at IS NOT NULL AND backup_confirmed_at IS NULL",
+    ).bind(tenant.0).bind(request_id).fetch_one(tx.conn()).await?;
     Ok(ErasureReceipt {
         tenant_id: tenant.0,
         request_id,
@@ -306,7 +311,67 @@ pub async fn erase(
         subject_id: subject,
         active_content_erased,
         pending_provider_deletions,
+        pending_provider_retention,
         blocked_actions,
         pending_sender_cleanup,
     })
+}
+
+#[derive(Debug)]
+pub struct ProviderDeletion {
+    pub deletion_id: Uuid,
+    pub request_id: Uuid,
+    pub sender_identity_id: Uuid,
+    pub provider: String,
+    pub provider_message_id: String,
+    pub lease_id: Uuid,
+    pub attempts: i32,
+}
+
+/// Claim one item immediately before I/O. A batch lease can expire while its
+/// earlier members are waiting on the network. SKIP LOCKED supports replicas.
+pub async fn claim_provider_deletion(
+    tx: &mut TenantTx<'_>,
+    now: DateTime<Utc>,
+) -> Result<Option<ProviderDeletion>, StoreError> {
+    let lease = Uuid::now_v7();
+    let row = sqlx::query("WITH due AS (SELECT deletion_id FROM kernel.privacy_provider_deletions
+        WHERE tenant_id=$1 AND confirmed_at IS NULL AND next_attempt_at<=$2
+        ORDER BY next_attempt_at,deletion_id LIMIT 1 FOR UPDATE SKIP LOCKED)
+        UPDATE kernel.privacy_provider_deletions d SET attempts=d.attempts+1,lease_id=$3,next_attempt_at=$2+interval '90 seconds'
+        FROM due WHERE d.tenant_id=$1 AND d.deletion_id=due.deletion_id
+        RETURNING d.deletion_id,d.request_id,d.sender_identity_id,d.provider,d.provider_message_id,d.attempts")
+        .bind(tx.tenant().0).bind(now).bind(lease).fetch_optional(tx.conn()).await?;
+    row.map(|r| {
+        Ok(ProviderDeletion {
+            deletion_id: r.try_get("deletion_id")?,
+            request_id: r.try_get("request_id")?,
+            sender_identity_id: r.try_get("sender_identity_id")?,
+            provider: r.try_get("provider")?,
+            provider_message_id: r.try_get("provider_message_id")?,
+            lease_id: lease,
+            attempts: r.try_get("attempts")?,
+        })
+    })
+    .transpose()
+}
+
+/// CAS receipt + caller audit must commit together. An expired lease cannot
+/// overwrite the receipt of a replacement worker, even after a late response.
+pub async fn finish_provider_deletion(
+    tx: &mut TenantTx<'_>,
+    job: &ProviderDeletion,
+    receipt: Option<&Digest>,
+    error: Option<&str>,
+    now: DateTime<Utc>,
+) -> Result<bool, StoreError> {
+    let delay = 30_i64 * (1_i64 << job.attempts.clamp(0, 7));
+    let updated = sqlx::query("UPDATE kernel.privacy_provider_deletions SET lease_id=NULL,last_error=$4,
+        confirmed_at=CASE WHEN $5::text IS NOT NULL THEN $6 ELSE NULL END,receipt_digest=$5,
+        backup_not_before=CASE WHEN $5::text IS NOT NULL THEN $6+interval '30 days' ELSE NULL END,
+        next_attempt_at=$7 WHERE tenant_id=$1 AND deletion_id=$2 AND lease_id=$3 AND confirmed_at IS NULL")
+        .bind(tx.tenant().0).bind(job.deletion_id).bind(job.lease_id).bind(error)
+        .bind(receipt.map(ToString::to_string)).bind(now).bind(now+chrono::Duration::seconds(delay.min(3600)))
+        .execute(tx.conn()).await?;
+    Ok(updated.rows_affected() == 1)
 }

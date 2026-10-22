@@ -15,7 +15,7 @@ from .kernel import KernelUnavailable
 from .models import ErasureRequest, ErasureTask
 
 KERNEL_KINDS = {"kernel_contact": ("customer", "contact"), "kernel_account": ("account", "account")}
-COUNT_FIELDS = ("pending_provider_deletions", "blocked_actions", "pending_sender_cleanup")
+COUNT_FIELDS = ("pending_provider_deletions", "pending_provider_retention", "blocked_actions", "pending_sender_cleanup")
 
 
 def bound_receipt(status, body, *, tenant_id, request_id, subject_kind, subject_id):

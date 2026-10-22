@@ -76,6 +76,24 @@ pub trait SenderResolver: Send + Sync + std::fmt::Debug {
         tenant: TenantId,
         sender_identity_id: uuid::Uuid,
     ) -> Option<TwilioSender>;
+
+    /// Cleanup may use a disabled sender's retained credential. This capability
+    /// is deliberately separate from sending and observation of live actions.
+    async fn resolve_for_erasure(
+        &self,
+        tenant: TenantId,
+        sender_identity_id: uuid::Uuid,
+    ) -> Option<TwilioSender> {
+        self.resolve(tenant, sender_identity_id).await
+    }
+}
+
+/// Active provider absence only. Twilio backup retention is a separate obligation.
+#[derive(Debug)]
+pub struct MessageErasureReceipt {
+    pub delete_status: u16,
+    pub readback_status: u16,
+    pub digest: Digest,
 }
 
 #[derive(Debug)]
@@ -121,6 +139,8 @@ struct TwilioMessage {
     from: Option<String>,
     #[serde(default)]
     messaging_service_sid: Option<String>,
+    #[serde(default)]
+    direction: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -545,6 +565,73 @@ impl TwilioAdapter {
         })
     }
 
+    /// Delete only an exact, durably recorded message id. Authenticate and bind
+    /// any existing resource before deletion; a 204 alone is never a receipt.
+    /// All response bodies are bounded and discarded, never logged or retained.
+    pub async fn erase_message(
+        &self,
+        tenant: TenantId,
+        sender_identity_id: uuid::Uuid,
+        message_sid: &str,
+    ) -> Result<MessageErasureReceipt, AdapterError> {
+        if !valid_message_sid(message_sid) {
+            return Err(AdapterError::permanent("message_sid_invalid"));
+        }
+        let sender = self
+            .resolver
+            .resolve_for_erasure(tenant, sender_identity_id)
+            .await
+            .filter(|s| s.sender_identity_id == sender_identity_id)
+            .ok_or(AdapterError::permanent("sender_not_registered"))?;
+        let url = self
+            .messages_url(&sender.account_sid)?
+            .join(&format!("Messages/{message_sid}.json"))
+            .map_err(|_| AdapterError::permanent("url"))?;
+        self.egress
+            .check(url.as_str())
+            .map_err(|_| AdapterError::permanent("egress_not_allowlisted"))?;
+        let request = |method| {
+            self.client.request(method, url.clone()).basic_auth(
+                &sender.account_sid,
+                Some(std::str::from_utf8(sender.auth_token.expose_bytes()).unwrap_or_default()),
+            )
+        };
+        let (status, body) = erasure_response(request(reqwest::Method::GET)).await?;
+        if status == 200 {
+            let m: TwilioMessage = serde_json::from_slice(&body)
+                .map_err(|_| AdapterError::permanent("provider_fetch_unparseable"))?;
+            let sender_matches = match (&sender.from_number, &sender.messaging_service_sid) {
+                (Some(number), None) if m.direction.as_deref() == Some("inbound") => {
+                    m.to.as_ref() == Some(number)
+                }
+                (Some(number), None) => m.from.as_ref() == Some(number),
+                (None, Some(service)) => m.messaging_service_sid.as_ref() == Some(service),
+                _ => false,
+            };
+            if m.sid != message_sid
+                || m.account_sid.as_ref() != Some(&sender.account_sid)
+                || !sender_matches
+            {
+                return Err(AdapterError::permanent("provider_resource_mismatch"));
+            }
+        } else if !twilio_absent(status, &body) {
+            return Err(AdapterError::transient("provider_erasure_preflight_failed"));
+        }
+        let (delete_status, body) = erasure_response(request(reqwest::Method::DELETE)).await?;
+        if delete_status != 204 && !twilio_absent(delete_status, &body) {
+            return Err(AdapterError::transient("provider_delete_unconfirmed"));
+        }
+        let (readback_status, body) = erasure_response(request(reqwest::Method::GET)).await?;
+        if !twilio_absent(readback_status, &body) {
+            return Err(AdapterError::transient("provider_erasure_readback_failed"));
+        }
+        Ok(MessageErasureReceipt {
+            delete_status,
+            readback_status,
+            digest: Digest::of(format!("mk:message-erasure:v1:{tenant}:{sender_identity_id}:{}:{message_sid}:{delete_status}:{readback_status}", sender.account_sid).as_bytes()),
+        })
+    }
+
     /// Search the provider for a message matching an ambiguous submission.
     /// Advisory candidates only: identical messages can belong to another attempt,
     /// and an empty/paginated result never proves that no submission occurred.
@@ -612,6 +699,36 @@ impl TwilioAdapter {
             _ => Reconciled::Multiple(matches.len()),
         })
     }
+}
+
+fn twilio_absent(status: u16, body: &[u8]) -> bool {
+    status == 404
+        && serde_json::from_slice::<TwilioError>(body)
+            .ok()
+            .and_then(|e| e.code)
+            == Some(20404)
+}
+
+async fn erasure_response(
+    request: reqwest::RequestBuilder,
+) -> Result<(u16, Vec<u8>), AdapterError> {
+    let mut response = request
+        .send()
+        .await
+        .map_err(|_| AdapterError::transient("provider_erasure_transport"))?;
+    let status = response.status().as_u16();
+    let mut body = Vec::new();
+    while let Some(chunk) = response
+        .chunk()
+        .await
+        .map_err(|_| AdapterError::transient("provider_erasure_transport"))?
+    {
+        if body.len().saturating_add(chunk.len()) > MAX_RESPONSE_BYTES {
+            return Err(AdapterError::permanent("provider_response_too_large"));
+        }
+        body.extend_from_slice(&chunk);
+    }
+    Ok((status, body))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -22,8 +22,6 @@ async fn main() -> anyhow::Result<()> {
     init_tracing();
     let cfg = Config::from_env()?;
     let store = Store::connect(cfg.database_url.expose_secret(), 16).await?;
-    let stream = StreamClient::connect(cfg.redis_url.expose_secret(), "mk").await?;
-    stream.ensure_groups().await?;
     let keyring = mk_store::keys::keyring_from_env(store.pool(), &cfg.master_key).await?;
     let egress = EgressAllowlist::new(
         cfg.egress_authorities.iter().map(String::as_str),
@@ -114,6 +112,28 @@ async fn main() -> anyhow::Result<()> {
         })
     };
 
+    let privacy_task = {
+        let ctx = ctx.clone();
+        tokio::spawn(async move {
+            loop {
+                if let Ok(tenants) = mk_store::audit::all_tenants(ctx.store.pool()).await {
+                    if let Ok(stats) =
+                        mk_worker::privacy::run_once(&ctx, &tenants, chrono::Utc::now()).await
+                    {
+                        tracing::info!(?stats, "provider privacy cleanup");
+                    } else {
+                        tracing::warn!(
+                            "provider privacy cleanup failed; retained lease will retry"
+                        );
+                    }
+                } else {
+                    tracing::warn!("privacy tenant listing failed");
+                }
+                tokio::time::sleep(Duration::from_secs(30)).await;
+            }
+        })
+    };
+
     let metrics = Arc::new(mk_worker::metrics::WorkerMetrics::new());
     metrics.provider_live.set(i64::from(
         cfg.twilio_api_base.trim_end_matches('/') == "https://api.twilio.com",
@@ -155,6 +175,7 @@ async fn main() -> anyhow::Result<()> {
 
     tracing::info!(worker_id = %cfg.worker_id, "worker started");
     let mut tick = 0u64;
+    let mut stream: Option<StreamClient> = None;
     while !stopping.load(Ordering::SeqCst) {
         // Fail closed: if audit/DB is unavailable we do not dispatch.
         if store.ping().await.is_err() {
@@ -162,7 +183,27 @@ async fn main() -> anyhow::Result<()> {
             tokio::time::sleep(Duration::from_secs(5)).await;
             continue;
         }
-        let deliveries = match stream
+        // Redis startup/recovery must not prevent durable PostgreSQL privacy
+        // and reconciliation work. Reconnect the dispatch lane independently.
+        if stream.is_none() {
+            let connected = tokio::time::timeout(Duration::from_secs(5), async {
+                let candidate = StreamClient::connect(cfg.redis_url.expose_secret(), "mk").await?;
+                candidate.ensure_groups().await?;
+                Ok::<_, mk_queue::StreamError>(candidate)
+            })
+            .await;
+            if let Ok(Ok(candidate)) = connected {
+                stream = Some(candidate);
+            } else {
+                tracing::warn!("dispatch Redis unavailable; database maintenance remains active");
+                tokio::time::sleep(Duration::from_secs(2)).await;
+                continue;
+            }
+        }
+        let Some(active_stream) = stream.as_ref() else {
+            continue;
+        };
+        let deliveries = match active_stream
             .read(
                 &cfg.worker_id,
                 cfg.batch,
@@ -174,6 +215,7 @@ async fn main() -> anyhow::Result<()> {
             Ok(d) => d,
             Err(e) => {
                 tracing::error!(error = %e, "stream read failed");
+                stream = None;
                 tokio::time::sleep(Duration::from_secs(2)).await;
                 continue;
             }
@@ -191,7 +233,7 @@ async fn main() -> anyhow::Result<()> {
                 }
                 Ok(outcome) => {
                     tracing::info!(action_id = %d.message.action_id, ?outcome, "dispatched");
-                    if let Err(e) = stream.ack(&d.stream, &d.id).await {
+                    if let Err(e) = active_stream.ack(&d.stream, &d.id).await {
                         tracing::warn!(error = %e, "ack failed; duplicate delivery will be absorbed");
                     }
                 }
@@ -223,6 +265,7 @@ async fn main() -> anyhow::Result<()> {
     }
     tracing::info!("worker stopped");
     reconciliation_task.abort();
+    privacy_task.abort();
     if let Some(task) = inbound_probe_task {
         task.abort();
     }

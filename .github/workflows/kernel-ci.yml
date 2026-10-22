@@ -62,7 +62,7 @@ jobs:
         # A request that opens a second pooled connection while its transaction is
         # open deadlocks the pool under load (found by the 2x load run). With one
         # connection such a path times out (STORE_UNAVAILABLE) and the suite fails.
-        run: cargo nextest run -p mk-api -p mk-worker --no-fail-fast -E 'binary(http_e2e) | binary(dispatch_e2e)'
+        run: cargo nextest run -p mk-api -p mk-worker --no-fail-fast -E 'binary(http_e2e) | binary(dispatch_e2e) | binary(privacy_e2e)'
         env:
           MK_TEST_DATABASE_URL: postgres://postgres:kernel@127.0.0.1:5432/mk_kernel_test
           MK_TEST_REDIS_URL: redis://127.0.0.1:6379

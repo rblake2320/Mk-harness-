@@ -17,6 +17,7 @@ pub mod dispatch;
 pub mod housekeeping;
 pub mod inbound_probe;
 pub mod metrics;
+pub mod privacy;
 pub mod reconciliation;
 pub mod resolver;
 

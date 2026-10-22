@@ -64,7 +64,7 @@ The completion contract supplies engineering defaults: content 12 months; ordina
 resolved work and content-free audit 24 months; minimal consent five years; backup
 35 days. A privacy/legal owner must approve exceptions and restricted legal holds.
 This batch does not add an unaudited admin override or silently treat every record
-as being under legal hold. Automated expiry/hold enforcement and provider erasure
+as being under legal hold. Automated expiry/hold enforcement and live provider qualification
 are still required before production qualification.
 
 ## Kernel delivery and pending work
@@ -90,9 +90,26 @@ Unresolved/in-flight submissions report `blocked_actions`; retain their resoluti
 evidence and use the existing passkey resolution workflow. Nonterminal provider
 delivery likewise remains pending. Account-owned sender credentials remain disabled
 with `pending_sender_cleanup` until provider-resource cleanup has its own receipt.
-`privacy_provider_deletions` is a durable queue, not a deletion receipt. Its consumer
-and provider-backup evidence are still required; no live provider was contacted by
-this author-run verification. Twilio documents that Message DELETE returns 204, and
+`privacy_provider_deletions` is a durable queue, not a deletion receipt. The kernel
+worker consumes it independently of Redis startup and dispatch traffic. Each item
+has a 90-second lease, bounded exponential retry and lease-owner CAS completion.
+It authenticates a GET of the exact message, binds the returned account/sender/id,
+performs DELETE, and requires authenticated 404/code 20404 readback. False 204,
+proxy 404, authentication failure, rate limit, wrong sender and lost responses do
+not confirm deletion. Retry after a lost response safely handles already-absent
+resources. Disabled sender credentials are usable only by the cleanup resolver;
+ordinary submission still refuses them. API intake cannot insert or update outcome
+fields; workers cannot rewrite targets, regress receipts or certify backups.
+
+Successful active deletion records a digest-bound audit receipt and a separate
+`pending_provider_retention` obligation. The application requires this count too;
+an older receipt omitting it fails closed. The backup window begins at verified
+provider absence, not at the user's earlier request. Time alone does not confirm
+backup erasure. A delayed provider cleanup can therefore miss the overall 35-day
+backup deadline; operations must clear active provider copies within five days or
+obtain a stricter verified provider retention control. Independent vendor backup
+evidence and an authorized retention verifier remain required. No live provider
+was contacted by author-run verification. Twilio documents that Message DELETE returns 204, and
 message bodies may remain in its backups for up to 30 days after deletion
 ([Twilio Message resource](https://www.twilio.com/docs/messaging/api/message-resource#delete-a-message-resource)).
 
@@ -122,3 +139,13 @@ disposable cluster. It removes only its own UUID databases/login/process. The ap
 PostgreSQL CI job runs this bridge for all four accepted UUID spellings. Rust HTTP
 tests additionally cover forced RLS, service authority, in-flight DB lock waits,
 queued dispatch refusal, uncertain submissions and late inbound/delivery webhooks.
+
+`rust/crates/mk-worker/tests/privacy_e2e.rs` exercises the actual worker database
+role, concurrent replicas, abandoned leases, false provider success, disabled
+sender authentication, immutable receipts and backup pending state.
+`tools/verification/test_privacy_process.py` launches the actual API and worker
+binaries against a fresh database with separate restricted logins and a loopback
+provider. It holds Redis unavailable, kills the worker after provider deletion but
+before the response, expires the recorded lease, and restarts the process. Cleanup
+must recover exactly one audit receipt without a send or a false backup completion.
+This process drill runs in the mandatory app PostgreSQL CI job.

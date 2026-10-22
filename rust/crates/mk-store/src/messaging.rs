@@ -243,12 +243,32 @@ pub async fn sender_secret(
     keyring: &Keyring,
     id: Uuid,
 ) -> Result<SenderIdentitySecret, StoreError> {
+    sender_secret_scoped(tx, keyring, id, false).await
+}
+
+/// Only the provider cleanup resolver uses this path. Disabling a sender must
+/// stop sends immediately while preserving authentication needed for erasure.
+pub async fn sender_secret_for_erasure(
+    tx: &mut TenantTx<'_>,
+    keyring: &Keyring,
+    id: Uuid,
+) -> Result<SenderIdentitySecret, StoreError> {
+    sender_secret_scoped(tx, keyring, id, true).await
+}
+
+async fn sender_secret_scoped(
+    tx: &mut TenantTx<'_>,
+    keyring: &Keyring,
+    id: Uuid,
+    allow_disabled: bool,
+) -> Result<SenderIdentitySecret, StoreError> {
     let r = sqlx::query(
         "SELECT owner_user_id, account_sid, auth_token_sealed, from_number, messaging_service_sid, status
-         FROM kernel.sender_identities WHERE tenant_id = $1 AND sender_identity_id = $2 AND status = 'active'",
+         FROM kernel.sender_identities WHERE tenant_id = $1 AND sender_identity_id = $2 AND (status = 'active' OR $3)",
     )
     .bind(tx.tenant().0)
     .bind(id)
+    .bind(allow_disabled)
     .fetch_optional(tx.conn())
     .await?
     .ok_or(StoreError::NotFound)?;
