@@ -1,0 +1,50 @@
+{
+  "source_commit": "7c51785131f99b068bf90a315e9851a8fd1c6da1",
+  "classification": "author_run_local_verification_not_release_closure",
+  "artifacts": [
+    {
+      "path": "local-verification/c4-resolution-a11y.json",
+      "sha256": "2529e60afa2fed86a38381d6e5af7cd141e2fe68ea7d55b7c77b4d4cbdc82a8d"
+    },
+    {
+      "path": "local-verification/c4-resolution-app.xml",
+      "sha256": "ff2ab2c871aa2a9d4c42516c022100f9e287fd4e6ebd4ca595f750516141aca6"
+    },
+    {
+      "path": "local-verification/c4-resolution-clippy.log",
+      "sha256": "3ad11b5eeb4e1f6493d57c4f3ff80d08e21e66ee0cdddd3fff9a0b262a705da3"
+    },
+    {
+      "path": "local-verification/c4-resolution-first.log",
+      "sha256": "b698fa9276cf7755aff622a0f964c7feb3fab871ab2786ae70fca56f0853cb7b"
+    },
+    {
+      "path": "local-verification/c4-resolution-http-serial.log",
+      "sha256": "6faeca1a781139d76248edf3c55a8f743dc98657ec752843255614fef708afc5"
+    },
+    {
+      "path": "local-verification/c4-resolution-http.log",
+      "sha256": "063f2cdff1a329ba9e0530292e59093e8d99f11f40f385bed1a54c4d94376ec0"
+    },
+    {
+      "path": "local-verification/c4-resolution-python.xml",
+      "sha256": "a33f634dbf82f24d5a5f0f7893fe28b84af0183a99f367b16792dd817bbaf3d0"
+    },
+    {
+      "path": "local-verification/c4-resolution-stale-approval-red.log",
+      "sha256": "c536c7c3dd8328ee3841a8145fa856a622dd564299a0773cc367f403fdfe027b"
+    },
+    {
+      "path": "local-verification/c4-resolution-workspace.log",
+      "sha256": "19b2da627bd75d984d27b7419debf164738de3774e10ee2c1ccd53250185e0e1"
+    },
+    {
+      "path": "local-verification/c4-browser/resolution-360.png",
+      "sha256": "8bb7818eee59a927a2266c6097f2be08625a0ab6ca1e6fb1308fc1175e1677d0"
+    },
+    {
+      "path": "local-verification/c4-browser/resolution-browser.json",
+      "sha256": "5b89c8d6b56485840a8d4c0b8deeb26eb4ad7afa9a9e513d3601c0b7eebbfe08"
+    }
+  ]
+}
