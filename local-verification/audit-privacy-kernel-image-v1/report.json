@@ -1,0 +1,138 @@
+{
+  "scope": "author-run built kernel image; synthetic fixtures; no external provider calls",
+  "image_id": "sha256:215efe3164b60995b6f08d5e19f4f41173a7070b30f12e1154f039acebb5c1f7",
+  "migration_count": 19,
+  "user": "65532:65532",
+  "read_only_root": true,
+  "dropped_capabilities": [
+    "ALL"
+  ],
+  "active_content_erased": true,
+  "erased_read_status": 410,
+  "reintake_status": 410,
+  "service_cross_route_status": 403,
+  "privacy_restore": {
+    "actual_pg_dump_restore": true,
+    "without_external_ledger_refused": true,
+    "preview_refused_unreplayed_content": true,
+    "apply_scrubbed_content": true,
+    "restored_fences": 1,
+    "dispatch_enabled": false,
+    "repeat_report_passed": true,
+    "runtime_user": "65532:65532",
+    "ledger_sha256": "sha256:19136b0e44b763a895b707bde903ccd80fb1114fb1f52a9dd649cb17509ce728",
+    "gate": [
+      {
+        "check": "global_dispatch_disabled",
+        "ok": true,
+        "detail": {
+          "dispatch_enabled": false
+        }
+      },
+      {
+        "check": "privacy_restore_ledger",
+        "ok": true,
+        "detail": {
+          "applied": true,
+          "requests": 1,
+          "fences": 1,
+          "pending_content": 0,
+          "enforced": true
+        }
+      },
+      {
+        "check": "keyring_loads",
+        "ok": true,
+        "detail": {
+          "current": 0,
+          "versions": [
+            0
+          ]
+        }
+      },
+      {
+        "check": "audit_chain_verified",
+        "ok": true,
+        "detail": {
+          "tenants": 1,
+          "failures": []
+        }
+      },
+      {
+        "check": "suppression_ledger_loaded",
+        "ok": true,
+        "detail": {
+          "live_suppressions": 0,
+          "revocations": 0
+        }
+      },
+      {
+        "check": "credentials_unseal",
+        "ok": true,
+        "detail": {
+          "checked": 0,
+          "unreadable": 0
+        }
+      },
+      {
+        "check": "in_flight_marked_unknown",
+        "ok": true,
+        "detail": {
+          "found_in_flight": 0,
+          "marked": 0,
+          "remaining_dispatching": 0,
+          "remaining_submission_started": 0,
+          "apply": true
+        }
+      },
+      {
+        "check": "pre_restore_approvals_invalidated",
+        "ok": true,
+        "detail": {
+          "found": 0,
+          "revoked": 0,
+          "remaining": 0,
+          "restored_at": "2026-10-22T09:11:03.556959Z",
+          "apply": true
+        }
+      },
+      {
+        "check": "reconciliation_backlog",
+        "ok": true,
+        "detail": {
+          "actions_requiring_human_reconciliation": 0,
+          "note": "resolve each against provider records before any replacement message; dispatch stays disabled until the release owner authorises"
+        }
+      },
+      {
+        "gate": "PASS",
+        "apply": true,
+        "next": "operator may enable dispatch via /kill-switch/global with passkey step-up after reviewing the reconciliation backlog"
+      }
+    ]
+  },
+  "provider_cleanup": {
+    "deletes": 2,
+    "sends": 0,
+    "auth_failures": 0,
+    "present": false,
+    "redis_unavailable": true,
+    "sigkill_after_external_effect": true,
+    "restart_recovered_lease": true,
+    "active_receipts": 1,
+    "backup_pending": true,
+    "restricted_worker_role": true,
+    "worker_user": "65532:65532",
+    "worker_read_only": true,
+    "killed_exit_code": 137
+  },
+  "audit_privacy": {
+    "events_scanned": 8,
+    "audit_canary_absent": true,
+    "metric_canary_absent": true,
+    "log_canary_absent": true,
+    "signed_provider_callback_status": 200
+  },
+  "outcome": "Worked",
+  "owned_targets_removed": true
+}
