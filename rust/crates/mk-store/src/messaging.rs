@@ -320,6 +320,7 @@ pub async fn delivery_exceptions(
         JOIN kernel.sender_identities s ON s.tenant_id = d.tenant_id AND s.sender_identity_id = d.sender_identity_id
         WHERE d.tenant_id = $1 AND ($2 OR s.owner_user_id = $3)
           AND (a.state = 'reconciliation_required' OR d.state IN ('submission_unknown','delivery_unknown'))
+          AND NOT EXISTS (SELECT 1 FROM kernel.submission_resolutions r WHERE r.tenant_id = d.tenant_id AND r.action_id = d.action_id)
           AND ($4::uuid IS NULL OR d.delivery_id > $4)
         ORDER BY d.delivery_id LIMIT $5")
         .bind(tx.tenant().0).bind(admin).bind(user.0).bind(after).bind(limit.clamp(1, 101))
@@ -335,6 +336,10 @@ pub async fn delivery_exceptions(
                 "read_status": r.try_get::<String, _>("read_status")?,
                 "created_at": r.try_get::<DateTime<Utc>, _>("submission_started_at")?,
                 "reconciled_at": r.try_get::<Option<DateTime<Utc>>, _>("reconciled_at")?,
+                "resolution_options": if admin && r.try_get::<String, _>("action_state")? == "reconciliation_required"
+                    && r.try_get::<Option<String>, _>("provider_message_id")?.is_some() {
+                    crate::resolutions::Decision::for_state(&r.try_get::<String, _>("delivery_state")?).into_iter().collect::<Vec<_>>()
+                } else { vec![] },
             }))
         })
         .collect()

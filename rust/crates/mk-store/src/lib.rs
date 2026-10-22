@@ -25,6 +25,7 @@ pub mod keys;
 pub mod messaging;
 pub mod outbox;
 pub mod policy;
+pub mod resolutions;
 pub mod tx;
 
 pub use error::StoreError;
@@ -154,6 +155,11 @@ pub fn migrator() -> sqlx::migrate::Migrator {
             11,
             "worker reconciliation evidence grant",
             include_str!("../../../../migrations/kernel/0011_reconciliation_event_grant.sql"),
+        ),
+        (
+            12,
+            "passkey submission resolutions",
+            include_str!("../../../../migrations/kernel/0012_submission_resolutions.sql"),
         ),
     ];
     let migrations: Vec<Migration> = FILES

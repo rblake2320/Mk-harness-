@@ -795,7 +795,17 @@ async fn full_governed_path_over_http() {
     assert!(
         !metrics.contains(&h.tenant.to_string())
             && !metrics.contains(&action_id)
-            && !metrics.contains("0100")
+            && !metrics.contains("+1 (555) 555-0100")
+            && !metrics.contains("+15555550100")
+    );
+    // PII belongs in neither names nor label values. Four digits alone may
+    // occur in an ordinary histogram measurement and are not an identifier.
+    assert!(
+        !metrics
+            .lines()
+            .filter_map(|line| line.split_once('}'))
+            .any(|(labels, _)| labels.contains("0100")),
+        "{metrics}"
     );
     // Request metrics are keyed by the matched route template, with latency histograms (O3/O6).
     assert!(
@@ -2332,6 +2342,422 @@ async fn automatic_provider_reconciliation_recovers_missing_callbacks_without_re
         DispatchOutcome::Skipped { .. }
     ));
     assert_eq!(r.sim.calls(), 1);
+}
+
+async fn signed_provider_observation(h: &Harness, message: &Value, status: &str) {
+    let public = message["status_callback"].as_str().unwrap();
+    let parsed = url::Url::parse(public).unwrap();
+    let path = format!("{}?{}", parsed.path(), parsed.query().unwrap_or_default());
+    let form = vec![
+        ("AccountSid".to_owned(), ACCOUNT_SID.to_owned()),
+        (
+            "MessageSid".to_owned(),
+            message["sid"].as_str().unwrap().to_owned(),
+        ),
+        ("MessageStatus".to_owned(), status.to_owned()),
+    ];
+    let sig = mk_adapters::twilio::twilio_signature(&AdapterSecret::new(TOKEN), public, &form);
+    let body = url::form_urlencoded::Serializer::new(String::new())
+        .extend_pairs(&form)
+        .finish();
+    let req = Request::builder()
+        .method("POST")
+        .uri(path)
+        .header("content-type", "application/x-www-form-urlencoded")
+        .header("x-twilio-signature", sig)
+        .body(Body::from(body))
+        .unwrap();
+    assert_eq!(
+        h.app.clone().oneshot(req).await.unwrap().status(),
+        StatusCode::OK
+    );
+}
+
+fn sign_resolution(ch: &Value, auth: &mut SoftAuthenticator) -> Value {
+    let challenge = mk_crypto::webauthn::b64url_decode(ch["challenge"].as_str().unwrap()).unwrap();
+    let (cdj, ad, sig) = auth.assert(&challenge, RP_ID, ORIGIN);
+    json!({"decision":ch["decision"],"operation_digest":ch["operation_digest"],"webauthn":{
+        "credential_id":b64url(&auth.credential_id),"client_data_json":b64url(&cdj),
+        "authenticator_data":b64url(&ad),"signature":b64url(&sig)}})
+}
+
+#[tokio::test]
+async fn uncertainty_gate_and_passkey_resolution_enforce_provider_evidence_and_no_replay() {
+    let mut h = harness().await.expect("real Postgres required");
+    let mut r = provider_rig(
+        &h,
+        mk_adapters::twilio_sim::TwilioSimMode::AcceptButDropResponse,
+    )
+    .await;
+    health_ok(&h, r.admin).await;
+    // Exercise every HTTP write as the restricted API role, not database owner.
+    let pool = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(1)
+        .after_connect(|conn, _| {
+            Box::pin(async move {
+                sqlx::query("SET ROLE mk_kernel_api").execute(conn).await?;
+                Ok(())
+            })
+        })
+        .connect(&mk_testkit::test_database_url().unwrap())
+        .await
+        .unwrap();
+    let mut state = h.state.clone();
+    state.store = Store::from_pool(pool);
+    h.app = router(state);
+    let mut key = h.register_passkey(r.admin, &["tenant_admin"]).await;
+    let (aid, _) = approved_action(
+        &h,
+        &mut r,
+        "Original. Reply STOP to opt out.",
+        "+15555550100",
+    )
+    .await;
+    assert_eq!(
+        run_dispatch(&r, h.tenant, &aid).await,
+        DispatchOutcome::ReconciliationRequired
+    );
+    let challenge_path = format!("/internal/v1/actions/{aid}/resolution-challenge");
+    let resolve_path = format!("/internal/v1/actions/{aid}/resolve-submission");
+    let replay_path = format!("/internal/v1/actions/{aid}/replay");
+    let close = json!({"decision":"closed_no_replacement"});
+    let permit = json!({"decision":"replacement_permitted"});
+    // Even an administrator cannot turn no evidence into permission.
+    assert_eq!(
+        h.call(
+            "POST",
+            &challenge_path,
+            Some(&h.token(r.admin, &["tenant_admin"])),
+            Some(permit.clone())
+        )
+        .await
+        .0,
+        StatusCode::CONFLICT
+    );
+    assert_eq!(
+        h.call(
+            "POST",
+            &replay_path,
+            Some(&h.token(r.admin, &["tenant_admin"])),
+            Some(json!({}))
+        )
+        .await
+        .0,
+        StatusCode::CONFLICT
+    );
+    let (replacement, _) = approved_action(
+        &h,
+        &mut r,
+        "New id, same destination. Reply STOP to opt out.",
+        "+15555550100",
+    )
+    .await;
+    assert_eq!(
+        run_dispatch(&r, h.tenant, &replacement).await,
+        DispatchOutcome::Deferred {
+            reason: "unresolved_submission"
+        }
+    );
+    assert_eq!(r.sim.calls(), 1);
+    {
+        let mut tx = h.state.store.begin(h.tenant).await.unwrap();
+        assert!(
+            mk_store::approvals::live_for_action_locked(&mut tx, replacement.parse().unwrap())
+                .await
+                .unwrap()
+                .is_some(),
+            "deferral must not consume human approval"
+        );
+        let a = mk_store::actions::get(&mut tx, aid.parse().unwrap())
+            .await
+            .unwrap();
+        // Rotation aliases still match, even when the new primary differs.
+        let mut aliases = a.destination_fingerprints_set().unwrap();
+        aliases.primary = "a".repeat(64);
+        aliases.tagged.insert(0, format!("k2:{}", aliases.primary));
+        assert!(
+            mk_store::resolutions::blocks_destination(
+                &mut tx,
+                replacement.parse().unwrap(),
+                "sms",
+                &aliases
+            )
+            .await
+            .unwrap()
+        );
+        assert!(
+            !mk_store::resolutions::blocks_destination(
+                &mut tx,
+                replacement.parse().unwrap(),
+                "sms",
+                &mk_store::fingerprint::Fingerprints::legacy(&"b".repeat(64))
+            )
+            .await
+            .unwrap()
+        );
+        tx.commit().await.unwrap();
+    }
+    let message = r.sim.created_messages().await.remove(0);
+    signed_provider_observation(&h, &message, "sent").await;
+    assert_eq!(
+        h.call(
+            "POST",
+            &challenge_path,
+            Some(&h.token(r.manager, &["manager"])),
+            Some(close.clone())
+        )
+        .await
+        .0,
+        StatusCode::FORBIDDEN
+    );
+    let (status, ch) = h
+        .call(
+            "POST",
+            &challenge_path,
+            Some(&h.token(r.admin, &["tenant_admin"])),
+            Some(close.clone()),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{ch}");
+    let stale = sign_resolution(&ch, &mut key);
+    signed_provider_observation(&h, &message, "delivered").await;
+    assert_eq!(
+        h.call(
+            "POST",
+            &resolve_path,
+            Some(&h.token(r.admin, &["tenant_admin"])),
+            Some(stale.clone())
+        )
+        .await
+        .0,
+        StatusCode::CONFLICT
+    );
+    assert_ne!(
+        h.call(
+            "POST",
+            &resolve_path,
+            Some(&h.token(r.admin, &["tenant_admin"])),
+            Some(stale)
+        )
+        .await
+        .0,
+        StatusCode::OK,
+        "stale challenge burned"
+    );
+    assert_eq!(
+        h.call(
+            "POST",
+            &challenge_path,
+            Some(&h.token(r.admin, &["tenant_admin"])),
+            Some(permit.clone())
+        )
+        .await
+        .0,
+        StatusCode::CONFLICT,
+        "delivered cannot permit replacement"
+    );
+    let (_, ch) = h
+        .call(
+            "POST",
+            &challenge_path,
+            Some(&h.token(r.admin, &["tenant_admin"])),
+            Some(close.clone()),
+        )
+        .await;
+    let valid = sign_resolution(&ch, &mut key);
+    let mut forged = valid.clone();
+    forged["webauthn"]["signature"] = json!("AA");
+    assert_eq!(
+        h.call(
+            "POST",
+            &resolve_path,
+            Some(&h.token(r.admin, &["tenant_admin"])),
+            Some(forged)
+        )
+        .await
+        .0,
+        StatusCode::FORBIDDEN
+    );
+    assert_ne!(
+        h.call(
+            "POST",
+            &resolve_path,
+            Some(&h.token(r.admin, &["tenant_admin"])),
+            Some(valid)
+        )
+        .await
+        .0,
+        StatusCode::OK,
+        "bad signature burns challenge"
+    );
+    let (_, ch) = h
+        .call(
+            "POST",
+            &challenge_path,
+            Some(&h.token(r.admin, &["tenant_admin"])),
+            Some(close.clone()),
+        )
+        .await;
+    let valid = sign_resolution(&ch, &mut key);
+    let (status, result) = h
+        .call(
+            "POST",
+            &resolve_path,
+            Some(&h.token(r.admin, &["tenant_admin"])),
+            Some(valid.clone()),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{result}");
+    assert_ne!(
+        h.call(
+            "POST",
+            &resolve_path,
+            Some(&h.token(r.admin, &["tenant_admin"])),
+            Some(valid)
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    assert_eq!(
+        h.call(
+            "POST",
+            &replay_path,
+            Some(&h.token(r.admin, &["tenant_admin"])),
+            Some(json!({}))
+        )
+        .await
+        .0,
+        StatusCode::CONFLICT,
+        "no-replacement cannot be replayed"
+    );
+    let (_, view) = h
+        .call(
+            "GET",
+            &format!("/internal/v1/actions/{aid}"),
+            Some(&h.token(r.manager, &["manager"])),
+            None,
+        )
+        .await;
+    assert_eq!(
+        view["state"], "reconciliation_required",
+        "terminal action history is immutable"
+    );
+    assert_eq!(view["message_state"], "delivered");
+    assert_eq!(view["read_status"], "unknown");
+    let (_, queue) = h
+        .call(
+            "GET",
+            "/internal/v1/deliveries/exceptions",
+            Some(&h.token(r.admin, &["tenant_admin"])),
+            None,
+        )
+        .await;
+    assert_eq!(queue["items"], json!([]));
+    assert_eq!(r.sim.calls(), 1, "resolution itself never sends");
+    // DB evidence cannot be overwritten or erased even through owner credentials.
+    for sql in [
+        "UPDATE kernel.submission_resolutions SET decision = 'replacement_permitted' WHERE tenant_id = $1",
+        "DELETE FROM kernel.submission_resolutions WHERE tenant_id = $1",
+    ] {
+        let mut tx = h.state.store.begin(h.tenant).await.unwrap();
+        assert!(
+            sqlx::query(sql)
+                .bind(h.tenant.0)
+                .execute(tx.raw_conn())
+                .await
+                .is_err()
+        );
+    }
+    // Old queued approvals cannot spring back to life after a human resolution.
+    assert!(matches!(
+        run_dispatch(&r, h.tenant, &replacement).await,
+        DispatchOutcome::Blocked { .. }
+    ));
+    assert_eq!(r.sim.calls(), 1);
+    let (replacement, _) = approved_action(
+        &h,
+        &mut r,
+        "Freshly reviewed. Reply STOP to opt out.",
+        "+15555550100",
+    )
+    .await;
+    // A fresh ambiguous attempt later gets a terminal failure; only then can
+    // a passkey permit a separately approved replacement. This is not a resend.
+    assert_eq!(
+        run_dispatch(&r, h.tenant, &replacement).await,
+        DispatchOutcome::ReconciliationRequired
+    );
+    let message2 = r.sim.created_messages().await.remove(1);
+    signed_provider_observation(&h, &message2, "failed").await;
+    let path2 = format!("/internal/v1/actions/{replacement}/resolution-challenge");
+    let (_, ch) = h
+        .call(
+            "POST",
+            &path2,
+            Some(&h.token(r.admin, &["tenant_admin"])),
+            Some(permit),
+        )
+        .await;
+    let valid = sign_resolution(&ch, &mut key);
+    // Transplant to the first action is refused and burns the challenge.
+    assert_ne!(
+        h.call(
+            "POST",
+            &resolve_path,
+            Some(&h.token(r.admin, &["tenant_admin"])),
+            Some(valid.clone())
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    let resolve2 = format!("/internal/v1/actions/{replacement}/resolve-submission");
+    assert_ne!(
+        h.call(
+            "POST",
+            &resolve2,
+            Some(&h.token(r.admin, &["tenant_admin"])),
+            Some(valid)
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    let (_, ch) = h
+        .call(
+            "POST",
+            &path2,
+            Some(&h.token(r.admin, &["tenant_admin"])),
+            Some(json!({"decision":"replacement_permitted"})),
+        )
+        .await;
+    let valid = sign_resolution(&ch, &mut key);
+    let (status, result) = h
+        .call(
+            "POST",
+            &resolve2,
+            Some(&h.token(r.admin, &["tenant_admin"])),
+            Some(valid),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{result}");
+    let (status, replay) = h
+        .call(
+            "POST",
+            &format!("/internal/v1/actions/{replacement}/replay"),
+            Some(&h.token(r.admin, &["tenant_admin"])),
+            Some(json!({})),
+        )
+        .await;
+    assert_eq!(status, StatusCode::CREATED, "{replay}");
+    assert_eq!(
+        replay["state"], "draft",
+        "resolution never bypasses new approval"
+    );
+    assert_eq!(r.sim.calls(), 2);
+    let mut tx = h.state.store.begin(h.tenant).await.unwrap();
+    assert!(mk_store::audit::verify_tenant(&mut tx).await.unwrap() > 0);
 }
 
 /// O2: per-tenant limits refuse with 429 + Retry-After after the assertion

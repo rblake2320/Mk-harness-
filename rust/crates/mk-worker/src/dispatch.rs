@@ -269,6 +269,51 @@ pub async fn dispatch_one(
             state: a.state,
         });
     }
+    // C4: evaluate policy first so expired/revoked authorizations terminate,
+    // then hold new sends while the destination has unresolved uncertainty.
+    // This executes under the shared destination lock, before approval use.
+    if let (Some(ch), Some(dest)) = (action.channel, action_fps.as_ref())
+        && action.request.action_kind.is_outreach()
+        && let Some(resolved_at) =
+            mk_store::resolutions::latest_for_destination(&mut tx, ch.as_str(), dest).await?
+        && approval
+            .as_ref()
+            .is_none_or(|a| a.created_at <= resolved_at)
+    {
+        let code = DenyCode::ApprovalPredatesResolution;
+        let a = actions::transition(
+            &mut tx,
+            action_id,
+            Transition::Cancel,
+            Some(code.as_str()),
+            worker_actor,
+            now,
+        )
+        .await?;
+        outbox::release_lease(&mut tx, action_id, lease).await?;
+        tx.commit().await?;
+        return Ok(DispatchOutcome::Blocked {
+            code,
+            state: a.state,
+        });
+    }
+    if let (Some(ch), Some(dest)) = (action.channel, action_fps.as_ref())
+        && action.request.action_kind.is_outreach()
+        && mk_store::resolutions::blocks_destination(&mut tx, action_id, ch.as_str(), dest).await?
+    {
+        let reason = "unresolved_submission";
+        outbox::enqueue(
+            &mut tx,
+            action_id,
+            "retry",
+            now + chrono::Duration::seconds(30),
+            json!({"deferred": reason}),
+        )
+        .await?;
+        outbox::release_lease(&mut tx, action_id, lease).await?;
+        tx.commit().await?;
+        return Ok(DispatchOutcome::Deferred { reason });
+    }
     if attempt == 0
         && let Some(a) = &approval
     {

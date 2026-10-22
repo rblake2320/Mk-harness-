@@ -70,7 +70,9 @@ export interface DeliveryException {
   message_state: MessageState; provider_message_id: string | null; read_status: string;
   customer_id: string | null; customer_name: string | null; created_at: string;
   reconciled_at: string | null; replacement_allowed: false;
+  resolution_options?: SubmissionResolution[];
 }
+export type SubmissionResolution = 'closed_no_replacement' | 'replacement_permitted';
 export interface WebAuthnAssertion { credential_id: string; client_data_json: string; authenticator_data: string; signature: string }
 
 export function b64url(bytes: ArrayBuffer | Uint8Array): string {
@@ -374,6 +376,30 @@ export class MKClient {
   inboundHealth() { return this.request<any>('/api/agent-ops/inbound/health'); }
   deliveryExceptions(after?: string) {
     return this.request<{ items: DeliveryException[]; next_cursor: string | null }>(`/api/delivery-exceptions?limit=50${after ? `&after=${encodeURIComponent(after)}` : ''}`);
+  }
+  /** This decision never submits a message. It binds the reviewed provider evidence. */
+  async resolveSubmissionWithPasskey(item: DeliveryException, decision: SubmissionResolution) {
+    const path = `/api/agent-ops/actions/${item.action_id}`;
+    const ch = await this.request<{ challenge: string; rp_id: string; action_id: string;
+      operation_digest: string; decision: SubmissionResolution; provider_message_id: string;
+      delivery_state: string; allow_credentials: string[]; user_verification: string }>(
+      `${path}/resolution-challenge`, { method: 'POST', body: JSON.stringify({ decision }) });
+    if (ch.action_id !== item.action_id || ch.decision !== decision || ch.provider_message_id !== item.provider_message_id
+        || ch.delivery_state !== item.delivery_state || ch.user_verification !== 'required') {
+      throw new Error('Provider evidence changed. Refresh and review this attempt before resolving it.');
+    }
+    const cred = await navigator.credentials.get({ publicKey: {
+      challenge: b64urlDecode(ch.challenge), rpId: ch.rp_id, userVerification: 'required',
+      allowCredentials: ch.allow_credentials.map(id => ({ type: 'public-key', id: b64urlDecode(id) })),
+    } }) as PublicKeyCredential | null;
+    if (!cred) throw new Error('Resolution was cancelled.');
+    const assertion = cred.response as AuthenticatorAssertionResponse;
+    return this.request<{ decision: SubmissionResolution }>(`${path}/resolve-submission`, { method: 'POST', body: JSON.stringify({
+      decision, operation_digest: ch.operation_digest, webauthn: {
+        credential_id: b64url(cred.rawId), client_data_json: b64url(assertion.clientDataJSON),
+        authenticator_data: b64url(assertion.authenticatorData), signature: b64url(assertion.signature),
+      },
+    }) });
   }
   senders() { return this.request<any[]>('/api/agent-ops/senders'); }
   registerSender(body: { owner_user_id: string; display_name: string; account_sid: string; auth_token: string; from_number?: string; messaging_service_sid?: string }) {

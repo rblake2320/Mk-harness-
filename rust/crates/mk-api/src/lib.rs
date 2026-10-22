@@ -103,6 +103,14 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/inbound/pending", get(routes::messaging::inbound_pending))
         .route(
+            "/actions/{action_id}/resolution-challenge",
+            post(routes::reconciliation::challenge),
+        )
+        .route(
+            "/actions/{action_id}/resolve-submission",
+            post(routes::reconciliation::resolve),
+        )
+        .route(
             "/deliveries/exceptions",
             get(routes::messaging::delivery_exceptions),
         )

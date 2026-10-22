@@ -323,6 +323,16 @@ pub async fn insert_replay(
     if !original.state.is_terminal() {
         return Err(StoreError::Conflict("replay requires a terminal original"));
     }
+    if original.state == ActionState::ReconciliationRequired
+        && crate::resolutions::decision(tx, original.action_id)
+            .await?
+            .as_deref()
+            != Some("replacement_permitted")
+    {
+        return Err(StoreError::Conflict(
+            "replay requires a passkey resolution permitting replacement",
+        ));
+    }
     let mut req = original.request.clone();
     req.action_id = Some(new_id);
     req.idempotency_key = format!("{}:replay:{}", req.idempotency_key, new_id);

@@ -1008,10 +1008,18 @@ pub async fn enrich_result(
     result: &mut mk_contracts::ActionResult,
 ) -> Result<(), ApiError> {
     if let Some(d) = ms::delivery_for_action(tx, result.action_id).await? {
-        result.message_state = Some(mk_contracts::MessageState::derive(
-            result.state,
-            Some(&d.state),
-        ));
+        // Terminal action history stays unchanged. Only after the human's
+        // bound decision may the public message state use the provider facts.
+        let observed = if result.state == mk_domain::ActionState::ReconciliationRequired
+            && mk_store::resolutions::decision(tx, result.action_id)
+                .await?
+                .is_some()
+        {
+            mk_domain::ActionState::Completed
+        } else {
+            result.state
+        };
+        result.message_state = Some(mk_contracts::MessageState::derive(observed, Some(&d.state)));
         result.read_status = Some(d.read_status);
         result.provider_message_id = d.provider_message_id;
     }

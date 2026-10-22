@@ -142,7 +142,12 @@ async def delivery_exceptions(after: uuid.UUID | None = None, limit: int = Query
         link = _link_for(db, user.tenant_id, item["action_id"])
         if link:
             try:
-                customer = own_customer(db, user.tenant_id, user.id, link.customer_id)
+                if user.role == "admin":
+                    customer = db.get(Customer, link.customer_id)
+                    if not customer or customer.tenant_id != user.tenant_id:
+                        continue
+                else:
+                    customer = own_customer(db, user.tenant_id, user.id, link.customer_id)
             except HTTPException:
                 continue
         else:

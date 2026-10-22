@@ -115,10 +115,23 @@ Crash after provider submission before durable confirmation. Control: persist `s
 - Multi-worker or one-connection-pool starvation: bounded claimed work, durable retry watermark,
   commit before credential resolution/provider GET; test the real restricted worker role.
 - Uncertainty hiding: owner-scoped read-only queue, no generic dismiss as delivered, and visible
-  stale/error state when refresh fails. Operator step-up resolution and dispatch replacement
-  gating remain an open implementation item; UI text alone is not that security boundary.
+  stale/error state when refresh fails. Operator resolution now requires a bound passkey;
+  the kernel enforces the destination hold and post-resolution approval freshness.
 - False inbound health: outbound status callbacks no longer refresh inbound-reply health;
   scheduled end-to-end inbound probing remains an open implementation item.
+
+C4 branch implementation (author-run verification, not release sign-off): a tenant administrator signs a
+single-use operation challenge binding tenant, action, exact action digest, provider
+SID, current delivery state and decision. Re-read all bindings in the decision
+transaction; stale/tampered challenges are burned and rejected. An append-only
+resolution may close known provider acceptance/sent/delivered without authorizing
+replacement, or permit a separately proposed and approved replacement only after
+authoritative terminal failure. No-SID/unknown remains unknown and blocks replacement.
+Dispatch checks unresolved attempts under the existing destination-control lock;
+UI dismissal, a fresh action id, replay, or waiting cannot bypass that check.
+Resolution and dispatch share the destination lock. Any waiting approval issued
+before the resolution is rejected at dispatch, so resolving an exception cannot
+release a previously queued replacement; a fresh human approval is required.
 
 ## 3. Decisions taken by this model
 

@@ -6,6 +6,7 @@ pub mod consent;
 pub mod human_approval;
 pub mod messaging;
 pub mod ops;
+pub mod reconciliation;
 
 use mk_audit::ActorType;
 use mk_crypto::MasterKey;

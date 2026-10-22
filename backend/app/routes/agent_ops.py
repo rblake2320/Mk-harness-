@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import hashlib
 import uuid
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, Response
@@ -256,6 +256,7 @@ class WebAuthnAssertionIn(BaseModel):
     """Bytes from `navigator.credentials.get()` on the approval screen. FastAPI
     relays them untouched; only the kernel verifies (it holds the registered
     public keys and issued the challenge). FastAPI cannot forge these."""
+    model_config = {"extra": "forbid"}
     credential_id: str = Field(pattern=_B64URL, max_length=_B64URL_MAX)
     client_data_json: str = Field(pattern=_B64URL, max_length=_B64URL_MAX)
     authenticator_data: str = Field(pattern=_B64URL, max_length=_B64URL_MAX)
@@ -266,6 +267,34 @@ class DecisionIn(BaseModel):
     action_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
     reason: str | None = None
     webauthn: WebAuthnAssertionIn | None = None
+
+
+class SubmissionResolutionChallengeIn(BaseModel):
+    model_config = {"extra": "forbid"}
+    decision: Literal["closed_no_replacement", "replacement_permitted"]
+
+
+class SubmissionResolutionIn(SubmissionResolutionChallengeIn):
+    operation_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    webauthn: WebAuthnAssertionIn
+
+
+@router.post("/actions/{action_id}/resolution-challenge")
+async def submission_resolution_challenge(action_id: str, body: SubmissionResolutionChallengeIn,
+        p: Principal = Depends(principal), client: KernelClient = Depends(get_kernel_client)):
+    if p.app_role != "admin":
+        raise HTTPException(403, "Tenant administrator required")
+    return await forward(client, p, "POST",
+        f"/actions/{_uuid_text(action_id, 'action_id')}/resolution-challenge", json=body.model_dump())
+
+
+@router.post("/actions/{action_id}/resolve-submission")
+async def resolve_submission(action_id: str, body: SubmissionResolutionIn,
+        p: Principal = Depends(principal), client: KernelClient = Depends(get_kernel_client)):
+    if p.app_role != "admin":
+        raise HTTPException(403, "Tenant administrator required")
+    return await forward(client, p, "POST",
+        f"/actions/{_uuid_text(action_id, 'action_id')}/resolve-submission", json=body.model_dump())
 
 
 @router.post("/actions/{action_id}/approve")

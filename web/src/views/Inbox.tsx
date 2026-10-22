@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { client } from '../App.tsx';
-import type { DeliveryException, ExceptionItem } from '../../../packages/sdk/src/index.ts';
+import type { DeliveryException, ExceptionItem, SubmissionResolution } from '../../../packages/sdk/src/index.ts';
 import { ErrorNote, HumanSteps, StateBadge, fmtWhen } from '../components/Common.tsx';
 
 const KIND_LABEL: Record<string, string> = {
@@ -23,6 +23,18 @@ export default function InboxView({ onOpenCustomer }: { onOpenCustomer: (id: str
   const [deliveryError, setDeliveryError] = useState<unknown>(null);
   const [deliveryLoaded, setDeliveryLoaded] = useState(false);
   const [deliveryBusy, setDeliveryBusy] = useState(false);
+  const [resolving, setResolving] = useState<string | null>(null);
+  const [resolutionNote, setResolutionNote] = useState('');
+  const [resolutionError, setResolutionError] = useState<unknown>(null);
+
+  async function resolveDelivery(item: DeliveryException, decision: SubmissionResolution) {
+    setResolving(item.delivery_id); setResolutionError(null); setResolutionNote('');
+    try {
+      await client.resolveSubmissionWithPasskey(item, decision);
+      setResolutionNote('Resolution recorded. No message was sent. Any further send requires a fresh review and approval.');
+      await loadDeliveries();
+    } catch (e) { setResolutionError(e); } finally { setResolving(null); }
+  }
 
   async function loadDeliveries(after?: string) {
     setDeliveryBusy(true);
@@ -78,6 +90,8 @@ export default function InboxView({ onOpenCustomer }: { onOpenCustomer: (id: str
         <p className="small">Do not send a replacement while submission is uncertain. Provider checks run automatically;
           a missing receipt is not a failure. Contact your operator to resolve an unknown attempt.</p>
         <ErrorNote error={deliveryError} />
+        <ErrorNote error={resolutionError} onDismiss={() => setResolutionError(null)} />
+        {resolutionNote && <p role="status">{resolutionNote}</p>}
         {deliveryError != null && <p role="status">Current delivery evidence could not be refreshed. Existing entries may be stale.</p>}
         {deliveryLoaded && !deliveryError && deliveries.length === 0 && <p>No uncertain deliveries in this page.</p>}
         <ul className="plain">
@@ -86,8 +100,17 @@ export default function InboxView({ onOpenCustomer }: { onOpenCustomer: (id: str
               <div className="row"><strong>{item.customer_name ?? 'Message attempt'}</strong><StateBadge state={item.message_state} /></div>
               <p className="small">Provider evidence: {item.delivery_state.replace(/_/g, ' ')}. Read status: {item.read_status}.</p>
               <div className="small wrap">Action reference: {item.action_id}</div>
+              {item.provider_message_id && <div className="small wrap">Provider reference: {item.provider_message_id}</div>}
               <div className="muted small">Submission started {fmtWhen(item.created_at)}{item.reconciled_at && <> · provider checked {fmtWhen(item.reconciled_at)}</>}</div>
               <p className="limitation small">Replacement sending is not authorized by this screen. This exception cannot be dismissed as delivered.</p>
+              {(item.resolution_options ?? []).length > 0 && <p className="small">Resolve only the provider evidence shown here. Previously queued approvals will not resume; any further send needs a fresh review and approval.</p>}
+              {(item.resolution_options ?? []).map(decision => (
+                <button key={decision} className="btn ghost small" disabled={resolving !== null || deliveryBusy || deliveryError != null}
+                  onClick={() => void resolveDelivery(item, decision)}>
+                  {resolving === item.delivery_id ? 'Waiting for passkey…' : decision === 'closed_no_replacement'
+                    ? 'Resolve without replacement with passkey' : 'Permit a newly approved replacement with passkey'}
+                </button>
+              ))}
               {item.customer_id && <button className="link" onClick={() => onOpenCustomer(item.customer_id!)}>Open customer</button>}
             </li>
           ))}
