@@ -1,0 +1,1272 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="pytest" errors="11" failures="2" skipped="0" tests="15" time="11.265" timestamp="2026-10-22T01:41:45.629484-05:00" hostname="DESKTOP-CM6G60N"><testcase classname="tools.verification.test_app_database" name="test_owner_is_rejected_before_api_creates_any_tables" time="0.122" /><testcase classname="tools.verification.test_app_database" name="test_runtime_has_dml_not_ddl_audit_mutation_or_kernel_access" time="0.690"><error message="failed on setup with &quot;sqlalchemy.exc.ProgrammingError: (psycopg.ProgrammingError) only '%s', '%b', '%t' are allowed as placeholders, got '%R'&#10;[SQL: -- Fence obsolete application writers before retiring a sealing key.&#10;CREATE TABLE IF NOT EXISTS application_seal_policy (&#10;  id integer PRIMARY KEY CHECK (id = 1),&#10;  writer_kid varchar(16) NOT NULL CHECK (writer_kid ~ '^[a-z0-9_-]{1,16}$'),&#10;  allow_legacy boolean NOT NULL CHECK (NOT allow_legacy OR writer_kid = 'm0')&#10;);&#10;INSERT INTO application_seal_policy VALUES (1, 'm0', true) ON CONFLICT (id) DO NOTHING;&#10;&#10;CREATE FUNCTION mk_app.seal_policy_lock() RETURNS trigger LANGUAGE plpgsql AS $fn$&#10;BEGIN&#10;  PERFORM pg_advisory_xact_lock(58721493622);&#10;  IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;&#10;  RETURN NEW;&#10;END&#10;$fn$;&#10;CREATE TRIGGER seal_policy_lock BEFORE INSERT OR UPDATE OR DELETE ON application_seal_policy&#10;FOR EACH STATEMENT EXECUTE FUNCTION mk_app.seal_policy_lock();&#10;&#10;CREATE FUNCTION mk_app.check_seal_write() RETURNS trigger LANGUAGE plpgsql VOLATILE AS $fn$&#10;DECLARE&#10;  field_name text;&#10;  ciphertext text;&#10;  previous text;&#10;  policy mk_app.application_seal_policy%ROWTYPE;&#10;BEGIN&#10;  FOREACH field_name IN ARRAY TG_ARGV LOOP&#10;    ciphertext := to_jsonb(NEW)-&gt;&gt;field_name;&#10;    previous := CASE WHEN TG_OP = 'UPDATE' THEN to_jsonb(OLD)-&gt;&gt;field_name ELSE NULL END;&#10;    IF ciphertext IS NULL OR ciphertext = '' OR ciphertext IS NOT DISTINCT FROM previous THEN&#10;      CONTINUE;&#10;    END IF;&#10;    IF current_setting('transaction_isolation') &lt;&gt; 'read committed' THEN&#10;      RAISE EXCEPTION 'SEAL_WRITE_REQUIRES_READ_COMMITTED' USING ERRCODE = '23514';&#10;    END IF;&#10;    -- Held through commit. A policy change cannot complete while an old write&#10;    -- is in flight; a waiting writer reads the policy after acquiring the lock.&#10;    PERFORM pg_advisory_xact_lock_shared(58721493622);&#10;    SELECT * INTO STRICT policy FROM mk_app.application_seal_policy WHERE id = 1;&#10;    IF ciphertext LIKE 'mk1:%' THEN&#10;      IF split_part(ciphertext, ':', 2) = policy.writer_kid&#10;         AND ciphertext ~ '^mk1:[a-z0-9_-]{1,16}:[A-Za-z0-9+/]+={0,2}$' THEN&#10;        CONTINUE;&#10;      END IF;&#10;    ELSIF policy.allow_legacy AND ciphertext ~ '^[A-Za-z0-9+/]+={0,2}$' THEN&#10;      CONTINUE;&#10;    END IF;&#10;    RAISE EXCEPTION 'SEAL_WRITER_RETIRED' USING ERRCODE = '23514';&#10;  END LOOP;&#10;  RETURN NEW;&#10;END&#10;$fn$;&#10;REVOKE ALL ON FUNCTION mk_app.seal_policy_lock(), mk_app.check_seal_write() FROM PUBLIC;&#10;GRANT EXECUTE ON FUNCTION mk_app.check_seal_write() TO mk_app_runtime;&#10;&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON provider_keys&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('ciphertext');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON customer_destinations&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('value_enc');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON import_rows&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('phone_enc', 'email_enc');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON draft_versions&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('text_enc');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON exceptions&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('detail_enc');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON outcomes&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('note_enc');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON auth_factors&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('secret_enc', 'pending_secret_enc');&#10;]&#10;(Background on this error at: https://sqlalche.me/e/20/f405)&quot;">/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1963: in _exec_single_context
+    self.dialect.do_execute(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/default.py:943: in do_execute
+    cursor.execute(statement, parameters)
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/psycopg/cursor.py:97: in execute
+    raise ex.with_traceback(None)
+E   psycopg.ProgrammingError: only '%s', '%b', '%t' are allowed as placeholders, got '%R'
+
+The above exception was the direct cause of the following exception:
+tools/verification/test_app_database.py:38: in initialized
+    assert migrate(migration) == VERSIONS
+backend/app/migrate.py:78: in migrate
+    conn.exec_driver_sql(path.read_text(encoding="utf-8"))
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1775: in exec_driver_sql
+    ret = self._execute_context(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1842: in _execute_context
+    return self._exec_single_context(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1982: in _exec_single_context
+    self._handle_dbapi_exception(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2351: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1963: in _exec_single_context
+    self.dialect.do_execute(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/default.py:943: in do_execute
+    cursor.execute(statement, parameters)
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/psycopg/cursor.py:97: in execute
+    raise ex.with_traceback(None)
+E   sqlalchemy.exc.ProgrammingError: (psycopg.ProgrammingError) only '%s', '%b', '%t' are allowed as placeholders, got '%R'
+E   [SQL: -- Fence obsolete application writers before retiring a sealing key.
+E   CREATE TABLE IF NOT EXISTS application_seal_policy (
+E     id integer PRIMARY KEY CHECK (id = 1),
+E     writer_kid varchar(16) NOT NULL CHECK (writer_kid ~ '^[a-z0-9_-]{1,16}$'),
+E     allow_legacy boolean NOT NULL CHECK (NOT allow_legacy OR writer_kid = 'm0')
+E   );
+E   INSERT INTO application_seal_policy VALUES (1, 'm0', true) ON CONFLICT (id) DO NOTHING;
+E   
+E   CREATE FUNCTION mk_app.seal_policy_lock() RETURNS trigger LANGUAGE plpgsql AS $fn$
+E   BEGIN
+E     PERFORM pg_advisory_xact_lock(58721493622);
+E     IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
+E     RETURN NEW;
+E   END
+E   $fn$;
+E   CREATE TRIGGER seal_policy_lock BEFORE INSERT OR UPDATE OR DELETE ON application_seal_policy
+E   FOR EACH STATEMENT EXECUTE FUNCTION mk_app.seal_policy_lock();
+E   
+E   CREATE FUNCTION mk_app.check_seal_write() RETURNS trigger LANGUAGE plpgsql VOLATILE AS $fn$
+E   DECLARE
+E     field_name text;
+E     ciphertext text;
+E     previous text;
+E     policy mk_app.application_seal_policy%ROWTYPE;
+E   BEGIN
+E     FOREACH field_name IN ARRAY TG_ARGV LOOP
+E       ciphertext := to_jsonb(NEW)-&gt;&gt;field_name;
+E       previous := CASE WHEN TG_OP = 'UPDATE' THEN to_jsonb(OLD)-&gt;&gt;field_name ELSE NULL END;
+E       IF ciphertext IS NULL OR ciphertext = '' OR ciphertext IS NOT DISTINCT FROM previous THEN
+E         CONTINUE;
+E       END IF;
+E       IF current_setting('transaction_isolation') &lt;&gt; 'read committed' THEN
+E         RAISE EXCEPTION 'SEAL_WRITE_REQUIRES_READ_COMMITTED' USING ERRCODE = '23514';
+E       END IF;
+E       -- Held through commit. A policy change cannot complete while an old write
+E       -- is in flight; a waiting writer reads the policy after acquiring the lock.
+E       PERFORM pg_advisory_xact_lock_shared(58721493622);
+E       SELECT * INTO STRICT policy FROM mk_app.application_seal_policy WHERE id = 1;
+E       IF ciphertext LIKE 'mk1:%' THEN
+E         IF split_part(ciphertext, ':', 2) = policy.writer_kid
+E            AND ciphertext ~ '^mk1:[a-z0-9_-]{1,16}:[A-Za-z0-9+/]+={0,2}$' THEN
+E           CONTINUE;
+E         END IF;
+E       ELSIF policy.allow_legacy AND ciphertext ~ '^[A-Za-z0-9+/]+={0,2}$' THEN
+E         CONTINUE;
+E       END IF;
+E       RAISE EXCEPTION 'SEAL_WRITER_RETIRED' USING ERRCODE = '23514';
+E     END LOOP;
+E     RETURN NEW;
+E   END
+E   $fn$;
+E   REVOKE ALL ON FUNCTION mk_app.seal_policy_lock(), mk_app.check_seal_write() FROM PUBLIC;
+E   GRANT EXECUTE ON FUNCTION mk_app.check_seal_write() TO mk_app_runtime;
+E   
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON provider_keys
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('ciphertext');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON customer_destinations
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('value_enc');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON import_rows
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('phone_enc', 'email_enc');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON draft_versions
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('text_enc');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON exceptions
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('detail_enc');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON outcomes
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('note_enc');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON auth_factors
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('secret_enc', 'pending_secret_enc');
+E   ]
+E   (Background on this error at: https://sqlalche.me/e/20/f405)</error></testcase><testcase classname="tools.verification.test_app_database" name="test_set_role_cannot_disguise_owner_login" time="0.671"><error message="failed on setup with &quot;sqlalchemy.exc.ProgrammingError: (psycopg.ProgrammingError) only '%s', '%b', '%t' are allowed as placeholders, got '%R'&#10;[SQL: -- Fence obsolete application writers before retiring a sealing key.&#10;CREATE TABLE IF NOT EXISTS application_seal_policy (&#10;  id integer PRIMARY KEY CHECK (id = 1),&#10;  writer_kid varchar(16) NOT NULL CHECK (writer_kid ~ '^[a-z0-9_-]{1,16}$'),&#10;  allow_legacy boolean NOT NULL CHECK (NOT allow_legacy OR writer_kid = 'm0')&#10;);&#10;INSERT INTO application_seal_policy VALUES (1, 'm0', true) ON CONFLICT (id) DO NOTHING;&#10;&#10;CREATE FUNCTION mk_app.seal_policy_lock() RETURNS trigger LANGUAGE plpgsql AS $fn$&#10;BEGIN&#10;  PERFORM pg_advisory_xact_lock(58721493622);&#10;  IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;&#10;  RETURN NEW;&#10;END&#10;$fn$;&#10;CREATE TRIGGER seal_policy_lock BEFORE INSERT OR UPDATE OR DELETE ON application_seal_policy&#10;FOR EACH STATEMENT EXECUTE FUNCTION mk_app.seal_policy_lock();&#10;&#10;CREATE FUNCTION mk_app.check_seal_write() RETURNS trigger LANGUAGE plpgsql VOLATILE AS $fn$&#10;DECLARE&#10;  field_name text;&#10;  ciphertext text;&#10;  previous text;&#10;  policy mk_app.application_seal_policy%ROWTYPE;&#10;BEGIN&#10;  FOREACH field_name IN ARRAY TG_ARGV LOOP&#10;    ciphertext := to_jsonb(NEW)-&gt;&gt;field_name;&#10;    previous := CASE WHEN TG_OP = 'UPDATE' THEN to_jsonb(OLD)-&gt;&gt;field_name ELSE NULL END;&#10;    IF ciphertext IS NULL OR ciphertext = '' OR ciphertext IS NOT DISTINCT FROM previous THEN&#10;      CONTINUE;&#10;    END IF;&#10;    IF current_setting('transaction_isolation') &lt;&gt; 'read committed' THEN&#10;      RAISE EXCEPTION 'SEAL_WRITE_REQUIRES_READ_COMMITTED' USING ERRCODE = '23514';&#10;    END IF;&#10;    -- Held through commit. A policy change cannot complete while an old write&#10;    -- is in flight; a waiting writer reads the policy after acquiring the lock.&#10;    PERFORM pg_advisory_xact_lock_shared(58721493622);&#10;    SELECT * INTO STRICT policy FROM mk_app.application_seal_policy WHERE id = 1;&#10;    IF ciphertext LIKE 'mk1:%' THEN&#10;      IF split_part(ciphertext, ':', 2) = policy.writer_kid&#10;         AND ciphertext ~ '^mk1:[a-z0-9_-]{1,16}:[A-Za-z0-9+/]+={0,2}$' THEN&#10;        CONTINUE;&#10;      END IF;&#10;    ELSIF policy.allow_legacy AND ciphertext ~ '^[A-Za-z0-9+/]+={0,2}$' THEN&#10;      CONTINUE;&#10;    END IF;&#10;    RAISE EXCEPTION 'SEAL_WRITER_RETIRED' USING ERRCODE = '23514';&#10;  END LOOP;&#10;  RETURN NEW;&#10;END&#10;$fn$;&#10;REVOKE ALL ON FUNCTION mk_app.seal_policy_lock(), mk_app.check_seal_write() FROM PUBLIC;&#10;GRANT EXECUTE ON FUNCTION mk_app.check_seal_write() TO mk_app_runtime;&#10;&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON provider_keys&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('ciphertext');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON customer_destinations&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('value_enc');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON import_rows&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('phone_enc', 'email_enc');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON draft_versions&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('text_enc');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON exceptions&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('detail_enc');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON outcomes&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('note_enc');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON auth_factors&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('secret_enc', 'pending_secret_enc');&#10;]&#10;(Background on this error at: https://sqlalche.me/e/20/f405)&quot;">/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1963: in _exec_single_context
+    self.dialect.do_execute(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/default.py:943: in do_execute
+    cursor.execute(statement, parameters)
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/psycopg/cursor.py:97: in execute
+    raise ex.with_traceback(None)
+E   psycopg.ProgrammingError: only '%s', '%b', '%t' are allowed as placeholders, got '%R'
+
+The above exception was the direct cause of the following exception:
+tools/verification/test_app_database.py:38: in initialized
+    assert migrate(migration) == VERSIONS
+backend/app/migrate.py:78: in migrate
+    conn.exec_driver_sql(path.read_text(encoding="utf-8"))
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1775: in exec_driver_sql
+    ret = self._execute_context(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1842: in _execute_context
+    return self._exec_single_context(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1982: in _exec_single_context
+    self._handle_dbapi_exception(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2351: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1963: in _exec_single_context
+    self.dialect.do_execute(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/default.py:943: in do_execute
+    cursor.execute(statement, parameters)
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/psycopg/cursor.py:97: in execute
+    raise ex.with_traceback(None)
+E   sqlalchemy.exc.ProgrammingError: (psycopg.ProgrammingError) only '%s', '%b', '%t' are allowed as placeholders, got '%R'
+E   [SQL: -- Fence obsolete application writers before retiring a sealing key.
+E   CREATE TABLE IF NOT EXISTS application_seal_policy (
+E     id integer PRIMARY KEY CHECK (id = 1),
+E     writer_kid varchar(16) NOT NULL CHECK (writer_kid ~ '^[a-z0-9_-]{1,16}$'),
+E     allow_legacy boolean NOT NULL CHECK (NOT allow_legacy OR writer_kid = 'm0')
+E   );
+E   INSERT INTO application_seal_policy VALUES (1, 'm0', true) ON CONFLICT (id) DO NOTHING;
+E   
+E   CREATE FUNCTION mk_app.seal_policy_lock() RETURNS trigger LANGUAGE plpgsql AS $fn$
+E   BEGIN
+E     PERFORM pg_advisory_xact_lock(58721493622);
+E     IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
+E     RETURN NEW;
+E   END
+E   $fn$;
+E   CREATE TRIGGER seal_policy_lock BEFORE INSERT OR UPDATE OR DELETE ON application_seal_policy
+E   FOR EACH STATEMENT EXECUTE FUNCTION mk_app.seal_policy_lock();
+E   
+E   CREATE FUNCTION mk_app.check_seal_write() RETURNS trigger LANGUAGE plpgsql VOLATILE AS $fn$
+E   DECLARE
+E     field_name text;
+E     ciphertext text;
+E     previous text;
+E     policy mk_app.application_seal_policy%ROWTYPE;
+E   BEGIN
+E     FOREACH field_name IN ARRAY TG_ARGV LOOP
+E       ciphertext := to_jsonb(NEW)-&gt;&gt;field_name;
+E       previous := CASE WHEN TG_OP = 'UPDATE' THEN to_jsonb(OLD)-&gt;&gt;field_name ELSE NULL END;
+E       IF ciphertext IS NULL OR ciphertext = '' OR ciphertext IS NOT DISTINCT FROM previous THEN
+E         CONTINUE;
+E       END IF;
+E       IF current_setting('transaction_isolation') &lt;&gt; 'read committed' THEN
+E         RAISE EXCEPTION 'SEAL_WRITE_REQUIRES_READ_COMMITTED' USING ERRCODE = '23514';
+E       END IF;
+E       -- Held through commit. A policy change cannot complete while an old write
+E       -- is in flight; a waiting writer reads the policy after acquiring the lock.
+E       PERFORM pg_advisory_xact_lock_shared(58721493622);
+E       SELECT * INTO STRICT policy FROM mk_app.application_seal_policy WHERE id = 1;
+E       IF ciphertext LIKE 'mk1:%' THEN
+E         IF split_part(ciphertext, ':', 2) = policy.writer_kid
+E            AND ciphertext ~ '^mk1:[a-z0-9_-]{1,16}:[A-Za-z0-9+/]+={0,2}$' THEN
+E           CONTINUE;
+E         END IF;
+E       ELSIF policy.allow_legacy AND ciphertext ~ '^[A-Za-z0-9+/]+={0,2}$' THEN
+E         CONTINUE;
+E       END IF;
+E       RAISE EXCEPTION 'SEAL_WRITER_RETIRED' USING ERRCODE = '23514';
+E     END LOOP;
+E     RETURN NEW;
+E   END
+E   $fn$;
+E   REVOKE ALL ON FUNCTION mk_app.seal_policy_lock(), mk_app.check_seal_write() FROM PUBLIC;
+E   GRANT EXECUTE ON FUNCTION mk_app.check_seal_write() TO mk_app_runtime;
+E   
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON provider_keys
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('ciphertext');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON customer_destinations
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('value_enc');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON import_rows
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('phone_enc', 'email_enc');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON draft_versions
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('text_enc');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON exceptions
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('detail_enc');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON outcomes
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('note_enc');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON auth_factors
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('secret_enc', 'pending_secret_enc');
+E   ]
+E   (Background on this error at: https://sqlalche.me/e/20/f405)</error></testcase><testcase classname="tools.verification.test_app_database" name="test_runtime_rejects_privilege_drift[GRANT mk_app_owner TO mk_app_login-REVOKE mk_app_owner FROM mk_app_login]" time="0.676"><error message="failed on setup with &quot;sqlalchemy.exc.ProgrammingError: (psycopg.ProgrammingError) only '%s', '%b', '%t' are allowed as placeholders, got '%R'&#10;[SQL: -- Fence obsolete application writers before retiring a sealing key.&#10;CREATE TABLE IF NOT EXISTS application_seal_policy (&#10;  id integer PRIMARY KEY CHECK (id = 1),&#10;  writer_kid varchar(16) NOT NULL CHECK (writer_kid ~ '^[a-z0-9_-]{1,16}$'),&#10;  allow_legacy boolean NOT NULL CHECK (NOT allow_legacy OR writer_kid = 'm0')&#10;);&#10;INSERT INTO application_seal_policy VALUES (1, 'm0', true) ON CONFLICT (id) DO NOTHING;&#10;&#10;CREATE FUNCTION mk_app.seal_policy_lock() RETURNS trigger LANGUAGE plpgsql AS $fn$&#10;BEGIN&#10;  PERFORM pg_advisory_xact_lock(58721493622);&#10;  IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;&#10;  RETURN NEW;&#10;END&#10;$fn$;&#10;CREATE TRIGGER seal_policy_lock BEFORE INSERT OR UPDATE OR DELETE ON application_seal_policy&#10;FOR EACH STATEMENT EXECUTE FUNCTION mk_app.seal_policy_lock();&#10;&#10;CREATE FUNCTION mk_app.check_seal_write() RETURNS trigger LANGUAGE plpgsql VOLATILE AS $fn$&#10;DECLARE&#10;  field_name text;&#10;  ciphertext text;&#10;  previous text;&#10;  policy mk_app.application_seal_policy%ROWTYPE;&#10;BEGIN&#10;  FOREACH field_name IN ARRAY TG_ARGV LOOP&#10;    ciphertext := to_jsonb(NEW)-&gt;&gt;field_name;&#10;    previous := CASE WHEN TG_OP = 'UPDATE' THEN to_jsonb(OLD)-&gt;&gt;field_name ELSE NULL END;&#10;    IF ciphertext IS NULL OR ciphertext = '' OR ciphertext IS NOT DISTINCT FROM previous THEN&#10;      CONTINUE;&#10;    END IF;&#10;    IF current_setting('transaction_isolation') &lt;&gt; 'read committed' THEN&#10;      RAISE EXCEPTION 'SEAL_WRITE_REQUIRES_READ_COMMITTED' USING ERRCODE = '23514';&#10;    END IF;&#10;    -- Held through commit. A policy change cannot complete while an old write&#10;    -- is in flight; a waiting writer reads the policy after acquiring the lock.&#10;    PERFORM pg_advisory_xact_lock_shared(58721493622);&#10;    SELECT * INTO STRICT policy FROM mk_app.application_seal_policy WHERE id = 1;&#10;    IF ciphertext LIKE 'mk1:%' THEN&#10;      IF split_part(ciphertext, ':', 2) = policy.writer_kid&#10;         AND ciphertext ~ '^mk1:[a-z0-9_-]{1,16}:[A-Za-z0-9+/]+={0,2}$' THEN&#10;        CONTINUE;&#10;      END IF;&#10;    ELSIF policy.allow_legacy AND ciphertext ~ '^[A-Za-z0-9+/]+={0,2}$' THEN&#10;      CONTINUE;&#10;    END IF;&#10;    RAISE EXCEPTION 'SEAL_WRITER_RETIRED' USING ERRCODE = '23514';&#10;  END LOOP;&#10;  RETURN NEW;&#10;END&#10;$fn$;&#10;REVOKE ALL ON FUNCTION mk_app.seal_policy_lock(), mk_app.check_seal_write() FROM PUBLIC;&#10;GRANT EXECUTE ON FUNCTION mk_app.check_seal_write() TO mk_app_runtime;&#10;&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON provider_keys&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('ciphertext');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON customer_destinations&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('value_enc');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON import_rows&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('phone_enc', 'email_enc');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON draft_versions&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('text_enc');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON exceptions&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('detail_enc');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON outcomes&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('note_enc');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON auth_factors&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('secret_enc', 'pending_secret_enc');&#10;]&#10;(Background on this error at: https://sqlalche.me/e/20/f405)&quot;">/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1963: in _exec_single_context
+    self.dialect.do_execute(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/default.py:943: in do_execute
+    cursor.execute(statement, parameters)
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/psycopg/cursor.py:97: in execute
+    raise ex.with_traceback(None)
+E   psycopg.ProgrammingError: only '%s', '%b', '%t' are allowed as placeholders, got '%R'
+
+The above exception was the direct cause of the following exception:
+tools/verification/test_app_database.py:38: in initialized
+    assert migrate(migration) == VERSIONS
+backend/app/migrate.py:78: in migrate
+    conn.exec_driver_sql(path.read_text(encoding="utf-8"))
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1775: in exec_driver_sql
+    ret = self._execute_context(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1842: in _execute_context
+    return self._exec_single_context(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1982: in _exec_single_context
+    self._handle_dbapi_exception(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2351: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1963: in _exec_single_context
+    self.dialect.do_execute(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/default.py:943: in do_execute
+    cursor.execute(statement, parameters)
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/psycopg/cursor.py:97: in execute
+    raise ex.with_traceback(None)
+E   sqlalchemy.exc.ProgrammingError: (psycopg.ProgrammingError) only '%s', '%b', '%t' are allowed as placeholders, got '%R'
+E   [SQL: -- Fence obsolete application writers before retiring a sealing key.
+E   CREATE TABLE IF NOT EXISTS application_seal_policy (
+E     id integer PRIMARY KEY CHECK (id = 1),
+E     writer_kid varchar(16) NOT NULL CHECK (writer_kid ~ '^[a-z0-9_-]{1,16}$'),
+E     allow_legacy boolean NOT NULL CHECK (NOT allow_legacy OR writer_kid = 'm0')
+E   );
+E   INSERT INTO application_seal_policy VALUES (1, 'm0', true) ON CONFLICT (id) DO NOTHING;
+E   
+E   CREATE FUNCTION mk_app.seal_policy_lock() RETURNS trigger LANGUAGE plpgsql AS $fn$
+E   BEGIN
+E     PERFORM pg_advisory_xact_lock(58721493622);
+E     IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
+E     RETURN NEW;
+E   END
+E   $fn$;
+E   CREATE TRIGGER seal_policy_lock BEFORE INSERT OR UPDATE OR DELETE ON application_seal_policy
+E   FOR EACH STATEMENT EXECUTE FUNCTION mk_app.seal_policy_lock();
+E   
+E   CREATE FUNCTION mk_app.check_seal_write() RETURNS trigger LANGUAGE plpgsql VOLATILE AS $fn$
+E   DECLARE
+E     field_name text;
+E     ciphertext text;
+E     previous text;
+E     policy mk_app.application_seal_policy%ROWTYPE;
+E   BEGIN
+E     FOREACH field_name IN ARRAY TG_ARGV LOOP
+E       ciphertext := to_jsonb(NEW)-&gt;&gt;field_name;
+E       previous := CASE WHEN TG_OP = 'UPDATE' THEN to_jsonb(OLD)-&gt;&gt;field_name ELSE NULL END;
+E       IF ciphertext IS NULL OR ciphertext = '' OR ciphertext IS NOT DISTINCT FROM previous THEN
+E         CONTINUE;
+E       END IF;
+E       IF current_setting('transaction_isolation') &lt;&gt; 'read committed' THEN
+E         RAISE EXCEPTION 'SEAL_WRITE_REQUIRES_READ_COMMITTED' USING ERRCODE = '23514';
+E       END IF;
+E       -- Held through commit. A policy change cannot complete while an old write
+E       -- is in flight; a waiting writer reads the policy after acquiring the lock.
+E       PERFORM pg_advisory_xact_lock_shared(58721493622);
+E       SELECT * INTO STRICT policy FROM mk_app.application_seal_policy WHERE id = 1;
+E       IF ciphertext LIKE 'mk1:%' THEN
+E         IF split_part(ciphertext, ':', 2) = policy.writer_kid
+E            AND ciphertext ~ '^mk1:[a-z0-9_-]{1,16}:[A-Za-z0-9+/]+={0,2}$' THEN
+E           CONTINUE;
+E         END IF;
+E       ELSIF policy.allow_legacy AND ciphertext ~ '^[A-Za-z0-9+/]+={0,2}$' THEN
+E         CONTINUE;
+E       END IF;
+E       RAISE EXCEPTION 'SEAL_WRITER_RETIRED' USING ERRCODE = '23514';
+E     END LOOP;
+E     RETURN NEW;
+E   END
+E   $fn$;
+E   REVOKE ALL ON FUNCTION mk_app.seal_policy_lock(), mk_app.check_seal_write() FROM PUBLIC;
+E   GRANT EXECUTE ON FUNCTION mk_app.check_seal_write() TO mk_app_runtime;
+E   
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON provider_keys
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('ciphertext');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON customer_destinations
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('value_enc');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON import_rows
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('phone_enc', 'email_enc');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON draft_versions
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('text_enc');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON exceptions
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('detail_enc');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON outcomes
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('note_enc');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON auth_factors
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('secret_enc', 'pending_secret_enc');
+E   ]
+E   (Background on this error at: https://sqlalche.me/e/20/f405)</error></testcase><testcase classname="tools.verification.test_app_database" name="test_runtime_rejects_privilege_drift[ALTER ROLE mk_app_login BYPASSRLS-ALTER ROLE mk_app_login NOBYPASSRLS]" time="0.702"><error message="failed on setup with &quot;sqlalchemy.exc.ProgrammingError: (psycopg.ProgrammingError) only '%s', '%b', '%t' are allowed as placeholders, got '%R'&#10;[SQL: -- Fence obsolete application writers before retiring a sealing key.&#10;CREATE TABLE IF NOT EXISTS application_seal_policy (&#10;  id integer PRIMARY KEY CHECK (id = 1),&#10;  writer_kid varchar(16) NOT NULL CHECK (writer_kid ~ '^[a-z0-9_-]{1,16}$'),&#10;  allow_legacy boolean NOT NULL CHECK (NOT allow_legacy OR writer_kid = 'm0')&#10;);&#10;INSERT INTO application_seal_policy VALUES (1, 'm0', true) ON CONFLICT (id) DO NOTHING;&#10;&#10;CREATE FUNCTION mk_app.seal_policy_lock() RETURNS trigger LANGUAGE plpgsql AS $fn$&#10;BEGIN&#10;  PERFORM pg_advisory_xact_lock(58721493622);&#10;  IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;&#10;  RETURN NEW;&#10;END&#10;$fn$;&#10;CREATE TRIGGER seal_policy_lock BEFORE INSERT OR UPDATE OR DELETE ON application_seal_policy&#10;FOR EACH STATEMENT EXECUTE FUNCTION mk_app.seal_policy_lock();&#10;&#10;CREATE FUNCTION mk_app.check_seal_write() RETURNS trigger LANGUAGE plpgsql VOLATILE AS $fn$&#10;DECLARE&#10;  field_name text;&#10;  ciphertext text;&#10;  previous text;&#10;  policy mk_app.application_seal_policy%ROWTYPE;&#10;BEGIN&#10;  FOREACH field_name IN ARRAY TG_ARGV LOOP&#10;    ciphertext := to_jsonb(NEW)-&gt;&gt;field_name;&#10;    previous := CASE WHEN TG_OP = 'UPDATE' THEN to_jsonb(OLD)-&gt;&gt;field_name ELSE NULL END;&#10;    IF ciphertext IS NULL OR ciphertext = '' OR ciphertext IS NOT DISTINCT FROM previous THEN&#10;      CONTINUE;&#10;    END IF;&#10;    IF current_setting('transaction_isolation') &lt;&gt; 'read committed' THEN&#10;      RAISE EXCEPTION 'SEAL_WRITE_REQUIRES_READ_COMMITTED' USING ERRCODE = '23514';&#10;    END IF;&#10;    -- Held through commit. A policy change cannot complete while an old write&#10;    -- is in flight; a waiting writer reads the policy after acquiring the lock.&#10;    PERFORM pg_advisory_xact_lock_shared(58721493622);&#10;    SELECT * INTO STRICT policy FROM mk_app.application_seal_policy WHERE id = 1;&#10;    IF ciphertext LIKE 'mk1:%' THEN&#10;      IF split_part(ciphertext, ':', 2) = policy.writer_kid&#10;         AND ciphertext ~ '^mk1:[a-z0-9_-]{1,16}:[A-Za-z0-9+/]+={0,2}$' THEN&#10;        CONTINUE;&#10;      END IF;&#10;    ELSIF policy.allow_legacy AND ciphertext ~ '^[A-Za-z0-9+/]+={0,2}$' THEN&#10;      CONTINUE;&#10;    END IF;&#10;    RAISE EXCEPTION 'SEAL_WRITER_RETIRED' USING ERRCODE = '23514';&#10;  END LOOP;&#10;  RETURN NEW;&#10;END&#10;$fn$;&#10;REVOKE ALL ON FUNCTION mk_app.seal_policy_lock(), mk_app.check_seal_write() FROM PUBLIC;&#10;GRANT EXECUTE ON FUNCTION mk_app.check_seal_write() TO mk_app_runtime;&#10;&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON provider_keys&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('ciphertext');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON customer_destinations&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('value_enc');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON import_rows&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('phone_enc', 'email_enc');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON draft_versions&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('text_enc');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON exceptions&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('detail_enc');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON outcomes&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('note_enc');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON auth_factors&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('secret_enc', 'pending_secret_enc');&#10;]&#10;(Background on this error at: https://sqlalche.me/e/20/f405)&quot;">/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1963: in _exec_single_context
+    self.dialect.do_execute(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/default.py:943: in do_execute
+    cursor.execute(statement, parameters)
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/psycopg/cursor.py:97: in execute
+    raise ex.with_traceback(None)
+E   psycopg.ProgrammingError: only '%s', '%b', '%t' are allowed as placeholders, got '%R'
+
+The above exception was the direct cause of the following exception:
+tools/verification/test_app_database.py:38: in initialized
+    assert migrate(migration) == VERSIONS
+backend/app/migrate.py:78: in migrate
+    conn.exec_driver_sql(path.read_text(encoding="utf-8"))
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1775: in exec_driver_sql
+    ret = self._execute_context(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1842: in _execute_context
+    return self._exec_single_context(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1982: in _exec_single_context
+    self._handle_dbapi_exception(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2351: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1963: in _exec_single_context
+    self.dialect.do_execute(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/default.py:943: in do_execute
+    cursor.execute(statement, parameters)
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/psycopg/cursor.py:97: in execute
+    raise ex.with_traceback(None)
+E   sqlalchemy.exc.ProgrammingError: (psycopg.ProgrammingError) only '%s', '%b', '%t' are allowed as placeholders, got '%R'
+E   [SQL: -- Fence obsolete application writers before retiring a sealing key.
+E   CREATE TABLE IF NOT EXISTS application_seal_policy (
+E     id integer PRIMARY KEY CHECK (id = 1),
+E     writer_kid varchar(16) NOT NULL CHECK (writer_kid ~ '^[a-z0-9_-]{1,16}$'),
+E     allow_legacy boolean NOT NULL CHECK (NOT allow_legacy OR writer_kid = 'm0')
+E   );
+E   INSERT INTO application_seal_policy VALUES (1, 'm0', true) ON CONFLICT (id) DO NOTHING;
+E   
+E   CREATE FUNCTION mk_app.seal_policy_lock() RETURNS trigger LANGUAGE plpgsql AS $fn$
+E   BEGIN
+E     PERFORM pg_advisory_xact_lock(58721493622);
+E     IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
+E     RETURN NEW;
+E   END
+E   $fn$;
+E   CREATE TRIGGER seal_policy_lock BEFORE INSERT OR UPDATE OR DELETE ON application_seal_policy
+E   FOR EACH STATEMENT EXECUTE FUNCTION mk_app.seal_policy_lock();
+E   
+E   CREATE FUNCTION mk_app.check_seal_write() RETURNS trigger LANGUAGE plpgsql VOLATILE AS $fn$
+E   DECLARE
+E     field_name text;
+E     ciphertext text;
+E     previous text;
+E     policy mk_app.application_seal_policy%ROWTYPE;
+E   BEGIN
+E     FOREACH field_name IN ARRAY TG_ARGV LOOP
+E       ciphertext := to_jsonb(NEW)-&gt;&gt;field_name;
+E       previous := CASE WHEN TG_OP = 'UPDATE' THEN to_jsonb(OLD)-&gt;&gt;field_name ELSE NULL END;
+E       IF ciphertext IS NULL OR ciphertext = '' OR ciphertext IS NOT DISTINCT FROM previous THEN
+E         CONTINUE;
+E       END IF;
+E       IF current_setting('transaction_isolation') &lt;&gt; 'read committed' THEN
+E         RAISE EXCEPTION 'SEAL_WRITE_REQUIRES_READ_COMMITTED' USING ERRCODE = '23514';
+E       END IF;
+E       -- Held through commit. A policy change cannot complete while an old write
+E       -- is in flight; a waiting writer reads the policy after acquiring the lock.
+E       PERFORM pg_advisory_xact_lock_shared(58721493622);
+E       SELECT * INTO STRICT policy FROM mk_app.application_seal_policy WHERE id = 1;
+E       IF ciphertext LIKE 'mk1:%' THEN
+E         IF split_part(ciphertext, ':', 2) = policy.writer_kid
+E            AND ciphertext ~ '^mk1:[a-z0-9_-]{1,16}:[A-Za-z0-9+/]+={0,2}$' THEN
+E           CONTINUE;
+E         END IF;
+E       ELSIF policy.allow_legacy AND ciphertext ~ '^[A-Za-z0-9+/]+={0,2}$' THEN
+E         CONTINUE;
+E       END IF;
+E       RAISE EXCEPTION 'SEAL_WRITER_RETIRED' USING ERRCODE = '23514';
+E     END LOOP;
+E     RETURN NEW;
+E   END
+E   $fn$;
+E   REVOKE ALL ON FUNCTION mk_app.seal_policy_lock(), mk_app.check_seal_write() FROM PUBLIC;
+E   GRANT EXECUTE ON FUNCTION mk_app.check_seal_write() TO mk_app_runtime;
+E   
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON provider_keys
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('ciphertext');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON customer_destinations
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('value_enc');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON import_rows
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('phone_enc', 'email_enc');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON draft_versions
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('text_enc');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON exceptions
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('detail_enc');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON outcomes
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('note_enc');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON auth_factors
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('secret_enc', 'pending_secret_enc');
+E   ]
+E   (Background on this error at: https://sqlalche.me/e/20/f405)</error></testcase><testcase classname="tools.verification.test_app_database" name="test_runtime_rejects_privilege_drift[GRANT UPDATE ON mk_app.audit_logs TO mk_app_login-REVOKE UPDATE ON mk_app.audit_logs FROM mk_app_login]" time="0.677"><error message="failed on setup with &quot;sqlalchemy.exc.ProgrammingError: (psycopg.ProgrammingError) only '%s', '%b', '%t' are allowed as placeholders, got '%R'&#10;[SQL: -- Fence obsolete application writers before retiring a sealing key.&#10;CREATE TABLE IF NOT EXISTS application_seal_policy (&#10;  id integer PRIMARY KEY CHECK (id = 1),&#10;  writer_kid varchar(16) NOT NULL CHECK (writer_kid ~ '^[a-z0-9_-]{1,16}$'),&#10;  allow_legacy boolean NOT NULL CHECK (NOT allow_legacy OR writer_kid = 'm0')&#10;);&#10;INSERT INTO application_seal_policy VALUES (1, 'm0', true) ON CONFLICT (id) DO NOTHING;&#10;&#10;CREATE FUNCTION mk_app.seal_policy_lock() RETURNS trigger LANGUAGE plpgsql AS $fn$&#10;BEGIN&#10;  PERFORM pg_advisory_xact_lock(58721493622);&#10;  IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;&#10;  RETURN NEW;&#10;END&#10;$fn$;&#10;CREATE TRIGGER seal_policy_lock BEFORE INSERT OR UPDATE OR DELETE ON application_seal_policy&#10;FOR EACH STATEMENT EXECUTE FUNCTION mk_app.seal_policy_lock();&#10;&#10;CREATE FUNCTION mk_app.check_seal_write() RETURNS trigger LANGUAGE plpgsql VOLATILE AS $fn$&#10;DECLARE&#10;  field_name text;&#10;  ciphertext text;&#10;  previous text;&#10;  policy mk_app.application_seal_policy%ROWTYPE;&#10;BEGIN&#10;  FOREACH field_name IN ARRAY TG_ARGV LOOP&#10;    ciphertext := to_jsonb(NEW)-&gt;&gt;field_name;&#10;    previous := CASE WHEN TG_OP = 'UPDATE' THEN to_jsonb(OLD)-&gt;&gt;field_name ELSE NULL END;&#10;    IF ciphertext IS NULL OR ciphertext = '' OR ciphertext IS NOT DISTINCT FROM previous THEN&#10;      CONTINUE;&#10;    END IF;&#10;    IF current_setting('transaction_isolation') &lt;&gt; 'read committed' THEN&#10;      RAISE EXCEPTION 'SEAL_WRITE_REQUIRES_READ_COMMITTED' USING ERRCODE = '23514';&#10;    END IF;&#10;    -- Held through commit. A policy change cannot complete while an old write&#10;    -- is in flight; a waiting writer reads the policy after acquiring the lock.&#10;    PERFORM pg_advisory_xact_lock_shared(58721493622);&#10;    SELECT * INTO STRICT policy FROM mk_app.application_seal_policy WHERE id = 1;&#10;    IF ciphertext LIKE 'mk1:%' THEN&#10;      IF split_part(ciphertext, ':', 2) = policy.writer_kid&#10;         AND ciphertext ~ '^mk1:[a-z0-9_-]{1,16}:[A-Za-z0-9+/]+={0,2}$' THEN&#10;        CONTINUE;&#10;      END IF;&#10;    ELSIF policy.allow_legacy AND ciphertext ~ '^[A-Za-z0-9+/]+={0,2}$' THEN&#10;      CONTINUE;&#10;    END IF;&#10;    RAISE EXCEPTION 'SEAL_WRITER_RETIRED' USING ERRCODE = '23514';&#10;  END LOOP;&#10;  RETURN NEW;&#10;END&#10;$fn$;&#10;REVOKE ALL ON FUNCTION mk_app.seal_policy_lock(), mk_app.check_seal_write() FROM PUBLIC;&#10;GRANT EXECUTE ON FUNCTION mk_app.check_seal_write() TO mk_app_runtime;&#10;&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON provider_keys&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('ciphertext');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON customer_destinations&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('value_enc');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON import_rows&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('phone_enc', 'email_enc');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON draft_versions&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('text_enc');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON exceptions&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('detail_enc');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON outcomes&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('note_enc');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON auth_factors&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('secret_enc', 'pending_secret_enc');&#10;]&#10;(Background on this error at: https://sqlalche.me/e/20/f405)&quot;">/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1963: in _exec_single_context
+    self.dialect.do_execute(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/default.py:943: in do_execute
+    cursor.execute(statement, parameters)
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/psycopg/cursor.py:97: in execute
+    raise ex.with_traceback(None)
+E   psycopg.ProgrammingError: only '%s', '%b', '%t' are allowed as placeholders, got '%R'
+
+The above exception was the direct cause of the following exception:
+tools/verification/test_app_database.py:38: in initialized
+    assert migrate(migration) == VERSIONS
+backend/app/migrate.py:78: in migrate
+    conn.exec_driver_sql(path.read_text(encoding="utf-8"))
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1775: in exec_driver_sql
+    ret = self._execute_context(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1842: in _execute_context
+    return self._exec_single_context(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1982: in _exec_single_context
+    self._handle_dbapi_exception(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2351: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1963: in _exec_single_context
+    self.dialect.do_execute(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/default.py:943: in do_execute
+    cursor.execute(statement, parameters)
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/psycopg/cursor.py:97: in execute
+    raise ex.with_traceback(None)
+E   sqlalchemy.exc.ProgrammingError: (psycopg.ProgrammingError) only '%s', '%b', '%t' are allowed as placeholders, got '%R'
+E   [SQL: -- Fence obsolete application writers before retiring a sealing key.
+E   CREATE TABLE IF NOT EXISTS application_seal_policy (
+E     id integer PRIMARY KEY CHECK (id = 1),
+E     writer_kid varchar(16) NOT NULL CHECK (writer_kid ~ '^[a-z0-9_-]{1,16}$'),
+E     allow_legacy boolean NOT NULL CHECK (NOT allow_legacy OR writer_kid = 'm0')
+E   );
+E   INSERT INTO application_seal_policy VALUES (1, 'm0', true) ON CONFLICT (id) DO NOTHING;
+E   
+E   CREATE FUNCTION mk_app.seal_policy_lock() RETURNS trigger LANGUAGE plpgsql AS $fn$
+E   BEGIN
+E     PERFORM pg_advisory_xact_lock(58721493622);
+E     IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
+E     RETURN NEW;
+E   END
+E   $fn$;
+E   CREATE TRIGGER seal_policy_lock BEFORE INSERT OR UPDATE OR DELETE ON application_seal_policy
+E   FOR EACH STATEMENT EXECUTE FUNCTION mk_app.seal_policy_lock();
+E   
+E   CREATE FUNCTION mk_app.check_seal_write() RETURNS trigger LANGUAGE plpgsql VOLATILE AS $fn$
+E   DECLARE
+E     field_name text;
+E     ciphertext text;
+E     previous text;
+E     policy mk_app.application_seal_policy%ROWTYPE;
+E   BEGIN
+E     FOREACH field_name IN ARRAY TG_ARGV LOOP
+E       ciphertext := to_jsonb(NEW)-&gt;&gt;field_name;
+E       previous := CASE WHEN TG_OP = 'UPDATE' THEN to_jsonb(OLD)-&gt;&gt;field_name ELSE NULL END;
+E       IF ciphertext IS NULL OR ciphertext = '' OR ciphertext IS NOT DISTINCT FROM previous THEN
+E         CONTINUE;
+E       END IF;
+E       IF current_setting('transaction_isolation') &lt;&gt; 'read committed' THEN
+E         RAISE EXCEPTION 'SEAL_WRITE_REQUIRES_READ_COMMITTED' USING ERRCODE = '23514';
+E       END IF;
+E       -- Held through commit. A policy change cannot complete while an old write
+E       -- is in flight; a waiting writer reads the policy after acquiring the lock.
+E       PERFORM pg_advisory_xact_lock_shared(58721493622);
+E       SELECT * INTO STRICT policy FROM mk_app.application_seal_policy WHERE id = 1;
+E       IF ciphertext LIKE 'mk1:%' THEN
+E         IF split_part(ciphertext, ':', 2) = policy.writer_kid
+E            AND ciphertext ~ '^mk1:[a-z0-9_-]{1,16}:[A-Za-z0-9+/]+={0,2}$' THEN
+E           CONTINUE;
+E         END IF;
+E       ELSIF policy.allow_legacy AND ciphertext ~ '^[A-Za-z0-9+/]+={0,2}$' THEN
+E         CONTINUE;
+E       END IF;
+E       RAISE EXCEPTION 'SEAL_WRITER_RETIRED' USING ERRCODE = '23514';
+E     END LOOP;
+E     RETURN NEW;
+E   END
+E   $fn$;
+E   REVOKE ALL ON FUNCTION mk_app.seal_policy_lock(), mk_app.check_seal_write() FROM PUBLIC;
+E   GRANT EXECUTE ON FUNCTION mk_app.check_seal_write() TO mk_app_runtime;
+E   
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON provider_keys
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('ciphertext');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON customer_destinations
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('value_enc');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON import_rows
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('phone_enc', 'email_enc');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON draft_versions
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('text_enc');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON exceptions
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('detail_enc');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON outcomes
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('note_enc');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON auth_factors
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('secret_enc', 'pending_secret_enc');
+E   ]
+E   (Background on this error at: https://sqlalche.me/e/20/f405)</error></testcase><testcase classname="tools.verification.test_app_database" name="test_runtime_rejects_privilege_drift[GRANT CREATE ON SCHEMA public TO mk_app_login-REVOKE CREATE ON SCHEMA public FROM mk_app_login]" time="0.675"><error message="failed on setup with &quot;sqlalchemy.exc.ProgrammingError: (psycopg.ProgrammingError) only '%s', '%b', '%t' are allowed as placeholders, got '%R'&#10;[SQL: -- Fence obsolete application writers before retiring a sealing key.&#10;CREATE TABLE IF NOT EXISTS application_seal_policy (&#10;  id integer PRIMARY KEY CHECK (id = 1),&#10;  writer_kid varchar(16) NOT NULL CHECK (writer_kid ~ '^[a-z0-9_-]{1,16}$'),&#10;  allow_legacy boolean NOT NULL CHECK (NOT allow_legacy OR writer_kid = 'm0')&#10;);&#10;INSERT INTO application_seal_policy VALUES (1, 'm0', true) ON CONFLICT (id) DO NOTHING;&#10;&#10;CREATE FUNCTION mk_app.seal_policy_lock() RETURNS trigger LANGUAGE plpgsql AS $fn$&#10;BEGIN&#10;  PERFORM pg_advisory_xact_lock(58721493622);&#10;  IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;&#10;  RETURN NEW;&#10;END&#10;$fn$;&#10;CREATE TRIGGER seal_policy_lock BEFORE INSERT OR UPDATE OR DELETE ON application_seal_policy&#10;FOR EACH STATEMENT EXECUTE FUNCTION mk_app.seal_policy_lock();&#10;&#10;CREATE FUNCTION mk_app.check_seal_write() RETURNS trigger LANGUAGE plpgsql VOLATILE AS $fn$&#10;DECLARE&#10;  field_name text;&#10;  ciphertext text;&#10;  previous text;&#10;  policy mk_app.application_seal_policy%ROWTYPE;&#10;BEGIN&#10;  FOREACH field_name IN ARRAY TG_ARGV LOOP&#10;    ciphertext := to_jsonb(NEW)-&gt;&gt;field_name;&#10;    previous := CASE WHEN TG_OP = 'UPDATE' THEN to_jsonb(OLD)-&gt;&gt;field_name ELSE NULL END;&#10;    IF ciphertext IS NULL OR ciphertext = '' OR ciphertext IS NOT DISTINCT FROM previous THEN&#10;      CONTINUE;&#10;    END IF;&#10;    IF current_setting('transaction_isolation') &lt;&gt; 'read committed' THEN&#10;      RAISE EXCEPTION 'SEAL_WRITE_REQUIRES_READ_COMMITTED' USING ERRCODE = '23514';&#10;    END IF;&#10;    -- Held through commit. A policy change cannot complete while an old write&#10;    -- is in flight; a waiting writer reads the policy after acquiring the lock.&#10;    PERFORM pg_advisory_xact_lock_shared(58721493622);&#10;    SELECT * INTO STRICT policy FROM mk_app.application_seal_policy WHERE id = 1;&#10;    IF ciphertext LIKE 'mk1:%' THEN&#10;      IF split_part(ciphertext, ':', 2) = policy.writer_kid&#10;         AND ciphertext ~ '^mk1:[a-z0-9_-]{1,16}:[A-Za-z0-9+/]+={0,2}$' THEN&#10;        CONTINUE;&#10;      END IF;&#10;    ELSIF policy.allow_legacy AND ciphertext ~ '^[A-Za-z0-9+/]+={0,2}$' THEN&#10;      CONTINUE;&#10;    END IF;&#10;    RAISE EXCEPTION 'SEAL_WRITER_RETIRED' USING ERRCODE = '23514';&#10;  END LOOP;&#10;  RETURN NEW;&#10;END&#10;$fn$;&#10;REVOKE ALL ON FUNCTION mk_app.seal_policy_lock(), mk_app.check_seal_write() FROM PUBLIC;&#10;GRANT EXECUTE ON FUNCTION mk_app.check_seal_write() TO mk_app_runtime;&#10;&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON provider_keys&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('ciphertext');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON customer_destinations&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('value_enc');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON import_rows&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('phone_enc', 'email_enc');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON draft_versions&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('text_enc');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON exceptions&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('detail_enc');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON outcomes&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('note_enc');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON auth_factors&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('secret_enc', 'pending_secret_enc');&#10;]&#10;(Background on this error at: https://sqlalche.me/e/20/f405)&quot;">/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1963: in _exec_single_context
+    self.dialect.do_execute(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/default.py:943: in do_execute
+    cursor.execute(statement, parameters)
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/psycopg/cursor.py:97: in execute
+    raise ex.with_traceback(None)
+E   psycopg.ProgrammingError: only '%s', '%b', '%t' are allowed as placeholders, got '%R'
+
+The above exception was the direct cause of the following exception:
+tools/verification/test_app_database.py:38: in initialized
+    assert migrate(migration) == VERSIONS
+backend/app/migrate.py:78: in migrate
+    conn.exec_driver_sql(path.read_text(encoding="utf-8"))
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1775: in exec_driver_sql
+    ret = self._execute_context(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1842: in _execute_context
+    return self._exec_single_context(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1982: in _exec_single_context
+    self._handle_dbapi_exception(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2351: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1963: in _exec_single_context
+    self.dialect.do_execute(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/default.py:943: in do_execute
+    cursor.execute(statement, parameters)
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/psycopg/cursor.py:97: in execute
+    raise ex.with_traceback(None)
+E   sqlalchemy.exc.ProgrammingError: (psycopg.ProgrammingError) only '%s', '%b', '%t' are allowed as placeholders, got '%R'
+E   [SQL: -- Fence obsolete application writers before retiring a sealing key.
+E   CREATE TABLE IF NOT EXISTS application_seal_policy (
+E     id integer PRIMARY KEY CHECK (id = 1),
+E     writer_kid varchar(16) NOT NULL CHECK (writer_kid ~ '^[a-z0-9_-]{1,16}$'),
+E     allow_legacy boolean NOT NULL CHECK (NOT allow_legacy OR writer_kid = 'm0')
+E   );
+E   INSERT INTO application_seal_policy VALUES (1, 'm0', true) ON CONFLICT (id) DO NOTHING;
+E   
+E   CREATE FUNCTION mk_app.seal_policy_lock() RETURNS trigger LANGUAGE plpgsql AS $fn$
+E   BEGIN
+E     PERFORM pg_advisory_xact_lock(58721493622);
+E     IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
+E     RETURN NEW;
+E   END
+E   $fn$;
+E   CREATE TRIGGER seal_policy_lock BEFORE INSERT OR UPDATE OR DELETE ON application_seal_policy
+E   FOR EACH STATEMENT EXECUTE FUNCTION mk_app.seal_policy_lock();
+E   
+E   CREATE FUNCTION mk_app.check_seal_write() RETURNS trigger LANGUAGE plpgsql VOLATILE AS $fn$
+E   DECLARE
+E     field_name text;
+E     ciphertext text;
+E     previous text;
+E     policy mk_app.application_seal_policy%ROWTYPE;
+E   BEGIN
+E     FOREACH field_name IN ARRAY TG_ARGV LOOP
+E       ciphertext := to_jsonb(NEW)-&gt;&gt;field_name;
+E       previous := CASE WHEN TG_OP = 'UPDATE' THEN to_jsonb(OLD)-&gt;&gt;field_name ELSE NULL END;
+E       IF ciphertext IS NULL OR ciphertext = '' OR ciphertext IS NOT DISTINCT FROM previous THEN
+E         CONTINUE;
+E       END IF;
+E       IF current_setting('transaction_isolation') &lt;&gt; 'read committed' THEN
+E         RAISE EXCEPTION 'SEAL_WRITE_REQUIRES_READ_COMMITTED' USING ERRCODE = '23514';
+E       END IF;
+E       -- Held through commit. A policy change cannot complete while an old write
+E       -- is in flight; a waiting writer reads the policy after acquiring the lock.
+E       PERFORM pg_advisory_xact_lock_shared(58721493622);
+E       SELECT * INTO STRICT policy FROM mk_app.application_seal_policy WHERE id = 1;
+E       IF ciphertext LIKE 'mk1:%' THEN
+E         IF split_part(ciphertext, ':', 2) = policy.writer_kid
+E            AND ciphertext ~ '^mk1:[a-z0-9_-]{1,16}:[A-Za-z0-9+/]+={0,2}$' THEN
+E           CONTINUE;
+E         END IF;
+E       ELSIF policy.allow_legacy AND ciphertext ~ '^[A-Za-z0-9+/]+={0,2}$' THEN
+E         CONTINUE;
+E       END IF;
+E       RAISE EXCEPTION 'SEAL_WRITER_RETIRED' USING ERRCODE = '23514';
+E     END LOOP;
+E     RETURN NEW;
+E   END
+E   $fn$;
+E   REVOKE ALL ON FUNCTION mk_app.seal_policy_lock(), mk_app.check_seal_write() FROM PUBLIC;
+E   GRANT EXECUTE ON FUNCTION mk_app.check_seal_write() TO mk_app_runtime;
+E   
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON provider_keys
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('ciphertext');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON customer_destinations
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('value_enc');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON import_rows
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('phone_enc', 'email_enc');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON draft_versions
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('text_enc');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON exceptions
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('detail_enc');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON outcomes
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('note_enc');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON auth_factors
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('secret_enc', 'pending_secret_enc');
+E   ]
+E   (Background on this error at: https://sqlalche.me/e/20/f405)</error></testcase><testcase classname="tools.verification.test_app_database" name="test_runtime_rejects_privilege_drift[GRANT INSERT ON mk_app.schema_migrations TO mk_app_login-REVOKE INSERT ON mk_app.schema_migrations FROM mk_app_login]" time="0.677"><error message="failed on setup with &quot;sqlalchemy.exc.ProgrammingError: (psycopg.ProgrammingError) only '%s', '%b', '%t' are allowed as placeholders, got '%R'&#10;[SQL: -- Fence obsolete application writers before retiring a sealing key.&#10;CREATE TABLE IF NOT EXISTS application_seal_policy (&#10;  id integer PRIMARY KEY CHECK (id = 1),&#10;  writer_kid varchar(16) NOT NULL CHECK (writer_kid ~ '^[a-z0-9_-]{1,16}$'),&#10;  allow_legacy boolean NOT NULL CHECK (NOT allow_legacy OR writer_kid = 'm0')&#10;);&#10;INSERT INTO application_seal_policy VALUES (1, 'm0', true) ON CONFLICT (id) DO NOTHING;&#10;&#10;CREATE FUNCTION mk_app.seal_policy_lock() RETURNS trigger LANGUAGE plpgsql AS $fn$&#10;BEGIN&#10;  PERFORM pg_advisory_xact_lock(58721493622);&#10;  IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;&#10;  RETURN NEW;&#10;END&#10;$fn$;&#10;CREATE TRIGGER seal_policy_lock BEFORE INSERT OR UPDATE OR DELETE ON application_seal_policy&#10;FOR EACH STATEMENT EXECUTE FUNCTION mk_app.seal_policy_lock();&#10;&#10;CREATE FUNCTION mk_app.check_seal_write() RETURNS trigger LANGUAGE plpgsql VOLATILE AS $fn$&#10;DECLARE&#10;  field_name text;&#10;  ciphertext text;&#10;  previous text;&#10;  policy mk_app.application_seal_policy%ROWTYPE;&#10;BEGIN&#10;  FOREACH field_name IN ARRAY TG_ARGV LOOP&#10;    ciphertext := to_jsonb(NEW)-&gt;&gt;field_name;&#10;    previous := CASE WHEN TG_OP = 'UPDATE' THEN to_jsonb(OLD)-&gt;&gt;field_name ELSE NULL END;&#10;    IF ciphertext IS NULL OR ciphertext = '' OR ciphertext IS NOT DISTINCT FROM previous THEN&#10;      CONTINUE;&#10;    END IF;&#10;    IF current_setting('transaction_isolation') &lt;&gt; 'read committed' THEN&#10;      RAISE EXCEPTION 'SEAL_WRITE_REQUIRES_READ_COMMITTED' USING ERRCODE = '23514';&#10;    END IF;&#10;    -- Held through commit. A policy change cannot complete while an old write&#10;    -- is in flight; a waiting writer reads the policy after acquiring the lock.&#10;    PERFORM pg_advisory_xact_lock_shared(58721493622);&#10;    SELECT * INTO STRICT policy FROM mk_app.application_seal_policy WHERE id = 1;&#10;    IF ciphertext LIKE 'mk1:%' THEN&#10;      IF split_part(ciphertext, ':', 2) = policy.writer_kid&#10;         AND ciphertext ~ '^mk1:[a-z0-9_-]{1,16}:[A-Za-z0-9+/]+={0,2}$' THEN&#10;        CONTINUE;&#10;      END IF;&#10;    ELSIF policy.allow_legacy AND ciphertext ~ '^[A-Za-z0-9+/]+={0,2}$' THEN&#10;      CONTINUE;&#10;    END IF;&#10;    RAISE EXCEPTION 'SEAL_WRITER_RETIRED' USING ERRCODE = '23514';&#10;  END LOOP;&#10;  RETURN NEW;&#10;END&#10;$fn$;&#10;REVOKE ALL ON FUNCTION mk_app.seal_policy_lock(), mk_app.check_seal_write() FROM PUBLIC;&#10;GRANT EXECUTE ON FUNCTION mk_app.check_seal_write() TO mk_app_runtime;&#10;&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON provider_keys&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('ciphertext');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON customer_destinations&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('value_enc');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON import_rows&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('phone_enc', 'email_enc');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON draft_versions&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('text_enc');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON exceptions&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('detail_enc');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON outcomes&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('note_enc');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON auth_factors&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('secret_enc', 'pending_secret_enc');&#10;]&#10;(Background on this error at: https://sqlalche.me/e/20/f405)&quot;">/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1963: in _exec_single_context
+    self.dialect.do_execute(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/default.py:943: in do_execute
+    cursor.execute(statement, parameters)
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/psycopg/cursor.py:97: in execute
+    raise ex.with_traceback(None)
+E   psycopg.ProgrammingError: only '%s', '%b', '%t' are allowed as placeholders, got '%R'
+
+The above exception was the direct cause of the following exception:
+tools/verification/test_app_database.py:38: in initialized
+    assert migrate(migration) == VERSIONS
+backend/app/migrate.py:78: in migrate
+    conn.exec_driver_sql(path.read_text(encoding="utf-8"))
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1775: in exec_driver_sql
+    ret = self._execute_context(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1842: in _execute_context
+    return self._exec_single_context(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1982: in _exec_single_context
+    self._handle_dbapi_exception(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2351: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1963: in _exec_single_context
+    self.dialect.do_execute(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/default.py:943: in do_execute
+    cursor.execute(statement, parameters)
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/psycopg/cursor.py:97: in execute
+    raise ex.with_traceback(None)
+E   sqlalchemy.exc.ProgrammingError: (psycopg.ProgrammingError) only '%s', '%b', '%t' are allowed as placeholders, got '%R'
+E   [SQL: -- Fence obsolete application writers before retiring a sealing key.
+E   CREATE TABLE IF NOT EXISTS application_seal_policy (
+E     id integer PRIMARY KEY CHECK (id = 1),
+E     writer_kid varchar(16) NOT NULL CHECK (writer_kid ~ '^[a-z0-9_-]{1,16}$'),
+E     allow_legacy boolean NOT NULL CHECK (NOT allow_legacy OR writer_kid = 'm0')
+E   );
+E   INSERT INTO application_seal_policy VALUES (1, 'm0', true) ON CONFLICT (id) DO NOTHING;
+E   
+E   CREATE FUNCTION mk_app.seal_policy_lock() RETURNS trigger LANGUAGE plpgsql AS $fn$
+E   BEGIN
+E     PERFORM pg_advisory_xact_lock(58721493622);
+E     IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
+E     RETURN NEW;
+E   END
+E   $fn$;
+E   CREATE TRIGGER seal_policy_lock BEFORE INSERT OR UPDATE OR DELETE ON application_seal_policy
+E   FOR EACH STATEMENT EXECUTE FUNCTION mk_app.seal_policy_lock();
+E   
+E   CREATE FUNCTION mk_app.check_seal_write() RETURNS trigger LANGUAGE plpgsql VOLATILE AS $fn$
+E   DECLARE
+E     field_name text;
+E     ciphertext text;
+E     previous text;
+E     policy mk_app.application_seal_policy%ROWTYPE;
+E   BEGIN
+E     FOREACH field_name IN ARRAY TG_ARGV LOOP
+E       ciphertext := to_jsonb(NEW)-&gt;&gt;field_name;
+E       previous := CASE WHEN TG_OP = 'UPDATE' THEN to_jsonb(OLD)-&gt;&gt;field_name ELSE NULL END;
+E       IF ciphertext IS NULL OR ciphertext = '' OR ciphertext IS NOT DISTINCT FROM previous THEN
+E         CONTINUE;
+E       END IF;
+E       IF current_setting('transaction_isolation') &lt;&gt; 'read committed' THEN
+E         RAISE EXCEPTION 'SEAL_WRITE_REQUIRES_READ_COMMITTED' USING ERRCODE = '23514';
+E       END IF;
+E       -- Held through commit. A policy change cannot complete while an old write
+E       -- is in flight; a waiting writer reads the policy after acquiring the lock.
+E       PERFORM pg_advisory_xact_lock_shared(58721493622);
+E       SELECT * INTO STRICT policy FROM mk_app.application_seal_policy WHERE id = 1;
+E       IF ciphertext LIKE 'mk1:%' THEN
+E         IF split_part(ciphertext, ':', 2) = policy.writer_kid
+E            AND ciphertext ~ '^mk1:[a-z0-9_-]{1,16}:[A-Za-z0-9+/]+={0,2}$' THEN
+E           CONTINUE;
+E         END IF;
+E       ELSIF policy.allow_legacy AND ciphertext ~ '^[A-Za-z0-9+/]+={0,2}$' THEN
+E         CONTINUE;
+E       END IF;
+E       RAISE EXCEPTION 'SEAL_WRITER_RETIRED' USING ERRCODE = '23514';
+E     END LOOP;
+E     RETURN NEW;
+E   END
+E   $fn$;
+E   REVOKE ALL ON FUNCTION mk_app.seal_policy_lock(), mk_app.check_seal_write() FROM PUBLIC;
+E   GRANT EXECUTE ON FUNCTION mk_app.check_seal_write() TO mk_app_runtime;
+E   
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON provider_keys
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('ciphertext');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON customer_destinations
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('value_enc');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON import_rows
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('phone_enc', 'email_enc');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON draft_versions
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('text_enc');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON exceptions
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('detail_enc');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON outcomes
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('note_enc');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON auth_factors
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('secret_enc', 'pending_secret_enc');
+E   ]
+E   (Background on this error at: https://sqlalche.me/e/20/f405)</error></testcase><testcase classname="tools.verification.test_app_database" name="test_runtime_rejects_privilege_drift[GRANT UPDATE(detail) ON mk_app.audit_logs TO mk_app_login-REVOKE UPDATE(detail) ON mk_app.audit_logs FROM mk_app_login]" time="0.668"><error message="failed on setup with &quot;sqlalchemy.exc.ProgrammingError: (psycopg.ProgrammingError) only '%s', '%b', '%t' are allowed as placeholders, got '%R'&#10;[SQL: -- Fence obsolete application writers before retiring a sealing key.&#10;CREATE TABLE IF NOT EXISTS application_seal_policy (&#10;  id integer PRIMARY KEY CHECK (id = 1),&#10;  writer_kid varchar(16) NOT NULL CHECK (writer_kid ~ '^[a-z0-9_-]{1,16}$'),&#10;  allow_legacy boolean NOT NULL CHECK (NOT allow_legacy OR writer_kid = 'm0')&#10;);&#10;INSERT INTO application_seal_policy VALUES (1, 'm0', true) ON CONFLICT (id) DO NOTHING;&#10;&#10;CREATE FUNCTION mk_app.seal_policy_lock() RETURNS trigger LANGUAGE plpgsql AS $fn$&#10;BEGIN&#10;  PERFORM pg_advisory_xact_lock(58721493622);&#10;  IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;&#10;  RETURN NEW;&#10;END&#10;$fn$;&#10;CREATE TRIGGER seal_policy_lock BEFORE INSERT OR UPDATE OR DELETE ON application_seal_policy&#10;FOR EACH STATEMENT EXECUTE FUNCTION mk_app.seal_policy_lock();&#10;&#10;CREATE FUNCTION mk_app.check_seal_write() RETURNS trigger LANGUAGE plpgsql VOLATILE AS $fn$&#10;DECLARE&#10;  field_name text;&#10;  ciphertext text;&#10;  previous text;&#10;  policy mk_app.application_seal_policy%ROWTYPE;&#10;BEGIN&#10;  FOREACH field_name IN ARRAY TG_ARGV LOOP&#10;    ciphertext := to_jsonb(NEW)-&gt;&gt;field_name;&#10;    previous := CASE WHEN TG_OP = 'UPDATE' THEN to_jsonb(OLD)-&gt;&gt;field_name ELSE NULL END;&#10;    IF ciphertext IS NULL OR ciphertext = '' OR ciphertext IS NOT DISTINCT FROM previous THEN&#10;      CONTINUE;&#10;    END IF;&#10;    IF current_setting('transaction_isolation') &lt;&gt; 'read committed' THEN&#10;      RAISE EXCEPTION 'SEAL_WRITE_REQUIRES_READ_COMMITTED' USING ERRCODE = '23514';&#10;    END IF;&#10;    -- Held through commit. A policy change cannot complete while an old write&#10;    -- is in flight; a waiting writer reads the policy after acquiring the lock.&#10;    PERFORM pg_advisory_xact_lock_shared(58721493622);&#10;    SELECT * INTO STRICT policy FROM mk_app.application_seal_policy WHERE id = 1;&#10;    IF ciphertext LIKE 'mk1:%' THEN&#10;      IF split_part(ciphertext, ':', 2) = policy.writer_kid&#10;         AND ciphertext ~ '^mk1:[a-z0-9_-]{1,16}:[A-Za-z0-9+/]+={0,2}$' THEN&#10;        CONTINUE;&#10;      END IF;&#10;    ELSIF policy.allow_legacy AND ciphertext ~ '^[A-Za-z0-9+/]+={0,2}$' THEN&#10;      CONTINUE;&#10;    END IF;&#10;    RAISE EXCEPTION 'SEAL_WRITER_RETIRED' USING ERRCODE = '23514';&#10;  END LOOP;&#10;  RETURN NEW;&#10;END&#10;$fn$;&#10;REVOKE ALL ON FUNCTION mk_app.seal_policy_lock(), mk_app.check_seal_write() FROM PUBLIC;&#10;GRANT EXECUTE ON FUNCTION mk_app.check_seal_write() TO mk_app_runtime;&#10;&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON provider_keys&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('ciphertext');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON customer_destinations&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('value_enc');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON import_rows&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('phone_enc', 'email_enc');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON draft_versions&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('text_enc');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON exceptions&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('detail_enc');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON outcomes&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('note_enc');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON auth_factors&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('secret_enc', 'pending_secret_enc');&#10;]&#10;(Background on this error at: https://sqlalche.me/e/20/f405)&quot;">/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1963: in _exec_single_context
+    self.dialect.do_execute(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/default.py:943: in do_execute
+    cursor.execute(statement, parameters)
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/psycopg/cursor.py:97: in execute
+    raise ex.with_traceback(None)
+E   psycopg.ProgrammingError: only '%s', '%b', '%t' are allowed as placeholders, got '%R'
+
+The above exception was the direct cause of the following exception:
+tools/verification/test_app_database.py:38: in initialized
+    assert migrate(migration) == VERSIONS
+backend/app/migrate.py:78: in migrate
+    conn.exec_driver_sql(path.read_text(encoding="utf-8"))
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1775: in exec_driver_sql
+    ret = self._execute_context(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1842: in _execute_context
+    return self._exec_single_context(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1982: in _exec_single_context
+    self._handle_dbapi_exception(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2351: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1963: in _exec_single_context
+    self.dialect.do_execute(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/default.py:943: in do_execute
+    cursor.execute(statement, parameters)
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/psycopg/cursor.py:97: in execute
+    raise ex.with_traceback(None)
+E   sqlalchemy.exc.ProgrammingError: (psycopg.ProgrammingError) only '%s', '%b', '%t' are allowed as placeholders, got '%R'
+E   [SQL: -- Fence obsolete application writers before retiring a sealing key.
+E   CREATE TABLE IF NOT EXISTS application_seal_policy (
+E     id integer PRIMARY KEY CHECK (id = 1),
+E     writer_kid varchar(16) NOT NULL CHECK (writer_kid ~ '^[a-z0-9_-]{1,16}$'),
+E     allow_legacy boolean NOT NULL CHECK (NOT allow_legacy OR writer_kid = 'm0')
+E   );
+E   INSERT INTO application_seal_policy VALUES (1, 'm0', true) ON CONFLICT (id) DO NOTHING;
+E   
+E   CREATE FUNCTION mk_app.seal_policy_lock() RETURNS trigger LANGUAGE plpgsql AS $fn$
+E   BEGIN
+E     PERFORM pg_advisory_xact_lock(58721493622);
+E     IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
+E     RETURN NEW;
+E   END
+E   $fn$;
+E   CREATE TRIGGER seal_policy_lock BEFORE INSERT OR UPDATE OR DELETE ON application_seal_policy
+E   FOR EACH STATEMENT EXECUTE FUNCTION mk_app.seal_policy_lock();
+E   
+E   CREATE FUNCTION mk_app.check_seal_write() RETURNS trigger LANGUAGE plpgsql VOLATILE AS $fn$
+E   DECLARE
+E     field_name text;
+E     ciphertext text;
+E     previous text;
+E     policy mk_app.application_seal_policy%ROWTYPE;
+E   BEGIN
+E     FOREACH field_name IN ARRAY TG_ARGV LOOP
+E       ciphertext := to_jsonb(NEW)-&gt;&gt;field_name;
+E       previous := CASE WHEN TG_OP = 'UPDATE' THEN to_jsonb(OLD)-&gt;&gt;field_name ELSE NULL END;
+E       IF ciphertext IS NULL OR ciphertext = '' OR ciphertext IS NOT DISTINCT FROM previous THEN
+E         CONTINUE;
+E       END IF;
+E       IF current_setting('transaction_isolation') &lt;&gt; 'read committed' THEN
+E         RAISE EXCEPTION 'SEAL_WRITE_REQUIRES_READ_COMMITTED' USING ERRCODE = '23514';
+E       END IF;
+E       -- Held through commit. A policy change cannot complete while an old write
+E       -- is in flight; a waiting writer reads the policy after acquiring the lock.
+E       PERFORM pg_advisory_xact_lock_shared(58721493622);
+E       SELECT * INTO STRICT policy FROM mk_app.application_seal_policy WHERE id = 1;
+E       IF ciphertext LIKE 'mk1:%' THEN
+E         IF split_part(ciphertext, ':', 2) = policy.writer_kid
+E            AND ciphertext ~ '^mk1:[a-z0-9_-]{1,16}:[A-Za-z0-9+/]+={0,2}$' THEN
+E           CONTINUE;
+E         END IF;
+E       ELSIF policy.allow_legacy AND ciphertext ~ '^[A-Za-z0-9+/]+={0,2}$' THEN
+E         CONTINUE;
+E       END IF;
+E       RAISE EXCEPTION 'SEAL_WRITER_RETIRED' USING ERRCODE = '23514';
+E     END LOOP;
+E     RETURN NEW;
+E   END
+E   $fn$;
+E   REVOKE ALL ON FUNCTION mk_app.seal_policy_lock(), mk_app.check_seal_write() FROM PUBLIC;
+E   GRANT EXECUTE ON FUNCTION mk_app.check_seal_write() TO mk_app_runtime;
+E   
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON provider_keys
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('ciphertext');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON customer_destinations
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('value_enc');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON import_rows
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('phone_enc', 'email_enc');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON draft_versions
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('text_enc');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON exceptions
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('detail_enc');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON outcomes
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('note_enc');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON auth_factors
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('secret_enc', 'pending_secret_enc');
+E   ]
+E   (Background on this error at: https://sqlalche.me/e/20/f405)</error></testcase><testcase classname="tools.verification.test_app_database" name="test_schema_and_applied_migration_tampering_fail_closed" time="0.682"><error message="failed on setup with &quot;sqlalchemy.exc.ProgrammingError: (psycopg.ProgrammingError) only '%s', '%b', '%t' are allowed as placeholders, got '%R'&#10;[SQL: -- Fence obsolete application writers before retiring a sealing key.&#10;CREATE TABLE IF NOT EXISTS application_seal_policy (&#10;  id integer PRIMARY KEY CHECK (id = 1),&#10;  writer_kid varchar(16) NOT NULL CHECK (writer_kid ~ '^[a-z0-9_-]{1,16}$'),&#10;  allow_legacy boolean NOT NULL CHECK (NOT allow_legacy OR writer_kid = 'm0')&#10;);&#10;INSERT INTO application_seal_policy VALUES (1, 'm0', true) ON CONFLICT (id) DO NOTHING;&#10;&#10;CREATE FUNCTION mk_app.seal_policy_lock() RETURNS trigger LANGUAGE plpgsql AS $fn$&#10;BEGIN&#10;  PERFORM pg_advisory_xact_lock(58721493622);&#10;  IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;&#10;  RETURN NEW;&#10;END&#10;$fn$;&#10;CREATE TRIGGER seal_policy_lock BEFORE INSERT OR UPDATE OR DELETE ON application_seal_policy&#10;FOR EACH STATEMENT EXECUTE FUNCTION mk_app.seal_policy_lock();&#10;&#10;CREATE FUNCTION mk_app.check_seal_write() RETURNS trigger LANGUAGE plpgsql VOLATILE AS $fn$&#10;DECLARE&#10;  field_name text;&#10;  ciphertext text;&#10;  previous text;&#10;  policy mk_app.application_seal_policy%ROWTYPE;&#10;BEGIN&#10;  FOREACH field_name IN ARRAY TG_ARGV LOOP&#10;    ciphertext := to_jsonb(NEW)-&gt;&gt;field_name;&#10;    previous := CASE WHEN TG_OP = 'UPDATE' THEN to_jsonb(OLD)-&gt;&gt;field_name ELSE NULL END;&#10;    IF ciphertext IS NULL OR ciphertext = '' OR ciphertext IS NOT DISTINCT FROM previous THEN&#10;      CONTINUE;&#10;    END IF;&#10;    IF current_setting('transaction_isolation') &lt;&gt; 'read committed' THEN&#10;      RAISE EXCEPTION 'SEAL_WRITE_REQUIRES_READ_COMMITTED' USING ERRCODE = '23514';&#10;    END IF;&#10;    -- Held through commit. A policy change cannot complete while an old write&#10;    -- is in flight; a waiting writer reads the policy after acquiring the lock.&#10;    PERFORM pg_advisory_xact_lock_shared(58721493622);&#10;    SELECT * INTO STRICT policy FROM mk_app.application_seal_policy WHERE id = 1;&#10;    IF ciphertext LIKE 'mk1:%' THEN&#10;      IF split_part(ciphertext, ':', 2) = policy.writer_kid&#10;         AND ciphertext ~ '^mk1:[a-z0-9_-]{1,16}:[A-Za-z0-9+/]+={0,2}$' THEN&#10;        CONTINUE;&#10;      END IF;&#10;    ELSIF policy.allow_legacy AND ciphertext ~ '^[A-Za-z0-9+/]+={0,2}$' THEN&#10;      CONTINUE;&#10;    END IF;&#10;    RAISE EXCEPTION 'SEAL_WRITER_RETIRED' USING ERRCODE = '23514';&#10;  END LOOP;&#10;  RETURN NEW;&#10;END&#10;$fn$;&#10;REVOKE ALL ON FUNCTION mk_app.seal_policy_lock(), mk_app.check_seal_write() FROM PUBLIC;&#10;GRANT EXECUTE ON FUNCTION mk_app.check_seal_write() TO mk_app_runtime;&#10;&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON provider_keys&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('ciphertext');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON customer_destinations&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('value_enc');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON import_rows&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('phone_enc', 'email_enc');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON draft_versions&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('text_enc');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON exceptions&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('detail_enc');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON outcomes&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('note_enc');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON auth_factors&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('secret_enc', 'pending_secret_enc');&#10;]&#10;(Background on this error at: https://sqlalche.me/e/20/f405)&quot;">/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1963: in _exec_single_context
+    self.dialect.do_execute(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/default.py:943: in do_execute
+    cursor.execute(statement, parameters)
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/psycopg/cursor.py:97: in execute
+    raise ex.with_traceback(None)
+E   psycopg.ProgrammingError: only '%s', '%b', '%t' are allowed as placeholders, got '%R'
+
+The above exception was the direct cause of the following exception:
+tools/verification/test_app_database.py:38: in initialized
+    assert migrate(migration) == VERSIONS
+backend/app/migrate.py:78: in migrate
+    conn.exec_driver_sql(path.read_text(encoding="utf-8"))
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1775: in exec_driver_sql
+    ret = self._execute_context(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1842: in _execute_context
+    return self._exec_single_context(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1982: in _exec_single_context
+    self._handle_dbapi_exception(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2351: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1963: in _exec_single_context
+    self.dialect.do_execute(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/default.py:943: in do_execute
+    cursor.execute(statement, parameters)
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/psycopg/cursor.py:97: in execute
+    raise ex.with_traceback(None)
+E   sqlalchemy.exc.ProgrammingError: (psycopg.ProgrammingError) only '%s', '%b', '%t' are allowed as placeholders, got '%R'
+E   [SQL: -- Fence obsolete application writers before retiring a sealing key.
+E   CREATE TABLE IF NOT EXISTS application_seal_policy (
+E     id integer PRIMARY KEY CHECK (id = 1),
+E     writer_kid varchar(16) NOT NULL CHECK (writer_kid ~ '^[a-z0-9_-]{1,16}$'),
+E     allow_legacy boolean NOT NULL CHECK (NOT allow_legacy OR writer_kid = 'm0')
+E   );
+E   INSERT INTO application_seal_policy VALUES (1, 'm0', true) ON CONFLICT (id) DO NOTHING;
+E   
+E   CREATE FUNCTION mk_app.seal_policy_lock() RETURNS trigger LANGUAGE plpgsql AS $fn$
+E   BEGIN
+E     PERFORM pg_advisory_xact_lock(58721493622);
+E     IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
+E     RETURN NEW;
+E   END
+E   $fn$;
+E   CREATE TRIGGER seal_policy_lock BEFORE INSERT OR UPDATE OR DELETE ON application_seal_policy
+E   FOR EACH STATEMENT EXECUTE FUNCTION mk_app.seal_policy_lock();
+E   
+E   CREATE FUNCTION mk_app.check_seal_write() RETURNS trigger LANGUAGE plpgsql VOLATILE AS $fn$
+E   DECLARE
+E     field_name text;
+E     ciphertext text;
+E     previous text;
+E     policy mk_app.application_seal_policy%ROWTYPE;
+E   BEGIN
+E     FOREACH field_name IN ARRAY TG_ARGV LOOP
+E       ciphertext := to_jsonb(NEW)-&gt;&gt;field_name;
+E       previous := CASE WHEN TG_OP = 'UPDATE' THEN to_jsonb(OLD)-&gt;&gt;field_name ELSE NULL END;
+E       IF ciphertext IS NULL OR ciphertext = '' OR ciphertext IS NOT DISTINCT FROM previous THEN
+E         CONTINUE;
+E       END IF;
+E       IF current_setting('transaction_isolation') &lt;&gt; 'read committed' THEN
+E         RAISE EXCEPTION 'SEAL_WRITE_REQUIRES_READ_COMMITTED' USING ERRCODE = '23514';
+E       END IF;
+E       -- Held through commit. A policy change cannot complete while an old write
+E       -- is in flight; a waiting writer reads the policy after acquiring the lock.
+E       PERFORM pg_advisory_xact_lock_shared(58721493622);
+E       SELECT * INTO STRICT policy FROM mk_app.application_seal_policy WHERE id = 1;
+E       IF ciphertext LIKE 'mk1:%' THEN
+E         IF split_part(ciphertext, ':', 2) = policy.writer_kid
+E            AND ciphertext ~ '^mk1:[a-z0-9_-]{1,16}:[A-Za-z0-9+/]+={0,2}$' THEN
+E           CONTINUE;
+E         END IF;
+E       ELSIF policy.allow_legacy AND ciphertext ~ '^[A-Za-z0-9+/]+={0,2}$' THEN
+E         CONTINUE;
+E       END IF;
+E       RAISE EXCEPTION 'SEAL_WRITER_RETIRED' USING ERRCODE = '23514';
+E     END LOOP;
+E     RETURN NEW;
+E   END
+E   $fn$;
+E   REVOKE ALL ON FUNCTION mk_app.seal_policy_lock(), mk_app.check_seal_write() FROM PUBLIC;
+E   GRANT EXECUTE ON FUNCTION mk_app.check_seal_write() TO mk_app_runtime;
+E   
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON provider_keys
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('ciphertext');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON customer_destinations
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('value_enc');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON import_rows
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('phone_enc', 'email_enc');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON draft_versions
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('text_enc');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON exceptions
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('detail_enc');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON outcomes
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('note_enc');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON auth_factors
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('secret_enc', 'pending_secret_enc');
+E   ]
+E   (Background on this error at: https://sqlalche.me/e/20/f405)</error></testcase><testcase classname="tools.verification.test_app_database" name="test_missing_schema_cannot_be_created_by_runtime" time="0.115" /><testcase classname="tools.verification.test_app_database" name="test_schema_drift_rolls_back_migration_ledger" time="0.712"><error message="failed on setup with &quot;sqlalchemy.exc.ProgrammingError: (psycopg.ProgrammingError) only '%s', '%b', '%t' are allowed as placeholders, got '%R'&#10;[SQL: -- Fence obsolete application writers before retiring a sealing key.&#10;CREATE TABLE IF NOT EXISTS application_seal_policy (&#10;  id integer PRIMARY KEY CHECK (id = 1),&#10;  writer_kid varchar(16) NOT NULL CHECK (writer_kid ~ '^[a-z0-9_-]{1,16}$'),&#10;  allow_legacy boolean NOT NULL CHECK (NOT allow_legacy OR writer_kid = 'm0')&#10;);&#10;INSERT INTO application_seal_policy VALUES (1, 'm0', true) ON CONFLICT (id) DO NOTHING;&#10;&#10;CREATE FUNCTION mk_app.seal_policy_lock() RETURNS trigger LANGUAGE plpgsql AS $fn$&#10;BEGIN&#10;  PERFORM pg_advisory_xact_lock(58721493622);&#10;  IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;&#10;  RETURN NEW;&#10;END&#10;$fn$;&#10;CREATE TRIGGER seal_policy_lock BEFORE INSERT OR UPDATE OR DELETE ON application_seal_policy&#10;FOR EACH STATEMENT EXECUTE FUNCTION mk_app.seal_policy_lock();&#10;&#10;CREATE FUNCTION mk_app.check_seal_write() RETURNS trigger LANGUAGE plpgsql VOLATILE AS $fn$&#10;DECLARE&#10;  field_name text;&#10;  ciphertext text;&#10;  previous text;&#10;  policy mk_app.application_seal_policy%ROWTYPE;&#10;BEGIN&#10;  FOREACH field_name IN ARRAY TG_ARGV LOOP&#10;    ciphertext := to_jsonb(NEW)-&gt;&gt;field_name;&#10;    previous := CASE WHEN TG_OP = 'UPDATE' THEN to_jsonb(OLD)-&gt;&gt;field_name ELSE NULL END;&#10;    IF ciphertext IS NULL OR ciphertext = '' OR ciphertext IS NOT DISTINCT FROM previous THEN&#10;      CONTINUE;&#10;    END IF;&#10;    IF current_setting('transaction_isolation') &lt;&gt; 'read committed' THEN&#10;      RAISE EXCEPTION 'SEAL_WRITE_REQUIRES_READ_COMMITTED' USING ERRCODE = '23514';&#10;    END IF;&#10;    -- Held through commit. A policy change cannot complete while an old write&#10;    -- is in flight; a waiting writer reads the policy after acquiring the lock.&#10;    PERFORM pg_advisory_xact_lock_shared(58721493622);&#10;    SELECT * INTO STRICT policy FROM mk_app.application_seal_policy WHERE id = 1;&#10;    IF ciphertext LIKE 'mk1:%' THEN&#10;      IF split_part(ciphertext, ':', 2) = policy.writer_kid&#10;         AND ciphertext ~ '^mk1:[a-z0-9_-]{1,16}:[A-Za-z0-9+/]+={0,2}$' THEN&#10;        CONTINUE;&#10;      END IF;&#10;    ELSIF policy.allow_legacy AND ciphertext ~ '^[A-Za-z0-9+/]+={0,2}$' THEN&#10;      CONTINUE;&#10;    END IF;&#10;    RAISE EXCEPTION 'SEAL_WRITER_RETIRED' USING ERRCODE = '23514';&#10;  END LOOP;&#10;  RETURN NEW;&#10;END&#10;$fn$;&#10;REVOKE ALL ON FUNCTION mk_app.seal_policy_lock(), mk_app.check_seal_write() FROM PUBLIC;&#10;GRANT EXECUTE ON FUNCTION mk_app.check_seal_write() TO mk_app_runtime;&#10;&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON provider_keys&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('ciphertext');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON customer_destinations&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('value_enc');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON import_rows&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('phone_enc', 'email_enc');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON draft_versions&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('text_enc');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON exceptions&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('detail_enc');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON outcomes&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('note_enc');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON auth_factors&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('secret_enc', 'pending_secret_enc');&#10;]&#10;(Background on this error at: https://sqlalche.me/e/20/f405)&quot;">/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1963: in _exec_single_context
+    self.dialect.do_execute(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/default.py:943: in do_execute
+    cursor.execute(statement, parameters)
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/psycopg/cursor.py:97: in execute
+    raise ex.with_traceback(None)
+E   psycopg.ProgrammingError: only '%s', '%b', '%t' are allowed as placeholders, got '%R'
+
+The above exception was the direct cause of the following exception:
+tools/verification/test_app_database.py:38: in initialized
+    assert migrate(migration) == VERSIONS
+backend/app/migrate.py:78: in migrate
+    conn.exec_driver_sql(path.read_text(encoding="utf-8"))
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1775: in exec_driver_sql
+    ret = self._execute_context(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1842: in _execute_context
+    return self._exec_single_context(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1982: in _exec_single_context
+    self._handle_dbapi_exception(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2351: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1963: in _exec_single_context
+    self.dialect.do_execute(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/default.py:943: in do_execute
+    cursor.execute(statement, parameters)
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/psycopg/cursor.py:97: in execute
+    raise ex.with_traceback(None)
+E   sqlalchemy.exc.ProgrammingError: (psycopg.ProgrammingError) only '%s', '%b', '%t' are allowed as placeholders, got '%R'
+E   [SQL: -- Fence obsolete application writers before retiring a sealing key.
+E   CREATE TABLE IF NOT EXISTS application_seal_policy (
+E     id integer PRIMARY KEY CHECK (id = 1),
+E     writer_kid varchar(16) NOT NULL CHECK (writer_kid ~ '^[a-z0-9_-]{1,16}$'),
+E     allow_legacy boolean NOT NULL CHECK (NOT allow_legacy OR writer_kid = 'm0')
+E   );
+E   INSERT INTO application_seal_policy VALUES (1, 'm0', true) ON CONFLICT (id) DO NOTHING;
+E   
+E   CREATE FUNCTION mk_app.seal_policy_lock() RETURNS trigger LANGUAGE plpgsql AS $fn$
+E   BEGIN
+E     PERFORM pg_advisory_xact_lock(58721493622);
+E     IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
+E     RETURN NEW;
+E   END
+E   $fn$;
+E   CREATE TRIGGER seal_policy_lock BEFORE INSERT OR UPDATE OR DELETE ON application_seal_policy
+E   FOR EACH STATEMENT EXECUTE FUNCTION mk_app.seal_policy_lock();
+E   
+E   CREATE FUNCTION mk_app.check_seal_write() RETURNS trigger LANGUAGE plpgsql VOLATILE AS $fn$
+E   DECLARE
+E     field_name text;
+E     ciphertext text;
+E     previous text;
+E     policy mk_app.application_seal_policy%ROWTYPE;
+E   BEGIN
+E     FOREACH field_name IN ARRAY TG_ARGV LOOP
+E       ciphertext := to_jsonb(NEW)-&gt;&gt;field_name;
+E       previous := CASE WHEN TG_OP = 'UPDATE' THEN to_jsonb(OLD)-&gt;&gt;field_name ELSE NULL END;
+E       IF ciphertext IS NULL OR ciphertext = '' OR ciphertext IS NOT DISTINCT FROM previous THEN
+E         CONTINUE;
+E       END IF;
+E       IF current_setting('transaction_isolation') &lt;&gt; 'read committed' THEN
+E         RAISE EXCEPTION 'SEAL_WRITE_REQUIRES_READ_COMMITTED' USING ERRCODE = '23514';
+E       END IF;
+E       -- Held through commit. A policy change cannot complete while an old write
+E       -- is in flight; a waiting writer reads the policy after acquiring the lock.
+E       PERFORM pg_advisory_xact_lock_shared(58721493622);
+E       SELECT * INTO STRICT policy FROM mk_app.application_seal_policy WHERE id = 1;
+E       IF ciphertext LIKE 'mk1:%' THEN
+E         IF split_part(ciphertext, ':', 2) = policy.writer_kid
+E            AND ciphertext ~ '^mk1:[a-z0-9_-]{1,16}:[A-Za-z0-9+/]+={0,2}$' THEN
+E           CONTINUE;
+E         END IF;
+E       ELSIF policy.allow_legacy AND ciphertext ~ '^[A-Za-z0-9+/]+={0,2}$' THEN
+E         CONTINUE;
+E       END IF;
+E       RAISE EXCEPTION 'SEAL_WRITER_RETIRED' USING ERRCODE = '23514';
+E     END LOOP;
+E     RETURN NEW;
+E   END
+E   $fn$;
+E   REVOKE ALL ON FUNCTION mk_app.seal_policy_lock(), mk_app.check_seal_write() FROM PUBLIC;
+E   GRANT EXECUTE ON FUNCTION mk_app.check_seal_write() TO mk_app_runtime;
+E   
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON provider_keys
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('ciphertext');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON customer_destinations
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('value_enc');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON import_rows
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('phone_enc', 'email_enc');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON draft_versions
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('text_enc');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON exceptions
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('detail_enc');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON outcomes
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('note_enc');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON auth_factors
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('secret_enc', 'pending_secret_enc');
+E   ]
+E   (Background on this error at: https://sqlalche.me/e/20/f405)</error></testcase><testcase classname="tools.verification.test_app_database" name="test_simultaneous_first_migrations_serialize" time="1.300"><failure message="sqlalchemy.exc.ProgrammingError: (psycopg.ProgrammingError) only '%s', '%b', '%t' are allowed as placeholders, got '%R'&#10;[SQL: -- Fence obsolete application writers before retiring a sealing key.&#10;CREATE TABLE IF NOT EXISTS application_seal_policy (&#10;  id integer PRIMARY KEY CHECK (id = 1),&#10;  writer_kid varchar(16) NOT NULL CHECK (writer_kid ~ '^[a-z0-9_-]{1,16}$'),&#10;  allow_legacy boolean NOT NULL CHECK (NOT allow_legacy OR writer_kid = 'm0')&#10;);&#10;INSERT INTO application_seal_policy VALUES (1, 'm0', true) ON CONFLICT (id) DO NOTHING;&#10;&#10;CREATE FUNCTION mk_app.seal_policy_lock() RETURNS trigger LANGUAGE plpgsql AS $fn$&#10;BEGIN&#10;  PERFORM pg_advisory_xact_lock(58721493622);&#10;  IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;&#10;  RETURN NEW;&#10;END&#10;$fn$;&#10;CREATE TRIGGER seal_policy_lock BEFORE INSERT OR UPDATE OR DELETE ON application_seal_policy&#10;FOR EACH STATEMENT EXECUTE FUNCTION mk_app.seal_policy_lock();&#10;&#10;CREATE FUNCTION mk_app.check_seal_write() RETURNS trigger LANGUAGE plpgsql VOLATILE AS $fn$&#10;DECLARE&#10;  field_name text;&#10;  ciphertext text;&#10;  previous text;&#10;  policy mk_app.application_seal_policy%ROWTYPE;&#10;BEGIN&#10;  FOREACH field_name IN ARRAY TG_ARGV LOOP&#10;    ciphertext := to_jsonb(NEW)-&gt;&gt;field_name;&#10;    previous := CASE WHEN TG_OP = 'UPDATE' THEN to_jsonb(OLD)-&gt;&gt;field_name ELSE NULL END;&#10;    IF ciphertext IS NULL OR ciphertext = '' OR ciphertext IS NOT DISTINCT FROM previous THEN&#10;      CONTINUE;&#10;    END IF;&#10;    IF current_setting('transaction_isolation') &lt;&gt; 'read committed' THEN&#10;      RAISE EXCEPTION 'SEAL_WRITE_REQUIRES_READ_COMMITTED' USING ERRCODE = '23514';&#10;    END IF;&#10;    -- Held through commit. A policy change cannot complete while an old write&#10;    -- is in flight; a waiting writer reads the policy after acquiring the lock.&#10;    PERFORM pg_advisory_xact_lock_shared(58721493622);&#10;    SELECT * INTO STRICT policy FROM mk_app.application_seal_policy WHERE id = 1;&#10;    IF ciphertext LIKE 'mk1:%' THEN&#10;      IF split_part(ciphertext, ':', 2) = policy.writer_kid&#10;         AND ciphertext ~ '^mk1:[a-z0-9_-]{1,16}:[A-Za-z0-9+/]+={0,2}$' THEN&#10;        CONTINUE;&#10;      END IF;&#10;    ELSIF policy.allow_legacy AND ciphertext ~ '^[A-Za-z0-9+/]+={0,2}$' THEN&#10;      CONTINUE;&#10;    END IF;&#10;    RAISE EXCEPTION 'SEAL_WRITER_RETIRED' USING ERRCODE = '23514';&#10;  END LOOP;&#10;  RETURN NEW;&#10;END&#10;$fn$;&#10;REVOKE ALL ON FUNCTION mk_app.seal_policy_lock(), mk_app.check_seal_write() FROM PUBLIC;&#10;GRANT EXECUTE ON FUNCTION mk_app.check_seal_write() TO mk_app_runtime;&#10;&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON provider_keys&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('ciphertext');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON customer_destinations&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('value_enc');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON import_rows&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('phone_enc', 'email_enc');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON draft_versions&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('text_enc');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON exceptions&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('detail_enc');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON outcomes&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('note_enc');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON auth_factors&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('secret_enc', 'pending_secret_enc');&#10;]&#10;(Background on this error at: https://sqlalche.me/e/20/f405)">/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1963: in _exec_single_context
+    self.dialect.do_execute(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/default.py:943: in do_execute
+    cursor.execute(statement, parameters)
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/psycopg/cursor.py:97: in execute
+    raise ex.with_traceback(None)
+E   psycopg.ProgrammingError: only '%s', '%b', '%t' are allowed as placeholders, got '%R'
+
+The above exception was the direct cause of the following exception:
+tools/verification/test_app_database.py:154: in test_simultaneous_first_migrations_serialize
+    results = list(pool.map(migrate, [migration, migration]))
+/usr/lib/python3.12/concurrent/futures/_base.py:619: in result_iterator
+    yield _result_or_cancel(fs.pop())
+/usr/lib/python3.12/concurrent/futures/_base.py:317: in _result_or_cancel
+    return fut.result(timeout)
+/usr/lib/python3.12/concurrent/futures/_base.py:456: in result
+    return self.__get_result()
+/usr/lib/python3.12/concurrent/futures/_base.py:401: in __get_result
+    raise self._exception
+/usr/lib/python3.12/concurrent/futures/thread.py:58: in run
+    result = self.fn(*self.args, **self.kwargs)
+backend/app/migrate.py:78: in migrate
+    conn.exec_driver_sql(path.read_text(encoding="utf-8"))
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1775: in exec_driver_sql
+    ret = self._execute_context(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1842: in _execute_context
+    return self._exec_single_context(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1982: in _exec_single_context
+    self._handle_dbapi_exception(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2351: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1963: in _exec_single_context
+    self.dialect.do_execute(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/default.py:943: in do_execute
+    cursor.execute(statement, parameters)
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/psycopg/cursor.py:97: in execute
+    raise ex.with_traceback(None)
+E   sqlalchemy.exc.ProgrammingError: (psycopg.ProgrammingError) only '%s', '%b', '%t' are allowed as placeholders, got '%R'
+E   [SQL: -- Fence obsolete application writers before retiring a sealing key.
+E   CREATE TABLE IF NOT EXISTS application_seal_policy (
+E     id integer PRIMARY KEY CHECK (id = 1),
+E     writer_kid varchar(16) NOT NULL CHECK (writer_kid ~ '^[a-z0-9_-]{1,16}$'),
+E     allow_legacy boolean NOT NULL CHECK (NOT allow_legacy OR writer_kid = 'm0')
+E   );
+E   INSERT INTO application_seal_policy VALUES (1, 'm0', true) ON CONFLICT (id) DO NOTHING;
+E   
+E   CREATE FUNCTION mk_app.seal_policy_lock() RETURNS trigger LANGUAGE plpgsql AS $fn$
+E   BEGIN
+E     PERFORM pg_advisory_xact_lock(58721493622);
+E     IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
+E     RETURN NEW;
+E   END
+E   $fn$;
+E   CREATE TRIGGER seal_policy_lock BEFORE INSERT OR UPDATE OR DELETE ON application_seal_policy
+E   FOR EACH STATEMENT EXECUTE FUNCTION mk_app.seal_policy_lock();
+E   
+E   CREATE FUNCTION mk_app.check_seal_write() RETURNS trigger LANGUAGE plpgsql VOLATILE AS $fn$
+E   DECLARE
+E     field_name text;
+E     ciphertext text;
+E     previous text;
+E     policy mk_app.application_seal_policy%ROWTYPE;
+E   BEGIN
+E     FOREACH field_name IN ARRAY TG_ARGV LOOP
+E       ciphertext := to_jsonb(NEW)-&gt;&gt;field_name;
+E       previous := CASE WHEN TG_OP = 'UPDATE' THEN to_jsonb(OLD)-&gt;&gt;field_name ELSE NULL END;
+E       IF ciphertext IS NULL OR ciphertext = '' OR ciphertext IS NOT DISTINCT FROM previous THEN
+E         CONTINUE;
+E       END IF;
+E       IF current_setting('transaction_isolation') &lt;&gt; 'read committed' THEN
+E         RAISE EXCEPTION 'SEAL_WRITE_REQUIRES_READ_COMMITTED' USING ERRCODE = '23514';
+E       END IF;
+E       -- Held through commit. A policy change cannot complete while an old write
+E       -- is in flight; a waiting writer reads the policy after acquiring the lock.
+E       PERFORM pg_advisory_xact_lock_shared(58721493622);
+E       SELECT * INTO STRICT policy FROM mk_app.application_seal_policy WHERE id = 1;
+E       IF ciphertext LIKE 'mk1:%' THEN
+E         IF split_part(ciphertext, ':', 2) = policy.writer_kid
+E            AND ciphertext ~ '^mk1:[a-z0-9_-]{1,16}:[A-Za-z0-9+/]+={0,2}$' THEN
+E           CONTINUE;
+E         END IF;
+E       ELSIF policy.allow_legacy AND ciphertext ~ '^[A-Za-z0-9+/]+={0,2}$' THEN
+E         CONTINUE;
+E       END IF;
+E       RAISE EXCEPTION 'SEAL_WRITER_RETIRED' USING ERRCODE = '23514';
+E     END LOOP;
+E     RETURN NEW;
+E   END
+E   $fn$;
+E   REVOKE ALL ON FUNCTION mk_app.seal_policy_lock(), mk_app.check_seal_write() FROM PUBLIC;
+E   GRANT EXECUTE ON FUNCTION mk_app.check_seal_write() TO mk_app_runtime;
+E   
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON provider_keys
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('ciphertext');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON customer_destinations
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('value_enc');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON import_rows
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('phone_enc', 'email_enc');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON draft_versions
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('text_enc');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON exceptions
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('detail_enc');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON outcomes
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('note_enc');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON auth_factors
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('secret_enc', 'pending_secret_enc');
+E   ]
+E   (Background on this error at: https://sqlalche.me/e/20/f405)</failure></testcase><testcase classname="tools.verification.test_app_database" name="test_public_data_adoption_is_explicit_and_preserves_rows" time="0.899"><failure message="sqlalchemy.exc.ProgrammingError: (psycopg.ProgrammingError) only '%s', '%b', '%t' are allowed as placeholders, got '%R'&#10;[SQL: -- Fence obsolete application writers before retiring a sealing key.&#10;CREATE TABLE IF NOT EXISTS application_seal_policy (&#10;  id integer PRIMARY KEY CHECK (id = 1),&#10;  writer_kid varchar(16) NOT NULL CHECK (writer_kid ~ '^[a-z0-9_-]{1,16}$'),&#10;  allow_legacy boolean NOT NULL CHECK (NOT allow_legacy OR writer_kid = 'm0')&#10;);&#10;INSERT INTO application_seal_policy VALUES (1, 'm0', true) ON CONFLICT (id) DO NOTHING;&#10;&#10;CREATE FUNCTION mk_app.seal_policy_lock() RETURNS trigger LANGUAGE plpgsql AS $fn$&#10;BEGIN&#10;  PERFORM pg_advisory_xact_lock(58721493622);&#10;  IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;&#10;  RETURN NEW;&#10;END&#10;$fn$;&#10;CREATE TRIGGER seal_policy_lock BEFORE INSERT OR UPDATE OR DELETE ON application_seal_policy&#10;FOR EACH STATEMENT EXECUTE FUNCTION mk_app.seal_policy_lock();&#10;&#10;CREATE FUNCTION mk_app.check_seal_write() RETURNS trigger LANGUAGE plpgsql VOLATILE AS $fn$&#10;DECLARE&#10;  field_name text;&#10;  ciphertext text;&#10;  previous text;&#10;  policy mk_app.application_seal_policy%ROWTYPE;&#10;BEGIN&#10;  FOREACH field_name IN ARRAY TG_ARGV LOOP&#10;    ciphertext := to_jsonb(NEW)-&gt;&gt;field_name;&#10;    previous := CASE WHEN TG_OP = 'UPDATE' THEN to_jsonb(OLD)-&gt;&gt;field_name ELSE NULL END;&#10;    IF ciphertext IS NULL OR ciphertext = '' OR ciphertext IS NOT DISTINCT FROM previous THEN&#10;      CONTINUE;&#10;    END IF;&#10;    IF current_setting('transaction_isolation') &lt;&gt; 'read committed' THEN&#10;      RAISE EXCEPTION 'SEAL_WRITE_REQUIRES_READ_COMMITTED' USING ERRCODE = '23514';&#10;    END IF;&#10;    -- Held through commit. A policy change cannot complete while an old write&#10;    -- is in flight; a waiting writer reads the policy after acquiring the lock.&#10;    PERFORM pg_advisory_xact_lock_shared(58721493622);&#10;    SELECT * INTO STRICT policy FROM mk_app.application_seal_policy WHERE id = 1;&#10;    IF ciphertext LIKE 'mk1:%' THEN&#10;      IF split_part(ciphertext, ':', 2) = policy.writer_kid&#10;         AND ciphertext ~ '^mk1:[a-z0-9_-]{1,16}:[A-Za-z0-9+/]+={0,2}$' THEN&#10;        CONTINUE;&#10;      END IF;&#10;    ELSIF policy.allow_legacy AND ciphertext ~ '^[A-Za-z0-9+/]+={0,2}$' THEN&#10;      CONTINUE;&#10;    END IF;&#10;    RAISE EXCEPTION 'SEAL_WRITER_RETIRED' USING ERRCODE = '23514';&#10;  END LOOP;&#10;  RETURN NEW;&#10;END&#10;$fn$;&#10;REVOKE ALL ON FUNCTION mk_app.seal_policy_lock(), mk_app.check_seal_write() FROM PUBLIC;&#10;GRANT EXECUTE ON FUNCTION mk_app.check_seal_write() TO mk_app_runtime;&#10;&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON provider_keys&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('ciphertext');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON customer_destinations&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('value_enc');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON import_rows&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('phone_enc', 'email_enc');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON draft_versions&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('text_enc');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON exceptions&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('detail_enc');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON outcomes&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('note_enc');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON auth_factors&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('secret_enc', 'pending_secret_enc');&#10;]&#10;(Background on this error at: https://sqlalche.me/e/20/f405)">/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1963: in _exec_single_context
+    self.dialect.do_execute(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/default.py:943: in do_execute
+    cursor.execute(statement, parameters)
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/psycopg/cursor.py:97: in execute
+    raise ex.with_traceback(None)
+E   psycopg.ProgrammingError: only '%s', '%b', '%t' are allowed as placeholders, got '%R'
+
+The above exception was the direct cause of the following exception:
+tools/verification/test_app_database.py:176: in test_public_data_adoption_is_explicit_and_preserves_rows
+    migrate(database.set(username="mk_app_migrator", password=MIGRATION_PASSWORD))
+backend/app/migrate.py:78: in migrate
+    conn.exec_driver_sql(path.read_text(encoding="utf-8"))
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1775: in exec_driver_sql
+    ret = self._execute_context(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1842: in _execute_context
+    return self._exec_single_context(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1982: in _exec_single_context
+    self._handle_dbapi_exception(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2351: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1963: in _exec_single_context
+    self.dialect.do_execute(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/default.py:943: in do_execute
+    cursor.execute(statement, parameters)
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/psycopg/cursor.py:97: in execute
+    raise ex.with_traceback(None)
+E   sqlalchemy.exc.ProgrammingError: (psycopg.ProgrammingError) only '%s', '%b', '%t' are allowed as placeholders, got '%R'
+E   [SQL: -- Fence obsolete application writers before retiring a sealing key.
+E   CREATE TABLE IF NOT EXISTS application_seal_policy (
+E     id integer PRIMARY KEY CHECK (id = 1),
+E     writer_kid varchar(16) NOT NULL CHECK (writer_kid ~ '^[a-z0-9_-]{1,16}$'),
+E     allow_legacy boolean NOT NULL CHECK (NOT allow_legacy OR writer_kid = 'm0')
+E   );
+E   INSERT INTO application_seal_policy VALUES (1, 'm0', true) ON CONFLICT (id) DO NOTHING;
+E   
+E   CREATE FUNCTION mk_app.seal_policy_lock() RETURNS trigger LANGUAGE plpgsql AS $fn$
+E   BEGIN
+E     PERFORM pg_advisory_xact_lock(58721493622);
+E     IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
+E     RETURN NEW;
+E   END
+E   $fn$;
+E   CREATE TRIGGER seal_policy_lock BEFORE INSERT OR UPDATE OR DELETE ON application_seal_policy
+E   FOR EACH STATEMENT EXECUTE FUNCTION mk_app.seal_policy_lock();
+E   
+E   CREATE FUNCTION mk_app.check_seal_write() RETURNS trigger LANGUAGE plpgsql VOLATILE AS $fn$
+E   DECLARE
+E     field_name text;
+E     ciphertext text;
+E     previous text;
+E     policy mk_app.application_seal_policy%ROWTYPE;
+E   BEGIN
+E     FOREACH field_name IN ARRAY TG_ARGV LOOP
+E       ciphertext := to_jsonb(NEW)-&gt;&gt;field_name;
+E       previous := CASE WHEN TG_OP = 'UPDATE' THEN to_jsonb(OLD)-&gt;&gt;field_name ELSE NULL END;
+E       IF ciphertext IS NULL OR ciphertext = '' OR ciphertext IS NOT DISTINCT FROM previous THEN
+E         CONTINUE;
+E       END IF;
+E       IF current_setting('transaction_isolation') &lt;&gt; 'read committed' THEN
+E         RAISE EXCEPTION 'SEAL_WRITE_REQUIRES_READ_COMMITTED' USING ERRCODE = '23514';
+E       END IF;
+E       -- Held through commit. A policy change cannot complete while an old write
+E       -- is in flight; a waiting writer reads the policy after acquiring the lock.
+E       PERFORM pg_advisory_xact_lock_shared(58721493622);
+E       SELECT * INTO STRICT policy FROM mk_app.application_seal_policy WHERE id = 1;
+E       IF ciphertext LIKE 'mk1:%' THEN
+E         IF split_part(ciphertext, ':', 2) = policy.writer_kid
+E            AND ciphertext ~ '^mk1:[a-z0-9_-]{1,16}:[A-Za-z0-9+/]+={0,2}$' THEN
+E           CONTINUE;
+E         END IF;
+E       ELSIF policy.allow_legacy AND ciphertext ~ '^[A-Za-z0-9+/]+={0,2}$' THEN
+E         CONTINUE;
+E       END IF;
+E       RAISE EXCEPTION 'SEAL_WRITER_RETIRED' USING ERRCODE = '23514';
+E     END LOOP;
+E     RETURN NEW;
+E   END
+E   $fn$;
+E   REVOKE ALL ON FUNCTION mk_app.seal_policy_lock(), mk_app.check_seal_write() FROM PUBLIC;
+E   GRANT EXECUTE ON FUNCTION mk_app.check_seal_write() TO mk_app_runtime;
+E   
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON provider_keys
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('ciphertext');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON customer_destinations
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('value_enc');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON import_rows
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('phone_enc', 'email_enc');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON draft_versions
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('text_enc');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON exceptions
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('detail_enc');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON outcomes
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('note_enc');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON auth_factors
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('secret_enc', 'pending_secret_enc');
+E   ]
+E   (Background on this error at: https://sqlalche.me/e/20/f405)</failure></testcase><testcase classname="tools.verification.test_app_database" name="test_real_api_mfa_and_customer_transaction_with_runtime_identity" time="0.709"><error message="failed on setup with &quot;sqlalchemy.exc.ProgrammingError: (psycopg.ProgrammingError) only '%s', '%b', '%t' are allowed as placeholders, got '%R'&#10;[SQL: -- Fence obsolete application writers before retiring a sealing key.&#10;CREATE TABLE IF NOT EXISTS application_seal_policy (&#10;  id integer PRIMARY KEY CHECK (id = 1),&#10;  writer_kid varchar(16) NOT NULL CHECK (writer_kid ~ '^[a-z0-9_-]{1,16}$'),&#10;  allow_legacy boolean NOT NULL CHECK (NOT allow_legacy OR writer_kid = 'm0')&#10;);&#10;INSERT INTO application_seal_policy VALUES (1, 'm0', true) ON CONFLICT (id) DO NOTHING;&#10;&#10;CREATE FUNCTION mk_app.seal_policy_lock() RETURNS trigger LANGUAGE plpgsql AS $fn$&#10;BEGIN&#10;  PERFORM pg_advisory_xact_lock(58721493622);&#10;  IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;&#10;  RETURN NEW;&#10;END&#10;$fn$;&#10;CREATE TRIGGER seal_policy_lock BEFORE INSERT OR UPDATE OR DELETE ON application_seal_policy&#10;FOR EACH STATEMENT EXECUTE FUNCTION mk_app.seal_policy_lock();&#10;&#10;CREATE FUNCTION mk_app.check_seal_write() RETURNS trigger LANGUAGE plpgsql VOLATILE AS $fn$&#10;DECLARE&#10;  field_name text;&#10;  ciphertext text;&#10;  previous text;&#10;  policy mk_app.application_seal_policy%ROWTYPE;&#10;BEGIN&#10;  FOREACH field_name IN ARRAY TG_ARGV LOOP&#10;    ciphertext := to_jsonb(NEW)-&gt;&gt;field_name;&#10;    previous := CASE WHEN TG_OP = 'UPDATE' THEN to_jsonb(OLD)-&gt;&gt;field_name ELSE NULL END;&#10;    IF ciphertext IS NULL OR ciphertext = '' OR ciphertext IS NOT DISTINCT FROM previous THEN&#10;      CONTINUE;&#10;    END IF;&#10;    IF current_setting('transaction_isolation') &lt;&gt; 'read committed' THEN&#10;      RAISE EXCEPTION 'SEAL_WRITE_REQUIRES_READ_COMMITTED' USING ERRCODE = '23514';&#10;    END IF;&#10;    -- Held through commit. A policy change cannot complete while an old write&#10;    -- is in flight; a waiting writer reads the policy after acquiring the lock.&#10;    PERFORM pg_advisory_xact_lock_shared(58721493622);&#10;    SELECT * INTO STRICT policy FROM mk_app.application_seal_policy WHERE id = 1;&#10;    IF ciphertext LIKE 'mk1:%' THEN&#10;      IF split_part(ciphertext, ':', 2) = policy.writer_kid&#10;         AND ciphertext ~ '^mk1:[a-z0-9_-]{1,16}:[A-Za-z0-9+/]+={0,2}$' THEN&#10;        CONTINUE;&#10;      END IF;&#10;    ELSIF policy.allow_legacy AND ciphertext ~ '^[A-Za-z0-9+/]+={0,2}$' THEN&#10;      CONTINUE;&#10;    END IF;&#10;    RAISE EXCEPTION 'SEAL_WRITER_RETIRED' USING ERRCODE = '23514';&#10;  END LOOP;&#10;  RETURN NEW;&#10;END&#10;$fn$;&#10;REVOKE ALL ON FUNCTION mk_app.seal_policy_lock(), mk_app.check_seal_write() FROM PUBLIC;&#10;GRANT EXECUTE ON FUNCTION mk_app.check_seal_write() TO mk_app_runtime;&#10;&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON provider_keys&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('ciphertext');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON customer_destinations&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('value_enc');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON import_rows&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('phone_enc', 'email_enc');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON draft_versions&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('text_enc');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON exceptions&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('detail_enc');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON outcomes&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('note_enc');&#10;CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON auth_factors&#10;FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('secret_enc', 'pending_secret_enc');&#10;]&#10;(Background on this error at: https://sqlalche.me/e/20/f405)&quot;">/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1963: in _exec_single_context
+    self.dialect.do_execute(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/default.py:943: in do_execute
+    cursor.execute(statement, parameters)
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/psycopg/cursor.py:97: in execute
+    raise ex.with_traceback(None)
+E   psycopg.ProgrammingError: only '%s', '%b', '%t' are allowed as placeholders, got '%R'
+
+The above exception was the direct cause of the following exception:
+tools/verification/test_app_database.py:38: in initialized
+    assert migrate(migration) == VERSIONS
+backend/app/migrate.py:78: in migrate
+    conn.exec_driver_sql(path.read_text(encoding="utf-8"))
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1775: in exec_driver_sql
+    ret = self._execute_context(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1842: in _execute_context
+    return self._exec_single_context(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1982: in _exec_single_context
+    self._handle_dbapi_exception(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2351: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1963: in _exec_single_context
+    self.dialect.do_execute(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/default.py:943: in do_execute
+    cursor.execute(statement, parameters)
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/psycopg/cursor.py:97: in execute
+    raise ex.with_traceback(None)
+E   sqlalchemy.exc.ProgrammingError: (psycopg.ProgrammingError) only '%s', '%b', '%t' are allowed as placeholders, got '%R'
+E   [SQL: -- Fence obsolete application writers before retiring a sealing key.
+E   CREATE TABLE IF NOT EXISTS application_seal_policy (
+E     id integer PRIMARY KEY CHECK (id = 1),
+E     writer_kid varchar(16) NOT NULL CHECK (writer_kid ~ '^[a-z0-9_-]{1,16}$'),
+E     allow_legacy boolean NOT NULL CHECK (NOT allow_legacy OR writer_kid = 'm0')
+E   );
+E   INSERT INTO application_seal_policy VALUES (1, 'm0', true) ON CONFLICT (id) DO NOTHING;
+E   
+E   CREATE FUNCTION mk_app.seal_policy_lock() RETURNS trigger LANGUAGE plpgsql AS $fn$
+E   BEGIN
+E     PERFORM pg_advisory_xact_lock(58721493622);
+E     IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
+E     RETURN NEW;
+E   END
+E   $fn$;
+E   CREATE TRIGGER seal_policy_lock BEFORE INSERT OR UPDATE OR DELETE ON application_seal_policy
+E   FOR EACH STATEMENT EXECUTE FUNCTION mk_app.seal_policy_lock();
+E   
+E   CREATE FUNCTION mk_app.check_seal_write() RETURNS trigger LANGUAGE plpgsql VOLATILE AS $fn$
+E   DECLARE
+E     field_name text;
+E     ciphertext text;
+E     previous text;
+E     policy mk_app.application_seal_policy%ROWTYPE;
+E   BEGIN
+E     FOREACH field_name IN ARRAY TG_ARGV LOOP
+E       ciphertext := to_jsonb(NEW)-&gt;&gt;field_name;
+E       previous := CASE WHEN TG_OP = 'UPDATE' THEN to_jsonb(OLD)-&gt;&gt;field_name ELSE NULL END;
+E       IF ciphertext IS NULL OR ciphertext = '' OR ciphertext IS NOT DISTINCT FROM previous THEN
+E         CONTINUE;
+E       END IF;
+E       IF current_setting('transaction_isolation') &lt;&gt; 'read committed' THEN
+E         RAISE EXCEPTION 'SEAL_WRITE_REQUIRES_READ_COMMITTED' USING ERRCODE = '23514';
+E       END IF;
+E       -- Held through commit. A policy change cannot complete while an old write
+E       -- is in flight; a waiting writer reads the policy after acquiring the lock.
+E       PERFORM pg_advisory_xact_lock_shared(58721493622);
+E       SELECT * INTO STRICT policy FROM mk_app.application_seal_policy WHERE id = 1;
+E       IF ciphertext LIKE 'mk1:%' THEN
+E         IF split_part(ciphertext, ':', 2) = policy.writer_kid
+E            AND ciphertext ~ '^mk1:[a-z0-9_-]{1,16}:[A-Za-z0-9+/]+={0,2}$' THEN
+E           CONTINUE;
+E         END IF;
+E       ELSIF policy.allow_legacy AND ciphertext ~ '^[A-Za-z0-9+/]+={0,2}$' THEN
+E         CONTINUE;
+E       END IF;
+E       RAISE EXCEPTION 'SEAL_WRITER_RETIRED' USING ERRCODE = '23514';
+E     END LOOP;
+E     RETURN NEW;
+E   END
+E   $fn$;
+E   REVOKE ALL ON FUNCTION mk_app.seal_policy_lock(), mk_app.check_seal_write() FROM PUBLIC;
+E   GRANT EXECUTE ON FUNCTION mk_app.check_seal_write() TO mk_app_runtime;
+E   
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON provider_keys
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('ciphertext');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON customer_destinations
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('value_enc');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON import_rows
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('phone_enc', 'email_enc');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON draft_versions
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('text_enc');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON exceptions
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('detail_enc');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON outcomes
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('note_enc');
+E   CREATE TRIGGER seal_write BEFORE INSERT OR UPDATE ON auth_factors
+E   FOR EACH ROW EXECUTE FUNCTION mk_app.check_seal_write('secret_enc', 'pending_secret_enc');
+E   ]
+E   (Background on this error at: https://sqlalche.me/e/20/f405)</error></testcase></testsuite></testsuites>

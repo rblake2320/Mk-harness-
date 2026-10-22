@@ -1,0 +1,1 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="pytest" errors="0" failures="0" skipped="0" tests="1" time="6.520" timestamp="2026-10-22T01:49:10.300314-05:00" hostname="DESKTOP-CM6G60N"><testcase classname="tools.verification.test_app_database" name="test_killed_reseal_process_resumes_committed_batches" time="6.058" /></testsuite></testsuites>
