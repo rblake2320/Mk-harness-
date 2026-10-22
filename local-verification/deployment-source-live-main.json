@@ -1,0 +1,5 @@
+{
+  "verdict": "REFUSED",
+  "source_sha": "80e08d0ab9e9f149e0c365d29b60a6311f26f7df",
+  "error": "the JSON object must be str, bytes or bytearray, not NoneType"
+}

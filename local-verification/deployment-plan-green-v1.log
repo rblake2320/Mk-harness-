@@ -1,0 +1,11 @@
+...................................................F.................... [ 61%]
+.............................................                            [100%]
+=================================== FAILURES ===================================
+_______ test_production_approval_follows_a_completed_encrypted_plan_job ________
+tools/release/test_deployment_workflow.py:78: in test_production_approval_follows_a_completed_encrypted_plan_job
+    assert any("tofu plan" in step.get("run", "") for step in plan["steps"])
+E   assert False
+E    +  where False = any(<generator object test_production_approval_follows_a_completed_encrypted_plan_job.<locals>.<genexpr> at 0x737a6ca275a0>)
+=========================== short test summary info ============================
+FAILED tools/release/test_deployment_workflow.py::test_production_approval_follows_a_completed_encrypted_plan_job
+1 failed, 116 passed in 0.91s

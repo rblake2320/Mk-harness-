@@ -1,0 +1,2 @@
+Error: failed to verify certificate identity: no matching CertificateIdentity found, last error: expected SAN value "https://github.com/rblake2320/Mk-harness-/.github/workflows/deploy.yml@refs/heads/main", got "keyless@projectsigstore.iam.gserviceaccount.com"
+error during command execution: failed to verify certificate identity: no matching CertificateIdentity found, last error: expected SAN value "https://github.com/rblake2320/Mk-harness-/.github/workflows/deploy.yml@refs/heads/main", got "keyless@projectsigstore.iam.gserviceaccount.com"

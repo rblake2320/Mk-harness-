@@ -1,0 +1,32 @@
+Unable to find image 'aquasec/trivy:0.76.0@sha256:2416d1f74045b57274df1a340eee6b510cacd73c66a6ccb8da092b117eb7d222' locally
+docker.io/aquasec/trivy@sha256:2416d1f74045b57274df1a340eee6b510cacd73c66a6ccb8da092b117eb7d222: Pulling from aquasec/trivy
+e2de96513ba9: Already exists
+404cb589430b: Pulling fs layer
+2f5cf6d3a5d1: Pulling fs layer
+28e25cc2c5e5: Pulling fs layer
+28e25cc2c5e5: Verifying Checksum
+28e25cc2c5e5: Download complete
+404cb589430b: Verifying Checksum
+404cb589430b: Download complete
+2f5cf6d3a5d1: Verifying Checksum
+2f5cf6d3a5d1: Download complete
+404cb589430b: Pull complete
+2f5cf6d3a5d1: Pull complete
+28e25cc2c5e5: Pull complete
+Digest: sha256:2416d1f74045b57274df1a340eee6b510cacd73c66a6ccb8da092b117eb7d222
+Status: Downloaded newer image for aquasec/trivy@sha256:2416d1f74045b57274df1a340eee6b510cacd73c66a6ccb8da092b117eb7d222
+2026-10-22T10:05:41Z	INFO	[vulndb] Need to update DB
+2026-10-22T10:05:41Z	INFO	[vulndb] Downloading vulnerability DB...
+2026-10-22T10:05:41Z	INFO	[vulndb] Downloading artifact...	repo="mirror.gcr.io/aquasec/trivy-db:2"
+2026-10-22T10:05:51Z	INFO	[vulndb] Artifact successfully downloaded	repo="mirror.gcr.io/aquasec/trivy-db:2"
+2026-10-22T10:05:51Z	INFO	[vuln] Vulnerability scanning is enabled
+2026-10-22T10:05:52Z	INFO	Detected OS	family="debian" version="13.7"
+2026-10-22T10:05:52Z	INFO	[debian] Detecting vulnerabilities...	os_version="13" pkg_num=14
+2026-10-22T10:05:52Z	INFO	Number of language-specific files	num=0
+2026-10-22T10:05:52Z	WARN	Using severities from other vendors for some vulnerabilities. Read https://trivy.dev/docs/v0.76/guide/scanner/vulnerability#severity-selection for details.
+
+📣 [34mNotices:[0m
+  - Version 0.76.1 of Trivy is now available, current version is 0.76.0
+
+To suppress version checks, run Trivy scans with the --skip-version-check flag
+
