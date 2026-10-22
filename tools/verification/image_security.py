@@ -8,6 +8,7 @@ import argparse
 from collections import Counter
 import hashlib
 import json
+import os
 from pathlib import Path
 import subprocess
 import tempfile
@@ -50,6 +51,18 @@ def run(parts, log=None):
     return result.stdout
 
 
+def scanner_command(temporary, cache, output):
+    command = ["docker", "run", "--rm", "--read-only", "--cap-drop=ALL",
+        "--security-opt=no-new-privileges", "--memory=2g", "--cpus=2", "--tmpfs=/tmp"]
+    # With CAP_DAC_OVERRIDE dropped, root cannot write a Linux runner-owned
+    # bind directory. Run as its actual owner and avoid root's private home.
+    if hasattr(os, "getuid"):
+        command += ["--user", f"{os.getuid()}:{os.getgid()}"]
+    return command + ["--mount", f"type=bind,src={temporary},dst=/input,readonly",
+        "--mount", f"type=bind,src={cache},dst=/cache",
+        "--mount", f"type=bind,src={output},dst=/output", SCANNER, "--cache-dir", "/cache"]
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--image", required=True)
@@ -68,11 +81,7 @@ def main():
             archive = Path(temporary) / "image.tar"
             run(["docker", "save", "--output", str(archive), image_id])
             summary["archive_sha256"] = digest(archive)
-            container = ["docker", "run", "--rm", "--read-only", "--cap-drop=ALL",
-                "--security-opt=no-new-privileges", "--memory=2g", "--cpus=2", "--tmpfs=/tmp",
-                "--mount", f"type=bind,src={temporary},dst=/input,readonly",
-                "--mount", f"type=bind,src={cache},dst=/root/.cache/trivy",
-                "--mount", f"type=bind,src={output},dst=/output", SCANNER]
+            container = scanner_command(temporary, cache, output)
             for format_, filename in (("json", "vulnerabilities.json"), ("cyclonedx", "sbom.cdx.json")):
                 run(container + ["image", "--input", "/input/image.tar", "--scanners", "vuln",
                     "--format", format_, "--output", f"/output/{filename}", "--no-progress", "--timeout", "10m"],

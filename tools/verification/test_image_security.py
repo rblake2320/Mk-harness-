@@ -3,6 +3,7 @@ from copy import deepcopy
 import pytest
 
 from tools.verification.image_security import summarize
+from tools.verification import image_security
 
 REPORT = {"SchemaVersion": 2, "ArtifactType": "container_image", "Metadata": {"DiffIDs": ["layer"]},
     "Results": [{"Target": "image (debian)", "Type": "debian"}]}
@@ -30,3 +31,15 @@ def test_unfixed_high_and_unknown_findings_are_not_suppressed():
     ]
     counts = summarize(report, ["layer"])
     assert counts["HIGH"] == counts["UNKNOWN"] == 1
+
+
+def test_linux_scanner_writes_as_runner_without_root_capabilities(monkeypatch):
+    monkeypatch.setattr(image_security.os, "getuid", lambda: 1001, raising=False)
+    monkeypatch.setattr(image_security.os, "getgid", lambda: 121, raising=False)
+    command = image_security.scanner_command("/archive", "/host-cache", "/evidence")
+    assert command[command.index("--user") + 1] == "1001:121"
+    assert "--cap-drop=ALL" in command and "--read-only" in command
+    assert command[-2:] == ["--cache-dir", "/cache"]
+    assert "type=bind,src=/host-cache,dst=/cache" in command
+    assert "type=bind,src=/archive,dst=/input,readonly" in command
+    assert all("docker.sock" not in arg for arg in command)
