@@ -200,7 +200,7 @@ def test_account_security_changes_revoke_all_sessions_durably(client, operation)
         assert result.status_code == 200
     elif operation == 'delete':
         result = client.request('DELETE', '/api/account', headers=auth_headers(token), json={'password': 'superSecret123!'})
-        assert result.status_code == 200
+        assert result.status_code == 202
     else:
         result = client.post('/api/agent-ops/revocations', headers=auth_headers(token), json={'user_id': uid})
         assert result.status_code == 503  # local protection commits even with kernel unavailable

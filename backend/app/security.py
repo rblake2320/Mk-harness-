@@ -136,6 +136,7 @@ SENSITIVE_ROUTES = frozenset({
     ('POST', '/api/auth/members'), ('POST', '/api/auth/change-password'),
     ('PATCH', '/api/auth/members/{member_id}'),
     ('GET', '/api/account/export'), ('DELETE', '/api/account'),
+    ('DELETE', '/api/customers/{cid}'),
     ('GET', '/api/customers/export.csv'), ('GET', '/api/audit/export.jsonl'),
     ('GET', '/api/me/skin-data/export'), ('DELETE', '/api/me/skin-data'),
     ('POST', '/api/billing/checkout'), ('POST', '/api/billing/portal'),

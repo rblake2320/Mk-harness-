@@ -69,13 +69,20 @@ My Data Act (MHMDA). We collect this data only after obtaining explicit operator
 stored with an integrity hash of the exact text agreed to. You may withdraw consent at any
 time via the app settings, which immediately blocks further processing.</p>
 
-<h2>5. Data retention</h2>
+<h2>5. Data deletion and retention</h2>
+<p>Deletion removes active application content and revokes account access. A deletion
+receipt tracks the remaining kernel, provider and backup processing; an accepted
+request is not confirmation that those copies have been erased.</p>
 <ul>
-  <li>Account and customer data: retained while your account is active, deleted within
-      30 days of account deletion.</li>
-  <li>Conversation history: retained for 12 months, then auto-purged.</li>
-  <li>Skin analysis scores: retained while the associated customer record exists.</li>
-  <li>Audit logs: retained for 7 years (legal / compliance requirement).</li>
+  <li>Engineering retention targets pending launch review: ordinary deletion requests
+      within 30 days; database backups age out within 35 days.</li>
+  <li>Message content: 12 months; resolved commitments and ordinary outcomes: 24 months.</li>
+  <li>Content-free security and audit events: 24 months. Minimal consent proof:
+      five years after last reliance. Minimal suppression identifiers remain while
+      the business relationship or account is active.</li>
+  <li>Provider deletion controls, automated retention jobs and any explicit legal hold
+      require verification before production launch. No blanket seven-year legal
+      retention requirement is asserted here.</li>
 </ul>
 
 <h2>6. Your rights</h2>
@@ -85,9 +92,9 @@ time via the app settings, which immediately blocks further processing.</p>
       <code>GET /api/account/export</code> (authenticated).</li>
   <li><strong>Portability</strong> — the export endpoint returns a machine-readable JSON
       file containing your complete account data.</li>
-  <li><strong>Deletion</strong> — contact us at the address below to request account
-      deletion. We will delete your data within 30 days, subject to legal holds on
-      audit logs.</li>
+  <li><strong>Deletion</strong> — request deletion in Settings, save the receipt and
+      check its pending stages. Provider processing, backup expiry and any reviewed
+      retention exception are separate from removal of active application content.</li>
   <li><strong>Correction</strong> — update your profile or customer records in-app at
       any time.</li>
 </ul>
@@ -159,6 +166,11 @@ async def database_constraint_failure(_request, exc):
     }:
         return JSONResponse(status_code=503, content={"detail": {"code": "SEAL_WRITER_RETIRED",
             "message": "This server's encryption configuration needs an operator rollout. The change was not saved."}})
+    if getattr(original, "sqlstate", None) == "23514" and message in {
+        "PRIVACY_SUBJECT_ERASED", "PRIVACY_WRITE_REQUIRES_READ_COMMITTED"
+    }:
+        return JSONResponse(status_code=409, content={"detail": {"code": "PRIVACY_WRITE_REFUSED",
+            "message": "The record cannot be written under the current privacy state. The change was not saved."}})
     # Never echo SQL, parameters, encrypted data or credentials to the caller.
     return JSONResponse(status_code=500, content={"detail": "Database operation failed"})
 
@@ -166,7 +178,7 @@ async def database_constraint_failure(_request, exc):
 @app.middleware('http')
 async def private_auth_responses(request, call_next):
     response = await call_next(request)
-    if request.url.path.startswith('/api/auth/'):
+    if request.url.path.startswith('/api/'):
         response.headers['Cache-Control'] = 'no-store'
         response.headers['Pragma'] = 'no-cache'
     return response

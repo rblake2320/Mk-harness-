@@ -8,6 +8,7 @@ from .models import Base
 
 MIGRATIONS = Path(__file__).parent / "migrations"
 READ_ONLY_TABLES = {"schema_migrations", "application_seal_policy"}
+APPEND_ONLY_TABLES = {"audit_logs", "erasure_requests", "retained_consents"}
 
 
 def migration_files():
@@ -84,7 +85,7 @@ def validate_runtime(connection):
           AND n.nspname <> 'information_schema'""")).all()
     for row in relations:
         permitted = row.nspname == "mk_app" and row.relname in {*Base.metadata.tables, "schema_migrations"}
-        immutable = row.relname in {"audit_logs", *READ_ONLY_TABLES}
+        immutable = row.relname in {*APPEND_ONLY_TABLES, *READ_ONLY_TABLES}
         if row.owned or (row.accessible and not permitted) or row.ddl or (immutable and row.destructive) or (row.relname in READ_ONLY_TABLES and row.insertable):
             raise RuntimeError("Unsafe runtime database identity: table ownership or excess grants")
     if connection.execute(text("""SELECT EXISTS(SELECT 1 FROM pg_proc p
@@ -94,7 +95,7 @@ def validate_runtime(connection):
         raise RuntimeError("Unsafe runtime database identity: executable security-definer function")
     validate_schema(connection)
     for name in [*Base.metadata.tables, "schema_migrations"]:
-        required = ["SELECT"] if name in READ_ONLY_TABLES else ["SELECT", "INSERT"] if name == "audit_logs" else ["SELECT", "INSERT", "UPDATE", "DELETE"]
+        required = ["SELECT"] if name in READ_ONLY_TABLES else ["SELECT", "INSERT"] if name in APPEND_ONLY_TABLES else ["SELECT", "INSERT", "UPDATE", "DELETE"]
         for permission in required:
             if not connection.execute(text("SELECT has_table_privilege(:table, :permission)"),
                                       {"table": f"mk_app.{name}", "permission": permission}).scalar():

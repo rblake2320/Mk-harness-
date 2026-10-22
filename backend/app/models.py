@@ -32,6 +32,51 @@ class ApplicationSealPolicy(Base):
     allow_legacy: Mapped[bool] = mapped_column(Boolean)
 
 
+class ErasureRequest(Base):
+    """Content-free, append-only tombstone; replayed before a backup is served."""
+    __tablename__ = "erasure_requests"
+    __table_args__ = (UniqueConstraint("tenant_id", "subject_kind", "subject_id", name="uq_erasure_subject"),)
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=uid)
+    tenant_id: Mapped[str] = mapped_column(String(32), index=True)
+    requested_by: Mapped[str] = mapped_column(String(32))
+    subject_kind: Mapped[str] = mapped_column(String(16))
+    subject_id: Mapped[str] = mapped_column(String(32))
+    requested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    due_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    backup_expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class ErasureTask(Base):
+    """Durable downstream work. Pending is never reported as completed erasure."""
+    __tablename__ = "erasure_tasks"
+    __table_args__ = (UniqueConstraint("request_id", "kind", "target_id", name="uq_erasure_task"),)
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=uid)
+    request_id: Mapped[str] = mapped_column(ForeignKey("erasure_requests.id"), index=True)
+    tenant_id: Mapped[str] = mapped_column(String(32), index=True)
+    kind: Mapped[str] = mapped_column(String(32))
+    target_id: Mapped[str] = mapped_column(String(80))
+    status: Mapped[str] = mapped_column(String(16), default="pending")
+    receipt_json: Mapped[str] = mapped_column(Text, default="{}")
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    last_error: Mapped[str] = mapped_column(String(80), default="")
+    next_attempt_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    lease_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class RetainedConsent(Base):
+    """Minimal consent proof, without contact details, free text or customer FK."""
+    __tablename__ = "retained_consents"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=uid)
+    tenant_id: Mapped[str] = mapped_column(String(32), index=True)
+    request_id: Mapped[str] = mapped_column(ForeignKey("erasure_requests.id"), index=True)
+    source_kind: Mapped[str] = mapped_column(String(20))
+    source_id: Mapped[str] = mapped_column(String(32))
+    proof_json: Mapped[str] = mapped_column(Text)
+    retain_until: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    __table_args__ = (UniqueConstraint("tenant_id", "source_kind", "source_id", name="uq_retained_consent"),)
+
+
 class Tenant(Base):
     __tablename__ = "tenants"
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=uid)

@@ -12,7 +12,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
 
 from .config import Settings
-from .database_policy import MIGRATIONS, READ_ONLY_TABLES, migration_files, validate_schema
+from .database_policy import MIGRATIONS, READ_ONLY_TABLES, APPEND_ONLY_TABLES, migration_files, validate_schema
 from .models import Base
 
 
@@ -88,7 +88,7 @@ def migrate(url):
             for name in [*Base.metadata.tables, "schema_migrations"]:
                 identifier = conn.dialect.identifier_preparer.quote(name)
                 conn.exec_driver_sql(f"REVOKE ALL ON TABLE mk_app.{identifier} FROM PUBLIC, mk_app_runtime, mk_app_login")
-                permissions = "SELECT" if name in READ_ONLY_TABLES else "SELECT, INSERT" if name == "audit_logs" else "SELECT, INSERT, UPDATE, DELETE"
+                permissions = "SELECT" if name in READ_ONLY_TABLES else "SELECT, INSERT" if name in APPEND_ONLY_TABLES else "SELECT, INSERT, UPDATE, DELETE"
                 conn.exec_driver_sql(f"GRANT {permissions} ON TABLE mk_app.{identifier} TO mk_app_runtime")
             return [p.name for p in files]
     finally:

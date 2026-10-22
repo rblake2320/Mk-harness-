@@ -14,6 +14,17 @@ export interface AuthSession {
   id: string; current: boolean; created_at: string; expires_at: string; revoked_at: string | null;
 }
 export interface RevocationResult { revoked: boolean; kernel_revocation: 'confirmed' | 'pending' }
+export interface ErasureReceipt {
+  ok: boolean; request_id: string; active_store_erased: boolean;
+  status: 'completed' | 'pending_downstream'; due_at: string; backup_expires_at: string;
+  pending: string[]; detail: string; status_token?: string;
+}
+export const ERASURE_STAGE_LABELS: Record<string, string> = {
+  backup_expiry: 'Backup expiry', customer_request: 'Linked customer records',
+  kernel_account: 'Action history and sending credentials', kernel_contact: 'Customer action history',
+  restore_ledger_anchor: 'Protected recovery ledger', billing_subscription: 'Billing cancellation',
+  billing_customer: 'Billing provider records', provider_sender: 'Sending provider records',
+};
 export type AppRole = 'admin' | 'manager' | 'consultant' | 'auditor';
 export interface TeamMember { id: string; email: string; display_name: string; role: AppRole; is_active: boolean }
 export interface SkinObservation { category: string; level: string; note: string }
@@ -324,7 +335,7 @@ export class MKClient {
   }
   createCustomer(c: Partial<Customer>) { return this.request<{ id: string }>('/api/customers', { method: 'POST', body: JSON.stringify(c) }); }
   updateCustomer(id: string, c: Partial<Customer>) { return this.request(`/api/customers/${id}`, { method: 'PUT', body: JSON.stringify(c) }); }
-  deleteCustomer(id: string) { return this.request(`/api/customers/${id}`, { method: 'DELETE' }); }
+  deleteCustomer(id: string) { return this.request<ErasureReceipt>(`/api/customers/${id}`, { method: 'DELETE' }); }
 
   // ---- keys & usage ----
   keyStatus() { return this.request<any>('/api/keys/status'); }
@@ -489,5 +500,6 @@ export class MKClient {
   exportAccount() { return this.request<any>('/api/account/export'); }
   exportAudit() { return this.response('/api/audit/export.jsonl').then(r => r.text()); }
   exportCustomersCsv() { return this.response('/api/customers/export.csv').then(r => r.text()); }
-  deleteAccount(body: { password: string }) { return this.request<any>('/api/account', { method: 'DELETE', body: JSON.stringify(body) }); }
+  deleteAccount(body: { password: string }) { return this.request<ErasureReceipt>('/api/account', { method: 'DELETE', body: JSON.stringify(body) }); }
+  erasureStatus(status_token: string) { return this.request<ErasureReceipt>('/api/account/erasure-status', { method: 'POST', body: JSON.stringify({ status_token }) }); }
 }

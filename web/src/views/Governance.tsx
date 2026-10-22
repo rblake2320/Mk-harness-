@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { client } from '../App.tsx';
 import { ErrorNote, HumanSteps, fmtWhen } from '../components/Common.tsx';
+import type { ErasureReceipt } from '../../../packages/sdk/src/index.ts';
 
 /**
  * Settings → Governance: approval passkeys, sending number status, inbound health,
  * session revocation, data export, audit export, account deletion.
  */
-export default function GovernanceSettings({ role, userId }: { role: string; userId: string }) {
+export default function GovernanceSettings({ role, userId, onDeleted }: { role: string; userId: string; onDeleted: (receipt: ErasureReceipt) => void }) {
   const [passkeys, setPasskeys] = useState<any[]>([]);
   const [senders, setSenders] = useState<any[]>([]);
   const [health, setHealth] = useState<any>(null);
@@ -90,7 +91,7 @@ export default function GovernanceSettings({ role, userId }: { role: string; use
 
       <section className="card" style={{ marginTop: 16 }}>
         <h3 style={{ marginTop: 0 }}>Your data & evidence</h3>
-        <HumanSteps steps={['Deleting your account is irreversible for your data; anonymised audit records are retained for legal hold.']} />
+        <HumanSteps steps={['Deletion removes active application data and signs out all sessions. Downstream provider processing and backup expiry are tracked separately. Minimal consent and content-free audit records are retained.']} />
         <div className="row">
           <button className="btn ghost" onClick={() => client.exportAccount().then(d => download('my-data.json', JSON.stringify(d, null, 2))).catch(setErr)}>Export my data (JSON)</button>
           {role !== 'auditor' && <button className="btn ghost" onClick={() => client.exportCustomersCsv().then(t => download('customers.csv', t, 'text/csv')).catch(setErr)}>Export customers (CSV)</button>}
@@ -101,7 +102,9 @@ export default function GovernanceSettings({ role, userId }: { role: string; use
           <summary>Delete my account</summary>
           <label className="muted small" htmlFor="del-pw">Confirm with your password</label>
           <input id="del-pw" type="password" autoComplete="current-password" value={del} onChange={e => setDel(e.target.value)} />
-          <button className="btn ghost" disabled={!del} onClick={() => run(() => client.deleteAccount({ password: del }), 'Deletion requested.')}>Delete account</button>
+          <button className="btn ghost" disabled={!del} onClick={() => {
+            setErr(null); client.deleteAccount({ password: del }).then(onDeleted).catch(setErr);
+          }}>Delete account</button>
         </details>
       </section>
     </div>

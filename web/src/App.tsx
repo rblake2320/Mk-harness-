@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useState } from 'react';
-import { MKClient, Tokens } from '../../packages/sdk/src/index.ts';
+import { MKClient, Tokens, ERASURE_STAGE_LABELS } from '../../packages/sdk/src/index.ts';
 import ChatView from './views/Chat.tsx';
 import SkinView from './views/Skin.tsx';
 import CustomersView from './views/Customers.tsx';
@@ -10,7 +10,7 @@ import ApprovalsView from './views/Approvals.tsx';
 import InboxView from './views/Inbox.tsx';
 import CustomerDetail from './views/CustomerDetail.tsx';
 import GovernanceSettings from './views/Governance.tsx';
-import type { Customer } from '../../packages/sdk/src/index.ts';
+import type { Customer, ErasureReceipt } from '../../packages/sdk/src/index.ts';
 import { AiNoticeModal } from './components/AiDisclosure.tsx';
 import { MfaScreen, StepUpDialog } from './components/Mfa.tsx';
 import './styles.css';
@@ -32,6 +32,7 @@ function refFromUrl(): string | undefined {
 export default function App() {
   const [tokens, setTokens] = useState<Tokens | null>(loadTokens);
   const [authNotice, setAuthNotice] = useState('');
+  const [erasureReceipt, setErasureReceipt] = useState<ErasureReceipt | null>(null);
   const [signingOut, setSigningOut] = useState(false);
   const [stepUp, setStepUp] = useState<{ finish: (ok: boolean) => void } | null>(null);
   const [view, setView] = useState<'brief' | 'approvals' | 'inbox' | 'customers' | 'chat' | 'skin' | 'billing' | 'settings'>('brief');
@@ -81,7 +82,21 @@ export default function App() {
     } finally { setTokens(null); setSigningOut(false); }
   }
 
-  if (!tokens) return <AuthScreen notice={authNotice} onAuthed={t => { setAuthNotice(''); setTokens(t); }} />;
+  if (!tokens) return <>
+    {erasureReceipt && <section className="card" aria-label="Deletion receipt" style={{ maxWidth: 600, margin: '1rem auto' }}>
+      <h2>Deletion request accepted</h2>
+      <p role="status">{erasureReceipt.detail}</p>
+      <p>Request {erasureReceipt.request_id}. Pending: {erasureReceipt.pending.map(stage => ERASURE_STAGE_LABELS[stage] ?? 'Processing review').join('; ')}.</p>
+      <button className="btn" onClick={() => {
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(new Blob([JSON.stringify(erasureReceipt, null, 2)], { type: 'application/json' }));
+        link.download = 'deletion-receipt.json'; link.click();
+        setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+      }}>Save deletion receipt</button>
+      <p className="small muted">Keep this receipt private. Its status token can check processing for 45 days without signing in.</p>
+    </section>}
+    <AuthScreen notice={authNotice} onAuthed={t => { setErasureReceipt(null); setAuthNotice(''); setTokens(t); }} />
+  </>;
   if (tokens.mfa_state && tokens.mfa_state !== 'verified') return <MfaScreen key={tokens.session_id}
     client={client} tokens={tokens} onVerified={setTokens} onSignOut={signOut} />;
   const shownView = tokens.role === 'auditor' ? 'settings' : view;
@@ -126,7 +141,10 @@ export default function App() {
         {shownView === 'billing' && <BillingView />}
         {shownView === 'settings' && (<>
           <SettingsView role={tokens.role} />
-          <GovernanceSettings role={tokens.role} userId={me?.id ?? ''} />
+          <GovernanceSettings role={tokens.role} userId={me?.id ?? ''} onDeleted={receipt => {
+            setErasureReceipt(receipt); setAuthNotice('All app sessions have been revoked.');
+            client.tokens = null; sessionStorage.removeItem(TOKEN_KEY); setTokens(null);
+          }} />
         </>)}
       </main>
     </div>

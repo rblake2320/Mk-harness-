@@ -27,7 +27,11 @@ def main():
     parser.add_argument("--database-container", required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--rotate-seal", action="store_true")
+    parser.add_argument("--erase", action="store_true")
+    parser.add_argument("--browser-url", help="Local production web preview for the actual deletion UI drill")
     args = parser.parse_args()
+    if args.erase and args.rotate_seal:
+        parser.error("Run erasure and rotation as separate, independently retained drills")
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
     report = {"scope": "author-run shipped container, real PostgreSQL, real HTTP; synthetic fixtures only"}
@@ -142,6 +146,110 @@ def main():
             retained = client.get("/api/customers/" + customer_id, headers=headers)
             assert retained.status_code == 200 and retained.json()["name"] == "Retained synthetic image customer"
             report["after_restart_customer_status"] = retained.status_code
+            if args.erase:
+                added = client.post(f"/api/customers/{customer_id}/destinations", headers=headers,
+                                    json={"channel": "sms", "value": "+15005550006"})
+                assert added.status_code == 201
+                assert client.put("/api/keys/mine", headers=headers,
+                                  json={"provider": "anthropic", "api_key": "synthetic-deletion-provider-key"}).status_code == 200
+                backup = subprocess.run(["docker", "exec", args.database_container, "pg_dump", "-U", parsed["user"],
+                                         "--format=custom", "--dbname", database], capture_output=True, timeout=45)
+                assert backup.returncode == 0 and len(backup.stdout) > 1000
+                report["pre_erasure_backup"] = {"sha256": hashlib.sha256(backup.stdout).hexdigest(), "bytes": len(backup.stdout)}
+                from datetime import datetime, timezone
+                not_before = datetime.now(timezone.utc).isoformat()
+                if args.browser_url:
+                    from urllib.parse import urlparse
+                    assert urlparse(args.browser_url).hostname in {"localhost", "127.0.0.1"}
+                    from playwright.sync_api import sync_playwright
+                    with sync_playwright() as playwright:
+                        browser = playwright.chromium.launch(headless=True)
+                        page = browser.new_page(viewport={"width": 1280, "height": 900})
+                        page_errors = []
+                        page.on("pageerror", lambda error: page_errors.append(str(error)))
+                        # Transparent loopback reverse proxy, NOT canned API data:
+                        # each browser request hits the actual pinned image.
+                        def proxy(route):
+                            parsed_url = urlparse(route.request.url)
+                            upstream = str(client.base_url).rstrip("/") + parsed_url.path
+                            if parsed_url.query:
+                                upstream += "?" + parsed_url.query
+                            response = route.fetch(url=upstream)
+                            route.fulfill(response=response)
+                        page.route("**/api/**", proxy)
+                        tokens_json = json.dumps(confirmed.json()["tokens"])
+                        page.add_init_script("sessionStorage.setItem('mk_tokens'," + json.dumps(tokens_json) + "); sessionStorage.setItem('cs_ai_notice_seen','1');")
+                        page.goto(args.browser_url)
+                        page.get_by_role("navigation", name="Main").get_by_role("button", name="Settings", exact=True).click()
+                        page.get_by_text("Delete my account", exact=True).click()
+                        page.get_by_label("Confirm with your password").fill("SyntheticStrongPassword123!")
+                        with page.expect_response(lambda response: response.request.method == "DELETE" and urlparse(response.url).path == "/api/account") as pending:
+                            page.get_by_role("button", name="Delete account", exact=True).click()
+                        deleted = pending.value
+                        receipt = deleted.json()
+                        assert deleted.status == 202
+                        page.get_by_role("heading", name="Deletion request accepted").wait_for()
+                        assert page.evaluate("sessionStorage.getItem('mk_tokens')") is None
+                        page.screenshot(path=str(output / "deleted-account-receipt.png"), full_page=True)
+                        page.set_viewport_size({"width": 360, "height": 780})
+                        assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+                        page.screenshot(path=str(output / "deleted-account-receipt-360.png"), full_page=True)
+                        with page.expect_download() as downloaded:
+                            page.get_by_role("button", name="Save deletion receipt", exact=True).click()
+                        assert downloaded.value.suggested_filename == "deletion-receipt.json"
+                        report["browser"] = {"actual_image_api": True, "auth_storage_cleared": True,
+                            "receipt_download": True, "mobile_overflow": False, "page_errors": page_errors}
+                        assert not page_errors
+                        browser.close()
+                else:
+                    deleted = client.request("DELETE", "/api/account", headers=headers, json={"password": "SyntheticStrongPassword123!"})
+                    assert deleted.status_code == 202, f"Account deletion returned {deleted.status_code}"
+                    receipt = deleted.json()
+                assert receipt["status"] == "pending_downstream"
+                report["deletion_status"] = 202
+                report["downstream_pending"] = receipt["pending"]
+                report["deleted_session_status"] = client.get("/api/customers", headers=headers).status_code
+                assert report["deleted_session_status"] == 401
+                status = client.post("/api/account/erasure-status", json={"status_token": receipt["status_token"]})
+                assert status.status_code == 200 and status.json()["request_id"] == receipt["request_id"]
+                report["unauthenticated_receipt_status"] = status.status_code
+                exporter = ("import sys; from sqlalchemy.orm import Session; from app.db import init_engine; "
+                            "from app.tools.privacy_ledger import export_ledger; "
+                            "s=Session(init_engine()); sys.stdout.buffer.write(export_ledger(s)); s.close()")
+                raw_ledger = (once(["python", "-c", exporter], runtime_env) + "\n").encode()
+                ledger_sha = hashlib.sha256(raw_ledger).hexdigest()
+                report["external_ledger"] = {"sha256": ledger_sha, "bytes": len(raw_ledger),
+                                             "requests": len(json.loads(raw_ledger)["requests"])}
+                with psycopg.connect(admin, autocommit=True) as conn:
+                    conn.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(restored_database)))
+                    restored_created = True
+                restored = subprocess.run(["docker", "exec", "-i", args.database_container, "pg_restore", "-U", parsed["user"],
+                                           "--exit-on-error", "--dbname", restored_database], input=backup.stdout,
+                                          capture_output=True, timeout=45)
+                assert restored.returncode == 0
+                once(["python", "-m", "app.migrate", "bootstrap"], {
+                    **env, "DB_NAME": restored_database, "MK_APP_BOOTSTRAP_USER": parsed["user"],
+                    "MK_APP_BOOTSTRAP_PASSWORD": parsed["password"], "MK_APP_RUNTIME_PASSWORD": runtime_pw,
+                    "MK_APP_MIGRATION_PASSWORD": migration_pw})
+                restored_runtime_dsn = psycopg.conninfo.make_conninfo(admin, dbname=restored_database, user="mk_app_login", password=runtime_pw)
+                def privacy_counts():
+                    with psycopg.connect(restored_runtime_dsn) as conn:
+                        return {name: conn.execute(sql.SQL("SELECT count(*) FROM mk_app.{}").format(sql.Identifier(name))).fetchone()[0]
+                                for name in ("customers", "customer_destinations", "provider_keys", "auth_factors", "erasure_requests")}
+                report["restored_before_ledger"] = privacy_counts()
+                assert all(report["restored_before_ledger"][name] == 1 for name in ("customers", "customer_destinations", "provider_keys", "auth_factors"))
+                restore_env = {**runtime_env, "DB_NAME": restored_database,
+                    "PRIVACY_LEDGER_B64": base64.b64encode(raw_ledger).decode(),
+                    "PRIVACY_LEDGER_SHA": ledger_sha, "PRIVACY_LEDGER_NOT_BEFORE": not_before}
+                replayer = ("import os,base64,json; from sqlalchemy.orm import Session; from app.db import init_engine; "
+                    "from app.tools.privacy_ledger import load_ledger,replay_ledger,timestamp; "
+                    "rows=load_ledger(base64.b64decode(os.environ['PRIVACY_LEDGER_B64']),os.environ['PRIVACY_LEDGER_SHA'],timestamp(os.environ['PRIVACY_LEDGER_NOT_BEFORE'])); "
+                    "s=Session(init_engine()); result=replay_ledger(s,rows,apply=True); s.commit(); print(json.dumps(result)); s.close()")
+                report["restore_erasure_replay"] = json.loads(once(["python", "-c", replayer], restore_env))
+                report["restored_after_ledger"] = privacy_counts()
+                assert all(report["restored_after_ledger"][name] == 0 for name in ("customers", "customer_destinations", "provider_keys", "auth_factors"))
+                report["restore_erasure_repeat"] = json.loads(once(["python", "-c", replayer], restore_env))
+                assert report["restored_after_ledger"]["erasure_requests"] == 2
             if args.rotate_seal:
                 created_key = client.put("/api/keys/mine", headers=headers,
                                          json={"provider": "anthropic", "api_key": "synthetic-image-provider-key"})

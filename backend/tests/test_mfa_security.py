@@ -242,7 +242,7 @@ def test_recovery_rotation_and_account_deletion_remove_old_credentials(client):
     with dbmod._SessionLocal() as db:
         uid = db.scalar(select(User.id).where(User.email == email))
     deleted = client.request('DELETE', '/api/account', headers=headers, json={'password': 'superSecret123!'})
-    assert deleted.status_code == 200
+    assert deleted.status_code == 202
     with dbmod._SessionLocal() as db:
         assert db.get(AuthFactor, uid) is None
         assert not list(db.scalars(select(AuthRecoveryCode).where(AuthRecoveryCode.user_id == uid)))

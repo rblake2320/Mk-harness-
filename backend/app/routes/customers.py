@@ -9,6 +9,7 @@ from ..db import get_db
 from ..models import Customer, User
 from ..ratelimit import check_rate
 from ..security import get_current_user
+from ..privacy import erase_customer, receipt
 
 router = APIRouter(prefix="/customers", tags=["customers"])
 
@@ -104,12 +105,12 @@ def update_customer(cid: str, body: CustomerIn, user: User = Depends(get_current
     return {"ok": True}
 
 
-@router.delete("/{cid}")
+@router.delete("/{cid}", status_code=202)
 def delete_customer(cid: str, user: User = Depends(get_current_user),
                     db: Session = Depends(get_db)):
-    db.delete(_own(db, user, cid))
+    request = erase_customer(db, user, cid)
     db.commit()
-    return {"ok": True}
+    return receipt(db, request, with_status_token=True)
 
 
 @router.post("/{cid}/touch")

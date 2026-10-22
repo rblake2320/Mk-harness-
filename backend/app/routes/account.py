@@ -1,35 +1,22 @@
-"""Account management: data export and deletion (GDPR/CCPA).
+"""Account export and transactional erasure requests.
 
-Endpoints:
-  GET  /api/account/export  — full data portability download (GDPR Art. 20, CCPA § 1798.100)
-  DELETE /api/account        — erase all personal data (GDPR Art. 17, CCPA § 1798.105)
-
-The export satisfies:
-  - GDPR Article 20 (right to data portability)
-  - CCPA § 1798.100 (right to know)
-  - Apple App Store Review Guideline 5.1.1 (data use disclosure)
-
-Account deletion:
-  - Anonymises the user record (email → deleted_<id>@deleted, display_name cleared)
-  - Deletes customers, conversations/messages, skin analyses
-  - Retains anonymised audit logs for legal hold (7-year requirement)
-  - Retains consent records (anonymised) for MHMDA compliance evidence
-  - Revokes all active sessions by clearing the password hash
+An accepted request is not a claim that provider copies or backups are erased.
+Content-free audit/tombstones and minimal consent proofs are retained separately.
 """
 import json
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import delete, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..models import (
-    AuditLog, AuthFactor, AuthRecoveryCode, AuthSession, ConsentRecord, ConsultantProfile, Conversation, Customer,
+    AuditLog, ConsentRecord, ConsultantProfile, Conversation, Customer,
     Message, SkinAnalysis, Subscription, UsageRecord, User,
 )
 from ..security import get_current_user, verify_password
-from ..auth_sessions import revoke_local
+from ..privacy import erase_account, receipt, receipt_from_token
 
 router = APIRouter(prefix="/account", tags=["account"])
 
@@ -150,75 +137,29 @@ def export_account(user: User = Depends(get_current_user),
 
 
 from pydantic import BaseModel  # noqa: E402
+from pydantic import Field  # noqa: E402
+
+
+class ErasureStatusIn(BaseModel):
+    status_token: str = Field(min_length=1, max_length=4096)
+
+
+@router.post("/erasure-status")
+def erasure_status(body: ErasureStatusIn, db: Session = Depends(get_db)):
+    # POST keeps this narrow receipt credential out of URLs/access logs.
+    return receipt_from_token(db, body.status_token)
 
 
 class DeleteAccountIn(BaseModel):
     password: str   # current password — required to confirm intentional deletion
 
 
-@router.delete("")
+@router.delete("", status_code=202)
 def delete_account(body: DeleteAccountIn, user: User = Depends(get_current_user),
                    db: Session = Depends(get_db)):
-    """Erase all personal data (GDPR Art. 17 / CCPA § 1798.105).
-
-    Anonymises the user record and deletes all PII-bearing rows. Audit logs are
-    retained in anonymised form to satisfy the 7-year legal hold requirement and
-    to preserve MHMDA consent evidence. Active sessions are invalidated by clearing
-    the password hash — all JWTs become useless on next use.
-    """
+    """Erase active app data and persist all required downstream work."""
     if not verify_password(body.password, user.password_hash):
         raise HTTPException(401, "Password is incorrect")
-
-    uid = user.id
-    tid = user.tenant_id
-
-    # Authentication secrets have no audit-retention purpose. Erase both active
-    # and pending factors plus backup hashes in the account-delete transaction.
-    db.execute(delete(AuthRecoveryCode).where(AuthRecoveryCode.user_id == uid, AuthRecoveryCode.tenant_id == tid))
-    db.execute(delete(AuthFactor).where(AuthFactor.user_id == uid, AuthFactor.tenant_id == tid))
-
-    # Delete customers (cascades skin_analyses linkage via nullable FK)
-    customers = db.scalars(select(Customer).where(Customer.user_id == uid)).all()
-    for c in customers:
-        # Delete skin analyses for this customer first
-        for sa in db.scalars(select(SkinAnalysis).where(SkinAnalysis.customer_id == c.id)).all():
-            db.delete(sa)
-        db.delete(c)
-
-    # Delete any remaining skin analyses not linked to a customer
-    for sa in db.scalars(select(SkinAnalysis).where(
-            SkinAnalysis.user_id == uid, SkinAnalysis.customer_id.is_(None))).all():
-        db.delete(sa)
-
-    # Delete conversations and their messages (cascade via relationship)
-    for conv in db.scalars(select(Conversation).where(Conversation.user_id == uid)).all():
-        db.delete(conv)
-
-    # Delete usage records
-    for ur in db.scalars(select(UsageRecord).where(UsageRecord.user_id == uid)).all():
-        db.delete(ur)
-
-    # Delete consultant profile
-    prof = db.scalar(select(ConsultantProfile).where(ConsultantProfile.user_id == uid))
-    if prof:
-        db.delete(prof)
-
-    # Anonymise consent records (keep for MHMDA evidence, remove PII linkage)
-    for cr in db.scalars(select(ConsentRecord).where(ConsentRecord.user_id == uid)).all():
-        cr.revoked_at = cr.revoked_at or datetime.now(timezone.utc)
-
-    # Anonymise the user record — invalidate sessions by clearing password hash
-    for session in db.scalars(select(AuthSession).where(AuthSession.user_id == uid,
-                                                       AuthSession.revoked_at.is_(None))):
-        revoke_local(db, session, by=uid, reason='account_deleted')
-    user.email = f"deleted_{uid}@deleted"
-    user.display_name = ""
-    user.password_hash = ""
-    user.referral_code = None
-    user.is_active = False
-
-    # Audit log entry (anonymised — user_id retained as a reference only)
-    db.add(AuditLog(tenant_id=tid, user_id=uid,
-                    action="account.delete", detail="gdpr_erasure"))
+    request = erase_account(db, user)
     db.commit()
-    return {"ok": True, "detail": "Account and personal data erased."}
+    return receipt(db, request, with_status_token=True)

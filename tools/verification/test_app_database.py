@@ -342,7 +342,9 @@ def test_waiting_legacy_writer_observes_new_fence_after_activation(initialized, 
                 pending.result(timeout=5)
         with psycopg.connect(raw(runtime)) as writer:
             writer.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
-            with pytest.raises(psycopg.errors.CheckViolation, match="SEAL_WRITE_REQUIRES_READ_COMMITTED"):
+            # Both independent fences reject stale transaction snapshots; the
+            # alphabetically first BEFORE trigger determines the refusal code.
+            with pytest.raises(psycopg.errors.CheckViolation, match="(SEAL|PRIVACY)_WRITE_REQUIRES_READ_COMMITTED"):
                 writer.execute("UPDATE mk_app.provider_keys SET ciphertext=%s WHERE id='fixture'",
                                (encrypt_secret(b"0" * 32, "snapshot", "unused"),))
     finally:

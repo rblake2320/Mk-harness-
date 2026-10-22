@@ -10,6 +10,7 @@ export default function CustomersView({ onOpen }: { onOpen: (c: Customer) => voi
   const [form, setForm] = useState<typeof EMPTY & { id?: string }>(EMPTY);
   const [editing, setEditing] = useState(false);
   const [err, setErr] = useState('');
+  const [deletionNotice, setDeletionNotice] = useState('');
   const [query, setQuery] = useState('');
   const [activeQuery, setActiveQuery] = useState('');
   const [nextOffset, setNextOffset] = useState<number | null>(null);
@@ -49,6 +50,7 @@ export default function CustomersView({ onOpen }: { onOpen: (c: Customer) => voi
         </button>
       </div>
       {err && <div className="error" role="alert" style={{ margin: '10px 0' }}>{err}</div>}
+      {deletionNotice && <p role="status">{deletionNotice}</p>}
 
       <p className="muted small">Follow-ups come from your brief (confirmed promises, requests and customer dates) — never from guesses about purchase age.</p>
 
@@ -98,7 +100,10 @@ export default function CustomersView({ onOpen }: { onOpen: (c: Customer) => voi
                   <button className="btn ghost"
                           onClick={() => { setForm({ ...c }); setEditing(true); }}>Edit</button>
                   <button className="btn ghost"
-                          onClick={async () => { await client.deleteCustomer(c.id); refresh(); }}>
+                          onClick={async () => {
+                            try { const receipt = await client.deleteCustomer(c.id); setDeletionNotice(receipt.detail); await refresh(); }
+                            catch (e: any) { setErr(e.message); }
+                          }}>
                     Delete
                   </button>
                 </div>
