@@ -374,7 +374,7 @@ for i in $(seq 1 40); do ops "$APP/api/agent-ops/actions/$A6" >/dev/null; ms=$(j
 [ "$ms" = delivered ] || die "provider path broken after key rotation: $(cat "$WORK/out.json")"
 # Restore gate in report mode on the live database: must FAIL (dispatch is enabled) while every
 # recoverability check passes — it never enables anything.
-set +e; "$BIN/mk-restore-gate" --restored-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"$WORK/restore-gate.json" 2>"$WORK/restore-gate.err"; rc=$?; set -e
+set +e; "$BIN/mk-restore-gate" --inspection-only --restored-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"$WORK/restore-gate.json" 2>"$WORK/restore-gate.err"; rc=$?; set -e
 [ "$rc" = 1 ] || die "restore gate must refuse while dispatch is enabled (rc=$rc): $(cat "$WORK/restore-gate.json" "$WORK/restore-gate.err")"
 python3 - "$WORK/restore-gate.json" <<'EOF2'
 import json,sys
@@ -435,7 +435,7 @@ for envset in "" "MK_LEGACY_SEAL_RETIRED=1 MK_PUBLIC_WEBHOOK_BASE=https://hooks.
   for why in "legacy seal version 0" "WEBHOOK_BASE is not https"; do
     grep "FAIL" "$WORK/preflight-devenv.log" | grep -q "$why" || { cat "$WORK/preflight-devenv.log"; die "pre-flight --for-enable did not name: $why"; }; done
   # The parts this stack CAN satisfy pass: the record, fingerprints, restore gate.
-  for good in "real-device acceptance record complete" "fingerprint keys match the running kernel" "kernel enforces passkey-bound approvals"; do
+  for good in "real-device acceptance record complete" "fingerprint keys match the running kernel" "kernel enforces passkey-bound approvals" "live recovery inspection passes"; do
     grep "PASS" "$WORK/preflight-devenv.log" | grep -q "$good" || { cat "$WORK/preflight-devenv.log"; die "pre-flight --for-enable failed: $good"; }; done
 done
 sed -i 's/^Result: ACCEPTED$/Result: REJECTED (screenshot missing)/' "$WORK/ACCEPTANCE.md"

@@ -118,6 +118,15 @@ If their raw destination has been erased and a replacement key cannot derive a n
 tag, retirement remains blocked; never omit these fences to make an inventory green.
 The privacy-preserving key-transition/retention policy remains a release task.
 
+Kernel recovery now requires its own independently retained deletion ledger and
+external digest/freshness pin. `mk-privacy-ledger` exports/replays request identity
+and destination fences, including post-backup contacts; `mk-restore-gate` rejects
+missing input and unresolved privacy content. See
+[restore without resend](restore-without-resend.md) for the commands, required
+source quiescence, separate opt-out/revocation review and controlled recovery role.
+This is not an external custody service and does not complete application
+`restore_ledger_anchor` tasks or certify provider/backup erasure.
+
 ## Executable checks
 
 `tools/verification/test_app_privacy.py` runs against a dedicated disposable

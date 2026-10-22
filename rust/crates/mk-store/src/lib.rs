@@ -27,6 +27,7 @@ pub mod messaging;
 pub mod outbox;
 pub mod policy;
 pub mod privacy;
+pub mod privacy_ledger;
 pub mod probes;
 pub mod resolutions;
 pub mod tx;

@@ -39,7 +39,7 @@ trap cleanup EXIT
 
 log "building release binaries"
 (cd "$ROOT/rust" && cargo build --release -q --bin mk-action-api --bin mk-outbox-relay --bin mk-action-worker \
-   --bin mk-audit-verifier --bin mk-devkeys --bin mk-softauthn --bin mk-twilio-sim --bin mk-restore-gate --bin mk-keyctl)
+   --bin mk-audit-verifier --bin mk-devkeys --bin mk-softauthn --bin mk-twilio-sim --bin mk-restore-gate --bin mk-keyctl --bin mk-privacy-ledger)
 BIN="$ROOT/rust/target/release"
 
 log "fresh database"
@@ -200,10 +200,14 @@ RESTORED_AT=$(date -u -d '+2 seconds' +%Y-%m-%dT%H:%M:%SZ); sleep 3
 kill -9 "$WORKER_PID" 2>/dev/null || true
 psql -q "$PGURL" -c "update kernel.actions set state='dispatching' where action_id='$A6'" -c "insert into kernel.message_deliveries (tenant_id, action_id, attempt, sender_identity_id, provider, state, submission_started_at) select tenant_id, action_id, 1, (select sender_identity_id from kernel.sender_identities limit 1), 'twilio', 'submission_started', now() from kernel.actions where action_id='$A6'"
 # Dispatch is still enabled → gate must FAIL first.
-if "$BIN/mk-restore-gate" --restored-at "$RESTORED_AT" >"$WORK/gate1.json" 2>&1; then die "restore gate passed with dispatch enabled"; fi
+PRIVACY_NOT_BEFORE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+"$BIN/mk-privacy-ledger" export --ledger "$WORK/privacy-ledger.json" >"$WORK/privacy-ledger-export.json"
+PRIVACY_DIGEST=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["sha256"])' "$WORK/privacy-ledger-export.json")
+PRIVACY_ARGS=(--privacy-ledger "$WORK/privacy-ledger.json" --privacy-sha256 "$PRIVACY_DIGEST" --privacy-not-before "$PRIVACY_NOT_BEFORE")
+if "$BIN/mk-restore-gate" --restored-at "$RESTORED_AT" "${PRIVACY_ARGS[@]}" >"$WORK/gate1.json" 2>&1; then die "restore gate passed with dispatch enabled"; fi
 grep -q '"check":"global_dispatch_disabled","ok":false' "$WORK/gate1.json" || die "gate did not flag enabled dispatch"
 psql -q "$PGURL" -c "insert into kernel.kill_switches (scope, tenant_id, dispatch_enabled, changed_by) values ('global', null, false, 'restore-drill') on conflict do nothing" -c "update kernel.kill_switches set dispatch_enabled=false where scope='global'" 2>/dev/null || true
-"$BIN/mk-restore-gate" --restored-at "$RESTORED_AT" --apply >"$WORK/gate2.json" 2>&1 || die "restore gate failed: $(cat "$WORK/gate2.json")"
+"$BIN/mk-restore-gate" --restored-at "$RESTORED_AT" "${PRIVACY_ARGS[@]}" --apply >"$WORK/gate2.json" 2>&1 || die "restore gate failed: $(cat "$WORK/gate2.json")"
 grep -q '"gate":"PASS"' "$WORK/gate2.json" || die "gate not PASS"
 [ "$(psql -tA "$PGURL" -c "select state from kernel.actions where action_id='$A6'")" = reconciliation_required ] || die "in-flight not marked"
 [ "$(psql -tA "$PGURL" -c "select count(*) from kernel.approvals where decision='approved' and consumed_at is null and revoked_at is null and created_at < '$RESTORED_AT'")" = 0 ] || die "pre-restore approvals remain"

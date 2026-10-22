@@ -22,19 +22,26 @@ end-to-end on purpose; the gate binary refuses to enable anything.
   KEK generation still able to unwrap the stored key versions).
 * Redis is **empty** (never restore Redis — it is a cache of the outbox, and the
   relay republishes from PostgreSQL).
-* The audit-root destination (separately protected bucket) is reachable.
+* The audit-root and deletion-ledger destinations (separately protected stores)
+  are reachable. Obtain the final deletion ledger, its SHA256 and the minimum
+  acceptable export time through the independent recovery record, not from the
+  restored database or an adjacent untrusted checksum file. Missing evidence
+  blocks recovery; do not manufacture an empty ledger from the backup.
+* Source intake is quiesced before the final ledger export. The destination
+  fingerprint keys and their version labels must match the source configuration.
+  Keep API/worker/relay ingress stopped until the gate and operator review finish.
 
 ## Procedure
 
 | # | Step | Command / check | Pass condition |
 |---|---|---|---|
 | 1 | Restore the database to a new instance; do **not** repoint any process yet | provider console / Terraform | instance reachable with the owner login |
-| 2 | Confirm dispatch is disabled on the restored data | `psql … -c "select enabled from kernel.global_dispatch"` or step 4 output | `false`. If `true`, run `POST /internal/v1/kill-switch/global {"enabled":false}` **before** starting any worker, or set it directly with the owner login and record that in the drill log |
-| 3 | Run migrations forward only (`MK_RUN_MIGRATIONS=1`) | migrator login | no error; `kernel.key_versions` present |
-| 4 | Gate, report mode | `mk-restore-gate --restored-at <ts>` | every `check` line `ok:true` except possibly `in_flight_marked_unknown` / `pre_restore_approvals_invalidated` (fixed in step 6); `keyring_loads`, `audit_chain_verified`, `suppression_ledger_loaded`, `credentials_unseal` **must** be `ok:true` — if any is false, stop: the restore is not usable |
-| 5 | Load the suppression / deletion recovery ledger from the separately protected destination and reconcile against `kernel.suppressions` | `tools/evidence/check.py` ledger mode (WP10) / manual diff | every ledger entry present in the restored table; any missing entry re-inserted **as a suppression** (never lifted) before step 7 |
-| 6 | Gate, apply mode | `mk-restore-gate --restored-at <ts> --apply` | exit 0; `in_flight_marked_unknown` and `pre_restore_approvals_invalidated` now `ok:true`; `reconciliation_backlog` lists the actions |
-| 7 | Reconcile every `reconciliation_required` action against provider records (Twilio console / Messages API by `provider_message_id`, or by `to`+time window if unknown) | human, per action | each action resolved to `completed` (provider has it) or `failed` (provider does not) via the exceptions UI; nothing is re-proposed automatically |
+| 2 | Confirm dispatch is disabled on the restored data | `SELECT dispatch_enabled FROM kernel.kill_switches WHERE scope='global'` | exactly one `false` row. Disable it using the controlled owner recovery login and record the action before starting any worker |
+| 3 | Run migrations forward only | `MK_MIGRATE_ONLY=1 mk-action-api`, with the controlled migration identity and required configuration | exit 0; migrations/checksums verified |
+| 4 | Load the independently retained deletion ledger and its independent digest/freshness pin | commands below | authenticated input accepted; report lists missing content/fences without enabling traffic |
+| 5 | Reconcile the separately retained opt-out/revocation recovery records | operator evidence review | every post-backup opt-out/revocation enforced. The privacy ledger below covers erasure requests/fences, not a complete opt-out/revocation archive; its PASS alone is not authorization to skip this step |
+| 6 | Gate, apply mode | command below with `--apply` | exit 0, `gate:PASS`; all checks `ok:true`; any unresolved privacy content keeps the gate failed |
+| 7 | Reconcile every `reconciliation_required` action against exact provider identity using the passkey-protected exception workflow | human, per action | accepted resolution receipt with bound provider evidence. Destination/time-window searches and provider absence alone are not negative-send proof; ambiguous actions stay quarantined. Never re-propose automatically |
 | 8 | Confirm sender bindings | gate `credentials_unseal` detail + provider console webhook URL = `MK_PUBLIC_WEBHOOK_BASE` | `unreadable: 0`; webhook URL matches |
 | 9 | Start api / relay / worker in shadow mode (`RUST_ACTION_KERNEL_ENABLED` unset) | | `/health/ready` ok; worker log shows `envelope keyring loaded` |
 | 10 | Release-owner authorization | written sign-off naming the restore point, backlog disposition, and the operator | recorded in `evidence/releases/<id>/restore-drill.json` |
@@ -47,6 +54,53 @@ end-to-end on purpose; the gate binary refuses to enable anything.
   anything; unreadable credentials are surfaced, not skipped.
 * Does not: decide whether a provider actually delivered an uncertain message
   (step 7 is human), or restore Redis (by design).
+
+## Kernel deletion ledger commands
+
+Export from the quiesced authoritative source with a read-capable operator
+identity. The output contains only immutable request UUIDs/times and destination
+fingerprints, not addresses, bodies, signing keys or provider credentials. It is
+still sensitive pseudonymous data: retain with restricted access and immutable
+external custody. The command creates a new file (0600 on Unix) and refuses to
+overwrite an existing path.
+
+```sh
+mk-privacy-ledger export --ledger /protected/kernel-erasure.json
+```
+
+Retain the returned `sha256` in the independent recovery record. On the restored
+database, use a controlled recovery/owner identity even for report mode, which
+takes exclusion locks. Supply the independently approved values, not values
+inferred from the restored backup:
+
+```sh
+mk-restore-gate --restored-at "$RESTORED_AT" \
+  --privacy-ledger /protected/kernel-erasure.json \
+  --privacy-sha256 "$INDEPENDENT_SHA256" \
+  --privacy-not-before "$INDEPENDENT_NOT_BEFORE"
+# Review the report, then repeat the exact command with --apply.
+```
+
+The standalone `mk-privacy-ledger replay --ledger <file> --sha256 <pin>
+--not-before <time> [--apply]` performs only the deletion replay, not the other
+restore-gate checks. It authenticates and validates the entire bounded document,
+rejects missing/conflicting retained identities, locks tenants in sorted order,
+replays contacts before accounts, and commits atomically. Post-backup destination
+fences are restored even when the contact did not exist at the backup point.
+Any SQL failure rolls back the entire replay. Repeating replay preserves fences
+and identity. In-flight/unresolved sends remain quarantined, keep their necessary
+resolution data, and yield a failing privacy check until safely resolved and erased.
+Provider active/backup receipts are not invented by recovery.
+
+`--inspection-only` is only for live preflight/smoke inspection. It cannot combine
+with `--apply`, emits `gate:INSPECTION_ONLY`, and never authorizes a restore.
+
+The mandatory PostgreSQL CI test `tools/verification/test_kernel_privacy_restore.py`
+uses actual API/recovery binaries, `pg_dump`/`pg_restore`, restricted API logins and
+fresh UUID databases. It exercises post-backup deletion/fence replay, tampering,
+freshness, identity conflicts, rollback after a mid-replay SQL fault, and uncertain
+send quarantine. Local author-run results belong in `local-verification/`; staging
+and independently retained restore evidence are separate release requirements.
 
 ## Timing targets
 

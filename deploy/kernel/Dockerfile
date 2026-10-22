@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 # Multi-stage build for the MK action kernel. One image, four process types
 # (mk-action-api, mk-outbox-relay, mk-action-worker, mk-audit-verifier) plus the
-# operator tools mk-keyctl and mk-restore-gate run
+# operator tools mk-keyctl, mk-restore-gate and mk-privacy-ledger run
 # with distinct DB roles via MK_DATABASE_URL.
 FROM rust:1.97.0-bookworm AS builder
 WORKDIR /src
@@ -13,7 +13,7 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/src/rust/target \
     cargo build --release --locked --bins \
  && mkdir -p /out \
- && cp target/release/mk-action-api target/release/mk-outbox-relay target/release/mk-action-worker target/release/mk-audit-verifier target/release/mk-mcp-server target/release/mk-keyctl target/release/mk-restore-gate target/release/mk-healthcheck /out/
+ && cp target/release/mk-action-api target/release/mk-outbox-relay target/release/mk-action-worker target/release/mk-audit-verifier target/release/mk-mcp-server target/release/mk-keyctl target/release/mk-restore-gate target/release/mk-healthcheck target/release/mk-privacy-ledger /out/
 
 # Database CA bundle (RDS global bundle) baked in; fetched at build time and pinned by
 # checksum supplied by the operator (`--build-arg RDS_CA_BUNDLE_SHA256=…`, from

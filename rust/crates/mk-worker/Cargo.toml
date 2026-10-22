@@ -63,3 +63,7 @@ path = "src/bin/restore_gate.rs"
 [[bin]]
 name = "mk-healthcheck"
 path = "src/bin/healthcheck.rs"
+
+[[bin]]
+name = "mk-privacy-ledger"
+path = "src/bin/privacy_ledger.rs"

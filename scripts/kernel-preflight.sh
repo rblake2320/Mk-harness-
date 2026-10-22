@@ -11,7 +11,7 @@
 #   scripts/kernel-preflight.sh [--for-enable]
 #
 # --for-enable additionally requires production approval/key/TLS configuration, a
-#   passing restore gate in report mode, and the real-device acceptance record
+#   passing live recovery inspection, and the real-device acceptance record
 # (deploy/kernel/ACCEPTANCE.md or $MK_ACCEPTANCE_RECORD) to be complete.
 # Exit 0 = every check passed. Any failure exits 1 with the failing check named.
 set -uo pipefail
@@ -154,15 +154,14 @@ if [ "$FOR_ENABLE" = 1 ]; then
     else fail "fingerprint status: $(grep -E 'lacking|orphaned|unverified|NOT SAFE|Error' "$WORKDIR_PROBLEMS.fp" | tr '\n' ' ')"; fi
     rm -f "$WORKDIR_PROBLEMS.fp"
   else fail "mk-keyctl not found at $KC (set MK_KEYCTL)"; fi
-  # Restore gate in report mode must agree the environment is recoverable (never
-  # enables anything). Every check except global_dispatch_disabled must pass.
+  # Live inspection checks current components, not a restored database's
+  # externally retained deletion ledger. It never authorizes a restoration.
   RG="${MK_RESTORE_GATE:-$ROOT/rust/target/release/mk-restore-gate}"
   if [ -x "$RG" ]; then
-    MK_DATABASE_URL="$RO_URL" "$RG" --restored-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"$WORKDIR_PROBLEMS.rg" 2>&1
-    bad=$(grep -o '"check":"[a-z_]*","ok":false' "$WORKDIR_PROBLEMS.rg" | grep -v global_dispatch_disabled | tr '\n' ' ')
-    nchecks=$(grep -c '"check":' "$WORKDIR_PROBLEMS.rg")
-    if [ -z "$bad" ] && [ "$nchecks" -ge 6 ]; then ok "restore gate: every recoverability check passes ($nchecks checks)"
-    else fail "restore gate FAIL: ${bad:-only $nchecks checks reported}"; fi
+    MK_DATABASE_URL="$RO_URL" "$RG" --inspection-only --restored-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"$WORKDIR_PROBLEMS.rg" 2>&1
+    if python3 "$ROOT/tools/verification/restore_inspection.py" "$WORKDIR_PROBLEMS.rg"; then
+      ok "live recovery inspection passes (not restore authorization)"
+    else fail "live recovery inspection incomplete or failed"; fi
   else fail "mk-restore-gate not found at $RG (set MK_RESTORE_GATE)"; fi
   rm -f "$WORKDIR_PROBLEMS.rg"
   REC="${MK_ACCEPTANCE_RECORD:-$ROOT/deploy/kernel/ACCEPTANCE.md}"

@@ -1,7 +1,7 @@
 """Exercise kernel privacy through the built, restricted runtime image.
 
 Owns only recorded UUID targets on the labelled mk-87-rows disposable PG cluster.
-Uses generated test keys and synthetic content; makes no provider requests.
+Uses generated test keys and synthetic content; no external provider requests.
 """
 import argparse
 import asyncio
@@ -35,10 +35,12 @@ def main():
     report={"scope":"author-run built kernel image; synthetic fixtures; no external provider calls"}
     owned="mk-kernel-privacy-"+uuid.uuid4().hex
     database="mk_kernel_image_"+uuid.uuid4().hex
+    restored_database="mk_kernel_restored_"+uuid.uuid4().hex
     login="mk_privacy_"+uuid.uuid4().hex
     container="mk-acceptance-pg-20261021"
     network_created=attached=database_created=login_created=api_created=False
     provider_created=worker_created=worker_login_created=False
+    restored_created=False
     worker_name,provider_name,worker_login=owned+"-worker",owned+"-provider",login+"_worker"
     dsn=os.environ["MK_KERNEL_TEST_ADMIN_DSN"]
     conninfo=psycopg.conninfo.conninfo_to_dict(dsn)
@@ -79,6 +81,7 @@ def main():
             conn.execute(sql.SQL("GRANT mk_kernel_api TO {}").format(sql.Identifier(login)))
         env["MK_DATABASE_URL"]=f"postgres://{login}:{password}@db:5432/{database}"
         options=["run","-d","--name",owned,"--network",owned,"--read-only","--cap-drop=ALL",
+            "--tmpfs","/recovery:rw,noexec,nosuid,uid=65532,gid=65532,mode=0700,size=8388608",
             "--security-opt=no-new-privileges","--memory","256m","--cpus","1","--pids-limit","64",
             "--label","codex.task=mk-87-rows","--publish","127.0.0.1::8090"]
         for name in env: options.extend(["--env",name])
@@ -109,6 +112,10 @@ def main():
         proposed=call("POST","/actions",["agent"],proposal)
         assert proposed.status_code in {202,403},proposed.body
         aid=proposed.body["result"]["action_id"]
+        # Actual pre-erasure backup. Raw bytes remain in memory, never artifacts.
+        dump=subprocess.run(["docker","exec",container,"pg_dump","-U",conninfo["user"],
+            "-d",database,"--format=custom","--no-owner"],check=True,capture_output=True,timeout=60).stdout
+        assert dump.startswith(b"PGDMP")
         erased=call("POST","/privacy/erase",["privacy_eraser"],
             {"request_id":request,"subject_kind":"contact","subject_id":contact})
         assert erased.status_code==201 and erased.body["active_content_erased"] is True
@@ -121,6 +128,44 @@ def main():
             report["migration_count"]=conn.execute("SELECT count(*) FROM _sqlx_migrations WHERE success").fetchone()[0]
         report.update(user=state["Config"]["User"],read_only_root=True,dropped_capabilities=state["HostConfig"]["CapDrop"],
             active_content_erased=True,erased_read_status=410,reintake_status=410,service_cross_route_status=403)
+
+        def recovery_command(binary,arguments,target):
+            recovery_env={**os.environ,"MK_DATABASE_URL":f"postgres://{conninfo['user']}:{conninfo['password']}@db:5432/{target}"}
+            return subprocess.run(["docker","exec","--env","MK_DATABASE_URL",owned,
+                "/usr/local/bin/"+binary,*arguments],env=recovery_env,capture_output=True,text=True,timeout=60)
+
+        freshness=datetime.now(timezone.utc).isoformat()
+        exported=recovery_command("mk-privacy-ledger",["export","--ledger","/recovery/kernel.json"],database)
+        assert exported.returncode==0, "built-image ledger export failed"
+        export_receipt=json.loads(exported.stdout)
+        with psycopg.connect(dsn,autocommit=True) as conn:
+            conn.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(restored_database)));restored_created=True
+        subprocess.run(["docker","exec","-i",container,"pg_restore","-U",conninfo["user"],
+            "-d",restored_database,"--no-owner","--exit-on-error"],input=dump,check=True,capture_output=True,timeout=60)
+        del dump
+        restored_dsn=psycopg.conninfo.make_conninfo(dsn,dbname=restored_database)
+        with psycopg.connect(restored_dsn) as conn:
+            assert conn.execute("SELECT octet_length(canonical_request)>0 FROM kernel.actions WHERE action_id=%s",(aid,)).fetchone()==(True,)
+            conn.execute("UPDATE kernel.kill_switches SET dispatch_enabled=false WHERE scope='global'")
+        gate_args=["--restored-at",datetime.now(timezone.utc).isoformat()]
+        refused=recovery_command("mk-restore-gate",gate_args,restored_database)
+        assert refused.returncode!=0 and 'privacy_restore_ledger' in refused.stdout
+        gate_args += ["--privacy-ledger","/recovery/kernel.json","--privacy-sha256",export_receipt["sha256"],"--privacy-not-before",freshness]
+        preview=recovery_command("mk-restore-gate",gate_args,restored_database)
+        assert preview.returncode!=0
+        applied=recovery_command("mk-restore-gate",[*gate_args,"--apply"],restored_database)
+        assert applied.returncode==0, "built-image privacy restore failed"
+        gate_report=[json.loads(line) for line in applied.stdout.splitlines() if line.startswith("{")]
+        assert gate_report[-1]["gate"]=="PASS"
+        assert recovery_command("mk-restore-gate",gate_args,restored_database).returncode==0
+        with psycopg.connect(restored_dsn) as conn:
+            assert conn.execute("SELECT octet_length(canonical_request),content_erased_at IS NOT NULL FROM kernel.actions WHERE action_id=%s",(aid,)).fetchone()==(0,True)
+            assert conn.execute("SELECT count(*) FROM kernel.privacy_destination_fences").fetchone()==(1,)
+            assert conn.execute("SELECT dispatch_enabled FROM kernel.kill_switches WHERE scope='global'").fetchone()==(False,)
+        report["privacy_restore"]={"actual_pg_dump_restore":True,"without_external_ledger_refused":True,
+            "preview_refused_unreplayed_content":True,"apply_scrubbed_content":True,"restored_fences":1,
+            "dispatch_enabled":False,"repeat_report_passed":True,"runtime_user":state["Config"]["User"],
+            "ledger_sha256":export_receipt["sha256"],"gate":gate_report}
         if args.provider_fixture_image:
             # Provider and worker share one isolated network namespace, so the
             # production HTTP egress rule remains strictly loopback-only.
@@ -209,6 +254,8 @@ def main():
         if network_created: docker("network","rm",owned)
         with psycopg.connect(dsn,autocommit=True) as conn:
             assert database.startswith("mk_kernel_image_") and login.startswith("mk_privacy_")
+            assert restored_database.startswith("mk_kernel_restored_")
+            if restored_created: conn.execute(sql.SQL("DROP DATABASE {} WITH (FORCE)").format(sql.Identifier(restored_database)))
             if database_created: conn.execute(sql.SQL("DROP DATABASE {} WITH (FORCE)").format(sql.Identifier(database)))
             if login_created: conn.execute(sql.SQL("DROP ROLE {}").format(sql.Identifier(login)))
             if worker_login_created: conn.execute(sql.SQL("DROP ROLE {}").format(sql.Identifier(worker_login)))
