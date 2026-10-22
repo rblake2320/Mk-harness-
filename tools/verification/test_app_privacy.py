@@ -22,6 +22,7 @@ from test_seal_rotation import seed_rotation_records
 @pytest.fixture
 def populated(initialized, monkeypatch):
     monkeypatch.setenv("MASTER_KEY", base64.b64encode(b"0" * 32).decode())
+    monkeypatch.setenv("JWT_SECRET", "synthetic-privacy-test-jwt-key-" + "0" * 32)
     monkeypatch.delenv("APP_SEAL_KEYS", raising=False)
     get_settings.cache_clear()
     engine = db.init_engine(initialized[2])

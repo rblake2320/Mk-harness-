@@ -165,8 +165,8 @@ def enforce_step_up(session: AuthSession) -> None:
 
 
 def get_current_user(request: Request, user: User = Depends(get_authenticated_user)) -> User:
-    route = request.scope.get('route')
-    path = getattr(route, 'path', '')
+    from .route_policy import matched_route_template
+    path = matched_route_template(request.scope)
     authorize_route(user.role, request.method, path)
     if mfa_required():
         session = request.state.auth_session

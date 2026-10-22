@@ -8,16 +8,22 @@ on:
 jobs:
   backend-tests:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.12", "3.13"]
     defaults: { run: { working-directory: backend } }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python-version }}
           cache: pip
           cache-dependency-path: backend/requirements.txt
       - run: sudo apt-get update -q && sudo apt-get install -y -q redis-server
-      - run: pip install -r requirements.txt
+      - run: pip install --require-hashes -r requirements.txt
+      - name: Image report gate refuses missing and substituted evidence
+        working-directory: .
+        run: python -m pytest tools/verification/test_image_security.py -q
       - name: pytest
         run: |
           set +e -o pipefail   # GitHub runs bash -e: keep going after the pipeline fails so diagnostics print
@@ -85,6 +91,17 @@ jobs:
       - run: docker build -t mk-harness-web -f web/Dockerfile .
       - name: Actual web proxy request and failure privacy
         run: python3 tools/verification/web_privacy_image.py --image mk-harness-web --output web-proxy-privacy
+      - name: Scan application runtime and retain CycloneDX inventory
+        run: python3 tools/verification/image_security.py --image mk-harness-api --cache "$RUNNER_TEMP/trivy" --output image-security/app
+      - name: Scan web runtime and retain CycloneDX inventory
+        if: success() || failure()
+        run: python3 tools/verification/image_security.py --image mk-harness-web --cache "$RUNNER_TEMP/trivy" --output image-security/web
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: app-web-image-security
+          path: image-security
+          if-no-files-found: error
       - uses: actions/upload-artifact@v4
         if: always()
         with:

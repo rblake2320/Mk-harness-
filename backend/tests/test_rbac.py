@@ -82,6 +82,7 @@ def test_admin_cannot_disable_self_or_assign_platform_operator(client):
 
 def test_auditor_allowlist_is_fail_closed_on_every_authenticated_route(client):
     import re
+    from fastapi.routing import iter_route_contexts
     from app.main import app
     from app.authorization import AUDITOR_ROUTES
     from app.security import get_current_user
@@ -90,7 +91,7 @@ def test_auditor_allowlist_is_fail_closed_on_every_authenticated_route(client):
     def protected(dependency):
         return dependency.call == get_current_user or any(protected(child) for child in dependency.dependencies)
     checked = 0
-    for route in app.routes:
+    for route in iter_route_contexts(app.routes):
         if not getattr(route, 'dependant', None) or not protected(route.dependant):
             continue
         for method in route.methods:

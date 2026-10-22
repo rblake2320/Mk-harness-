@@ -132,10 +132,17 @@ def main():
         report.update(user=state["Config"]["User"],read_only_root=True,dropped_capabilities=state["HostConfig"]["CapDrop"],
             active_content_erased=True,erased_read_status=410,reintake_status=410,service_cross_route_status=403)
 
+        recovery_attempts=[]
         def recovery_command(binary,arguments,target):
             recovery_env={**os.environ,"MK_DATABASE_URL":f"postgres://{conninfo['user']}:{conninfo['password']}@db:5432/{target}"}
-            return subprocess.run(["docker","exec","--env","MK_DATABASE_URL",owned,
+            result=subprocess.run(["docker","exec","--env","MK_DATABASE_URL",owned,
                 "/usr/local/bin/"+binary,*arguments],env=recovery_env,capture_output=True,text=True,timeout=60)
+            diagnostic=result.stdout+result.stderr
+            for secret in (conninfo['password'],password,env['MK_MASTER_KEY']):
+                diagnostic=diagnostic.replace(secret,"[redacted]")
+            recovery_attempts.append({"binary":binary,"exit_code":result.returncode,"diagnostic":diagnostic})
+            (output/"recovery-commands.json").write_text(json.dumps(recovery_attempts,indent=2)+"\n",encoding="utf-8")
+            return result
 
         freshness=datetime.now(timezone.utc).isoformat()
         exported=recovery_command("mk-privacy-ledger",["export","--ledger","/recovery/kernel.json"],database)
@@ -157,6 +164,11 @@ def main():
         preview=recovery_command("mk-restore-gate",gate_args,restored_database)
         assert preview.returncode!=0
         applied=recovery_command("mk-restore-gate",[*gate_args,"--apply"],restored_database)
+        if applied.returncode:
+            # Diagnose without adding recovery mutations or changing the timing
+            # of a successful normal run. No raw ledger is exported to artifacts.
+            recovery_command("mk-privacy-ledger",["replay","--ledger","/recovery/kernel.json",
+                "--sha256",export_receipt["sha256"],"--not-before",freshness],restored_database)
         assert applied.returncode==0, "built-image privacy restore failed"
         gate_report=[json.loads(line) for line in applied.stdout.splitlines() if line.startswith("{")]
         assert gate_report[-1]["gate"]=="PASS"

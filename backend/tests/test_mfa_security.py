@@ -65,10 +65,11 @@ def test_sensitive_export_requires_a_separate_fresh_check(client):
 
 def test_every_sensitive_route_is_registered_and_refused_before_validation(client):
     import re
+    from fastapi.routing import iter_route_contexts
     from app.main import app
     from app.security import SENSITIVE_ROUTES
     _, _, _, result = enroll(client)
-    registered = {(method, route.path) for route in app.routes for method in getattr(route, 'methods', [])}
+    registered = {(method, route.path) for route in iter_route_contexts(app.routes) for method in (route.methods or [])}
     assert SENSITIVE_ROUTES <= registered
     for method, path in SENSITIVE_ROUTES:
         concrete = re.sub(r'\{[^}]+\}', 'test-id', path)
