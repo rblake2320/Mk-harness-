@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="pytest" errors="0" failures="3" skipped="0" tests="3" time="0.657" timestamp="2026-10-22T00:34:32.106210-05:00" hostname="DESKTOP-CM6G60N"><testcase classname="tests.test_session_security" name="test_one_session_revocation_kills_access_and_refresh_but_not_other_session" time="0.094"><failure message="AssertionError: {&quot;detail&quot;:&quot;Not Found&quot;}&#10;assert 404 == 200&#10; +  where 404 = &lt;Response [404 Not Found]&gt;.status_code">client = &lt;starlette.testclient.TestClient object at 0x784bed3bc770&gt;
+kernel_env = None
+
+    @respx.mock
+    def test_one_session_revocation_kills_access_and_refresh_but_not_other_session(client, kernel_env):
+        email = f"sessions-{uuid.uuid4().hex}@example.com"
+        first = signup(client, email=email)
+        second = client.post("/api/auth/login", json={"email": email, "password": "superSecret123!"}).json()
+        rows = client.get("/api/auth/sessions", headers=auth_headers(first))
+&gt;       assert rows.status_code == 200, rows.text
+E       AssertionError: {"detail":"Not Found"}
+E       assert 404 == 200
+E        +  where 404 = &lt;Response [404 Not Found]&gt;.status_code
+
+backend/tests/test_session_security.py:19: AssertionError</failure></testcase><testcase classname="tests.test_session_security" name="test_refresh_rotates_and_reuse_revokes_the_session" time="0.043"><failure message="AssertionError: refresh credentials are one-use&#10;assert 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxYWI1YmE4MTZkMGY0YzVlOTdiZTFmOTU4Yjc3MzM5ZSIsInRpZCI6Ijk1ZTA4YmE3YWI3...LCJwdiI6IjA2YjIyMTVhZTU0OCIsImlhdCI6MTc5MjY0NzI3MiwiZXhwIjoxNzkzODU2ODcyfQ.Qnw6b8FKvfdsr-bvHHqvH0961fiyiShxp_6mP_bPg38' != 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxYWI1YmE4MTZkMGY0YzVlOTdiZTFmOTU4Yjc3MzM5ZSIsInRpZCI6Ijk1ZTA4YmE3YWI3...LCJwdiI6IjA2YjIyMTVhZTU0OCIsImlhdCI6MTc5MjY0NzI3MiwiZXhwIjoxNzkzODU2ODcyfQ.Qnw6b8FKvfdsr-bvHHqvH0961fiyiShxp_6mP_bPg38'">client = &lt;starlette.testclient.TestClient object at 0x784bed3bcd70&gt;
+
+    def test_refresh_rotates_and_reuse_revokes_the_session(client):
+        old = signup(client, email=f"rotate-{uuid.uuid4().hex}@example.com")
+        refreshed = client.post("/api/auth/refresh", json={"refresh_token": old["refresh_token"]})
+        assert refreshed.status_code == 200
+&gt;       assert refreshed.json()["refresh_token"] != old["refresh_token"], "refresh credentials are one-use"
+E       AssertionError: refresh credentials are one-use
+E       assert 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxYWI1YmE4MTZkMGY0YzVlOTdiZTFmOTU4Yjc3MzM5ZSIsInRpZCI6Ijk1ZTA4YmE3YWI3...LCJwdiI6IjA2YjIyMTVhZTU0OCIsImlhdCI6MTc5MjY0NzI3MiwiZXhwIjoxNzkzODU2ODcyfQ.Qnw6b8FKvfdsr-bvHHqvH0961fiyiShxp_6mP_bPg38' != 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxYWI1YmE4MTZkMGY0YzVlOTdiZTFmOTU4Yjc3MzM5ZSIsInRpZCI6Ijk1ZTA4YmE3YWI3...LCJwdiI6IjA2YjIyMTVhZTU0OCIsImlhdCI6MTc5MjY0NzI3MiwiZXhwIjoxNzkzODU2ODcyfQ.Qnw6b8FKvfdsr-bvHHqvH0961fiyiShxp_6mP_bPg38'
+
+backend/tests/test_session_security.py:41: AssertionError</failure></testcase><testcase classname="tests.test_session_security" name="test_revocation_network_failure_is_durable_and_not_reported_confirmed" time="0.043"><failure message="AssertionError: {&quot;detail&quot;:&quot;Not Found&quot;}&#10;assert 404 == 200&#10; +  where 404 = &lt;Response [404 Not Found]&gt;.status_code">client = &lt;starlette.testclient.TestClient object at 0x784bed3bec90&gt;
+kernel_env = None
+
+    @respx.mock
+    def test_revocation_network_failure_is_durable_and_not_reported_confirmed(client, kernel_env):
+        first = signup(client, email=f"partition-{uuid.uuid4().hex}@example.com")
+        rows = client.get("/api/auth/sessions", headers=auth_headers(first))
+&gt;       assert rows.status_code == 200, rows.text
+E       AssertionError: {"detail":"Not Found"}
+E       assert 404 == 200
+E        +  where 404 = &lt;Response [404 Not Found]&gt;.status_code
+
+backend/tests/test_session_security.py:50: AssertionError</failure></testcase></testsuite></testsuites>

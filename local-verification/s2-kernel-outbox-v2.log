@@ -1,0 +1,21 @@
+   Compiling mk-api v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-api)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.78s
+     Running tests/http_e2e.rs (/tmp/mk-release-acceptance-target/debug/deps/http_e2e-05ff1a20f14da3a3)
+
+running 1 test
+test session_outbox_authority_is_narrow_and_revokes_real_queued_approval ... 
+thread 'session_outbox_authority_is_narrow_and_revokes_real_queued_approval' (672904) panicked at crates/mk-api/tests/http_e2e.rs:1684:9:
+assertion `left == right` failed: {"type":"urn:mk:error:revocation_only","title":"Session delivery authority is restricted to revocation","status":403,"code":"REVOCATION_ONLY","request_id":"658976b2-11f3-4f78-9b8e-a15dd9a0e6dd"}
+  left: 403
+ right: 201
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED
+
+failures:
+
+failures:
+    session_outbox_authority_is_narrow_and_revokes_real_queued_approval
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 15 filtered out; finished in 0.40s
+
+error: test failed, to rerun pass `-p mk-api --test http_e2e`

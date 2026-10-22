@@ -1,0 +1,19 @@
+   Compiling mk-api v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-api)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.63s
+     Running tests/http_e2e.rs (/tmp/mk-release-acceptance-target/debug/deps/http_e2e-05ff1a20f14da3a3)
+
+running 1 test
+test session_revocation_before_approval_timestamp_still_blocks_dispatch ... 
+thread 'session_revocation_before_approval_timestamp_still_blocks_dispatch' (690793) panicked at crates/mk-api/tests/http_e2e.rs:1762:5:
+Dispatched { pending_callback: true }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED
+
+failures:
+
+failures:
+    session_revocation_before_approval_timestamp_still_blocks_dispatch
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 16 filtered out; finished in 0.36s
+
+error: test failed, to rerun pass `-p mk-api --test http_e2e`

@@ -1,0 +1,15 @@
+{
+  "database": "mk_s2_browser_db5e71efa6fb4c388f281802328ef602",
+  "kernel_runtime_role": "mk_kernel_api",
+  "revocations": [
+    3,
+    3
+  ],
+  "sessions": [
+    3,
+    3
+  ],
+  "actual_runtime_identity": "mk_kernel_api",
+  "kernel_revocations": 3,
+  "owned_database_removed": true
+}

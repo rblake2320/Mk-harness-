@@ -1,0 +1,20 @@
+   Compiling mk-store v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-store)
+   Compiling mk-queue v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-queue)
+   Compiling mk-adapters v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-adapters)
+   Compiling mk-api v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-api)
+   Compiling mk-worker v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-worker)
+error[E0599]: no method named `stop` found for struct `TwilioSimulator` in the current scope
+    --> crates/mk-api/tests/http_e2e.rs:1731:11
+     |
+1731 | ...im.stop()....
+     |       ^^^^ method not found in `TwilioSimulator`
+
+error[E0599]: no method named `stop` found for struct `Simulator` in the current scope
+    --> crates/mk-api/tests/http_e2e.rs:1732:11
+     |
+1732 | ...im.stop()....
+     |       ^^^^ method not found in `Simulator`
+
+For more information about this error, try `rustc --explain E0599`.
+error: could not compile `mk-api` (test "http_e2e") due to 2 previous errors
+warning: build failed, waiting for other jobs to finish...

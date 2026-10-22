@@ -1,0 +1,123 @@
+{
+  "scope": "author-run loopback real app/kernel/Postgres; no live provider or human qualification",
+  "outcomes": {
+    "other_access_after_revoke": 401,
+    "other_refresh_after_revoke": 401,
+    "current_access_after_other_revoke": 200,
+    "current_access_after_logout": 401,
+    "current_refresh_after_logout": 401
+  },
+  "new_login_after_logout": "worked",
+  "page_errors": [],
+  "mobile_width": {
+    "viewport": 360,
+    "document": 360
+  },
+  "signed_out_mobile_width": {
+    "viewport": 360,
+    "document": 360
+  },
+  "transport": "URL redirect only; no HTTP responses mocked",
+  "requests": [
+    {
+      "method": "GET",
+      "path": "/api/brief"
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/me"
+    },
+    {
+      "method": "GET",
+      "path": "/api/brief"
+    },
+    {
+      "method": "GET",
+      "path": "/api/keys/status"
+    },
+    {
+      "method": "GET",
+      "path": "/api/usage/me"
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/sessions"
+    },
+    {
+      "method": "GET",
+      "path": "/api/usage/tenant"
+    },
+    {
+      "method": "GET",
+      "path": "/api/agent-ops/health"
+    },
+    {
+      "method": "GET",
+      "path": "/api/agent-ops/approval-credentials"
+    },
+    {
+      "method": "GET",
+      "path": "/api/agent-ops/senders"
+    },
+    {
+      "method": "GET",
+      "path": "/api/agent-ops/inbound/health"
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/sessions/483a8bb0ecc9400e9954ac238b882bff/revoke"
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/sessions"
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/logout"
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/login"
+    },
+    {
+      "method": "GET",
+      "path": "/api/keys/status"
+    },
+    {
+      "method": "GET",
+      "path": "/api/usage/me"
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/sessions"
+    },
+    {
+      "method": "GET",
+      "path": "/api/usage/tenant"
+    },
+    {
+      "method": "GET",
+      "path": "/api/agent-ops/health"
+    },
+    {
+      "method": "GET",
+      "path": "/api/agent-ops/approval-credentials"
+    },
+    {
+      "method": "GET",
+      "path": "/api/agent-ops/senders"
+    },
+    {
+      "method": "GET",
+      "path": "/api/agent-ops/inbound/health"
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/me"
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/logout"
+    }
+  ]
+}
