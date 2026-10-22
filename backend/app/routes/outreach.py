@@ -25,6 +25,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..db import get_db
+from ..commitments import permission_snapshot
 from ..drafting import require_current_draft_claims
 from ..foundation import audit, own_customer, preference_for, unseal, utcnow
 from ..kernel import KernelClient, KernelUnavailable, get_kernel_client
@@ -180,20 +181,22 @@ async def pending_approvals(p: Principal = Depends(principal), user: User = Depe
         aid = str(res.get("action_id", ""))
         link = _link_for(db, user.tenant_id, aid)
         cust = db.get(Customer, link.customer_id) if link else None
-        if cust and cust.user_id != user.id and user.role != "admin":
+        if cust and (cust.tenant_id != user.tenant_id or (cust.user_id != user.id and user.role != "admin")):
             continue  # another consultant's customer: not this approver's to see
         commitment = db.get(Commitment, link.commitment_id) if link and link.commitment_id else None
+        if commitment and (commitment.tenant_id != user.tenant_id or not cust or commitment.customer_id != cust.id):
+            commitment = None
         perm = None
-        if link and link.brief_item_id:
-            it = db.get(BriefItem, link.brief_item_id)
-            perm = {"state": it.permission_state, "checked_at": it.permission_checked_at.isoformat() if it.permission_checked_at else None,
-                    "note": "historical observation; the kernel re-checks consent and suppression at send time"} if it else None
+        if cust:
+            state, checked_at = permission_snapshot(db, user.tenant_id, cust)
+            perm = {"state": state, "checked_at": checked_at.isoformat(),
+                    "note": "historical observation; the kernel re-checks consent and suppression at send time"}
         sender = None
-        for sid, sv in senders.items():
-            if sv.get("owner_user_id", "").replace("-", "") == (cust.user_id if cust else user.id):
-                sender = {"sender_identity_id": sid, "display_name": sv.get("display_name"), "from_number": sv.get("from_number"),
-                          "registration_status": sv.get("registration_status")}
-                break
+        sid = disp.get("sender_identity_id")
+        sv = senders.get(sid)
+        if sv:
+            sender = {"sender_identity_id": sid, "display_name": sv.get("display_name"), "from_number": sv.get("from_number"),
+                      "registration_status": sv.get("registration_status")}
         out.append({
             "action_id": aid, "action_digest": res.get("action_digest"), "state": res.get("state"), "message_state": res.get("message_state"),
             "exact_text": disp.get("rendered_text"), "destination_masked": disp.get("destination_redacted"), "channel": disp.get("channel"),
@@ -204,9 +207,12 @@ async def pending_approvals(p: Principal = Depends(principal), user: User = Depe
                                           "evidence_digest": commitment.source_evidence_reference} if commitment else None,
                            "draft_version_id": link.draft_version_id if link else None, "evidence_count": disp.get("evidence_count")},
             "permission": perm,
-            "scheduled_for": None,  # v1 sends as soon as policy allows; scheduling is recorded on the proposal when supplied
+            "scheduled_for": disp.get("scheduled_for"),
             "approval_expires_at": disp.get("expires_at"),
-            "approval_lifetime_minutes": 15,
+            "approval_lifetime_minutes": disp.get("approval_ttl_seconds", 0) / 60,
+            "can_approve": disp.get("can_approve") is True,
+            "approval_denial": disp.get("approval_denial"),
+            "self_approval": disp.get("self_approval") is True,
             "human_steps": ["Your passkey signs this exact text (digest shown); any edit creates a new draft that needs a new approval.",
                             "Approval is single-use and expires; the kernel re-checks policy at send time."],
         })

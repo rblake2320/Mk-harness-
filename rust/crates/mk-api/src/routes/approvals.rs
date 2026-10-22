@@ -252,7 +252,15 @@ pub async fn pending(
     headers: HeaderMap,
 ) -> Result<Json<Vec<PendingItem>>, ApiError> {
     let rid = |e: ApiError| e.with_request_id(&headers);
+    if !p.has_role("consultant") && !p.has_role("manager") && !p.has_role("tenant_admin") {
+        return Err(rid(ApiError::new(
+            StatusCode::FORBIDDEN,
+            "HUMAN_ROLE_REQUIRED",
+            "Approval previews require a human role",
+        )));
+    }
     let mut tx = st.store.begin(p.tenant).await.map_err(|e| rid(e.into()))?;
+    let (tenant_policy, _) = policy::load(&mut tx).await.map_err(|e| rid(e.into()))?;
     let ids = approvals::pending(&mut tx, 200)
         .await
         .map_err(|e| rid(e.into()))?;
@@ -260,6 +268,15 @@ pub async fn pending(
     for id in ids {
         let a = actions::get(&mut tx, id).await.map_err(|e| rid(e.into()))?;
         let args = &a.request.arguments;
+        let authority = check_approver(&ApproverContext {
+            tenant_id: p.tenant,
+            approver_id: p.user,
+            approver_roles: &p.roles,
+            action_tenant_id: a.tenant_id,
+            requested_by: a.request.requested_by,
+            workflow: a.request.workflow,
+            tenant_allows_self_approval: tenant_policy.allow_self_approval,
+        });
         let display = json!({
             "rendered_text": args.get("rendered_text"),
             "destination_redacted": args.get("to").and_then(serde_json::Value::as_str).map(redact_destination),
@@ -270,6 +287,12 @@ pub async fn pending(
             "evidence_count": a.request.evidence.len(),
             "expires_at": a.expires_at,
             "action_digest": a.digest.to_string(),
+            "sender_identity_id": args.get("sender_identity_id"),
+            "scheduled_for": args.get("scheduled_for"),
+            "can_approve": authority.is_ok(),
+            "approval_denial": authority.err().map(|e| e.code.as_str()),
+            "self_approval": p.user == a.request.requested_by,
+            "approval_ttl_seconds": tenant_policy.approval_ttl_secs,
         });
         out.push(PendingItem {
             result: a.to_result(None),

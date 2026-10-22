@@ -1391,7 +1391,7 @@ async fn provider_rig(h: &Harness, mode: mk_adapters::twilio_sim::TwilioSimMode)
     .await
     .unwrap_or_else(|e| panic!("{e}"));
     // A number belongs to exactly one business (UNIQUE across tenants): mint one per rig.
-    let from_number = format!("+1500555{:04}", u64::from(rand::random::<u16>()) % 10000);
+    let from_number = format!("+1800{:011}", Uuid::new_v4().as_u128() % 100_000_000_000);
     // Register the business's sender through the API (credentials sealed in the kernel).
     let (s, v) = h.call("POST", "/internal/v1/senders", Some(&h.token(admin, &["tenant_admin"])), Some(json!({
         "owner_user_id": manager, "display_name": "Angela's MK Business", "account_sid": ACCOUNT_SID,
@@ -1494,6 +1494,123 @@ async fn run_dispatch(r: &ProviderRig, tenant: TenantId, aid: &str) -> DispatchO
     )
     .await
     .unwrap_or_else(|e| panic!("{e:?}"))
+}
+
+#[tokio::test]
+async fn approval_preview_binds_sender_schedule_and_current_self_policy() {
+    let h = harness().await.expect("real Postgres required");
+    let mut r = provider_rig(&h, mk_adapters::twilio_sim::TwilioSimMode::Accept).await;
+    let scheduled = (chrono::Utc::now() + chrono::Duration::minutes(2))
+        .to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+    let mut req = provider_proposal(
+        r.contact,
+        r.sender_id,
+        "Scheduled check-in. Reply STOP to opt out.",
+        "+15555550100",
+    );
+    req["arguments"]["scheduled_for"] = json!(scheduled);
+    req["origin"] = json!({"type":"human", "session_id":"own-human"});
+    let (s, result) = h
+        .call(
+            "POST",
+            "/internal/v1/actions",
+            Some(&h.token(r.manager, &["consultant"])),
+            Some(req),
+        )
+        .await;
+    assert_eq!(s, StatusCode::ACCEPTED, "{result}");
+    let aid = result["result"]["action_id"].as_str().unwrap();
+    for (i, allowed) in [false, true, false, true].into_iter().enumerate() {
+        let mut tx = h.state.store.begin(h.tenant).await.unwrap();
+        let (mut policy, _) = mk_store::policy::load(&mut tx).await.unwrap();
+        policy.allow_self_approval = allowed;
+        policy.approval_ttl_secs = 300;
+        mk_store::policy::write(&mut tx, &format!("preview-policy-{i}"), &policy, 0)
+            .await
+            .unwrap();
+        tx.commit().await.unwrap();
+        let (s, rows) = h
+            .call(
+                "GET",
+                "/internal/v1/approvals/pending",
+                Some(&h.token(r.manager, &["consultant"])),
+                None,
+            )
+            .await;
+        assert_eq!(s, StatusCode::OK);
+        let display = &rows[0]["display"];
+        assert_eq!(display["sender_identity_id"], json!(r.sender_id));
+        assert_eq!(display["scheduled_for"], scheduled);
+        assert_eq!(display["self_approval"], true);
+        assert_eq!(display["can_approve"], allowed);
+        assert_eq!(display["approval_ttl_seconds"], 300);
+        assert_eq!(
+            display["approval_denial"],
+            if allowed {
+                Value::Null
+            } else {
+                json!("self_approval_forbidden")
+            }
+        );
+    }
+    for roles in [vec!["agent"], vec!["agent", "unknown"], vec!["viewer"]] {
+        assert_eq!(
+            h.call(
+                "GET",
+                "/internal/v1/approvals/pending",
+                Some(&h.token(r.manager, &roles)),
+                None
+            )
+            .await
+            .0,
+            StatusCode::FORBIDDEN
+        );
+    }
+    // The last displayed preview permits approval. Changing policy afterwards
+    // must still refuse the signed gesture; the UI observation is not authority.
+    let mut tx = h.state.store.begin(h.tenant).await.unwrap();
+    let (mut policy, _) = mk_store::policy::load(&mut tx).await.unwrap();
+    policy.allow_self_approval = false;
+    mk_store::policy::write(&mut tx, "changed-after-preview", &policy, 0)
+        .await
+        .unwrap();
+    tx.commit().await.unwrap();
+    let wa = h
+        .sign_approval(r.manager, &["consultant"], aid, &mut r.mgr_key)
+        .await;
+    let (s, _) = h
+        .call(
+            "POST",
+            &format!("/internal/v1/actions/{aid}/approve"),
+            Some(&h.token(r.manager, &["consultant"])),
+            Some(json!({"action_digest":result["result"]["action_digest"], "webauthn":wa})),
+        )
+        .await;
+    assert_eq!(s, StatusCode::FORBIDDEN);
+    let mut tx = h.state.store.begin(h.tenant).await.unwrap();
+    policy.allow_self_approval = true;
+    mk_store::policy::write(&mut tx, "self-approval-permitted", &policy, 0)
+        .await
+        .unwrap();
+    tx.commit().await.unwrap();
+    let wa = h
+        .sign_approval(r.manager, &["consultant"], aid, &mut r.mgr_key)
+        .await;
+    let (s, approved) = h
+        .call(
+            "POST",
+            &format!("/internal/v1/actions/{aid}/approve"),
+            Some(&h.token(r.manager, &["consultant"])),
+            Some(json!({"action_digest":result["result"]["action_digest"], "webauthn":wa})),
+        )
+        .await;
+    assert_eq!(s, StatusCode::OK, "{approved}");
+    assert_eq!(approved["result"]["state"], "queued");
+    assert_eq!(
+        r.sim.calls(),
+        0,
+        "preview and approval never execute provider calls"
+    );
 }
 
 async fn health_ok(h: &Harness, _admin: UserId) {

@@ -60,6 +60,7 @@ export interface PendingApproval {
   supporting: { commitment: { id: string; text: string; status: string; evidence_digest: string } | null; draft_version_id: string | null; evidence_count: number };
   permission: { state: string; checked_at: string | null; note: string } | null;
   scheduled_for: string | null; approval_expires_at: string; approval_lifetime_minutes: number; human_steps: string[];
+  can_approve: boolean; approval_denial: string | null; self_approval: boolean;
 }
 export interface ExceptionItem {
   id: string; customer_id: string | null; kind: string; state: string; source_reference: string; detail: string;
@@ -355,6 +356,7 @@ export class MKClient {
   async approveWithPasskey(action_id: string, action_digest: string, reason?: string) {
     const ch = await this.approvalChallenge(action_id);
     if (ch.action_digest !== action_digest) throw new Error('This message changed since it was displayed. Review it again before approving.');
+    if (ch.user_verification !== 'required') throw new Error('Approval requires a verified passkey. Ask your administrator to restore the approval configuration.');
     const cred = await navigator.credentials.get({ publicKey: {
       challenge: b64urlDecode(ch.challenge), rpId: ch.rp_id, userVerification: ch.user_verification as UserVerificationRequirement,
       allowCredentials: ch.allow_credentials.map(id => ({ type: 'public-key', id: b64urlDecode(id) })),

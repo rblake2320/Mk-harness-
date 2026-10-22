@@ -73,9 +73,15 @@ def test_draft_to_proposal_to_approval_screen(client, kernel_env):
     assert any(e["digest"] == d["text_digest"] for e in req["evidence"])
 
     # Approval screen: every H1 field present.
+    wrong_sender = {**senders[0], "sender_identity_id": str(uuid.uuid4()),
+                    "display_name": "Another sending identity", "from_number": "+15005550007"}
+    respx.get(f"{KERNEL}/internal/v1/senders").mock(return_value=httpx.Response(200, json=[wrong_sender, *senders]))
     pending = [{"result": {"action_id": aid, "state": "approval_required", "message_state": "awaiting_approval", "action_digest": "sha256:" + "a" * 64},
                 "display": {"rendered_text": d["text"], "destination_redacted": "********8001", "channel": "sms", "workflow": "customer_follow_up",
                             "purpose": "customer_requested_follow_up", "risk": "high", "evidence_count": 2, "expires_at": "2026-10-21T00:00:00Z",
+                            "sender_identity_id": sender_id, "scheduled_for": "2026-10-20T22:00:00Z",
+                            "can_approve": False, "approval_denial": "self_approval_forbidden", "self_approval": True,
+                            "approval_ttl_seconds": 300,
                             "action_digest": "sha256:" + "a" * 64}}]
     respx.get(f"{KERNEL}/internal/v1/approvals/pending").mock(return_value=httpx.Response(200, json=pending))
     r = client.get("/api/approvals/pending", headers=h)
@@ -85,8 +91,17 @@ def test_draft_to_proposal_to_approval_screen(client, kernel_env):
               "scheduled_for", "approval_expires_at", "action_digest", "approval_lifetime_minutes", "human_steps"):
         assert k in item, k
     assert item["customer"]["id"] == cid and item["sending_business"]["from_number"] == "+15005550006"
+    assert item["sending_business"]["sender_identity_id"] == sender_id
+    assert item["scheduled_for"] == "2026-10-20T22:00:00Z"
+    assert item["can_approve"] is False and item["approval_denial"] == "self_approval_forbidden"
+    assert item["self_approval"] is True and item["approval_lifetime_minutes"] == 5
+    assert item["permission"]["state"] == "none", "permission is observed even without a brief link"
     assert item["supporting"]["commitment"]["id"] == cm["id"] and item["supporting"]["draft_version_id"] == d["id"]
     assert item["exact_text"] == d["text"] and item["destination_masked"].endswith("8001")
+    # Losing the selected identity must not substitute another owned number.
+    respx.get(f"{KERNEL}/internal/v1/senders").mock(return_value=httpx.Response(200, json=[wrong_sender]))
+    missing = client.get("/api/approvals/pending", headers=h).json()[0]
+    assert missing["sending_business"] is None
 
     # Status view: contract vocabulary + verbatim definitions.
     respx.get(f"{KERNEL}/internal/v1/actions/{aid}").mock(return_value=httpx.Response(200, json={"action_id": aid, "state": "queued", "message_state": "queued"}))

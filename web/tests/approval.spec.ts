@@ -54,6 +54,38 @@ test('a changed digest between display and approval is refused client-side', asy
   expect(approved).toBe(false);
 });
 
+test('self-approval policy is displayed and refusal disables the ceremony', async ({ page }) => {
+  await mockApi(page, 'active', { can_approve: false, self_approval: true, approval_denial: 'self_approval_forbidden', approval_lifetime_minutes: 5 });
+  let calls = 0;
+  await page.route('**/approval-challenge', route => { calls++; return route.fulfill({ status: 500 }); });
+  await page.goto('/');
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('button', { name: 'Approvals' }).click();
+  await expect(page.getByText(/5 minute lifetime/)).toBeVisible();
+  await expect(page.getByText(/A different authorized person must approve/)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Approve this message with passkey' })).toBeDisabled();
+  expect(calls).toBe(0);
+});
+
+test('a missing selected sender disables approval instead of guessing another identity', async ({ page }) => {
+  await mockApi(page, 'active', { sending_business: null });
+  await page.goto('/');
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('button', { name: 'Approvals' }).click();
+  await expect(page.getByText(/Selected sender details are unavailable/)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Approve this message with passkey' })).toBeDisabled();
+});
+
+test('approval refuses a user-verification downgrade before requesting a signature', async ({ page }) => {
+  await mockApi(page);
+  await page.addInitScript(() => { (navigator.credentials as any).get = () => { throw new Error('AUTHENTICATOR_WAS_CALLED'); }; });
+  await page.route('**/approval-challenge', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+    action_digest: 'sha256:' + 'b'.repeat(64), user_verification: 'preferred', challenge: 'AAAA', rp_id: 'localhost', allow_credentials: ['AQID'] }) }));
+  await page.goto('/');
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('button', { name: 'Approvals' }).click();
+  await page.getByRole('button', { name: 'Approve this message with passkey' }).click();
+  await expect(page.getByRole('alert')).toContainText('Approval requires a verified passkey');
+  await expect(page.getByRole('alert')).not.toContainText('AUTHENTICATOR_WAS_CALLED');
+});
+
 /** Codex finding on #35: the brief compared permission to 'granted', a value the backend
  *  never returns (it reports none | active | suppressed), so consultants with valid
  *  consent never saw the draft action. The fixture carries the backend's real value. */

@@ -51,3 +51,19 @@ This uses explicit API fixtures (not the live kernel) and native Python Playwrig
 It checks pagination, visible uncertainty, no resend/dismiss, fail-visible refresh,
 and 360px layout. The real PostgreSQL/provider-simulator path is tested separately
 by `mk-api::http_e2e`; do not present the fixture browser check as a live-provider run.
+
+## Approval and resolution passkeys
+
+Against the same built preview, run:
+
+```text
+python tools/verification/approval_browser.py --output local-verification/h1-h8-browser
+python tools/verification/submission_resolution_browser.py --output local-verification/c4-browser
+```
+
+These native Python Playwright checks install ephemeral Chromium virtual
+authenticators and cryptographically verify their ES256 assertions. HTTP data
+is explicitly synthetic. The approval check covers selected sender/schedule,
+self-approval refusal, stale digest, UV downgrade, keyboard approval, persistent
+feedback and a 360px viewport. The kernel's real-Postgres tests separately enforce
+policy and passkey authority. Neither script sends to a real provider.
