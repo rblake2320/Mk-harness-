@@ -12,8 +12,11 @@ resource "aws_lb" "this" {
   enable_deletion_protection = local.is_prod
   idle_timeout               = 30
   access_logs {
-    bucket  = aws_s3_bucket.alb_logs.bucket
-    enabled = true
+    bucket = aws_s3_bucket.alb_logs.bucket
+    # Legacy ALB logs retain unredacted URLs, user agents and client addresses.
+    # Use aggregate ALB/WAF metrics and sanitized application request logs (S12).
+    # Preserve the existing archive resource; do not erase historical evidence.
+    enabled = false
   }
   tags = local.tags
 }
@@ -156,7 +159,7 @@ resource "aws_wafv2_web_acl" "this" {
     visibility_config {
       cloudwatch_metrics_enabled = true
       metric_name                = "rate"
-      sampled_requests_enabled   = true
+      sampled_requests_enabled   = false
     }
   }
   rule {
@@ -189,13 +192,14 @@ resource "aws_wafv2_web_acl" "this" {
     visibility_config {
       cloudwatch_metrics_enabled = true
       metric_name                = "common"
-      sampled_requests_enabled   = true
+      sampled_requests_enabled   = false
     }
   }
   visibility_config {
     cloudwatch_metrics_enabled = true
     metric_name                = local.name
-    sampled_requests_enabled   = true
+    # Log redaction does not protect WAF request samples. Keep counters, not bodies.
+    sampled_requests_enabled = false
   }
   tags = local.tags
 }

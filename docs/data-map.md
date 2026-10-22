@@ -13,6 +13,8 @@ qualification. The separate retention targets are in
 | Kernel audit | Hash-chained events, UUID principals/registered adapter IDs, closed categories, counts and digests | Free-form adapter descriptions, permission scopes, suppression reasons, rejected tool names and provider status are not copied. Device errors become a fixed failure category; provider error codes must be bounded digits. Correlation IDs are canonical UUIDs only. Hashes and IDs remain restricted pseudonymous data, not anonymous public material. |
 | Application HTTP logs | Closed method, route **template**, status, elapsed time; exception class only | Default Uvicorn raw-target/peer access logging is disabled by middleware. Unknown routes use `unmatched`, custom methods use `OTHER`. Unhandled failures return generic errors; stream failures rethrow only a sanitized exception, without the original chain. No query, body, credentials, peer IP or expanded path is logged here. |
 | Kernel logs and metrics | Operational categories, matched route templates, counts and timing | Canary tests inspect actual API logs, stored audit events and image metrics. Database exception details are not logged. Credentials and raw bodies are forbidden. Worker identities are operator configuration, not customer input. |
+| Web Nginx proxy | Closed method, coarse `api`/`web` surface, HTTP status and timing | Raw access/error formats are disabled. Upstream failures remain visible as sanitized 502 status events. Error-log detail is deliberately sacrificed because it embeds the raw request; use controlled synthetic diagnostics plus configuration/health checks. |
+| AWS ingress configuration | ALB/WAF aggregate metrics; sanitized application logs | Legacy ALB access-log delivery and WAF request sampling disabled in IaC; WAF blocking/rate rules and all CloudWatch counters unchanged. Existing log-bucket resource preserved. No cloud settings were applied by this change. |
 | Provider/device boundaries | Approved content is sent to the selected transport; receipts authenticated before application | Provider business payloads are not trusted as telemetry. Signed status and device callbacks cannot insert arbitrary error/identity text into the audit chain. Provider deletion/readback and backup obligations have separate receipts. |
 | Exports, evidence and roots | Authorized exports can contain personal data; local verification uses synthetic fixtures | No raw dump, private restore ledger or credential is included in verification artifacts. Public/externally anchored roots must carry only content-free commitments; an external anchoring deployment is still required. |
 
@@ -30,6 +32,15 @@ qualification. The separate retention targets are in
   URL/query canaries and presence of content-free replacement request events.
 - `tools/verification/kernel_privacy_image.py`: actual restricted image audit,
   log and metric canaries, together with dump/restore and provider crash recovery.
+- `tools/verification/web_privacy_image.py`: actual shipped Nginx, successful SPA
+  route, unavailable upstream and malformed custom method, including path/query,
+  Host, Authorization, Referer and User-Agent canaries; mandatory image CI step.
+- `backend/tests/test_edge_telemetry_policy.py`: configuration guard retaining
+  metrics and the historical archive while refusing raw ingress collection.
+
+AWS documents raw request/client fields in [ALB access logs](https://docs.aws.amazon.com/elasticloadbalancing/latest/application/load-balancer-access-logs.html).
+[WAF VisibilityConfig](https://docs.aws.amazon.com/waf/latest/APIReference/API_VisibilityConfig.html)
+separates sampling from metrics and notes that log redaction does not redact samples.
 
 ## Deployment and historical-data handling
 
