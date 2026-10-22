@@ -1,0 +1,117 @@
+{
+  "scope": "author-run real loopback app/kernel/Postgres; synthetic accounts; no HTTP fixtures",
+  "outcomes": {
+    "old_member_access": 401,
+    "old_member_refresh": 401,
+    "auditor_customers": 403,
+    "auditor_kernel": 403,
+    "auditor_audit_export": 200
+  },
+  "auditor_mobile_width": {
+    "viewport": 360,
+    "document": 360
+  },
+  "page_errors": [],
+  "requests": [
+    {
+      "method": "GET",
+      "path": "/api/brief"
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/me"
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/members"
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/me"
+    },
+    {
+      "method": "GET",
+      "path": "/api/keys/status"
+    },
+    {
+      "method": "GET",
+      "path": "/api/usage/me"
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/sessions"
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/mfa/status"
+    },
+    {
+      "method": "GET",
+      "path": "/api/usage/tenant"
+    },
+    {
+      "method": "GET",
+      "path": "/api/agent-ops/health"
+    },
+    {
+      "method": "GET",
+      "path": "/api/agent-ops/approval-credentials"
+    },
+    {
+      "method": "GET",
+      "path": "/api/agent-ops/senders"
+    },
+    {
+      "method": "GET",
+      "path": "/api/agent-ops/inbound/health"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/auth/members/334e8394a4734724a3b22a758ade1de7"
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/step-up"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/auth/members/334e8394a4734724a3b22a758ade1de7"
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/members"
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/logout"
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/sessions"
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/mfa/status"
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/me"
+    },
+    {
+      "method": "GET",
+      "path": "/api/audit/export.jsonl"
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/step-up"
+    },
+    {
+      "method": "GET",
+      "path": "/api/audit/export.jsonl"
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/logout"
+    }
+  ]
+}

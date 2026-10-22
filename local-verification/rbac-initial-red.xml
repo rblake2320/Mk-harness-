@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="pytest" errors="0" failures="4" skipped="0" tests="4" time="0.890" timestamp="2026-10-22T01:16:38.112020-05:00" hostname="DESKTOP-CM6G60N"><testcase classname="tests.test_rbac" name="test_unknown_roles_never_receive_consultant_or_agent_authority" time="0.084"><failure message="AssertionError: assert 200 == 403&#10; +  where 200 = &lt;Response [200 OK]&gt;.status_code&#10; +    where &lt;Response [200 OK]&gt; = get('/api/customers', headers={'Authorization': 'Bearer [REDACTED_SYNTHETIC_JWT]'})&#10; +      where get = &lt;starlette.testclient.TestClient object at 0x7e825d4af7a0&gt;.get">backend/tests/test_rbac.py:33: in test_unknown_roles_never_receive_consultant_or_agent_authority
+    assert client.get('/api/customers', headers=headers).status_code == 403
+E   AssertionError: assert 200 == 403
+E    +  where 200 = &lt;Response [200 OK]&gt;.status_code
+E    +    where &lt;Response [200 OK]&gt; = get('/api/customers', headers={'Authorization': 'Bearer [REDACTED_SYNTHETIC_JWT]'})
+E    +      where get = &lt;starlette.testclient.TestClient object at 0x7e825d4af7a0&gt;.get</failure></testcase><testcase classname="tests.test_rbac" name="test_manager_and_auditor_are_distinct_from_admin_and_consultant" time="0.044"><failure message="assert 422 == 201&#10; +  where 422 = &lt;Response [422 Unprocessable Entity]&gt;.status_code">backend/tests/test_rbac.py:41: in test_manager_and_auditor_are_distinct_from_admin_and_consultant
+    _, _, manager = member(client, admin, 'manager')
+backend/tests/test_rbac.py:18: in member
+    assert response.status_code == 201
+E   assert 422 == 201
+E    +  where 422 = &lt;Response [422 Unprocessable Entity]&gt;.status_code</failure></testcase><testcase classname="tests.test_rbac" name="test_role_change_is_tenant_scoped_revokes_sessions_and_audits" time="0.148"><failure message="assert 404 == 200&#10; +  where 404 = &lt;Response [404 Not Found]&gt;.status_code">backend/tests/test_rbac.py:62: in test_role_change_is_tenant_scoped_revokes_sessions_and_audits
+    assert response.status_code == 200
+E   assert 404 == 200
+E    +  where 404 = &lt;Response [404 Not Found]&gt;.status_code</failure></testcase><testcase classname="tests.test_rbac" name="test_admin_cannot_disable_self_or_assign_platform_operator" time="0.044"><failure message="AssertionError: assert 404 == 409&#10; +  where 404 = &lt;Response [404 Not Found]&gt;.status_code&#10; +    where &lt;Response [404 Not Found]&gt; = patch('/api/auth/members/27bd4c092d684e1ebc7d8ff06a71bc7e', headers={'Authorization': 'Bearer [REDACTED_SYNTHETIC_JWT]'}, json={'is_active': False})&#10; +      where patch = &lt;starlette.testclient.TestClient object at 0x7e825d14b380&gt;.patch">backend/tests/test_rbac.py:78: in test_admin_cannot_disable_self_or_assign_platform_operator
+    assert client.patch(f'/api/auth/members/{uid}', headers=admin, json={'is_active': False}).status_code == 409
+E   AssertionError: assert 404 == 409
+E    +  where 404 = &lt;Response [404 Not Found]&gt;.status_code
+E    +    where &lt;Response [404 Not Found]&gt; = patch('/api/auth/members/27bd4c092d684e1ebc7d8ff06a71bc7e', headers={'Authorization': 'Bearer [REDACTED_SYNTHETIC_JWT]'}, json={'is_active': False})
+E    +      where patch = &lt;starlette.testclient.TestClient object at 0x7e825d14b380&gt;.patch</failure></testcase></testsuite></testsuites>
