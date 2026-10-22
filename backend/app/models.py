@@ -286,6 +286,21 @@ class BillingProvision(Base):
     stripe_customer_id: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
 
 
+class BillingErasureBinding(Base):
+    """Cleanup-only identity recovered from an externally pinned erasure ledger.
+
+    No user/tenant FK: an external obligation can postdate the entire backup.
+    This cannot enable billing or recreate a user's application account.
+    """
+    __tablename__ = "billing_erasure_bindings"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    request_id: Mapped[str] = mapped_column(ForeignKey("erasure_requests.id"), unique=True)
+    tenant_id: Mapped[str] = mapped_column(String(32), index=True)
+    user_id: Mapped[str] = mapped_column(String(32), unique=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    stripe_customer_id: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
+
+
 class Subscription(Base):
     """One subscription per consultant. Mirrors Stripe state, driven by webhooks.
 

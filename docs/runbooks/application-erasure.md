@@ -234,3 +234,34 @@ lease in PostgreSQL, and restarts it: one DELETE, two GETs, no creates, one
 confirmed task. This simulator is isolated; no real customer was deleted or
 charged. Live qualification, legacy ownership evidence and provider/legal
 retention remain separate release requirements.
+
+## Restoring post-backup billing obligations
+
+The application erasure ledger now exports `mk-erasure-ledger-v2`, including the
+immutable billing intent and any accepted customer ID for each account request.
+The prior tombstone-only v1 format is refused: produce a new externally retained
+v2 ledger from the current source instead of labelling an older ledger complete.
+Quiesce intake, billing creation and provider-cleanup workers before the final
+export; the final cut must include every accepted external effect. Pin its hash
+and minimum freshness outside the database being restored.
+
+Migration `0006_billing_restore_bindings.sql` provides cleanup-only bindings for
+identities that postdate the backup. Replay validates every binding against its
+account tombstone and any surviving creation record before changing data.
+Conflicting owners, timestamps, IDs or provider bindings are refused. A binding
+cannot be rebound or removed and can learn a previously unknown customer ID only
+once. Its presence never permits billing, account sign-in or business intake.
+
+Replay retains these obligations even if the tenant and user did not exist at
+the backup point. It does not recreate their business rows. The recovered task
+uses the same exact ownership/readback checks as normal cleanup; a previously
+deleted customer can be confirmed with authenticated GET without another create
+or delete. Repeat replay is idempotent. The generic backup/anchor/legal-retention
+obligations remain pending until their own evidence is supplied.
+
+The actual-image acceptance helper's `--erase --billing-privacy --billing-restore`
+case takes pg_dump first, records a synthetic accepted billing identity afterward,
+deletes the account and exports its pinned ledger, then performs pg_restore and
+replay. It requires the exact cleanup binding plus one pending task to survive,
+with no recreated business intent. No real billing API key or provider call is
+used in that drill.

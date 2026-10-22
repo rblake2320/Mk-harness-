@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 
 from test_app_database import database, initialized, raw, RUNTIME_PASSWORD, MIGRATION_PASSWORD  # noqa: F401
 from app import db as dbmod
-from app.models import Base, BillingProvision, ErasureTask, Subscription, Tenant, User
+from app.models import Base, BillingErasureBinding, BillingProvision, ErasureTask, Subscription, Tenant, User
 from app.privacy import erase_account
 
 
@@ -115,7 +115,7 @@ def test_additive_upgrade_protects_existing_erasure_without_rewriting_old_migrat
     # the old database or disable validation to make an upgrade appear valid.
     historical = MetaData()
     for name, table in Base.metadata.tables.items():
-        if name != "billing_provisions":
+        if name not in {"billing_provisions", "billing_erasure_bindings"}:
             table.to_metadata(historical)
     from app import database_policy
     with monkeypatch.context() as old_release:
@@ -268,3 +268,40 @@ def test_process_killed_after_provider_delete_recovers_without_second_delete(ini
         release.set()
         if child.poll() is None: child.kill(); child.communicate(timeout=5)
         server.shutdown(); server.server_close(); thread.join(timeout=5)
+
+
+def test_restored_cleanup_binding_is_bound_to_tombstone_and_immutable(initialized):
+    from app.models import ErasureRequest
+    runtime = initialized[2]
+    engine = dbmod.init_engine(runtime)
+    with Session(engine, expire_on_commit=False) as session:
+        user, other, sub = seed(session)
+        row = BillingProvision(tenant_id=user.tenant_id, user_id=user.id)
+        session.add(row); session.commit()
+        request = erase_account(session, user); session.commit()
+        restored = BillingErasureBinding(id=row.id, request_id=request.id, tenant_id=row.tenant_id,
+            user_id=row.user_id, created_at=row.created_at, stripe_customer_id="cus_RestoredBinding")
+        session.add(restored); session.commit()
+        identity, other_id = row.id, other.id
+        from app.tools.privacy_ledger import export_ledger, load_ledger, replay_ledger
+        import hashlib
+        from datetime import datetime, timezone
+        before = datetime.now(timezone.utc)
+        raw_ledger = export_ledger(session)
+        rows = load_ledger(raw_ledger, hashlib.sha256(raw_ledger).hexdigest(), before)
+        replay_ledger(session, rows, apply=True); session.commit()
+        assert session.query(BillingErasureBinding).count() == 1
+    for statement, parameters in [
+        ("UPDATE mk_app.billing_erasure_bindings SET user_id=%s WHERE id=%s", (other_id, identity)),
+        ("UPDATE mk_app.billing_erasure_bindings SET stripe_customer_id=NULL WHERE id=%s", (identity,)),
+        ("UPDATE mk_app.billing_erasure_bindings SET stripe_customer_id='cus_Crossed' WHERE id=%s", (identity,)),
+        ("UPDATE mk_app.billing_erasure_bindings SET created_at=now() WHERE id=%s", (identity,)),
+        ("DELETE FROM mk_app.billing_erasure_bindings WHERE id=%s", (identity,)),
+    ]:
+        with psycopg.connect(raw(runtime)) as connection:
+            with pytest.raises(psycopg.errors.CheckViolation, match="BILLING_RESTORE_BINDING_IMMUTABLE"):
+                connection.execute(statement, parameters)
+    with psycopg.connect(raw(runtime)) as connection:
+        with pytest.raises(psycopg.errors.CheckViolation, match="BILLING_RESTORE_REQUEST_MISMATCH"):
+            connection.execute("INSERT INTO mk_app.billing_erasure_bindings(id,request_id,tenant_id,user_id,created_at) VALUES (%s,%s,%s,%s,now())",
+                (uuid.uuid4().hex, request.id, row.tenant_id, other_id))

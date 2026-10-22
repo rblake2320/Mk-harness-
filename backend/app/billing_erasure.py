@@ -10,9 +10,25 @@ from fastapi import HTTPException
 from sqlalchemy import select, update
 
 from . import billing
-from .models import BillingProvision, ErasureRequest, ErasureTask, Subscription
+from .models import BillingErasureBinding, BillingProvision, ErasureRequest, ErasureTask, Subscription
 
 BILLING_KINDS = {"billing_provision", "billing_customer", "billing_subscription"}
+
+
+def resolve_binding(db, request):
+    """Merge compatible original/restored identity without resurrecting accounts."""
+    original = db.scalar(select(BillingProvision).where(BillingProvision.tenant_id == request.tenant_id,
+        BillingProvision.user_id == request.subject_id))
+    restored = db.scalar(select(BillingErasureBinding).where(BillingErasureBinding.request_id == request.id,
+        BillingErasureBinding.tenant_id == request.tenant_id, BillingErasureBinding.user_id == request.subject_id))
+    if original and restored:
+        original_time = original.created_at.replace(tzinfo=timezone.utc) if original.created_at.tzinfo is None else original.created_at
+        restored_time = restored.created_at.replace(tzinfo=timezone.utc) if restored.created_at.tzinfo is None else restored.created_at
+        if original.id != restored.id or (original.stripe_customer_id and restored.stripe_customer_id
+                and original.stripe_customer_id != restored.stripe_customer_id) or original_time != restored_time:
+            return None
+        return restored if restored.stripe_customer_id else original
+    return restored or original
 
 
 class BillingErasureClient:
@@ -55,8 +71,7 @@ async def deliver_billing_erasure(db, client, task_id):
     request = db.get(ErasureRequest, task.request_id)
     provision = None
     if request and request.subject_kind == "account" and task.tenant_id == request.tenant_id:
-        provision = db.scalar(select(BillingProvision).where(BillingProvision.tenant_id == request.tenant_id,
-            BillingProvision.user_id == request.subject_id))
+        provision = resolve_binding(db, request)
     valid = provision is not None
     if valid and task.kind == "billing_provision":
         valid = task.target_id == provision.id
@@ -104,8 +119,9 @@ async def deliver_billing_erasure(db, client, task_id):
             if not billing.bound_customer(body, metadata):
                 raise Unconfirmed("BILLING_CUSTOMER_BINDING_INVALID")
             customer = body["id"]
-            db.execute(update(BillingProvision).where(BillingProvision.id == provision_id,
-                BillingProvision.stripe_customer_id.is_(None)).values(stripe_customer_id=customer))
+            binding_type = type(provision)
+            db.execute(update(binding_type).where(binding_type.id == provision_id,
+                binding_type.stripe_customer_id.is_(None)).values(stripe_customer_id=customer))
             db.commit()  # persist the binding BEFORE deletion can hide metadata
             db.refresh(provision)
             if provision.stripe_customer_id != customer:

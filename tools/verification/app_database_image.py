@@ -31,12 +31,15 @@ def main():
     parser.add_argument("--erase", action="store_true")
     parser.add_argument("--audit-privacy", action="store_true")
     parser.add_argument("--billing-privacy", action="store_true")
+    parser.add_argument("--billing-restore", action="store_true")
     parser.add_argument("--browser-url", help="Local production web preview for the actual deletion UI drill")
     args = parser.parse_args()
     if args.erase and args.rotate_seal:
         parser.error("Run erasure and rotation as separate, independently retained drills")
     if args.billing_privacy and not args.erase:
         parser.error("Billing privacy verification requires the erasure drill")
+    if args.billing_restore and not (args.erase and args.billing_privacy):
+        parser.error("Billing restore verification requires --erase --billing-privacy")
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
     report = {"scope": "author-run shipped container, real PostgreSQL, real HTTP; synthetic fixtures only"}
@@ -176,6 +179,15 @@ def main():
                                          "--format=custom", "--dbname", database], capture_output=True, timeout=45)
                 assert backup.returncode == 0 and len(backup.stdout) > 1000
                 report["pre_erasure_backup"] = {"sha256": hashlib.sha256(backup.stdout).hexdigest(), "bytes": len(backup.stdout)}
+                if args.billing_restore:
+                    # Deliberately accept the external identity AFTER the backup.
+                    # Only synthetic IDs are inserted; no provider request occurs.
+                    billing_intent = uuid.uuid4().hex
+                    with psycopg.connect(billing_dsn) as connection:
+                        connection.execute("INSERT INTO mk_app.billing_provisions(id,tenant_id,user_id,created_at) VALUES (%s,%s,%s,now())",
+                            (billing_intent, billing_tenant, billing_user))
+                        connection.execute("UPDATE mk_app.billing_provisions SET stripe_customer_id='cus_ImagePrivacy' WHERE id=%s", (billing_intent,))
+                    report["billing_intent_created_after_backup"] = True
                 from datetime import datetime, timezone
                 not_before = datetime.now(timezone.utc).isoformat()
                 if args.browser_url:
@@ -290,6 +302,15 @@ def main():
                 assert all(report["restored_after_ledger"][name] == 0 for name in ("customers", "customer_destinations", "provider_keys", "auth_factors"))
                 report["restore_erasure_repeat"] = json.loads(once(["python", "-c", replayer], restore_env))
                 assert report["restored_after_ledger"]["erasure_requests"] == 2
+                if args.billing_restore:
+                    with psycopg.connect(restored_runtime_dsn) as connection:
+                        assert connection.execute("SELECT count(*) FROM mk_app.billing_provisions WHERE id=%s", (billing_intent,)).fetchone()[0] == 0
+                        binding = connection.execute("SELECT tenant_id,user_id,stripe_customer_id FROM mk_app.billing_erasure_bindings WHERE id=%s", (billing_intent,)).fetchone()
+                        assert binding == (billing_tenant, billing_user, "cus_ImagePrivacy")
+                        assert connection.execute("SELECT count(*) FROM mk_app.erasure_tasks WHERE kind='billing_provision' AND target_id=%s AND status='pending' AND confirmed_at IS NULL", (billing_intent,)).fetchone()[0] == 1
+                    report["restored_billing_cleanup_binding"] = {"exact_identity_retained": True,
+                        "business_intent_not_recreated": True, "one_pending_cleanup_task": True,
+                        "repeat_replay_idempotent": True}
                 if args.billing_privacy:
                     report["restored_billing_reactivation_refused"] = False
                     with psycopg.connect(restored_runtime_dsn) as connection:
