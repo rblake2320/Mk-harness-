@@ -25,7 +25,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .config import get_settings
-from .crypto import decrypt_secret, encrypt_secret
+from .crypto import seal_secret, unseal_secret
 from .models import AuditLog, ContactPreference, Customer, CustomerDestination, SuppressionEvent
 
 E164 = re.compile(r"^\+[1-9][0-9]{6,14}$")
@@ -79,11 +79,11 @@ def _aad(tenant_id: str, kind: str) -> str:
 
 
 def seal(tenant_id: str, kind: str, plaintext: str) -> str:
-    return encrypt_secret(get_settings().master_key_bytes, plaintext, _aad(tenant_id, kind))
+    return seal_secret(plaintext, _aad(tenant_id, kind))
 
 
 def unseal(tenant_id: str, kind: str, ciphertext: str) -> str:
-    return decrypt_secret(get_settings().master_key_bytes, ciphertext, _aad(tenant_id, kind))
+    return unseal_secret(ciphertext, _aad(tenant_id, kind))
 
 
 def audit(db: Session, tenant_id: str, user_id: str, action: str, detail: dict) -> str:

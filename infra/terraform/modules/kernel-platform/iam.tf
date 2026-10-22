@@ -16,7 +16,7 @@ locals {
     kernel_worker = ["master_key", "kek", "db_worker_credential"]
     kernel_relay  = ["db_relay_credential"]
     verifier      = ["db_readonly_credential"]
-    app           = ["master_key", "assertion_private", "jwt_secret", "db_app_credential", "stripe"]
+    app           = ["master_key", "app_seal_keys", "assertion_private", "jwt_secret", "db_app_credential", "stripe"]
     app_migrator  = ["db_app_migration_credential"]
     migrator      = ["master_key", "kek", "db_api_credential", "db_worker_credential", "db_relay_credential", "db_readonly_credential"]
   }

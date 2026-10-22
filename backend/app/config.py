@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     db_sslrootcert: str = ""
     jwt_secret: str = ""
     master_key: str = ""  # base64-encoded 32 bytes for AES-256-GCM envelope encryption
+    app_seal_keys: str = ""  # kid=base64,...; first writes, all listed read; m0=master is legacy
     # Destination-fingerprint keys, `kid=base64(32 bytes)[,kid=...]`, FIRST = current.
     # Must equal the kernel's MK_FINGERPRINT_KEYS so inbound tags match. Empty = the
     # master key as `m0` (pre-rotation behaviour). `m0=master` names the master key.
@@ -101,6 +102,28 @@ class Settings(BaseSettings):
             return {str(k): str(v) for k, v in data.items()}
         except (ValueError, AttributeError):
             return {}
+
+    @property
+    def seal_key_list(self) -> list[tuple[str, bytes]]:
+        import re
+        if not self.app_seal_keys.strip():
+            return [("m0", self.master_key_bytes)]
+        result: list[tuple[str, bytes]] = []
+        parts = self.app_seal_keys.split(",")
+        if len(parts) > 8:
+            raise RuntimeError("APP_SEAL_KEYS supports at most eight retained keys")
+        for part in parts:
+            kid, separator, value = part.strip().partition("=")
+            if not separator or not re.fullmatch(r"[a-z0-9_-]{1,16}", kid) or any(k == kid for k, _ in result):
+                raise RuntimeError("APP_SEAL_KEYS requires unique kid=base64 entries")
+            try:
+                key = self.master_key_bytes if value == "master" else base64.b64decode(value, validate=True)
+            except Exception:
+                raise RuntimeError("APP_SEAL_KEYS contains an invalid key") from None
+            if len(key) != 32:
+                raise RuntimeError("APP_SEAL_KEYS keys must be exactly 32 bytes")
+            result.append((kid, key))
+        return result
 
     @property
     def fingerprint_key_list(self) -> list[tuple[str, bytes]]:

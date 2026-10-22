@@ -123,7 +123,14 @@ async def lifespan(app: FastAPI):
     settings = get_settings()
     require_secret(settings)
     settings.master_key_bytes  # fail fast if missing/malformed
-    init_engine()
+    settings.seal_key_list
+    engine = init_engine()
+    if engine.dialect.name == "postgresql":
+        from sqlalchemy import text
+        with engine.connect() as connection:
+            writer_kid = connection.execute(text("SELECT writer_kid FROM mk_app.application_seal_policy WHERE id=1")).scalar_one()
+            if writer_kid != settings.seal_key_list[0][0]:
+                raise RuntimeError("Application sealing writer differs from the database fence; finish the authorized key rollout")
     stop = asyncio.Event()
     worker = asyncio.create_task(revocation_worker(stop))
     try:
@@ -137,6 +144,23 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="MK Consultant Harness", version="1.6.2", lifespan=lifespan)
+
+
+from sqlalchemy.exc import IntegrityError  # noqa: E402
+
+
+@app.exception_handler(IntegrityError)
+async def database_constraint_failure(_request, exc):
+    from fastapi.responses import JSONResponse
+    original = exc.orig
+    message = getattr(getattr(original, "diag", None), "message_primary", "")
+    if getattr(original, "sqlstate", None) == "23514" and message in {
+        "SEAL_WRITER_RETIRED", "SEAL_WRITE_REQUIRES_READ_COMMITTED"
+    }:
+        return JSONResponse(status_code=503, content={"detail": {"code": "SEAL_WRITER_RETIRED",
+            "message": "This server's encryption configuration needs an operator rollout. The change was not saved."}})
+    # Never echo SQL, parameters, encrypted data or credentials to the caller.
+    return JSONResponse(status_code=500, content={"detail": "Database operation failed"})
 
 
 @app.middleware('http')

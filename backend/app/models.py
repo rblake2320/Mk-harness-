@@ -24,6 +24,14 @@ class Base(DeclarativeBase):
     pass
 
 
+class ApplicationSealPolicy(Base):
+    """Operator-owned write fence; runtime may read but never change it."""
+    __tablename__ = "application_seal_policy"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    writer_kid: Mapped[str] = mapped_column(String(16))
+    allow_legacy: Mapped[bool] = mapped_column(Boolean)
+
+
 class Tenant(Base):
     __tablename__ = "tenants"
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=uid)

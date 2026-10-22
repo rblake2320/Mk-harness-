@@ -61,6 +61,7 @@ services:
       DB_PASSWORD: ${APP_DATABASE_PASSWORD:?set a distinct runtime password}
       JWT_SECRET: ${JWT_SECRET:?set in .env}
       MASTER_KEY: ${MASTER_KEY:?set in .env}
+      APP_SEAL_KEYS: ${APP_SEAL_KEYS:-}
       # Destination-fingerprint keys: MUST be the same value the kernel gets as
       # MK_FINGERPRINT_KEYS (first = current; empty = master key as m0).
       FINGERPRINT_KEYS: ${MK_FINGERPRINT_KEYS:-}

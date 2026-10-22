@@ -6,6 +6,7 @@ targets. The database container must carry the mk-87-rows task label.
 import argparse
 import base64
 import json
+import hashlib
 import os
 import secrets
 import subprocess
@@ -25,12 +26,15 @@ def main():
     parser.add_argument("--image", required=True)
     parser.add_argument("--database-container", required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--rotate-seal", action="store_true")
     args = parser.parse_args()
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
     report = {"scope": "author-run shipped container, real PostgreSQL, real HTTP; synthetic fixtures only"}
     owned = "mk-app-image-" + uuid.uuid4().hex
     database = "mk_app_image_" + uuid.uuid4().hex
+    restored_database = "mk_app_image_" + uuid.uuid4().hex
+    restored_created = False
     app_name = owned + "-api"
     network_created = attached = app_created = database_created = False
 
@@ -78,7 +82,7 @@ def main():
         assert report["owner_runtime_refused"]
         runtime_env = {**env, "DB_USER": "mk_app_login", "DB_PASSWORD": runtime_pw,
                        "JWT_SECRET": secrets.token_urlsafe(40), "MASTER_KEY": base64.b64encode(secrets.token_bytes(32)).decode(),
-                       "RATE_LIMIT_PER_MINUTE": "10000"}
+                       "APP_SEAL_KEYS": "", "RATE_LIMIT_PER_MINUTE": "10000"}
         options = ["run", "--detach", "--name", app_name, "--network", owned, "--read-only",
                    "--cap-drop=ALL", "--security-opt=no-new-privileges", "--tmpfs", "/tmp:rw,noexec,nosuid,size=64m",
                    "--label", "codex.task=mk-87-rows", "--publish", "127.0.0.1::8000"]
@@ -138,6 +142,63 @@ def main():
             retained = client.get("/api/customers/" + customer_id, headers=headers)
             assert retained.status_code == 200 and retained.json()["name"] == "Retained synthetic image customer"
             report["after_restart_customer_status"] = retained.status_code
+            if args.rotate_seal:
+                created_key = client.put("/api/keys/mine", headers=headers,
+                                         json={"provider": "anthropic", "api_key": "synthetic-image-provider-key"})
+                assert created_key.status_code == 200
+                backup = subprocess.run(["docker", "exec", args.database_container, "pg_dump", "-U", parsed["user"],
+                                         "--format=custom", "--dbname", database], capture_output=True, timeout=45)
+                assert backup.returncode == 0 and len(backup.stdout) > 1000
+                report["pre_rotation_backup"] = {"sha256": hashlib.sha256(backup.stdout).hexdigest(), "bytes": len(backup.stdout)}
+                seal_key = base64.b64encode(secrets.token_bytes(32)).decode()
+                ring = "s2=" + seal_key + ",m0=master"
+                migration_url = f"postgresql+psycopg://mk_app_migrator:{migration_pw}@db:5432/{database}?sslmode=disable"
+                report["seal_activation"] = json.loads(once(["python", "-m", "app.tools.reseal", "activate", "--actor", "image-acceptance"],
+                    {"APP_SEAL_KEYS": ring, "MASTER_KEY": runtime_env["MASTER_KEY"], "MK_APP_MIGRATION_URL": migration_url}))
+                # The already-running old-key process is denied by PostgreSQL.
+                stale = client.put("/api/keys/mine", headers=headers,
+                                   json={"provider": "anthropic", "api_key": "obsolete-writer-value"})
+                report["retired_writer_status"] = stale.status_code
+                assert stale.status_code == 503 and stale.json()["detail"]["code"] == "SEAL_WRITER_RETIRED"
+                docker("rm", "--force", app_name)
+                app_created = False
+                runtime_env["APP_SEAL_KEYS"] = ring
+                report["reseal"] = json.loads(once(["python", "-m", "app.tools.reseal", "rekey", "--batch-size", "1", "--actor", "image-acceptance"], runtime_env))
+                assert report["reseal"]["stale"] == report["reseal"]["unreadable"] == 0
+                runtime_env["APP_SEAL_KEYS"] = "s2=" + seal_key
+                report["retired_key_status"] = json.loads(once(["python", "-m", "app.tools.reseal", "status"], runtime_env))
+                docker(*options, image, env=runtime_env)
+                app_created = True
+                rolled = json.loads(docker("inspect", app_name))[0]
+                client.base_url = "http://127.0.0.1:" + rolled["NetworkSettings"]["Ports"]["8000/tcp"][0]["HostPort"]
+                ready()
+                report["session_survives_reseal"] = client.get("/api/customers/" + customer_id, headers=headers).status_code
+                assert report["session_survives_reseal"] == 200
+                login = client.post("/api/auth/login", json={"email": "image@example.com", "password": "SyntheticStrongPassword123!"})
+                assert login.status_code == 200
+                verified = client.post("/api/auth/mfa/verify", headers={"Authorization": "Bearer " + login.json()["access_token"]},
+                                       json={"code": pyotp.TOTP(enrolled.json()["secret"]).at(time.time() + 30)})
+                report["totp_after_key_retirement"] = verified.status_code
+                assert verified.status_code == 200
+                with psycopg.connect(admin, autocommit=True) as conn:
+                    conn.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(restored_database)))
+                    restored_created = True
+                restored = subprocess.run(["docker", "exec", "-i", args.database_container, "pg_restore", "-U", parsed["user"],
+                                           "--exit-on-error", "--dbname", restored_database], input=backup.stdout,
+                                          capture_output=True, timeout=45)
+                assert restored.returncode == 0, "Restore of the synthetic pre-rotation backup failed"
+                restore_env = {**runtime_env, "DB_NAME": restored_database}
+                rejected = json.loads(once(["python", "-m", "app.tools.reseal", "status"], restore_env, expected=1))
+                assert rejected["unreadable"] == 2
+                report["old_backup_without_escrow_unreadable"] = rejected["unreadable"]
+                restore_env["APP_SEAL_KEYS"] = ring
+                restore_url = f"postgresql+psycopg://mk_app_migrator:{migration_pw}@db:5432/{restored_database}?sslmode=disable"
+                once(["python", "-m", "app.tools.reseal", "activate", "--actor", "restore-acceptance"],
+                     {"APP_SEAL_KEYS": ring, "MASTER_KEY": runtime_env["MASTER_KEY"], "MK_APP_MIGRATION_URL": restore_url})
+                report["restored_backup_reseal"] = json.loads(once(["python", "-m", "app.tools.reseal", "rekey", "--actor", "restore-acceptance"], restore_env))
+                restore_env["APP_SEAL_KEYS"] = runtime_env["APP_SEAL_KEYS"]
+                report["restored_backup_new_key_only"] = json.loads(once(["python", "-m", "app.tools.reseal", "status"], restore_env))
+                assert report["restored_backup_new_key_only"]["unreadable"] == 0
         live = psycopg.conninfo.make_conninfo(admin, dbname=database, user="mk_app_login", password=runtime_pw)
         with psycopg.connect(live) as conn:
             report["database_identity"] = conn.execute("SELECT session_user, current_user").fetchone()
@@ -159,6 +220,9 @@ def main():
         if database_created:
             with psycopg.connect(admin, autocommit=True) as conn:
                 conn.execute(sql.SQL("DROP DATABASE {} WITH (FORCE)").format(sql.Identifier(database)))
+        if restored_created:
+            with psycopg.connect(admin, autocommit=True) as conn:
+                conn.execute(sql.SQL("DROP DATABASE {} WITH (FORCE)").format(sql.Identifier(restored_database)))
         report["owned_targets_removed"] = True
         (output / "report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(report, indent=2))

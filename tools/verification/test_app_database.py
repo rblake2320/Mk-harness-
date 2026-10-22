@@ -19,9 +19,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "backend"))
 from app import db
 from app.migrate import bootstrap, migrate
 from app.models import Base
+from app.database_policy import migration_files
 
 RUNTIME_PASSWORD = "acceptance-runtime-only"
 MIGRATION_PASSWORD = "acceptance-migrator-only"
+VERSIONS = [path.name for path in migration_files()]
 
 
 def raw(url):
@@ -33,8 +35,8 @@ def initialized(database):
     bootstrap(database, RUNTIME_PASSWORD, MIGRATION_PASSWORD)
     migration = database.set(username="mk_app_migrator", password=MIGRATION_PASSWORD)
     runtime = database.set(username="mk_app_login", password=RUNTIME_PASSWORD)
-    assert migrate(migration) == ["0001_initial.sql"]
-    assert migrate(migration) == ["0001_initial.sql"]  # idempotent, checksummed
+    assert migrate(migration) == VERSIONS
+    assert migrate(migration) == VERSIONS  # idempotent, checksummed
     yield database, migration, runtime
 
 
@@ -150,9 +152,9 @@ def test_simultaneous_first_migrations_serialize(database):
     migration = database.set(username="mk_app_migrator", password=MIGRATION_PASSWORD)
     with ThreadPoolExecutor(max_workers=2) as pool:
         results = list(pool.map(migrate, [migration, migration]))
-    assert results == [["0001_initial.sql"], ["0001_initial.sql"]]
+    assert results == [VERSIONS, VERSIONS]
     with psycopg.connect(raw(database)) as conn:
-        assert conn.execute("SELECT count(*) FROM mk_app.schema_migrations").fetchone()[0] == 1
+        assert conn.execute("SELECT count(*) FROM mk_app.schema_migrations").fetchone()[0] == len(VERSIONS)
 
 
 def test_public_data_adoption_is_explicit_and_preserves_rows(database):
@@ -210,3 +212,199 @@ def test_real_api_mfa_and_customer_transaction_with_runtime_identity(initialized
         assert conn.execute("SELECT count(*) FROM customers").fetchone()[0] == 1
         assert conn.execute("SELECT count(*) FROM audit_logs").fetchone()[0] > 0
     get_settings.cache_clear()
+
+
+def test_seal_rekey_covers_real_postgres_records_and_fences_old_writers(initialized, monkeypatch):
+    from sqlalchemy.orm import Session
+    from app.config import get_settings
+    from app.crypto import encrypt_secret, seal_secret, unseal_secret
+    from app.tools.reseal import FIELDS, activate, scan
+    from backend.tests.test_seal_rotation import seed_rotation_records
+    from app.models import ProviderKey
+    owner, migration, runtime = initialized
+    monkeypatch.setenv("MASTER_KEY", base64.b64encode(b"0" * 32).decode())
+    monkeypatch.delenv("APP_SEAL_KEYS", raising=False)
+    get_settings.cache_clear()
+    engine = db.init_engine(runtime)
+    try:
+        with Session(engine, expire_on_commit=False) as session:
+            records = seed_rotation_records(session)
+            old = records[ProviderKey].ciphertext
+            before = scan(session)
+            assert before.total == before.stale == 9 and not before.clean()
+        monkeypatch.setenv("APP_SEAL_KEYS", "s2=" + base64.b64encode(b"2" * 32).decode() + ",m0=master")
+        get_settings.cache_clear()
+        with pytest.raises(RuntimeError, match="separate mk_app_migrator login"):
+            activate(runtime)
+        assert activate(migration)["writer_kid"] == "s2"
+        with psycopg.connect(raw(runtime)) as conn:
+            with pytest.raises(psycopg.errors.InsufficientPrivilege):
+                conn.execute("UPDATE mk_app.application_seal_policy SET writer_kid='m0'")
+        with Session(engine) as session:
+            report = scan(session, apply=True, batch_size=1)
+            assert report.updated == 9 and report.clean()
+        # Even an old process holding MASTER_KEY cannot reintroduce legacy rows.
+        for ciphertext in (old, seal_secret("old writer", "unused", keys=[("m0", b"0" * 32)])):
+            with psycopg.connect(raw(runtime)) as conn:
+                with pytest.raises(psycopg.errors.CheckViolation, match="SEAL_WRITER_RETIRED"):
+                    conn.execute("UPDATE mk_app.provider_keys SET ciphertext=%s WHERE id='fixture'", (ciphertext,))
+        monkeypatch.setenv("APP_SEAL_KEYS", "s2=" + base64.b64encode(b"2" * 32).decode())
+        get_settings.cache_clear()
+        with Session(engine) as session:
+            assert scan(session).clean()
+            for item in FIELDS:
+                row = session.scalars(__import__("sqlalchemy").select(item.model)).one()
+                assert unseal_secret(getattr(row, item.name), item.aad(row)) == "synthetic-" + item.name
+                primary = next(iter(item.model.__table__.primary_key.columns)).name
+                obsolete = encrypt_secret(b"0" * 32, "late-obsolete", item.aad(row))
+                with psycopg.connect(raw(runtime)) as old_writer:
+                    with pytest.raises(psycopg.errors.CheckViolation, match="SEAL_WRITER_RETIRED"):
+                        old_writer.execute(sql.SQL("UPDATE mk_app.{} SET {}=%s WHERE {}=%s").format(
+                            sql.Identifier(item.model.__tablename__), sql.Identifier(item.name), sql.Identifier(primary)),
+                            (obsolete, getattr(row, primary)))
+    finally:
+        get_settings.cache_clear()
+
+
+def test_policy_activation_waits_for_inflight_legacy_write(initialized, monkeypatch):
+    import time
+    from concurrent.futures import ThreadPoolExecutor
+    from app.config import get_settings
+    from app.tools.reseal import activate
+    from backend.tests.test_seal_rotation import seed_rotation_records
+    from sqlalchemy.orm import Session
+    from app.crypto import encrypt_secret
+    owner, migration, runtime = initialized
+    monkeypatch.setenv("MASTER_KEY", base64.b64encode(b"0" * 32).decode())
+    monkeypatch.delenv("APP_SEAL_KEYS", raising=False)
+    get_settings.cache_clear()
+    with Session(db.init_engine(runtime)) as session:
+        seed_rotation_records(session)
+    monkeypatch.setenv("APP_SEAL_KEYS", "s2=" + base64.b64encode(b"2" * 32).decode() + ",m0=master")
+    get_settings.cache_clear()
+    writer = psycopg.connect(raw(runtime))
+    try:
+        writer.execute("UPDATE mk_app.provider_keys SET ciphertext=%s WHERE id='fixture'",
+                       (encrypt_secret(b"0" * 32, "inflight", "a" * 32 + ":fixture:fixture"),))
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            pending = pool.submit(activate, migration)
+            try:
+                with psycopg.connect(raw(owner), autocommit=True) as inspect_conn:
+                    deadline = time.monotonic() + 5
+                    while time.monotonic() < deadline:
+                        blocked = inspect_conn.execute("SELECT count(*) FROM pg_locks WHERE locktype='advisory' AND NOT granted AND database=(SELECT oid FROM pg_database WHERE datname=current_database())").fetchone()[0]
+                        if blocked: break
+                        time.sleep(.02)
+                assert blocked == 1 and not pending.done()
+            finally:
+                writer.commit()
+            assert pending.result(timeout=5)["writer_kid"] == "s2"
+        with pytest.raises(psycopg.errors.CheckViolation, match="SEAL_WRITER_RETIRED"):
+            writer.execute("UPDATE mk_app.provider_keys SET ciphertext=%s WHERE id='fixture'",
+                           (encrypt_secret(b"0" * 32, "late", "a" * 32 + ":fixture:fixture"),))
+    finally:
+        writer.close(); get_settings.cache_clear()
+
+
+def test_waiting_legacy_writer_observes_new_fence_after_activation(initialized, monkeypatch):
+    import time
+    from concurrent.futures import ThreadPoolExecutor
+    from app.config import get_settings
+    from backend.tests.test_seal_rotation import seed_rotation_records
+    from sqlalchemy.orm import Session
+    from app.crypto import encrypt_secret
+    owner, _, runtime = initialized
+    monkeypatch.setenv("MASTER_KEY", base64.b64encode(b"0" * 32).decode())
+    monkeypatch.delenv("APP_SEAL_KEYS", raising=False)
+    get_settings.cache_clear()
+    with Session(db.init_engine(runtime)) as session:
+        seed_rotation_records(session)
+    controller = psycopg.connect(raw(owner))
+    try:
+        controller.execute("UPDATE mk_app.application_seal_policy SET writer_kid='s2',allow_legacy=false WHERE id=1")
+        def stale_write():
+            with psycopg.connect(raw(runtime)) as writer:
+                writer.execute("UPDATE mk_app.provider_keys SET ciphertext=%s WHERE id='fixture'",
+                               (encrypt_secret(b"0" * 32, "waiting", "a" * 32 + ":fixture:fixture"),))
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            pending = pool.submit(stale_write)
+            try:
+                with psycopg.connect(raw(owner), autocommit=True) as inspection:
+                    deadline = time.monotonic() + 5
+                    while time.monotonic() < deadline:
+                        blocked = inspection.execute("SELECT count(*) FROM pg_locks WHERE locktype='advisory' AND NOT granted AND database=(SELECT oid FROM pg_database WHERE datname=current_database())").fetchone()[0]
+                        if blocked: break
+                        time.sleep(.02)
+                assert blocked == 1 and not pending.done()
+            finally:
+                controller.commit()
+            with pytest.raises(psycopg.errors.CheckViolation, match="SEAL_WRITER_RETIRED"):
+                pending.result(timeout=5)
+        with psycopg.connect(raw(runtime)) as writer:
+            writer.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
+            with pytest.raises(psycopg.errors.CheckViolation, match="SEAL_WRITE_REQUIRES_READ_COMMITTED"):
+                writer.execute("UPDATE mk_app.provider_keys SET ciphertext=%s WHERE id='fixture'",
+                               (encrypt_secret(b"0" * 32, "snapshot", "unused"),))
+    finally:
+        controller.close(); get_settings.cache_clear()
+
+
+def test_killed_reseal_process_resumes_committed_batches(initialized, monkeypatch):
+    import json
+    import subprocess
+    import time
+    from app.config import get_settings
+    from app.crypto import encrypt_secret
+    from app.tools.reseal import activate
+    from backend.tests.test_seal_rotation import seed_rotation_records
+    from sqlalchemy.orm import Session
+    owner, migration, runtime = initialized
+    monkeypatch.setenv("MASTER_KEY", base64.b64encode(b"0" * 32).decode())
+    monkeypatch.delenv("APP_SEAL_KEYS", raising=False)
+    get_settings.cache_clear()
+    with Session(db.init_engine(runtime)) as session:
+        seed_rotation_records(session)
+    # Enough individually committed batches to observe and interrupt actual work.
+    with psycopg.connect(raw(owner)) as conn:
+        with conn.cursor() as cursor:
+            cursor.executemany("""INSERT INTO mk_app.exceptions
+                (id,tenant_id,customer_id,kind,source_reference,detail_enc,state,resolved_by,resolved_at,version,audit_ref,created_at)
+                VALUES (%s,%s,NULL,'fixture','',%s,'open',NULL,NULL,1,'',now())""",
+                [(f"kill-{index:06d}", "a" * 32, encrypt_secret(b"0" * 32, f"record-{index}", "mk-foundation:" + "a" * 32 + ":exception"))
+                 for index in range(4000)])
+    ring = "s2=" + base64.b64encode(b"2" * 32).decode() + ",m0=master"
+    monkeypatch.setenv("APP_SEAL_KEYS", ring)
+    get_settings.cache_clear()
+    activate(migration)
+    environment = {"PATH": os.environ.get("PATH", ""), "PYTHONPATH": str(Path(__file__).resolve().parents[2] / "backend"),
+                   "DATABASE_URL": runtime.render_as_string(hide_password=False),
+                   "MASTER_KEY": base64.b64encode(b"0" * 32).decode(), "APP_SEAL_KEYS": ring}
+    command = [sys.executable, "-m", "app.tools.reseal", "rekey", "--batch-size", "1", "--actor", "kill-acceptance"]
+    process = subprocess.Popen(command, env=environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    observed = 0
+    try:
+        with psycopg.connect(raw(owner), autocommit=True) as inspection:
+            deadline = time.monotonic() + 15
+            while time.monotonic() < deadline and process.poll() is None:
+                observed = inspection.execute("SELECT count(*) FROM mk_app.audit_logs WHERE action='security.seal_rekey' AND user_id='kill-acceptance'").fetchone()[0]
+                if observed >= 2:
+                    process.kill()
+                    break
+                time.sleep(.02)
+        stdout, stderr = process.communicate(timeout=10)
+        assert observed >= 2 and process.returncode != 0, (observed, process.returncode)
+        # Committed ciphertext and audit survive SIGKILL; unfinished batches retry.
+        resumed = subprocess.run([sys.executable, "-m", "app.tools.reseal", "rekey", "--batch-size", "200", "--actor", "resume-acceptance"],
+                                 env=environment, capture_output=True, text=True, timeout=40)
+        assert resumed.returncode == 0, resumed.stdout
+        report = json.loads(resumed.stdout)
+        assert report["total"] == 4009 and 0 < report["updated"] < 4009
+        assert report["stale"] == report["unreadable"] == report["conflicts"] == 0
+        environment["APP_SEAL_KEYS"] = "s2=" + base64.b64encode(b"2" * 32).decode()
+        final = subprocess.run([sys.executable, "-m", "app.tools.reseal", "status"], env=environment,
+                               capture_output=True, text=True, timeout=20)
+        assert final.returncode == 0 and json.loads(final.stdout)["total"] == 4009
+    finally:
+        if process.poll() is None:
+            process.kill(); process.communicate(timeout=10)
+        get_settings.cache_clear()

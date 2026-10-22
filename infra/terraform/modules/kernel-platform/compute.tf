@@ -110,6 +110,7 @@ locals {
       ]
       secrets = [
         { name = "MASTER_KEY", valueFrom = local.secret["master_key"] },
+        { name = "APP_SEAL_KEYS", valueFrom = local.secret["app_seal_keys"] },
         # Same secret as the kernel's MK_FINGERPRINT_KEYS: one value, never two.
         { name = "FINGERPRINT_KEYS", valueFrom = local.secret["fingerprint_keys"] },
         { name = "KERNEL_ASSERTION_PRIVATE_KEY", valueFrom = local.secret["assertion_private"] },

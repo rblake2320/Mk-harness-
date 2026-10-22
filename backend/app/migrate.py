@@ -12,7 +12,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
 
 from .config import Settings
-from .database_policy import MIGRATIONS, migration_files, validate_schema
+from .database_policy import MIGRATIONS, READ_ONLY_TABLES, migration_files, validate_schema
 from .models import Base
 
 
@@ -46,22 +46,26 @@ def bootstrap(url, runtime_password, migration_password, *, adopt_public=False):
             raise RuntimeError("Application schema has an unexpected owner")
 
 
+def require_migration_identity(conn):
+    identity = conn.execute(text("SELECT session_user, current_user")).one()
+    if tuple(identity) != ("mk_app_migrator", "mk_app_migrator"):
+        raise RuntimeError("Migration requires the separate mk_app_migrator login")
+    elevated = conn.execute(text("""SELECT EXISTS(SELECT 1 FROM pg_roles WHERE
+        (rolname=session_user OR pg_has_role(session_user,oid,'MEMBER'))
+        AND (rolsuper OR rolcreatedb OR rolcreaterole OR rolreplication OR rolbypassrls
+             OR rolname NOT IN ('mk_app_owner','mk_app_migrator')))""")).scalar()
+    if elevated:
+        raise RuntimeError("Unexpected migration identity privileges")
+    conn.exec_driver_sql("SET LOCAL ROLE mk_app_owner")
+
+
 def migrate(url):
     resolved = Settings(_env_file=None, database_url=make_url(url).render_as_string(hide_password=False),
                         db_host="", db_password="").connection_url
     engine = create_engine(resolved, hide_parameters=True)
     try:
         with engine.begin() as conn:
-            identity = conn.execute(text("SELECT session_user, current_user")).one()
-            if tuple(identity) != ("mk_app_migrator", "mk_app_migrator"):
-                raise RuntimeError("Migration requires the separate mk_app_migrator login")
-            elevated = conn.execute(text("""SELECT EXISTS(SELECT 1 FROM pg_roles WHERE
-                (rolname=session_user OR pg_has_role(session_user,oid,'MEMBER'))
-                AND (rolsuper OR rolcreatedb OR rolcreaterole OR rolreplication OR rolbypassrls
-                     OR rolname NOT IN ('mk_app_owner','mk_app_migrator')))""")).scalar()
-            if elevated:
-                raise RuntimeError("Unexpected migration identity privileges")
-            conn.exec_driver_sql("SET LOCAL ROLE mk_app_owner")
+            require_migration_identity(conn)
             conn.exec_driver_sql("SET LOCAL search_path = mk_app, pg_catalog")
             conn.exec_driver_sql("SELECT pg_advisory_xact_lock(58721493621)")
             conn.exec_driver_sql("CREATE TABLE IF NOT EXISTS mk_app.schema_migrations (version text PRIMARY KEY, sha256 text NOT NULL, applied_at timestamptz NOT NULL DEFAULT now())")
@@ -75,14 +79,16 @@ def migrate(url):
                     if applied[path.name] != digest:
                         raise RuntimeError("Applied migration checksum mismatch")
                     continue
-                conn.exec_driver_sql(path.read_text(encoding="utf-8"))
+                # Raw SQL files contain literal %ROWTYPE / LIKE patterns, not
+                # driver placeholders. Execute without an empty parameter map.
+                conn.connection.driver_connection.execute(path.read_text(encoding="utf-8"), prepare=False)
                 conn.execute(text("INSERT INTO mk_app.schema_migrations(version,sha256) VALUES (:version,:sha256)"),
                              {"version": path.name, "sha256": digest})
             validate_schema(conn)
             for name in [*Base.metadata.tables, "schema_migrations"]:
                 identifier = conn.dialect.identifier_preparer.quote(name)
                 conn.exec_driver_sql(f"REVOKE ALL ON TABLE mk_app.{identifier} FROM PUBLIC, mk_app_runtime, mk_app_login")
-                permissions = "SELECT" if name == "schema_migrations" else "SELECT, INSERT" if name == "audit_logs" else "SELECT, INSERT, UPDATE, DELETE"
+                permissions = "SELECT" if name in READ_ONLY_TABLES else "SELECT, INSERT" if name == "audit_logs" else "SELECT, INSERT, UPDATE, DELETE"
                 conn.exec_driver_sql(f"GRANT {permissions} ON TABLE mk_app.{identifier} TO mk_app_runtime")
             return [p.name for p in files]
     finally:

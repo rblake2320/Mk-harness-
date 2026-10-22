@@ -17,7 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
-from ..crypto import decrypt_secret, key_aad
+from ..crypto import unseal_secret, key_aad
 from ..models import ProviderKey, Tenant, UsageRecord, User
 from .anthropic_openai import AnthropicAdapter, OpenAIAdapter
 from .base import ChatRequest, ChatResult, ProviderAdapter, ProviderError, Usage, cost_usd
@@ -61,8 +61,7 @@ def resolve(db: Session, user: User, provider: str) -> ResolvedProvider:
         raise NoKeyAvailable(f"Unknown provider '{provider}'")
 
     def from_row(row: ProviderKey, scope: str) -> ResolvedProvider:
-        plaintext = decrypt_secret(s.master_key_bytes, row.ciphertext,
-                                   key_aad(row.tenant_id, row.user_id, row.provider))
+        plaintext = unseal_secret(row.ciphertext, key_aad(row.tenant_id, row.user_id, row.provider))
         return ResolvedProvider(cls(api_key=plaintext, base_url=row.base_url), provider, scope)
 
     if policy in ("byo", "both"):

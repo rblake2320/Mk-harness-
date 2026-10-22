@@ -61,6 +61,7 @@ locals {
     db_readonly_credential      = "mk_readonly_login"
     db_app_credential           = "mk_app_login - runtime DML only"
     db_app_migration_credential = "mk_app_migrator - one-shot application migrations only"
+    app_seal_keys               = "Application AES-GCM sealing key ring kid=base64,...; not destination fingerprints"
     stripe                      = "STRIPE_SECRET_KEY / STRIPE_WEBHOOK_SECRET"
   }
 }

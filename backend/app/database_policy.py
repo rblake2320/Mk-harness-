@@ -7,6 +7,7 @@ from sqlalchemy import inspect, text
 from .models import Base
 
 MIGRATIONS = Path(__file__).parent / "migrations"
+READ_ONLY_TABLES = {"schema_migrations", "application_seal_policy"}
 
 
 def migration_files():
@@ -83,8 +84,8 @@ def validate_runtime(connection):
           AND n.nspname <> 'information_schema'""")).all()
     for row in relations:
         permitted = row.nspname == "mk_app" and row.relname in {*Base.metadata.tables, "schema_migrations"}
-        immutable = row.relname in {"audit_logs", "schema_migrations"}
-        if row.owned or (row.accessible and not permitted) or row.ddl or (immutable and row.destructive) or (row.relname == "schema_migrations" and row.insertable):
+        immutable = row.relname in {"audit_logs", *READ_ONLY_TABLES}
+        if row.owned or (row.accessible and not permitted) or row.ddl or (immutable and row.destructive) or (row.relname in READ_ONLY_TABLES and row.insertable):
             raise RuntimeError("Unsafe runtime database identity: table ownership or excess grants")
     if connection.execute(text("""SELECT EXISTS(SELECT 1 FROM pg_proc p
         JOIN pg_namespace n ON n.oid=p.pronamespace WHERE p.prosecdef
@@ -93,7 +94,7 @@ def validate_runtime(connection):
         raise RuntimeError("Unsafe runtime database identity: executable security-definer function")
     validate_schema(connection)
     for name in [*Base.metadata.tables, "schema_migrations"]:
-        required = ["SELECT"] if name == "schema_migrations" else ["SELECT", "INSERT"] if name == "audit_logs" else ["SELECT", "INSERT", "UPDATE", "DELETE"]
+        required = ["SELECT"] if name in READ_ONLY_TABLES else ["SELECT", "INSERT"] if name == "audit_logs" else ["SELECT", "INSERT", "UPDATE", "DELETE"]
         for permission in required:
             if not connection.execute(text("SELECT has_table_privilege(:table, :permission)"),
                                       {"table": f"mk_app.{name}", "permission": permission}).scalar():

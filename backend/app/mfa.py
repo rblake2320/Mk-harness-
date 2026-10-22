@@ -13,8 +13,7 @@ from fastapi import HTTPException
 from sqlalchemy import case, delete, or_, update
 from sqlalchemy.orm import Session
 
-from .config import get_settings
-from .crypto import decrypt_secret, encrypt_secret
+from .crypto import seal_secret, unseal_secret
 from .models import AuthFactor, AuthRecoveryCode, User
 
 
@@ -27,11 +26,11 @@ def aad(user: User, session_id: str | None = None) -> str:
 
 
 def seal(user: User, secret: str, session_id: str | None = None) -> str:
-    return encrypt_secret(get_settings().master_key_bytes, secret, aad(user, session_id))
+    return seal_secret(secret, aad(user, session_id))
 
 
 def unseal(user: User, encrypted: str, session_id: str | None = None) -> str:
-    return decrypt_secret(get_settings().master_key_bytes, encrypted, aad(user, session_id))
+    return unseal_secret(encrypted, aad(user, session_id))
 
 
 def factor_for(db: Session, user: User) -> AuthFactor | None:
