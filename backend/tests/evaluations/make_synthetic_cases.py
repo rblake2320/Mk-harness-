@@ -231,7 +231,7 @@ def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     for fname, rows in (("a2_customer_context.jsonl", a2()), ("a3_product_claims.jsonl", a3()),
                         ("a4_optout_escalation.jsonl", a4()), ("a5_prompt_injection.jsonl", a5())):
-        (OUT / fname).write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows))
+        (OUT / fname).write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows), encoding="utf-8")
         print(f"{fname}: {len(rows)} synthetic cases")
 
 

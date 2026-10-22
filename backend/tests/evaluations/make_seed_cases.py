@@ -12,7 +12,7 @@ CASES.mkdir(exist_ok=True)
 
 
 def write(name: str, rows: list[dict]):
-    (CASES / name).write_text("\n".join(json.dumps(r, ensure_ascii=False) for r in rows) + "\n")
+    (CASES / name).write_text("\n".join(json.dumps(r, ensure_ascii=False) for r in rows) + "\n", encoding="utf-8")
 
 
 def ex(commitments):  # extractor output

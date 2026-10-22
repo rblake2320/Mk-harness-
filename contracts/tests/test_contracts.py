@@ -120,24 +120,11 @@ def test_work_order_fixture_validates():
     assert errors, "verified_on_device=true must be rejected by the contract"
 
 
-if __name__ == "__main__":
-    failures = 0
-    for name, fn in sorted(globals().items()):
-        if name.startswith("test_") and callable(fn):
-            try:
-                fn()
-                print(f"ok   {name}")
-            except Exception as exc:  # noqa: BLE001
-                failures += 1
-                print(f"FAIL {name}: {exc!r}")
-    sys.exit(1 if failures else 0)
-
-
 def test_commitment_and_outcome_schemas_compile_and_separate_transport_from_business():
     import jsonschema
     base = ROOT
-    c = json.loads((base / "commitments/v1/commitment.schema.json").read_text())
-    o = json.loads((base / "outcomes/v1/outcome.schema.json").read_text())
+    c = json.loads((base / "commitments/v1/commitment.schema.json").read_text(encoding="utf-8"))
+    o = json.loads((base / "outcomes/v1/outcome.schema.json").read_text(encoding="utf-8"))
     Draft202012Validator.check_schema(c)
     Draft202012Validator.check_schema(o)
     v = Draft202012Validator(c, format_checker=jsonschema.FormatChecker())
@@ -177,6 +164,26 @@ def test_inbound_event_schema_matches_contract_fields_and_message_state_vocabula
               "source_destination": "a" * 64, "received_at": "2026-10-20T00:00:00Z", "provider_timestamp": None,
               "content_reference": "sealed:01a15bcc-6dd9-7335-a12a-536eabc1fa21", "authentication_result": "verified",
               "raw_event_digest": "sha256:" + "0" * 64, "opt_out_signal": "explicit", "disposition": "suppressed"}
-    Draft202012Validator(inbound).validate(sample)
+    validator = Draft202012Validator(inbound, format_checker=Draft202012Validator.FORMAT_CHECKER)
+    validator.validate(sample)
     bad = dict(sample, authentication_result="failed")
-    assert list(Draft202012Validator(inbound).iter_errors(bad)), "unverified events must not validate"
+    assert list(validator.iter_errors(bad)), "unverified events must not validate"
+    for field in inbound["required"]:
+        missing = {k: v for k, v in sample.items() if k != field}
+        assert list(validator.iter_errors(missing)), f"missing {field} must not validate"
+    for bad in (dict(sample, body="private message"), dict(sample, tenant_id="wrong"),
+                dict(sample, received_at="yesterday"), dict(sample, source_destination="+15555550100")):
+        assert list(validator.iter_errors(bad)), "malformed or plaintext event must not validate"
+
+
+if __name__ == "__main__":
+    failures = 0
+    for name, fn in sorted(globals().items()):
+        if name.startswith("test_") and callable(fn):
+            try:
+                fn()
+                print(f"ok   {name}")
+            except Exception as exc:  # noqa: BLE001
+                failures += 1
+                print(f"FAIL {name}: {exc!r}")
+    sys.exit(1 if failures else 0)

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Gross-margin gate (contract M3): ≥ 70 % at the proposed price on MEASURED costs.
+"""Gross-margin gate (contract M4): ≥ 70 % at the proposed price on MEASURED costs.
 
     python -I tools/release/margin.py costs.yaml
 
@@ -58,7 +58,7 @@ def evaluate(doc: dict) -> dict:
         "unmeasured_lines": unmeasured,
         "checks": checks,
         "pass": all(checks.values()),
-        "note": "pricing still requires the business owner's written approval (M3 record); a passing margin is not that approval",
+        "note": "pricing still requires the business owner's written approval (M4 record); a passing margin is not that approval",
     }
 
 

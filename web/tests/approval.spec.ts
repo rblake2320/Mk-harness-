@@ -63,3 +63,17 @@ test('brief offers drafting when the permission observation is active', async ({
   await expect(page.getByText('Permission:')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Draft a message' })).toBeVisible();
 });
+
+for (const permission of ['none', 'suppressed'] as const) {
+  test(`brief retains source and safe controls without drafting when permission is ${permission}`, async ({ page }) => {
+    await mockApi(page, permission);
+    await page.goto('/');
+    const item = page.getByRole('listitem').filter({ hasText: 'Brenda Lee' });
+    await expect(item.getByText('Send the shade chart', { exact: false }).first()).toBeVisible();
+    await expect(item.getByRole('button', { name: 'Draft a message' })).toHaveCount(0);
+    for (const name of ['Defer to tomorrow', 'Mark resolved', 'Skip']) {
+      await expect(item.getByRole('button', { name, exact: true })).toBeVisible();
+    }
+    if (permission === 'suppressed') await expect(item).toContainText('Outreach is blocked.');
+  });
+}

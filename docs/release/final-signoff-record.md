@@ -21,7 +21,7 @@ with an artifact checksum and a named verifier closes a row.
 * Release commit (40-hex), deployed image digests (`mk-action-kernel`, `mk-app`)
 * Qualification window (C10 30 days; O4 envelope run dates)
 * Evidence index: `evidence/releases/<id>/` listing, each record's `status` and `verifier`
-* Named sign-offs: release owner; legal/privacy reviewer (M1); external security reviewer (S15); business owner (M3 pricing); support owner (M4)
+* Named sign-offs: release owner; legal/privacy reviewer (M1); external security reviewer (S15); business owner (M4 pricing); support owner (M3)
 * The exact permitted claims from `claims-register.md`
 
 ## Owners (blocking — unassigned)
@@ -31,7 +31,7 @@ with an artifact checksum and a named verifier closes a row.
 | Release owner | — | all; final checklist |
 | Independent verifier (engineering) | — | every Implemented row → Independently verified |
 | External security reviewer | — | S15 |
-| Legal/privacy reviewer | — | S1, S2, M1, M2 |
+| Legal/privacy reviewer | — | D7, S13, M1, M2 |
 | Qualification owner | — | C10, O2–O4, K1 |
-| Business owner | — | M3 (pricing), D6, D7 |
-| Support owner | — | M4, O7 on-call |
+| Business owner | — | M4 (pricing), D6, D7 |
+| Support owner | — | M3, O7 on-call |

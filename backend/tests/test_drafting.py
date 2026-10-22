@@ -242,7 +242,7 @@ def test_evaluation_harness_replay_passes_on_synthetic_sets():
     import json
     from pathlib import Path
     syn = Path(ev.__file__).parent / "cases" / "synthetic"
-    lines = [json.loads(l) for f in syn.glob("*.jsonl") for l in f.read_text().splitlines() if l.strip()]
+    lines = [json.loads(l) for f in syn.glob("*.jsonl") for l in f.read_text(encoding="utf-8").splitlines() if l.strip()]
     assert len(lines) > 1000 and all(l["provenance"].startswith("synthetic-generated") for l in lines)
 
 

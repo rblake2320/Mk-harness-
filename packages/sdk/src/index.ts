@@ -232,6 +232,11 @@ export class MKClient {
 
   // ---- customers ----
   listCustomers() { return this.request<Customer[]>('/api/customers'); }
+  searchCustomers(query: string, offset = 0) {
+    return this.request<{ items: Customer[]; next_offset: number | null }>('/api/customers/search', {
+      method: 'POST', body: JSON.stringify({ query, offset, limit: 50 }),
+    });
+  }
   createCustomer(c: Partial<Customer>) { return this.request<{ id: string }>('/api/customers', { method: 'POST', body: JSON.stringify(c) }); }
   updateCustomer(id: string, c: Partial<Customer>) { return this.request(`/api/customers/${id}`, { method: 'PUT', body: JSON.stringify(c) }); }
   deleteCustomer(id: string) { return this.request(`/api/customers/${id}`, { method: 'DELETE' }); }

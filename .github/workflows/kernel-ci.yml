@@ -84,7 +84,7 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with: { python-version: "3.12" }
-      - run: pip install jsonschema==4.23.0
+      - run: pip install 'jsonschema[format]==4.23.0'
       - name: JSON Schema fixtures + cross-language HMAC vectors (Python side)
         run: python -I contracts/tests/test_contracts.py 2>&1 | tee contracts.log || { grep -E "Error|FAIL|Traceback" contracts.log | head -20 | sed 's/^/::error title=contracts::/'; exit 1; }
       - name: Real-device agent suite (stdlib, no device)

@@ -13,7 +13,7 @@ import jsonschema
 import yaml
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-SCHEMA = yaml.safe_load((ROOT / "evidence/releases/schema.yaml").read_text())
+SCHEMA = yaml.safe_load((ROOT / "evidence/releases/schema.yaml").read_text(encoding="utf-8"))
 
 
 def check_record(path: pathlib.Path, verify_checksums: bool = True) -> list[str]:
@@ -21,7 +21,7 @@ def check_record(path: pathlib.Path, verify_checksums: bool = True) -> list[str]
     with `_` (e.g. `_example`) are schema-checked only: they are templates, not
     evidence, and readiness.py never counts them."""
     problems = []
-    rec = yaml.safe_load(path.read_text())
+    rec = yaml.safe_load(path.read_text(encoding="utf-8"))
     try:
         jsonschema.Draft202012Validator(SCHEMA, format_checker=jsonschema.FormatChecker()).validate(rec)
     except jsonschema.ValidationError as e:

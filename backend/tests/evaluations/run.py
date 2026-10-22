@@ -53,7 +53,7 @@ def load(name: str) -> list[dict]:
     p = _DIR[0] / name
     if not p.exists():
         return []
-    return [json.loads(l) for l in p.read_text().splitlines() if l.strip() and not l.startswith("#")]
+    return [json.loads(l) for l in p.read_text(encoding="utf-8").splitlines() if l.strip() and not l.startswith("#")]
 
 
 @dataclass
@@ -289,7 +289,7 @@ def main(argv=None) -> int:
     if a.json:
         Path(a.json).write_text(json.dumps([{"row": r.row, "cases": r.cases, "metrics": r.metrics, "failures": r.failures,
                                              "available": r.available, "passed": r.passed(), "mode": "live" if live else "replay"}
-                                            for r in rows], indent=2))
+                                            for r in rows], indent=2), encoding="utf-8")
     print("\nNOTE: replay results and seed-size sets are NOT acceptance evidence for A1–A6 (see README).")
     return 0 if ok else 1
 

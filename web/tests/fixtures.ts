@@ -7,7 +7,7 @@ const COMMIT = { id: 'k1', customer_id: 'c1', kind: 'promise', text: 'Send the s
   created_by: 'ai:anthropic:x', confirmed_by: 'u1', version: 2 };
 
 /** Mock every API the screens call. Responses mirror the real route shapes. */
-export async function mockApi(page: Page) {
+export async function mockApi(page: Page, permission: 'active' | 'none' | 'suppressed' = 'active') {
   await page.route('**/api/**', async route => {
     const url = new URL(route.request().url());
     const p = url.pathname; const m = route.request().method();
@@ -15,9 +15,10 @@ export async function mockApi(page: Page) {
     if (p === '/api/auth/me') return json({ id: 'u1', email: 'a@x', role: 'admin', display_name: 'Angela' });
     if (p === '/api/brief') return json({ date: '2026-10-21', items: [{
       id: 'b1', customer: { id: 'c1', name: 'Brenda Lee' }, rule: 'due_today', rank_category: 2, source_type: 'commitment', source_reference: 'k1', source: COMMIT,
-      due_at: '2026-10-21T14:00:00Z', state: 'open', permission_state: 'active', permission_checked_at: '2026-10-21T08:00:00Z',
-      permission_note: 'historical observation; execution re-checks the kernel', suggested_step: 'Send the shade chart you promised.', draft_version_id: null,
-      controls: ['approve', 'edit', 'defer', 'resolve', 'skip'] }] });
+      due_at: '2026-10-21T14:00:00Z', state: 'open', permission_state: permission, permission_checked_at: '2026-10-21T08:00:00Z',
+      permission_note: 'historical observation; execution re-checks the kernel',
+      suggested_step: permission === 'suppressed' ? 'Outreach is blocked. Review the suppression before any contact.' : 'Send the shade chart you promised.',
+      draft_version_id: null, controls: [...(permission === 'active' ? ['approve', 'edit'] : []), 'defer', 'resolve', 'skip'] }] });
     if (p === '/api/approvals/pending') return json([{
       action_id: '11111111-1111-4111-8111-111111111111', action_digest: 'sha256:' + 'b'.repeat(64), state: 'approval_required', message_state: 'awaiting_approval',
       exact_text: 'Hi Brenda! Here is the shade chart I promised. Reply STOP to opt out.', destination_masked: '********0100', channel: 'sms',

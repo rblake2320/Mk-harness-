@@ -23,11 +23,11 @@ from sqlalchemy.orm import Session
 
 from ..commitments import create_draft, record_outcome
 from ..db import get_db
-from ..foundation import audit, seal
+from ..foundation import audit, seal, utcnow
 from ..inbound import EXCEPTION_KIND, STOPS_SALES_FOLLOW_UP, classify_inbound
 from ..kernel import KernelClient, KernelUnavailable, get_kernel_client
 from ..kernel.assertions import roles_for
-from ..models import Customer, CustomerDestination, ExceptionRecord, InboundApplication, User
+from ..models import ConsentEvent, Customer, CustomerDestination, ExceptionRecord, InboundApplication, SuppressionEvent, User
 from ..ratelimit import check_rate
 from .agent_ops import Principal, principal
 
@@ -73,6 +73,40 @@ def _exception(db: Session, tenant_id: str, user_id: str, customer_id: str | Non
     db.add(ex)
     db.flush()
     return ex
+
+
+def _mirror_kernel_suppression(db: Session, user: User, event: dict, label: str, source_ref: str) -> None:
+    """Keep application permission views consistent with a confirmed kernel stop.
+
+    This never grants permission or lifts a hold. It commits with the event's
+    application ledger, so replay cannot create a second local suppression.
+    Fingerprint aliases preserve matching during key rotation.
+    """
+    permanent = event.get("disposition") == "suppressed" or event.get("opt_out_signal") == "explicit"
+    destinations = db.scalars(select(CustomerDestination).where(
+        CustomerDestination.tenant_id == user.tenant_id, CustomerDestination.channel == "sms",
+        CustomerDestination.fingerprint.in_(_event_fingerprints(event)),
+        CustomerDestination.retired_at.is_(None))).all()
+    targets = {d.fingerprint: d.customer_id for d in destinations}
+    if not targets:
+        targets[event["source_destination_hash"]] = None
+    for fingerprint, customer_id in targets.items():
+        existing = db.scalars(select(SuppressionEvent).where(
+            SuppressionEvent.tenant_id == user.tenant_id, SuppressionEvent.fingerprint == fingerprint,
+            SuppressionEvent.channel == "sms", SuppressionEvent.lifted_at.is_(None))).all()
+        if not any(s.permanent or not permanent for s in existing):
+            aref = audit(db, user.tenant_id, user.id, "inbound.suppression", {
+                "source_reference": source_ref, "customer_id": customer_id, "permanent": permanent})
+            db.add(SuppressionEvent(tenant_id=user.tenant_id, customer_id=customer_id,
+                                    channel="sms", fingerprint=fingerprint, reason=f"inbound:{label}",
+                                    source="sms_reply", permanent=permanent, created_by=user.id, audit_ref=aref))
+    if permanent:
+        for d in destinations:
+            for consent in db.scalars(select(ConsentEvent).where(
+                ConsentEvent.tenant_id == user.tenant_id, ConsentEvent.destination_id == d.id,
+                ConsentEvent.status == "active")):
+                consent.status, consent.revoked_at = "revoked", utcnow()
+                consent.revoked_reason = "suppressed:sms_reply"
 
 
 @router.post("/inbound/process")
@@ -162,6 +196,8 @@ async def process_inbound(body: ProcessIn, p: Principal = Depends(principal), us
                                 "matches": len(customers), "created": [], "hold": hold, "marked_processed": None,
                                 "retry": True})
                 continue
+        if ev.get("disposition") in ("suppressed", "held") or hold == 201:
+            _mirror_kernel_suppression(db, user, ev, label, source_ref)
         db.add(InboundApplication(tenant_id=user.tenant_id, source_reference=source_ref, kernel_event_id=event_id,
                                   label=label, customer_id=customer.id if customer else None,
                                   created_json=json.dumps(created), hold_status=hold))
@@ -180,7 +216,7 @@ async def process_inbound(body: ProcessIn, p: Principal = Depends(principal), us
 # --------------------------------------------------------------------------- #
 # Exceptions (visible queue; C7 "create visible exceptions")
 # --------------------------------------------------------------------------- #
-from ..foundation import own_customer, unseal, utcnow  # noqa: E402
+from ..foundation import own_customer, unseal  # noqa: E402
 
 
 def _ex_view(tenant_id: str, ex: ExceptionRecord) -> dict:

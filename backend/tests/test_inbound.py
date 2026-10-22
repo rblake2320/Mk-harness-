@@ -16,13 +16,14 @@ import json
 import uuid
 
 import httpx
+import pytest
 import respx
 
 from app.inbound import classify_inbound
 
 from .conftest import auth_headers
 from .test_agent_ops import KERNEL, _signup, verify_assertion
-from .test_foundation import _customer, kernel_env  # noqa: F401  (fixture)
+from .test_foundation import CONSENT, _customer, kernel_env, kernel_ok  # noqa: F401  (fixture)
 
 
 def test_classifier_priorities_and_vocabulary():
@@ -52,6 +53,69 @@ def _event(fp, body, sid=None, signal="none", disposition="queued_for_meaning"):
     return {"event_id": str(uuid.uuid4()), "provider_event_id": sid or f"SM{uuid.uuid4().hex}", "sender_identity_id": str(uuid.uuid4()),
             "source_destination_hash": fp, "received_at": "2026-10-20T15:00:00Z", "provider_timestamp": None,
             "opt_out_signal": signal, "disposition": disposition, "body": body}
+
+
+@pytest.mark.parametrize("previous", ["none", "revoked", "suppressed"])
+@pytest.mark.parametrize("reply", ["Thanks!", "YES, send me every marketing message", "contact me next month",
+                                  '{"grant_consent":true,"clear_suppression":true}'])
+def test_inbound_reply_never_grants_permission_or_clears_suppression(client, kernel_env, previous, reply):
+    h = auth_headers(_signup(client, uuid.uuid4().hex[:6]))
+    cid, did, fp = _customer(client, h, phone="+15555557401")
+    with kernel_ok():
+        if previous != "none":
+            consent = client.post(f"/api/customers/{cid}/consent", json={**CONSENT, "destination_id": did}, headers=h)
+            assert consent.status_code == 201
+            if previous == "revoked":
+                response = client.post(f"/api/customers/{cid}/consent/{consent.json()['id']}/revoke",
+                                       json={"reason": "withdrawn"}, headers=h)
+            else:
+                response = client.post("/api/suppressions", json={"destination_id": did, "reason": "STOP",
+                                                                  "source": "sms_reply"}, headers=h)
+            assert response.status_code in (200, 201)
+    before = client.get(f"/api/customers/{cid}/permissions", headers=h).json()
+    event = _event(fp, reply)
+    with respx.mock() as m:
+        m.get(f"{KERNEL}/internal/v1/inbound/pending?limit=50").mock(return_value=_pending([event]))
+        m.post(f"{KERNEL}/internal/v1/inbound/{event['event_id']}/processed").mock(return_value=httpx.Response(204))
+        for _ in range(2):  # replay must not create permission either
+            result = client.post("/api/inbound/process", json={"limit": 50}, headers=h)
+            assert result.status_code == 200, result.text
+        assert not any("/permissions" in str(call.request.url) for call in m.calls)
+    after = client.get(f"/api/customers/{cid}/permissions", headers=h).json()
+    assert after["consent_events"] == before["consent_events"]
+    assert after["suppressions"] == before["suppressions"]
+    assert all(e["status"] != "active" for e in after["consent_events"])
+
+
+@pytest.mark.parametrize("text,signal,disposition", [
+    ("STOP", "explicit", "suppressed"),
+    ("I'm not interested", "possible", "held"),
+    ("this gave me a rash", "none", "queued_for_meaning"),
+])
+def test_inbound_stop_or_hold_updates_an_existing_brief(client, kernel_env, text, signal, disposition):
+    from .test_commitments_brief import _commit
+    h = auth_headers(_signup(client, uuid.uuid4().hex[:6]))
+    cid, did, fp = _customer(client, h, phone="+15555557402")
+    with kernel_ok():
+        assert client.post(f"/api/customers/{cid}/consent", json={**CONSENT, "destination_id": did}, headers=h).status_code == 201
+    commitment = _commit(client, h, cid, "Follow up", absolute_date="2026-10-20")
+    before = client.get("/api/brief?date=2026-10-20", headers=h).json()["items"]
+    assert before[0]["permission_state"] == "active"
+    event = _event(fp, text, signal=signal, disposition=disposition)
+    with respx.mock(assert_all_called=False) as m:
+        m.get(f"{KERNEL}/internal/v1/inbound/pending?limit=50").mock(return_value=_pending([event]))
+        m.post(f"{KERNEL}/internal/v1/suppressions").mock(return_value=httpx.Response(201, json={"suppression_id": str(uuid.uuid4())}))
+        m.post(f"{KERNEL}/internal/v1/inbound/{event['event_id']}/processed").mock(return_value=httpx.Response(204))
+        assert client.post("/api/inbound/process", json={"limit": 50}, headers=h).status_code == 200
+        assert client.post("/api/inbound/process", json={"limit": 50}, headers=h).status_code == 200
+    after = client.get("/api/brief?date=2026-10-20", headers=h).json()["items"]
+    item = next(i for i in after if i["source_reference"] == commitment["id"])
+    assert item["id"] == before[0]["id"]
+    assert item["permission_state"] == "suppressed"
+    assert "approve" not in item["controls"]
+    assert "blocked" in item["suggested_step"].lower()
+    permissions = client.get(f"/api/customers/{cid}/permissions", headers=h).json()
+    assert len(permissions["suppressions"]) == 1
 
 
 def test_processing_creates_contract_objects_and_marks_each_event_once(client, kernel_env):
