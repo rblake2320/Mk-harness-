@@ -73,6 +73,12 @@ included in this bundle.
 
 ## Release boundary
 
+All ten source-pin CI jobs passed: application run `39749631828` and Rust run
+`39749631819`, both at `74cb83726932ba4231358b13777e20138b61a7f9`. Retained
+`privacy-restore-ci-app-74cb837.json` and `privacy-restore-ci-rust-74cb837.json`
+include the live-smoke/preflight, actual PostgreSQL restore, image and security
+checks. These are CI results, not independent staging release qualification.
+
 The readiness report remains 0/87 closed. These are branch-level author results,
 not main/staging independent qualification. Still needed in this recovery lane:
 complete opt-out/revocation external recovery, immutable custody/anchor delivery,
