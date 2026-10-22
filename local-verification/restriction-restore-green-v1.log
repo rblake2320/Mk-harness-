@@ -1,0 +1,25 @@
+FFF                                                                      [100%]
+=================================== FAILURES ===================================
+_ test_post_backup_contact_and_principal_restrictions_survive_recovery[suppression] _
+tools/verification/test_kernel_privacy_restore.py:49: in test_post_backup_contact_and_principal_restrictions_survive_recovery
+    assert proposed.status_code in {202, 403}, proposed.body
+E   AssertionError: {'type': 'urn:mk:error:store_error', 'title': 'Internal error', 'status': 500, 'code': 'STORE_ERROR', ...}
+E   assert 500 in {202, 403}
+E    +  where 500 = KernelResponse(status_code=500, body={'type': 'urn:mk:error:store_error', 'title': 'Internal error', 'status': 500, 'c...uest_id': '9f60a259-7faa-4471-81bc-fb05a65fc282'}, request_id='9f60a259-7faa-4471-81bc-fb05a65fc282', retry_after=None).status_code
+_ test_post_backup_contact_and_principal_restrictions_survive_recovery[session_revocation] _
+tools/verification/test_kernel_privacy_restore.py:49: in test_post_backup_contact_and_principal_restrictions_survive_recovery
+    assert proposed.status_code in {202, 403}, proposed.body
+E   AssertionError: {'type': 'urn:mk:error:store_error', 'title': 'Internal error', 'status': 500, 'code': 'STORE_ERROR', ...}
+E   assert 500 in {202, 403}
+E    +  where 500 = KernelResponse(status_code=500, body={'type': 'urn:mk:error:store_error', 'title': 'Internal error', 'status': 500, 'c...uest_id': '0c867bd1-3d29-4382-bd76-e79405529a59'}, request_id='0c867bd1-3d29-4382-bd76-e79405529a59', retry_after=None).status_code
+_ test_post_backup_contact_and_principal_restrictions_survive_recovery[user_revocation] _
+tools/verification/test_kernel_privacy_restore.py:49: in test_post_backup_contact_and_principal_restrictions_survive_recovery
+    assert proposed.status_code in {202, 403}, proposed.body
+E   AssertionError: {'type': 'urn:mk:error:store_error', 'title': 'Internal error', 'status': 500, 'code': 'STORE_ERROR', ...}
+E   assert 500 in {202, 403}
+E    +  where 500 = KernelResponse(status_code=500, body={'type': 'urn:mk:error:store_error', 'title': 'Internal error', 'status': 500, 'c...uest_id': '4ad7c7f0-f7f0-4a03-bbb1-41bd3a1c45f9'}, request_id='4ad7c7f0-f7f0-4a03-bbb1-41bd3a1c45f9', retry_after=None).status_code
+=========================== short test summary info ============================
+FAILED tools/verification/test_kernel_privacy_restore.py::test_post_backup_contact_and_principal_restrictions_survive_recovery[suppression]
+FAILED tools/verification/test_kernel_privacy_restore.py::test_post_backup_contact_and_principal_restrictions_survive_recovery[session_revocation]
+FAILED tools/verification/test_kernel_privacy_restore.py::test_post_backup_contact_and_principal_restrictions_survive_recovery[user_revocation]
+3 failed, 17 deselected in 3.55s

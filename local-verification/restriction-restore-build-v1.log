@@ -1,0 +1,13 @@
+   Compiling tower-http v0.6.11
+   Compiling sqlx-postgres v0.9.0
+   Compiling rmcp v3.6.0
+   Compiling reqwest v0.12.28
+   Compiling sqlx v0.9.0
+   Compiling mk-store v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-store)
+   Compiling mk-testkit v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-testkit)
+   Compiling mk-queue v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-queue)
+   Compiling mk-adapters v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-adapters)
+   Compiling mk-mcp v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-mcp)
+   Compiling mk-worker v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-worker)
+   Compiling mk-api v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-api)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 13.16s
