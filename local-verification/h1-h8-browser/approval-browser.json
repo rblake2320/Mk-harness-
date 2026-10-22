@@ -1,0 +1,103 @@
+{
+  "environment": "built UI; explicit API fixtures; real Chromium virtual passkey, ES256 verified",
+  "checks": [
+    "selected sender and scheduled time",
+    "self-policy disable",
+    "missing sender disables",
+    "stale digest aborts before signing",
+    "UV downgrade aborts before signing",
+    "policy refusal preserves pending item",
+    "keyboard per-message approval",
+    "success survives queue refresh",
+    "360px no overflow"
+  ],
+  "verified_assertions": 2,
+  "browser_errors": [],
+  "width_360": {
+    "viewport": 360,
+    "document": 360
+  },
+  "requests": [
+    {
+      "method": "GET",
+      "path": "/api/brief",
+      "phase": "forbidden"
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/me",
+      "phase": "forbidden"
+    },
+    {
+      "method": "GET",
+      "path": "/api/approvals/pending",
+      "phase": "forbidden"
+    },
+    {
+      "method": "GET",
+      "path": "/api/brief",
+      "phase": "missing_sender"
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/me",
+      "phase": "missing_sender"
+    },
+    {
+      "method": "GET",
+      "path": "/api/approvals/pending",
+      "phase": "missing_sender"
+    },
+    {
+      "method": "GET",
+      "path": "/api/brief",
+      "phase": "stale"
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/me",
+      "phase": "stale"
+    },
+    {
+      "method": "GET",
+      "path": "/api/approvals/pending",
+      "phase": "stale"
+    },
+    {
+      "method": "POST",
+      "path": "/api/agent-ops/actions/11111111-1111-4111-8111-111111111111/approval-challenge",
+      "phase": "stale"
+    },
+    {
+      "method": "POST",
+      "path": "/api/agent-ops/actions/11111111-1111-4111-8111-111111111111/approval-challenge",
+      "phase": "weak_uv"
+    },
+    {
+      "method": "POST",
+      "path": "/api/agent-ops/actions/11111111-1111-4111-8111-111111111111/approval-challenge",
+      "phase": "deny"
+    },
+    {
+      "method": "POST",
+      "path": "/api/agent-ops/actions/11111111-1111-4111-8111-111111111111/approve",
+      "phase": "deny"
+    },
+    {
+      "method": "POST",
+      "path": "/api/agent-ops/actions/11111111-1111-4111-8111-111111111111/approval-challenge",
+      "phase": "accept"
+    },
+    {
+      "method": "POST",
+      "path": "/api/agent-ops/actions/11111111-1111-4111-8111-111111111111/approve",
+      "phase": "accept"
+    },
+    {
+      "method": "GET",
+      "path": "/api/approvals/pending",
+      "phase": "accept"
+    }
+  ],
+  "provider_calls": 0
+}
