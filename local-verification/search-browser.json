@@ -1,0 +1,25 @@
+{
+  "environment": "local Windows; production web build; actual FastAPI; isolated SQLite",
+  "provider_calls": 0,
+  "customers_in_scope": 52,
+  "foreign_customers_excluded": 1,
+  "pagination": [
+    50,
+    2
+  ],
+  "search_in_request_body": true,
+  "search_requests": 4,
+  "browser_errors": [],
+  "width_360": {
+    "viewport": 360,
+    "document": 360
+  },
+  "checks": [
+    "tenant isolation",
+    "pagination",
+    "exact result",
+    "empty result",
+    "clear",
+    "360px search/open/edit/delete controls"
+  ]
+}
