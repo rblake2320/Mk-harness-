@@ -74,5 +74,35 @@ jobs:
     needs: [backend-tests, web-build]
     steps:
       - uses: actions/checkout@v4
-      - run: docker build -t mk-harness-api ./backend
+      - name: Build application image with recorded official RDS trust bundle
+        run: |
+          curl -fsSL https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem -o /tmp/app-rds-ca.pem
+          digest=$(sha256sum /tmp/app-rds-ca.pem | cut -d' ' -f1)
+          echo "RDS CA SHA256: $digest"
+          docker build --build-arg RDS_CA_BUNDLE_SHA256="$digest" -t mk-harness-api ./backend
       - run: docker build -t mk-harness-web -f web/Dockerfile .
+
+  app-postgres-boundary:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: isolated-ci-app-test-only
+          POSTGRES_DB: mk_app_test_admin
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres -d mk_app_test_admin"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install -r backend/requirements.txt
+      - name: Actual runtime role, migration, retained-data upgrade and MFA transactions
+        run: python -m pytest tools/verification/test_app_database.py -q --tb=short --junitxml=app-postgres.xml
+        env:
+          MK_APP_TEST_ADMIN_URL: postgresql+psycopg://postgres:isolated-ci-app-test-only@127.0.0.1:5432/mk_app_test_admin
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: {name: app-postgres-boundary, path: app-postgres.xml}

@@ -38,6 +38,7 @@ Web auditors see account security and audit export, not unusable customer or
 action screens. Native auditors get a read-only audit view using the shared
 step-up client. Native device parity is a separate X2 verification queue.
 
-This implements the application-role portion of S3 on the branch. Runtime
-database ownership/bootstrap is a separate S3 implementation step; independent
-staging qualification and main-branch evidence are still required for closure.
+Application runtime and migration credentials are now separated, with actual
+PostgreSQL denial/upgrade/MFA acceptance tests and a startup privilege gate; see
+`runbooks/application-database.md`. Independent staging qualification and
+main-branch evidence are still required for S3 closure.

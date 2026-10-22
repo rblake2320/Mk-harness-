@@ -11,10 +11,54 @@ services:
       interval: 5s
       retries: 10
 
-  api:
-    build: ./backend
+  # Explicit one-time operator bootstrap. It is never an API dependency and is
+  # not started by ordinary `up`; run the database runbook before first deploy.
+  app-bootstrap:
+    profiles: [operator]
+    build:
+      context: ./backend
+      args:
+        RDS_CA_BUNDLE_SHA256: ${RDS_CA_BUNDLE_SHA256:?pin the official RDS CA bundle}
+    command: [python, -m, app.migrate, bootstrap]
     environment:
-      DATABASE_URL: postgresql+psycopg://mk:${POSTGRES_PASSWORD}@db:5432/mkharness
+      DB_HOST: db
+      DB_SSLMODE: disable
+      MK_APP_BOOTSTRAP_USER: mk
+      MK_APP_BOOTSTRAP_PASSWORD: ${POSTGRES_PASSWORD:?set in .env}
+      MK_APP_RUNTIME_PASSWORD: ${APP_DATABASE_PASSWORD:?set a distinct runtime password}
+      MK_APP_MIGRATION_PASSWORD: ${APP_MIGRATION_PASSWORD:?set a distinct migration password}
+    depends_on:
+      db: { condition: service_healthy }
+
+  app-migrate:
+    build:
+      context: ./backend
+      args:
+        RDS_CA_BUNDLE_SHA256: ${RDS_CA_BUNDLE_SHA256:?pin the official RDS CA bundle}
+    command: [python, -m, app.migrate, upgrade]
+    read_only: true
+    cap_drop: [ALL]
+    environment:
+      DB_HOST: db
+      DB_SSLMODE: disable
+      MK_APP_MIGRATION_PASSWORD: ${APP_MIGRATION_PASSWORD:?set a distinct migration password}
+    depends_on:
+      db: { condition: service_healthy }
+
+  api:
+    build:
+      context: ./backend
+      args:
+        RDS_CA_BUNDLE_SHA256: ${RDS_CA_BUNDLE_SHA256:?pin the official RDS CA bundle}
+    read_only: true
+    cap_drop: [ALL]
+    tmpfs: [/tmp:rw,noexec,nosuid,size=64m]
+    environment:
+      DB_HOST: db
+      DB_USER: mk_app_login
+      DB_NAME: mkharness
+      DB_SSLMODE: disable # private Compose-only development network
+      DB_PASSWORD: ${APP_DATABASE_PASSWORD:?set a distinct runtime password}
       JWT_SECRET: ${JWT_SECRET:?set in .env}
       MASTER_KEY: ${MASTER_KEY:?set in .env}
       # Destination-fingerprint keys: MUST be the same value the kernel gets as
@@ -27,7 +71,7 @@ services:
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-}
       RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-30}
     depends_on:
-      db: { condition: service_healthy }
+      app-migrate: { condition: service_completed_successfully }
 
   web:
     build:

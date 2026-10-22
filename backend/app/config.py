@@ -8,6 +8,13 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     database_url: str = "sqlite:///./mkharness.db"
+    db_host: str = ""
+    db_port: int = 5432
+    db_name: str = "mkharness"
+    db_user: str = "mk_app_login"
+    db_password: str = ""
+    db_sslmode: str = "verify-full"
+    db_sslrootcert: str = ""
     jwt_secret: str = ""
     master_key: str = ""  # base64-encoded 32 bytes for AES-256-GCM envelope encryption
     # Destination-fingerprint keys, `kid=base64(32 bytes)[,kid=...]`, FIRST = current.
@@ -55,6 +62,34 @@ class Settings(BaseSettings):
     kernel_platform_operators: str = ""
 
     model_config = {"env_file": ".env", "extra": "ignore"}
+
+    @property
+    def connection_url(self):
+        """Compose the ECS secret without parsing password characters as a URL."""
+        from sqlalchemy.engine import URL, make_url
+        if self.db_host or self.db_password:
+            if not all((self.db_host, self.db_password, self.db_user, self.db_name)):
+                raise ValueError("DB_HOST, DB_PASSWORD, DB_USER and DB_NAME are required together")
+            if "database_url" in self.model_fields_set:
+                raise ValueError("Configure DATABASE_URL or DB_HOST fields, not both")
+            query = {"sslmode": self.db_sslmode}
+            if self.db_sslrootcert:
+                query["sslrootcert"] = self.db_sslrootcert
+            result = URL.create("postgresql+psycopg", username=self.db_user,
+                                password=self.db_password, host=self.db_host,
+                                port=self.db_port, database=self.db_name, query=query)
+        else:
+            result = make_url(self.database_url)
+        if result.get_backend_name() == "postgresql":
+            if result.drivername == "postgresql":
+                result = result.set(drivername="postgresql+psycopg")
+            # Explicit insecure transport is for loopback/Compose development only.
+            local = result.host in {"localhost", "127.0.0.1", "::1", "db"}
+            if not local and result.query.get("sslmode") != "verify-full":
+                raise ValueError("Remote PostgreSQL requires sslmode=verify-full")
+            if not local and not result.query.get("sslrootcert"):
+                raise ValueError("Remote PostgreSQL requires an explicit sslrootcert")
+        return result
 
     @property
     def stripe_price_map(self) -> dict[str, str]:

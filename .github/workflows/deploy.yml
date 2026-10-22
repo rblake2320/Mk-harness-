@@ -53,12 +53,17 @@ jobs:
       - uses: aws-actions/amazon-ecr-login@062b18b96a7aff071d4dc91bc00c4c1a7945b076 # v2.0.1
         id: ecr
       - uses: docker/setup-buildx-action@c47758b77c9736f4b2ef4073d4d51994fabfe349 # v3.7.1
+      - name: Require operator-pinned database trust anchor
+        env:
+          RDS_CA_BUNDLE_SHA256: ${{ vars.RDS_CA_BUNDLE_SHA256 }}
+        run: '[[ "$RDS_CA_BUNDLE_SHA256" =~ ^[0-9a-f]{64}$ ]] || { echo "Set the reviewed RDS_CA_BUNDLE_SHA256 repository variable"; exit 1; }'
       - name: Build + push kernel image by digest
         id: kernel
         uses: docker/build-push-action@4f58ea79222b3b9dc2c8bbdd6debcef730109a75 # v6.9.0
         with:
           context: .
           file: deploy/kernel/Dockerfile
+          build-args: RDS_CA_BUNDLE_SHA256=${{ vars.RDS_CA_BUNDLE_SHA256 }}
           push: true
           provenance: mode=max
           sbom: true
@@ -68,6 +73,7 @@ jobs:
         uses: docker/build-push-action@4f58ea79222b3b9dc2c8bbdd6debcef730109a75 # v6.9.0
         with:
           context: backend
+          build-args: RDS_CA_BUNDLE_SHA256=${{ vars.RDS_CA_BUNDLE_SHA256 }}
           push: true
           provenance: mode=max
           sbom: true
