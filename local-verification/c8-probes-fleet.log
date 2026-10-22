@@ -1,0 +1,21 @@
+   Compiling mk-api v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-api)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 4.18s
+     Running tests/http_e2e.rs (/tmp/mk-release-acceptance-target/debug/deps/http_e2e-05ff1a20f14da3a3)
+
+running 1 test
+test public_inbound_probes_require_committed_receipts_and_drain_before_recovery ... 
+thread 'public_inbound_probes_require_committed_receipts_and_drain_before_recovery' (509951) panicked at crates/mk-api/tests/http_e2e.rs:1755:9:
+assertion `left == right` failed: non-human role cannot read the inbound backlog: []
+  left: 401
+ right: 403
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED
+
+failures:
+
+failures:
+    public_inbound_probes_require_committed_receipts_and_drain_before_recovery
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 10 filtered out; finished in 0.65s
+
+error: test failed, to rerun pass `-p mk-api --test http_e2e`

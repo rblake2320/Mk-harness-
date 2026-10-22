@@ -1,0 +1,25 @@
+   Compiling mk-store v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-store)
+   Compiling mk-queue v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-queue)
+   Compiling mk-adapters v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-adapters)
+   Compiling mk-api v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-api)
+   Compiling mk-worker v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-worker)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 6.16s
+     Running tests/http_e2e.rs (/tmp/mk-release-acceptance-target/debug/deps/http_e2e-05ff1a20f14da3a3)
+
+running 1 test
+test public_inbound_probes_require_committed_receipts_and_drain_before_recovery ... 
+thread 'public_inbound_probes_require_committed_receipts_and_drain_before_recovery' (508219) panicked at crates/mk-api/tests/http_e2e.rs:1762:9:
+assertion `left == right` failed: non-human role cannot clear the recovery backlog: ["agent"]
+  left: 204
+ right: 403
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED
+
+failures:
+
+failures:
+    public_inbound_probes_require_committed_receipts_and_drain_before_recovery
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 10 filtered out; finished in 0.63s
+
+error: test failed, to rerun pass `-p mk-api --test http_e2e`

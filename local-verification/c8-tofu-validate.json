@@ -1,0 +1,52 @@
+{
+  "format_version": "1.0",
+  "valid": false,
+  "error_count": 1,
+  "warning_count": 0,
+  "diagnostics": [
+    {
+      "severity": "error",
+      "summary": "Invalid function argument",
+      "detail": "Invalid value for \"path\" parameter: no file exists at \"./../../../../deploy/observability/alerts.yml\"; this function works only with files that are distributed as part of the configuration source code, so if this file will be created by a resource in this configuration you must instead obtain this result from an attribute of that resource.",
+      "range": {
+        "filename": "monitoring.tf",
+        "start": {
+          "line": 96,
+          "column": 26,
+          "byte": 3698
+        },
+        "end": {
+          "line": 96,
+          "column": 37,
+          "byte": 3709
+        }
+      },
+      "snippet": {
+        "context": "resource \"aws_prometheus_rule_group_namespace\" \"kernel\"",
+        "code": "  data         = file(\"${path.module}/../../../../deploy/observability/alerts.yml\")",
+        "start_line": 96,
+        "highlight_start_offset": 25,
+        "highlight_end_offset": 36,
+        "values": [
+          {
+            "traversal": "path.module",
+            "statement": "is \".\""
+          }
+        ],
+        "function_call": {
+          "called_as": "file",
+          "signature": {
+            "name": "file",
+            "params": [
+              {
+                "name": "path",
+                "type": "string"
+              }
+            ],
+            "return_type": "string"
+          }
+        }
+      }
+    }
+  ]
+}
