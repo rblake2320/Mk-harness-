@@ -144,7 +144,13 @@ def main():
             (output/"recovery-commands.json").write_text(json.dumps(recovery_attempts,indent=2)+"\n",encoding="utf-8")
             return result
 
-        freshness=datetime.now(timezone.utc).isoformat()
+        # Pin the live ORIGINAL database's clock before export, not the restored
+        # database and not a possibly skewed Windows host clock. The exported
+        # digest and cutoff are then retained independently through restoration.
+        with psycopg.connect(psycopg.conninfo.make_conninfo(dsn,dbname=database)) as conn:
+            freshness=conn.execute("SELECT clock_timestamp()").fetchone()[0].isoformat()
+        report["privacy_freshness"]={"source":"live_original_database_before_export",
+            "not_before":freshness,"host_utc_observed":datetime.now(timezone.utc).isoformat()}
         exported=recovery_command("mk-privacy-ledger",["export","--ledger","/recovery/kernel.json"],database)
         assert exported.returncode==0, "built-image ledger export failed"
         export_receipt=json.loads(exported.stdout)
@@ -157,6 +163,11 @@ def main():
         with psycopg.connect(restored_dsn) as conn:
             assert conn.execute("SELECT octet_length(canonical_request)>0 FROM kernel.actions WHERE action_id=%s",(aid,)).fetchone()==(True,)
             conn.execute("UPDATE kernel.kill_switches SET dispatch_enabled=false WHERE scope='global'")
+        future_bound=(datetime.fromisoformat(freshness)+timedelta(minutes=1)).isoformat()
+        future=recovery_command("mk-privacy-ledger",["replay","--ledger","/recovery/kernel.json",
+            "--sha256",export_receipt["sha256"],"--not-before",future_bound],restored_database)
+        assert future.returncode!=0 and "version or freshness" in future.stderr
+        report["privacy_freshness"]["future_cutoff_refused"]=True
         gate_args=["--restored-at",datetime.now(timezone.utc).isoformat()]
         refused=recovery_command("mk-restore-gate",gate_args,restored_database)
         assert refused.returncode!=0 and 'privacy_restore_ledger' in refused.stdout

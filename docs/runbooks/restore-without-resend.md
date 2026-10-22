@@ -92,6 +92,15 @@ and identity. In-flight/unresolved sends remain quarantined, keep their necessar
 resolution data, and yield a failing privacy check until safely resolved and erased.
 Provider active/backup receipts are not invented by recovery.
 
+Record the cutoff from a verified, synchronized source clock before the final
+export and retain it independently with the digest. Never invent the cutoff from
+the restored database. Check clock skew between the export source, operator host
+and recovery runtime: a host ahead of the source can create a future cutoff that
+correctly fails freshness validation. Do not weaken the gate or backdate the pin
+to make a refused recovery pass. The local image drill records the original live
+database's pre-export UTC cutoff and separately records the host's observed UTC;
+it also confirms that an intentionally future cutoff is refused.
+
 `--inspection-only` is only for live preflight/smoke inspection. It cannot combine
 with `--apply`, emits `gate:INSPECTION_ONLY`, and never authorizes a restore.
 
