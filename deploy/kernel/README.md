@@ -16,11 +16,15 @@ Environment:
 |---|---|---|
 | `MK_DATABASE_URL` | all | `postgres://role:pw@host/db`; role per process type |
 | `MK_DB_HOST`, `MK_DB_USER`, `MK_DB_PASSWORD`, `MK_DB_NAME`, `MK_DB_PORT` | all | alternative to `MK_DATABASE_URL` (composed in-process, `sslmode=require`); the orchestrator injects these so no password-bearing URL is written anywhere |
-| `MK_DB_SSLROOTCERT` | all | path to the database CA bundle (RDS global bundle). **Required in production**: switches to `sslmode=verify-full` and makes the client trust that CA alone instead of the bundled webpki roots (see `rust/deny.toml`, RUSTSEC-2026-0381) |
+| `MK_DB_SSLROOTCERT` | all | path to the database CA bundle (RDS global bundle). **Required in production**: switches to `sslmode=verify-full` and makes the client trust that CA alone instead of the bundled webpki roots |
 | `MK_REDIS_URL` | relay, worker | `redis://host:6379` |
 | `MK_MASTER_KEY` | api, worker, keyctl, restore-gate | base64 32 bytes; same key as FastAPI `MASTER_KEY`. Legacy seal (keyring version 0) and HMAC destination fingerprints. **Not** given to the verifier |
 | `MK_KEK` | api, worker, keyctl, restore-gate | base64 32 bytes key-encryption key (from the secrets manager / KMS data key). Wraps the per-version data keys in `kernel.key_versions` (migration 0005). Empty = legacy master-key-only seal: allowed for development, logged at start, **refused by production pre-flight** |
 | `MK_KEK_ID` | same | identifier recorded on each wrapped version; default `kek-1`. Change it together with the KEK value |
+| `MK_FINGERPRINT_KEYS` | api, keyctl | optional `kid=base64(32 bytes),...` destination-fingerprint keys; **first entry is current**. Unset = `m0` = `MK_MASTER_KEY` (pre-0008 behaviour). Rotation order and `mk-keyctl fingerprint-status / fingerprint-rekey / fingerprint-prune`: `docs/runbooks/key-compromise.md` |
+| `MK_TENANT_READ_RPS` / `MK_TENANT_READ_BURST` | api | per-tenant GET budget per replica (default 20 / 40); over → `429 TENANT_RATE_LIMITED` + `Retry-After` |
+| `MK_TENANT_WRITE_RPS` / `MK_TENANT_WRITE_BURST` | api | per-tenant non-GET budget per replica (default 5 / 10) |
+| `MK_MAX_INFLIGHT` | api | concurrent `/internal/v1` requests per replica (default 256); full → `503 OVER_CAPACITY` + `Retry-After: 1`. Webhooks, adapter callbacks and health are never shed. Published envelope: `docs/load/limits.md` |
 | `MK_LEGACY_SEAL_RETIRED` | same | `1` after `mk-keyctl reencrypt` reports zero rows under version 0: the process then refuses to unseal legacy ciphertext at all |
 | `MK_ASSERTION_KEYS` | api | `kid=<base64url Ed25519 public key>,...`; FastAPI holds the private keys |
 | `MK_BIND` | api | default `127.0.0.1:8090`; never expose publicly |
@@ -92,7 +96,7 @@ except the last one, which requires the platform operator's passkey.
    "initial"` (owner login, `MK_KEK` set). `mk-keyctl status` must show
    `current_version=1`; without this step processes seal under the legacy
    single master key (version 0), which pre-flight refuses for production.
-4. Run the pre-flight (`scripts/kernel-preflight.sh --for-enable`, PR #32). **Gap, Not demonstrated:** the checks for `MK_APPROVAL_*`, `MK_ALLOW_UNBOUND_APPROVAL`, `MK_KEK`/`MK_LEGACY_SEAL_RETIRED`, `MK_DB_SSLROOTCERT`, `MK_TWILIO_API_BASE` and the restore-gate report are written (commit 39515f9) but not yet in pre-flight — they are added when #32 and this branch are joined; until then verify these items by hand. Required: RLS
+4. Run the pre-flight (`scripts/kernel-preflight.sh --for-enable`). With `--for-enable` it also requires: no `MK_ALLOW_UNBOUND_APPROVAL`/`MK_APPROVAL_ALLOW_NO_UV`, `MK_APPROVAL_RP_ID`/`ORIGINS` set, `MK_KEK` with exactly one active key version, `MK_LEGACY_SEAL_RETIRED=1`, a readable `MK_DB_SSLROOTCERT`, an https `MK_PUBLIC_WEBHOOK_BASE`, `MK_TWILIO_API_BASE=https://api.twilio.com`, no destination row orphaned from `MK_FINGERPRINT_KEYS`, and `mk-restore-gate` (report mode) agreeing the environment is recoverable. Required: RLS
    on every `kernel.*` table, per-process logins in place, `MK_APPROVAL_RP_ID`
    and `MK_APPROVAL_ORIGINS` set, `MK_ALLOW_UNBOUND_APPROVAL` unset, `MK_KEK` set,
    `MK_PUBLIC_WEBHOOK_BASE` set and equal to the URL configured at the provider.

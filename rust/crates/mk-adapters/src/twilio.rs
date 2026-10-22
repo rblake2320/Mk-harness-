@@ -602,39 +602,126 @@ const POSSIBLE: &[&str] = &[
     "no thank you",
 ];
 
-#[must_use]
-pub fn detect_opt_out(body: &str) -> OptOutSignal {
-    let norm: String = body
-        .trim()
+/// NFKC (fullwidth and compatibility forms fold: `ＳＴＯＰ` → `STOP`, `…` → `...`)
+/// with typographic apostrophes and quotes mapped to ASCII (iOS types `’`).
+fn canon(body: &str) -> String {
+    use unicode_normalization::UnicodeNormalization as _;
+    body.nfkc()
+        .map(|c| match c {
+            '\u{2019}' | '\u{2018}' | '\u{02BC}' => '\'',
+            '\u{201C}' | '\u{201D}' => '"',
+            c => c,
+        })
+        .collect()
+}
+
+/// Canonical word sequence: lowercase, apostrophes deleted (`don't` → `dont`),
+/// every other non-alphanumeric character (punctuation, symbols, emoji) a word
+/// break. Mirrors `backend/app/inbound.py::_norm` exactly.
+fn norm(body: &str) -> String {
+    let t: String = canon(body)
         .to_lowercase()
         .chars()
-        .filter(|c| {
-            !matches!(
-                c,
-                '.' | '!' | '?' | ',' | '"' | '\'' | '\u{201c}' | '\u{201d}'
-            )
+        .filter(|c| *c != '\'')
+        .map(|c| {
+            if c.is_alphanumeric() || c.is_whitespace() {
+                c
+            } else {
+                ' '
+            }
         })
         .collect();
-    let norm = norm.split_whitespace().collect::<Vec<_>>().join(" ");
-    if EXPLICIT.contains(&norm.as_str()) {
+    t.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// An explicit stop phrase, also when its words are run together
+/// (`stoptexting`); "please stop" never counts before "by".
+fn explicit_phrase(n: &str) -> bool {
+    let collapsed: String = n.chars().filter(|c| *c != ' ').collect();
+    EXPLICIT_PHRASES.iter().any(|p| {
+        let pn = norm(p);
+        if pn == "please stop" && n.contains("stop by") {
+            return false;
+        }
+        n.contains(&pn) || collapsed.contains(&pn.replace(' ', ""))
+    })
+}
+
+#[must_use]
+pub fn detect_opt_out(body: &str) -> OptOutSignal {
+    let n = norm(body);
+    if n.is_empty() {
+        return OptOutSignal::None;
+    }
+    if EXPLICIT.contains(&n.as_str()) {
         return OptOutSignal::Explicit;
     }
-    let first = norm.split(' ').next().unwrap_or("");
-    if EXPLICIT.contains(&first) && norm.split(' ').count() <= 2 && !norm.starts_with("stop by") {
+    let words: Vec<&str> = n.split(' ').collect();
+    if is_keyword(words[0]) && words.len() <= 2 && !n.starts_with("stop by") {
         return OptOutSignal::Explicit;
     }
-    if EXPLICIT_PHRASES.iter().any(|p| norm.contains(p)) {
+    // "STOP STOP STOP"
+    if words.iter().all(|w| is_keyword(w)) {
         return OptOutSignal::Explicit;
     }
-    if POSSIBLE.iter().any(|p| norm.contains(p))
-        || (norm.contains("stop")
-            && !norm.contains("stop by")
-            && !norm.contains("nonstop")
-            && !norm.contains("non-stop"))
+    // "STOP. this gave me a rash", "Stop! who is this", "STOP\nsent from my phone":
+    // a stop keyword opening the message, then a sentence break.
+    if keyword_then_break(&canon(body)) {
+        return OptOutSignal::Explicit;
+    }
+    if explicit_phrase(&n) {
+        return OptOutSignal::Explicit;
+    }
+    if POSSIBLE.iter().any(|p| n.contains(&norm(p)))
+        || (words
+            .iter()
+            .any(|w| is_stop_word(w) || *w == "stopping" || *w == "stops")
+            && !n.contains("stop by")
+            && !n.contains("non stop"))
     {
         return OptOutSignal::Possible;
     }
     OptOutSignal::None
+}
+
+/// "stop" with emphatic repeats ("stopp", "stooop") — not "stopped" or "nonstop".
+fn is_stop_word(w: &str) -> bool {
+    let b = w.as_bytes();
+    if b.len() < 4 || b[0] != b's' || b[1] != b't' {
+        return false;
+    }
+    let rest = &b[2..];
+    let os = rest.iter().take_while(|c| **c == b'o').count();
+    let ps = rest[os..].iter().take_while(|c| **c == b'p').count();
+    os >= 1 && ps >= 1 && os + ps == rest.len()
+}
+
+fn is_keyword(w: &str) -> bool {
+    EXPLICIT.contains(&w) || is_stop_word(w)
+}
+
+/// A stop keyword that opens the (canonicalized) message, followed by
+/// `. ! , ; :`, a newline, or a dash. Mirrors `_KEYWORD_THEN_BREAK`.
+fn keyword_then_break(body: &str) -> bool {
+    let t = body.trim_start().to_lowercase();
+    for kw in [
+        "stopall",
+        "stop",
+        "unsubscribe",
+        "optout",
+        "opt-out",
+        "opt out",
+        "revoke",
+    ] {
+        if let Some(rest) = t.strip_prefix(kw) {
+            let rest = rest.trim_start_matches([' ', '\t']);
+            if rest.starts_with(['.', '!', ',', ';', ':', '\n', '–', '—']) || rest.starts_with("- ")
+            {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 #[cfg(test)]
@@ -803,6 +890,18 @@ mod tests {
             "please stop texting me",
             "I'm not interested, remove me",
             "Can you stop sending these",
+            // Synthetic-set findings (A4): keyword then a sentence break, repeats,
+            // emphatic spellings, and an explicit phrase with a wrong-number cue.
+            "STOP. this gave me a rash",
+            "Stop! who is this",
+            "STOP, I'm not interested",
+            "STOP\nsent from my iPhone",
+            "stop - not interested",
+            "STOP STOP STOP",
+            "STOPPP",
+            "stooop",
+            "who is this? please stop texting me",
+            "wrong number, please stop texting",
         ] {
             assert_eq!(detect_opt_out(s), O::Explicit, "{s}");
         }
@@ -821,13 +920,55 @@ mod tests {
             "I can't stop by today but Friday is good",
             "nonstop fun",
             "Thanks!",
+            "Stopped by the store yesterday, loved it",
+            "stopwatch",
         ] {
             assert_ne!(detect_opt_out(s), O::Explicit, "{s}");
         }
+        assert_eq!(
+            detect_opt_out("Stopped by the store yesterday, loved it"),
+            O::None,
+            "'stopped' is not a stop request"
+        );
+        assert_eq!(
+            detect_opt_out("bus stop was late"),
+            O::Possible,
+            "a bare 'stop' still holds"
+        );
+        assert_eq!(detect_opt_out("   "), O::None);
         assert_eq!(
             detect_opt_out("Stop by anytime, I'd love a sample!"),
             O::None
         );
         assert_eq!(detect_opt_out("yes Thursday works"), O::None);
+    }
+
+    /// Parity with the application classifier on the synthetic A4 set: every case
+    /// labelled an explicit opt-out is Explicit in the kernel (the kernel writes the
+    /// permanent suppression); every possible opt-out is at least held; ordinary
+    /// messages are never suppressed.
+    #[test]
+    fn kernel_detector_agrees_with_the_a4_synthetic_set() {
+        use OptOutSignal as O;
+        let set = include_str!(
+            "../../../../backend/tests/evaluations/cases/synthetic/a4_optout_escalation.jsonl"
+        );
+        let mut n = 0;
+        for line in set.lines().filter(|l| !l.trim().is_empty()) {
+            let v: serde_json::Value = serde_json::from_str(line).unwrap();
+            let text = v["inbound_text"].as_str().unwrap();
+            let got = detect_opt_out(text);
+            if v["kernel_expected"] == "explicit" {
+                assert_eq!(got, O::Explicit, "{} {text:?}", v["id"]);
+            }
+            match v["expected_class"].as_str().unwrap() {
+                "opt_out" => assert_eq!(got, O::Explicit, "{} {text:?}", v["id"]),
+                "ambiguous_opt_out" => assert_ne!(got, O::None, "{} {text:?}", v["id"]),
+                "ordinary" => assert_eq!(got, O::None, "{} {text:?}", v["id"]),
+                _ => {}
+            }
+            n += 1;
+        }
+        assert!(n > 400, "synthetic set present ({n})");
     }
 }

@@ -58,7 +58,13 @@ struct World {
 
 async fn world(mode: SimMode) -> Option<World> {
     let url = mk_testkit::test_database_url()?;
-    let store = Store::connect(&url, 8).await.ok()?;
+    // MK_TEST_POOL_SIZE=1 (CI) makes any second pooled-connection acquisition
+    // inside an open transaction fail fast instead of deadlocking under load.
+    let pool = std::env::var("MK_TEST_POOL_SIZE")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(8);
+    let store = Store::connect(&url, pool).await.ok()?;
     store.migrate().await.ok()?;
     let tenant = TenantId::new();
     let secret = AdapterSecret::new("sim-secret-0123456789");
@@ -131,7 +137,8 @@ async fn queued_outreach(w: &World) -> mk_domain::ActionId {
         now - chrono::Duration::hours(1),
         now + chrono::Duration::days(1),
         w.user,
-        "dest-hash",
+        &mk_store::fingerprint::Fingerprints::legacy("dest-hash"),
+        None,
         ACTOR,
         now,
     )
@@ -141,7 +148,7 @@ async fn queued_outreach(w: &World) -> mk_domain::ActionId {
         &mut tx,
         &req,
         Some(Channel::Sms),
-        Some("dest-hash"),
+        Some(&mk_store::fingerprint::Fingerprints::legacy("dest-hash")),
         ACTOR,
         now,
     )
@@ -285,7 +292,7 @@ async fn revocation_after_queue_suppresses_before_dispatch() {
         .begin(w.tenant)
         .await
         .unwrap_or_else(|e| panic!("{e:?}"));
-    let perms = consent::permissions_for(&mut tx, w.contact, Channel::Sms)
+    let perms = consent::permissions_for(&mut tx, w.contact, Channel::Sms, None)
         .await
         .unwrap_or_default();
     assert_eq!(perms.len(), 1);
@@ -339,7 +346,8 @@ async fn suppression_after_approval_and_kill_switch_block_dispatch() {
     consent::add_suppression(
         &mut tx,
         Some(Channel::Sms),
-        Some("dest-hash"),
+        Some(&mk_store::fingerprint::Fingerprints::legacy("dest-hash")),
+        None,
         "destination",
         "opt_out",
         true,

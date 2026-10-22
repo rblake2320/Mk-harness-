@@ -14,8 +14,12 @@ pub struct AppState {
     pub master: MasterKey,
     /// Versioned envelope keys for data at rest (S6).
     pub keyring: Keyring,
+    /// Destination fingerprint keys (first = current); see `mk_store::fingerprint`.
+    pub fingerprints: Arc<mk_store::fingerprint::FingerprintKeys>,
     pub tools: Arc<ToolAllowlist>,
     pub metrics: Arc<Metrics>,
+    /// Per-tenant rate limits and replica in-flight cap (O2).
+    pub limiter: crate::limits::Limiter,
     /// HMAC timestamp tolerance for adapter callbacks (seconds).
     pub callback_tolerance_secs: i64,
     /// Feature flag: when false, proposals are evaluated and recorded but

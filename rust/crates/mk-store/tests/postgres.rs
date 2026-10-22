@@ -49,7 +49,7 @@ async fn ensure_member<'e, E>(exec: E, role: &str)
 where
     E: sqlx::PgExecutor<'e> + Copy,
 {
-    let _ = sqlx::query(&format!("GRANT {role} TO CURRENT_USER"))
+    let _ = sqlx::query(sqlx::AssertSqlSafe(format!("GRANT {role} TO CURRENT_USER")))
         .execute(exec)
         .await;
     let ok: bool = sqlx::query_scalar("SELECT pg_has_role(current_user, $1, 'MEMBER')")
@@ -76,9 +76,16 @@ async fn full_lifecycle_with_verified_audit_chain() {
     let id = req.action_id.unwrap_or_default();
 
     let mut tx = s.begin(tenant).await.unwrap_or_else(|e| panic!("{e:?}"));
-    let a = actions::insert_draft(&mut tx, &req, Some(Channel::Sms), Some("dest"), ACTOR, now)
-        .await
-        .unwrap_or_else(|e| panic!("{e:?}"));
+    let a = actions::insert_draft(
+        &mut tx,
+        &req,
+        Some(Channel::Sms),
+        Some(&mk_store::fingerprint::Fingerprints::legacy("dest")),
+        ACTOR,
+        now,
+    )
+    .await
+    .unwrap_or_else(|e| panic!("{e:?}"));
     assert_eq!(a.state, ActionState::Draft);
     assert_eq!(a.digest, req.digest().unwrap_or_else(|_| panic!()));
     for t in [
@@ -366,20 +373,26 @@ async fn cross_tenant_access_is_invisible_even_with_raw_sql() {
         .execute(&mut *raw)
         .await
         .unwrap_or_else(|e| panic!("{e:?}"));
-    sqlx::query(&format!("SET LOCAL kernel.tenant_id = '{}'", tb.0))
-        .execute(&mut *raw)
-        .await
-        .unwrap_or_else(|e| panic!("{e:?}"));
+    sqlx::query(sqlx::AssertSqlSafe(format!(
+        "SET LOCAL kernel.tenant_id = '{}'",
+        tb.0
+    )))
+    .execute(&mut *raw)
+    .await
+    .unwrap_or_else(|e| panic!("{e:?}"));
     let n: i64 = sqlx::query_scalar("SELECT count(*) FROM kernel.actions WHERE action_id = $1")
         .bind(id.0)
         .fetch_one(&mut *raw)
         .await
         .unwrap_or_else(|e| panic!("{e:?}"));
     assert_eq!(n, 0, "RLS must hide tenant A's row from tenant B context");
-    sqlx::query(&format!("SET LOCAL kernel.tenant_id = '{}'", ta.0))
-        .execute(&mut *raw)
-        .await
-        .unwrap_or_else(|e| panic!("{e:?}"));
+    sqlx::query(sqlx::AssertSqlSafe(format!(
+        "SET LOCAL kernel.tenant_id = '{}'",
+        ta.0
+    )))
+    .execute(&mut *raw)
+    .await
+    .unwrap_or_else(|e| panic!("{e:?}"));
     let n: i64 = sqlx::query_scalar("SELECT count(*) FROM kernel.actions WHERE action_id = $1")
         .bind(id.0)
         .fetch_one(&mut *raw)
@@ -707,13 +720,14 @@ async fn revocation_finds_pending_actions_and_policy_roundtrip() {
         now,
         now + Duration::days(30),
         user,
-        "dest",
+        &mk_store::fingerprint::Fingerprints::legacy("dest"),
+        None,
         ACTOR,
         now,
     )
     .await
     .unwrap_or_else(|e| panic!("{e:?}"));
-    let facts = consent::permissions_for(&mut tx, contact, Channel::Sms)
+    let facts = consent::permissions_for(&mut tx, contact, Channel::Sms, None)
         .await
         .unwrap_or_else(|e| panic!("{e:?}"));
     assert_eq!(facts.len(), 1);
@@ -723,7 +737,7 @@ async fn revocation_finds_pending_actions_and_policy_roundtrip() {
         &mut tx,
         &req,
         Some(Channel::Sms),
-        Some("dest-1"),
+        Some(&mk_store::fingerprint::Fingerprints::legacy("dest-1")),
         ACTOR,
         now,
     )
@@ -746,14 +760,19 @@ async fn revocation_finds_pending_actions_and_policy_roundtrip() {
         .await
         .unwrap_or_else(|e| panic!("{e:?}"));
     assert_eq!((c, ch), (contact, Channel::Sms));
-    let pending = actions::pending_for_destination(&mut tx, Some(Channel::Sms), Some("dest-1"))
-        .await
-        .unwrap_or_else(|e| panic!("{e:?}"));
+    let pending = actions::pending_for_destination(
+        &mut tx,
+        Some(Channel::Sms),
+        Some(&mk_store::fingerprint::Fingerprints::legacy("dest-1")),
+    )
+    .await
+    .unwrap_or_else(|e| panic!("{e:?}"));
     assert_eq!(pending, vec![id]);
     let sup = consent::add_suppression(
         &mut tx,
         Some(Channel::Sms),
-        Some("dest-1"),
+        Some(&mk_store::fingerprint::Fingerprints::legacy("dest-1")),
+        None,
         "destination",
         "opt_out",
         true,
@@ -770,9 +789,13 @@ async fn revocation_finds_pending_actions_and_policy_roundtrip() {
         ),
         "permanent needs elevated lift"
     );
-    let sups = consent::suppressions_for(&mut tx, Channel::Sms, "dest-1")
-        .await
-        .unwrap_or_else(|e| panic!("{e:?}"));
+    let sups = consent::suppressions_for(
+        &mut tx,
+        Channel::Sms,
+        &mk_store::fingerprint::Fingerprints::legacy("dest-1"),
+    )
+    .await
+    .unwrap_or_else(|e| panic!("{e:?}"));
     assert_eq!(sups.len(), 1);
 
     let (defaults, off) = policy::load(&mut tx)
@@ -996,7 +1019,7 @@ async fn role_pool(url: &str, role: &'static str) -> sqlx::PgPool {
         .max_connections(4)
         .after_connect(move |conn, _| {
             Box::pin(async move {
-                sqlx::query(&format!("SET ROLE {role}"))
+                sqlx::query(sqlx::AssertSqlSafe(format!("SET ROLE {role}")))
                     .execute(conn)
                     .await?;
                 Ok(())
@@ -1184,7 +1207,7 @@ async fn envelope_key_rotation_drill() {
     assert!(
         stale
             .iter()
-            .any(|(t, n)| t == "kernel.adapter_credentials" && *n >= 1)
+            .any(|(t, n)| t.starts_with("kernel.adapter_credentials.") && *n >= 1)
     );
     let rep = keys::reencrypt(s.pool(), &ring1, Some(tenant))
         .await
@@ -1281,4 +1304,414 @@ async fn envelope_key_rotation_drill() {
         .execute(s.pool())
         .await
         .unwrap_or_else(|e| panic!("{e:?}"));
+}
+
+/// S6: rotating the destination-fingerprint key must not orphan opt-outs or
+/// consent. Rows written under the master-key fingerprint (`m0`) keep matching
+/// after `k2` becomes current; removing `m0` before rekey orphans them (shown,
+/// then fixed); after rekey a `k2`-only configuration still finds every row,
+/// including a provider opt-out written without a sealed destination.
+#[tokio::test]
+async fn fingerprint_key_rotation_never_orphans_suppressions_or_consent() {
+    use base64::Engine as _;
+    use mk_store::fingerprint::{self, FingerprintKeys};
+    let s = require_db!();
+    let (tenant, user, contact) = (TenantId::new(), UserId::new(), ContactId::new());
+    let now = t0();
+    let master = MasterKey::generate();
+    let ring = mk_crypto::Keyring::legacy(&master);
+    let raw = "+1 (555) 555-0123";
+    let k0 = FingerprintKeys::from_master(&master);
+    let fp0 = k0.compute(tenant, Channel::Sms, raw);
+
+    let mut tx = s.begin(tenant).await.unwrap_or_else(|e| panic!("{e:?}"));
+    consent::grant_permission(
+        &mut tx,
+        contact,
+        Channel::Sms,
+        &["customer_requested_follow_up".into()],
+        "web_form",
+        &mk_crypto::Digest::of(b"proof"),
+        now,
+        now + Duration::days(30),
+        user,
+        &fp0,
+        Some((&ring, raw)),
+        ACTOR,
+        now,
+    )
+    .await
+    .unwrap_or_else(|e| panic!("{e:?}"));
+    // Inbound STOP: sealed raw destination.
+    consent::add_suppression(
+        &mut tx,
+        Some(Channel::Sms),
+        Some(&fp0),
+        Some((&ring, raw)),
+        "destination",
+        "sms_opt_out",
+        true,
+        "sms_reply",
+        ACTOR,
+        now,
+    )
+    .await
+    .unwrap_or_else(|e| panic!("{e:?}"));
+    // Provider opt-out: no sealed raw — recovered through the action's canonical `to`.
+    let provider_sup = consent::add_suppression(
+        &mut tx,
+        Some(Channel::Sms),
+        Some(&fp0),
+        None,
+        "destination",
+        "provider_opt_out",
+        true,
+        "provider",
+        ACTOR,
+        now,
+    )
+    .await
+    .unwrap_or_else(|e| panic!("{e:?}"));
+    let mut req = sms_request(tenant, user, contact, now);
+    req.arguments
+        .insert("to".into(), serde_json::json!("+15555550123"));
+    let action_id = req.action_id.unwrap_or_default();
+    actions::insert_draft(&mut tx, &req, Some(Channel::Sms), Some(&fp0), ACTOR, now)
+        .await
+        .unwrap_or_else(|e| panic!("{e:?}"));
+    actions::transition(
+        &mut tx,
+        action_id,
+        Transition::SubmitForPolicy,
+        None,
+        ACTOR,
+        now,
+    )
+    .await
+    .unwrap_or_else(|e| panic!("{e:?}"));
+    tx.commit().await.unwrap_or_else(|e| panic!("{e:?}"));
+
+    // Phase 2: k2 current, m0 still configured.
+    let k2b64 = base64::engine::general_purpose::STANDARD.encode([9u8; 32]);
+    let k_rot = FingerprintKeys::parse(&format!("k2={k2b64},m0=master"), &master).unwrap();
+    let fp_rot = k_rot.compute(tenant, Channel::Sms, "+15555550123");
+    assert_ne!(fp_rot.primary, fp0.primary);
+    let mut tx = s.begin(tenant).await.unwrap_or_else(|e| panic!("{e:?}"));
+    let sups = consent::suppressions_for(&mut tx, Channel::Sms, &fp_rot)
+        .await
+        .unwrap();
+    assert_eq!(sups.len(), 2, "both pre-rotation suppressions still apply");
+    assert!(
+        sups.iter()
+            .all(|f| f.destination_hash.as_deref() == Some(fp_rot.primary.as_str()))
+    );
+    let perms = consent::permissions_for(&mut tx, contact, Channel::Sms, Some(&fp_rot))
+        .await
+        .unwrap();
+    assert_eq!(
+        perms[0].destination_hash.as_deref(),
+        Some(fp_rot.primary.as_str()),
+        "consent still binds"
+    );
+    let pending = actions::pending_for_destination(&mut tx, Some(Channel::Sms), Some(&fp_rot))
+        .await
+        .unwrap();
+    assert_eq!(pending, vec![action_id]);
+    drop(tx);
+    let st = fingerprint::status(s.pool(), &k_rot, Some(tenant))
+        .await
+        .unwrap();
+    assert!(
+        st.iter().map(|t| t.lacking_current).sum::<u64>() >= 4,
+        "{st:?}"
+    );
+    assert!(st.iter().all(|t| t.orphaned == 0), "{st:?}");
+
+    // Removing m0 before rekey would orphan every row: lookups find nothing.
+    let k_only = FingerprintKeys::parse(&format!("k2={k2b64}"), &master).unwrap();
+    let fp_only = k_only.compute(tenant, Channel::Sms, raw);
+    let mut tx = s.begin(tenant).await.unwrap_or_else(|e| panic!("{e:?}"));
+    assert!(
+        consent::suppressions_for(&mut tx, Channel::Sms, &fp_only)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    drop(tx);
+    let st = fingerprint::status(s.pool(), &k_only, Some(tenant))
+        .await
+        .unwrap();
+    assert!(
+        st.iter().map(|t| t.orphaned).sum::<u64>() >= 4,
+        "status must flag orphaned rows: {st:?}"
+    );
+
+    // Rekey with both keys configured; then k2 alone matches everything.
+    let rep = fingerprint::rekey(s.pool(), &ring, &k_rot, Some(tenant))
+        .await
+        .unwrap();
+    assert_eq!(rep.unresolved, 0, "{rep:?}");
+    assert_eq!(rep.updated, 4, "{rep:?}");
+    let again = fingerprint::rekey(s.pool(), &ring, &k_rot, Some(tenant))
+        .await
+        .unwrap();
+    assert_eq!(again.updated, 0, "rekey is idempotent: {again:?}");
+    let st = fingerprint::status(s.pool(), &k_only, Some(tenant))
+        .await
+        .unwrap();
+    assert!(
+        st.iter().all(|t| t.lacking_current == 0 && t.orphaned == 0),
+        "{st:?}"
+    );
+    let mut tx = s.begin(tenant).await.unwrap_or_else(|e| panic!("{e:?}"));
+    let sups = consent::suppressions_for(&mut tx, Channel::Sms, &fp_only)
+        .await
+        .unwrap();
+    assert_eq!(
+        sups.len(),
+        2,
+        "opt-outs survive removal of the old key after rekey"
+    );
+    let perms = consent::permissions_for(&mut tx, contact, Channel::Sms, Some(&fp_only))
+        .await
+        .unwrap();
+    assert_eq!(
+        perms[0].destination_hash.as_deref(),
+        Some(fp_only.primary.as_str())
+    );
+    assert_eq!(
+        actions::pending_for_destination(&mut tx, Some(Channel::Sms), Some(&fp_only))
+            .await
+            .unwrap(),
+        vec![action_id]
+    );
+    let _ = provider_sup;
+    // A different number never matches (no false positives from overlap).
+    let other = k_only.compute(tenant, Channel::Sms, "+15555550999");
+    assert!(
+        consent::suppressions_for(&mut tx, Channel::Sms, &other)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    drop(tx);
+    // Prune the retired m0: refused while m0 is still configured, then strips
+    // every m0 tag and rewrites the hash columns to the k2 value.
+    assert!(matches!(
+        fingerprint::prune(s.pool(), &k_rot, "m0", Some(tenant)).await,
+        Err(StoreError::Conflict(_))
+    ));
+    let n = fingerprint::prune(s.pool(), &k_only, "m0", Some(tenant))
+        .await
+        .unwrap();
+    assert_eq!(n, 4, "action, permission, two suppressions");
+    let left: i64 = sqlx::query_scalar(
+        "SELECT (SELECT count(*) FROM kernel.suppressions WHERE tenant_id = $1
+                   AND (normalized_destination_hash = $2 OR EXISTS (SELECT 1 FROM unnest(destination_fingerprints) x WHERE x LIKE 'm0:%')))
+              + (SELECT count(*) FROM kernel.contact_permissions WHERE tenant_id = $1
+                   AND (destination_hash = $2 OR EXISTS (SELECT 1 FROM unnest(destination_fingerprints) x WHERE x LIKE 'm0:%')))
+              + (SELECT count(*) FROM kernel.actions WHERE tenant_id = $1
+                   AND (destination_hash = $2 OR EXISTS (SELECT 1 FROM unnest(destination_fingerprints) x WHERE x LIKE 'm0:%')))",
+    )
+    .bind(tenant.0)
+    .bind(&fp0.primary)
+    .fetch_one(s.pool())
+    .await
+    .unwrap();
+    assert_eq!(left, 0, "no m0 HMAC remains in any table");
+    let total: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM kernel.suppressions WHERE tenant_id = $1")
+            .bind(tenant.0)
+            .fetch_one(s.pool())
+            .await
+            .unwrap();
+    assert_eq!(
+        total, 2,
+        "the count query sees this tenant's rows (not vacuous)"
+    );
+    let mut tx = s.begin(tenant).await.unwrap_or_else(|e| panic!("{e:?}"));
+    assert_eq!(
+        consent::suppressions_for(&mut tx, Channel::Sms, &fp_only)
+            .await
+            .unwrap()
+            .len(),
+        2,
+        "opt-outs still block after the old key's HMACs are gone"
+    );
+    let perms = consent::permissions_for(&mut tx, contact, Channel::Sms, Some(&fp_only))
+        .await
+        .unwrap();
+    assert_eq!(
+        perms[0].destination_hash.as_deref(),
+        Some(fp_only.primary.as_str())
+    );
+    assert_eq!(
+        fingerprint::prune(s.pool(), &k_only, "m0", Some(tenant))
+            .await
+            .unwrap(),
+        0,
+        "prune is idempotent"
+    );
+}
+
+/// Rekey refuses to re-point a row: a sealed destination that does not
+/// reproduce any stored tag (tampered row / wrong raw) is left unresolved.
+#[tokio::test]
+async fn fingerprint_rekey_rejects_inconsistent_raw_destination() {
+    use base64::Engine as _;
+    use mk_store::fingerprint::{self, FingerprintKeys, Fingerprints};
+    let s = require_db!();
+    let tenant = TenantId::new();
+    let now = t0();
+    let master = MasterKey::generate();
+    let ring = mk_crypto::Keyring::legacy(&master);
+    let mut tx = s.begin(tenant).await.unwrap_or_else(|e| panic!("{e:?}"));
+    // Tags claim one number; sealed raw is another.
+    let claimed: Fingerprints =
+        FingerprintKeys::from_master(&master).compute(tenant, Channel::Sms, "+15555550001");
+    consent::add_suppression(
+        &mut tx,
+        Some(Channel::Sms),
+        Some(&claimed),
+        Some((&ring, "+15555550002")),
+        "destination",
+        "sms_opt_out",
+        true,
+        "sms_reply",
+        ACTOR,
+        now,
+    )
+    .await
+    .unwrap_or_else(|e| panic!("{e:?}"));
+    tx.commit().await.unwrap_or_else(|e| panic!("{e:?}"));
+    let rep = fingerprint::rekey(
+        s.pool(),
+        &ring,
+        &FingerprintKeys::from_master(&master),
+        Some(tenant),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        (rep.updated, rep.unresolved),
+        (0, 0),
+        "already complete under m0: {rep:?}"
+    );
+    let k = FingerprintKeys::parse(
+        &format!(
+            "k3={},m0=master",
+            base64::engine::general_purpose::STANDARD.encode([3u8; 32])
+        ),
+        &master,
+    )
+    .unwrap();
+    let rep = fingerprint::rekey(s.pool(), &ring, &k, Some(tenant))
+        .await
+        .unwrap();
+    assert_eq!((rep.updated, rep.unresolved), (0, 1), "{rep:?}");
+    let st = fingerprint::status(s.pool(), &k, Some(tenant))
+        .await
+        .unwrap();
+    assert_eq!(
+        st.iter().map(|t| t.lacking_current).sum::<u64>(),
+        1,
+        "still blocks key removal"
+    );
+}
+
+/// Review findings: a bare hash of unknown key version is tagged under every kid
+/// and marked unverified (status blocks key removal), re-filing it with the raw
+/// destination lets rekey verify it; a row written by a pre-0008 binary (empty
+/// tags) is defaulted to `m0:` by trigger; status counts tenants it scanned.
+#[tokio::test]
+async fn hash_only_suppressions_are_unverified_until_rekey_and_old_binaries_are_tagged() {
+    use mk_store::fingerprint::{self, FingerprintKeys, UNVERIFIED};
+    let s = require_db!();
+    let tenant = TenantId::new();
+    let now = t0();
+    let master = MasterKey::generate();
+    let ring = mk_crypto::Keyring::legacy(&master);
+    let keys = FingerprintKeys::from_master(&master);
+    let raw = "+15555550444";
+    let fp = keys.compute(tenant, Channel::Sms, raw);
+    let mut tx = s.begin(tenant).await.unwrap_or_else(|e| panic!("{e:?}"));
+    // Hash-only, no stored row knows it.
+    assert!(
+        fingerprint::tags_for_hash(&mut tx, &keys, &fp.primary)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    let unverified = keys.tag_unverified(&fp.primary);
+    assert!(unverified.tagged.contains(&UNVERIFIED.to_owned()));
+    consent::add_suppression(
+        &mut tx,
+        Some(Channel::Sms),
+        Some(&unverified),
+        None,
+        "destination",
+        "operator",
+        true,
+        "operator",
+        ACTOR,
+        now,
+    )
+    .await
+    .unwrap_or_else(|e| panic!("{e:?}"));
+    // It still blocks the destination it names.
+    assert_eq!(
+        consent::suppressions_for(&mut tx, Channel::Sms, &fp)
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
+    tx.commit().await.unwrap_or_else(|e| panic!("{e:?}"));
+    // A pre-0008 binary's insert (no tag columns) is defaulted to m0.
+    sqlx::query("INSERT INTO kernel.suppressions (suppression_id, tenant_id, normalized_destination_hash, channel, scope, reason, permanent, created_at, source)
+                 VALUES (gen_random_uuid(), $1, 'legacyhash', 'sms', 'destination', 'opt_out', true, now(), 'old-binary')")
+        .bind(tenant.0).execute(s.pool()).await.unwrap();
+    let tags: Vec<String> = sqlx::query_scalar("SELECT destination_fingerprints FROM kernel.suppressions WHERE tenant_id = $1 AND normalized_destination_hash = 'legacyhash'")
+        .bind(tenant.0).fetch_one(s.pool()).await.unwrap();
+    assert_eq!(tags, vec!["m0:legacyhash".to_owned()]);
+    sqlx::query("DELETE FROM kernel.suppressions WHERE tenant_id = $1 AND normalized_destination_hash = 'legacyhash'")
+        .bind(tenant.0).execute(s.pool()).await.ok();
+    let st = fingerprint::status(s.pool(), &keys, Some(tenant))
+        .await
+        .unwrap();
+    assert!(
+        st.iter().any(|t| t.unverified == 1 && t.blocking() >= 1),
+        "{st:?}"
+    );
+    assert!(st.iter().all(|t| t.tenants == 1), "{st:?}");
+    // Rekey cannot verify it (no raw anywhere): still unresolved.
+    let rep = fingerprint::rekey(s.pool(), &ring, &keys, Some(tenant))
+        .await
+        .unwrap();
+    assert_eq!(rep.unresolved, 1, "{rep:?}");
+    // Re-file with the raw destination; rekey learns it and verifies the hash-only row.
+    let mut tx = s.begin(tenant).await.unwrap_or_else(|e| panic!("{e:?}"));
+    consent::add_suppression(
+        &mut tx,
+        Some(Channel::Sms),
+        Some(&fp),
+        Some((&ring, raw)),
+        "destination",
+        "operator",
+        true,
+        "operator",
+        ACTOR,
+        now,
+    )
+    .await
+    .unwrap_or_else(|e| panic!("{e:?}"));
+    tx.commit().await.unwrap_or_else(|e| panic!("{e:?}"));
+    let rep = fingerprint::rekey(s.pool(), &ring, &keys, Some(tenant))
+        .await
+        .unwrap();
+    assert_eq!((rep.updated, rep.unresolved), (1, 0), "{rep:?}");
+    let st = fingerprint::status(s.pool(), &keys, Some(tenant))
+        .await
+        .unwrap();
+    assert!(st.iter().all(|t| t.blocking() == 0), "{st:?}");
 }

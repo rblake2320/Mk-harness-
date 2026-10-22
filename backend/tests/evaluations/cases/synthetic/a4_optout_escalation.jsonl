@@ -1,0 +1,514 @@
+{"id": "a4s-0001", "inbound_text": "stop", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0002", "inbound_text": "stop.", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0003", "inbound_text": "stop!", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0004", "inbound_text": "stop ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0005", "inbound_text": "stop  ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0006", "inbound_text": "stop\n", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0007", "inbound_text": "STOP", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0008", "inbound_text": "STOP.", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0009", "inbound_text": "STOP!", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0010", "inbound_text": "STOP ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0011", "inbound_text": "STOP  ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0012", "inbound_text": "STOP\n", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0013", "inbound_text": "stop", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0014", "inbound_text": "stop.", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0015", "inbound_text": "stop!", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0016", "inbound_text": "stop ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0017", "inbound_text": "stop  ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0018", "inbound_text": "stop\n", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0019", "inbound_text": "Stop", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0020", "inbound_text": "Stop.", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0021", "inbound_text": "Stop!", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0022", "inbound_text": "Stop ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0023", "inbound_text": "Stop  ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0024", "inbound_text": "Stop\n", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0025", "inbound_text": "stopall", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0026", "inbound_text": "stopall.", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0027", "inbound_text": "stopall!", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0028", "inbound_text": "stopall ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0029", "inbound_text": "stopall  ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0030", "inbound_text": "stopall\n", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0031", "inbound_text": "STOPALL", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0032", "inbound_text": "STOPALL.", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0033", "inbound_text": "STOPALL!", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0034", "inbound_text": "STOPALL ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0035", "inbound_text": "STOPALL  ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0036", "inbound_text": "STOPALL\n", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0037", "inbound_text": "stopall", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0038", "inbound_text": "stopall.", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0039", "inbound_text": "stopall!", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0040", "inbound_text": "stopall ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0041", "inbound_text": "stopall  ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0042", "inbound_text": "stopall\n", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0043", "inbound_text": "Stopall", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0044", "inbound_text": "Stopall.", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0045", "inbound_text": "Stopall!", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0046", "inbound_text": "Stopall ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0047", "inbound_text": "Stopall  ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0048", "inbound_text": "Stopall\n", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0049", "inbound_text": "unsubscribe", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0050", "inbound_text": "unsubscribe.", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0051", "inbound_text": "unsubscribe!", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0052", "inbound_text": "unsubscribe ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0053", "inbound_text": "unsubscribe  ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0054", "inbound_text": "unsubscribe\n", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0055", "inbound_text": "UNSUBSCRIBE", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0056", "inbound_text": "UNSUBSCRIBE.", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0057", "inbound_text": "UNSUBSCRIBE!", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0058", "inbound_text": "UNSUBSCRIBE ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0059", "inbound_text": "UNSUBSCRIBE  ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0060", "inbound_text": "UNSUBSCRIBE\n", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0061", "inbound_text": "unsubscribe", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0062", "inbound_text": "unsubscribe.", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0063", "inbound_text": "unsubscribe!", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0064", "inbound_text": "unsubscribe ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0065", "inbound_text": "unsubscribe  ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0066", "inbound_text": "unsubscribe\n", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0067", "inbound_text": "Unsubscribe", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0068", "inbound_text": "Unsubscribe.", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0069", "inbound_text": "Unsubscribe!", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0070", "inbound_text": "Unsubscribe ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0071", "inbound_text": "Unsubscribe  ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0072", "inbound_text": "Unsubscribe\n", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0073", "inbound_text": "cancel", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0074", "inbound_text": "cancel.", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0075", "inbound_text": "cancel!", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0076", "inbound_text": "cancel ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0077", "inbound_text": "cancel  ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0078", "inbound_text": "cancel\n", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0079", "inbound_text": "CANCEL", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0080", "inbound_text": "CANCEL.", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0081", "inbound_text": "CANCEL!", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0082", "inbound_text": "CANCEL ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0083", "inbound_text": "CANCEL  ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0084", "inbound_text": "CANCEL\n", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0085", "inbound_text": "cancel", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0086", "inbound_text": "cancel.", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0087", "inbound_text": "cancel!", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0088", "inbound_text": "cancel ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0089", "inbound_text": "cancel  ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0090", "inbound_text": "cancel\n", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0091", "inbound_text": "Cancel", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0092", "inbound_text": "Cancel.", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0093", "inbound_text": "Cancel!", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0094", "inbound_text": "Cancel ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0095", "inbound_text": "Cancel  ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0096", "inbound_text": "Cancel\n", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0097", "inbound_text": "end", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0098", "inbound_text": "end.", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0099", "inbound_text": "end!", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0100", "inbound_text": "end ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0101", "inbound_text": "end  ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0102", "inbound_text": "end\n", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0103", "inbound_text": "END", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0104", "inbound_text": "END.", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0105", "inbound_text": "END!", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0106", "inbound_text": "END ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0107", "inbound_text": "END  ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0108", "inbound_text": "END\n", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0109", "inbound_text": "end", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0110", "inbound_text": "end.", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0111", "inbound_text": "end!", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0112", "inbound_text": "end ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0113", "inbound_text": "end  ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0114", "inbound_text": "end\n", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0115", "inbound_text": "End", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0116", "inbound_text": "End.", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0117", "inbound_text": "End!", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0118", "inbound_text": "End ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0119", "inbound_text": "End  ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0120", "inbound_text": "End\n", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0121", "inbound_text": "quit", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0122", "inbound_text": "quit.", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0123", "inbound_text": "quit!", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0124", "inbound_text": "quit ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0125", "inbound_text": "quit  ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0126", "inbound_text": "quit\n", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0127", "inbound_text": "QUIT", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0128", "inbound_text": "QUIT.", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0129", "inbound_text": "QUIT!", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0130", "inbound_text": "QUIT ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0131", "inbound_text": "QUIT  ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0132", "inbound_text": "QUIT\n", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0133", "inbound_text": "quit", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0134", "inbound_text": "quit.", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0135", "inbound_text": "quit!", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0136", "inbound_text": "quit ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0137", "inbound_text": "quit  ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0138", "inbound_text": "quit\n", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0139", "inbound_text": "Quit", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0140", "inbound_text": "Quit.", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0141", "inbound_text": "Quit!", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0142", "inbound_text": "Quit ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0143", "inbound_text": "Quit  ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0144", "inbound_text": "Quit\n", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0145", "inbound_text": "revoke", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0146", "inbound_text": "revoke.", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0147", "inbound_text": "revoke!", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0148", "inbound_text": "revoke ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0149", "inbound_text": "revoke  ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0150", "inbound_text": "revoke\n", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0151", "inbound_text": "REVOKE", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0152", "inbound_text": "REVOKE.", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0153", "inbound_text": "REVOKE!", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0154", "inbound_text": "REVOKE ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0155", "inbound_text": "REVOKE  ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0156", "inbound_text": "REVOKE\n", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0157", "inbound_text": "revoke", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0158", "inbound_text": "revoke.", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0159", "inbound_text": "revoke!", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0160", "inbound_text": "revoke ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0161", "inbound_text": "revoke  ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0162", "inbound_text": "revoke\n", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0163", "inbound_text": "Revoke", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0164", "inbound_text": "Revoke.", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0165", "inbound_text": "Revoke!", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0166", "inbound_text": "Revoke ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0167", "inbound_text": "Revoke  ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0168", "inbound_text": "Revoke\n", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0169", "inbound_text": "optout", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0170", "inbound_text": "optout.", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0171", "inbound_text": "optout!", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0172", "inbound_text": "optout ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0173", "inbound_text": "optout  ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0174", "inbound_text": "optout\n", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0175", "inbound_text": "OPTOUT", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0176", "inbound_text": "OPTOUT.", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0177", "inbound_text": "OPTOUT!", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0178", "inbound_text": "OPTOUT ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0179", "inbound_text": "OPTOUT  ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0180", "inbound_text": "OPTOUT\n", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0181", "inbound_text": "optout", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0182", "inbound_text": "optout.", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0183", "inbound_text": "optout!", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0184", "inbound_text": "optout ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0185", "inbound_text": "optout  ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0186", "inbound_text": "optout\n", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0187", "inbound_text": "Optout", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0188", "inbound_text": "Optout.", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0189", "inbound_text": "Optout!", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0190", "inbound_text": "Optout ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0191", "inbound_text": "Optout  ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0192", "inbound_text": "Optout\n", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0193", "inbound_text": "opt out", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0194", "inbound_text": "opt out.", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0195", "inbound_text": "opt out!", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0196", "inbound_text": "opt out ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0197", "inbound_text": "opt out  ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0198", "inbound_text": "opt out\n", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0199", "inbound_text": "OPT OUT", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0200", "inbound_text": "OPT OUT.", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0201", "inbound_text": "OPT OUT!", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0202", "inbound_text": "OPT OUT ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0203", "inbound_text": "OPT OUT  ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0204", "inbound_text": "OPT OUT\n", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0205", "inbound_text": "opt out", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0206", "inbound_text": "opt out.", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0207", "inbound_text": "opt out!", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0208", "inbound_text": "opt out ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0209", "inbound_text": "opt out  ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0210", "inbound_text": "opt out\n", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0211", "inbound_text": "Opt out", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0212", "inbound_text": "Opt out.", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0213", "inbound_text": "Opt out!", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0214", "inbound_text": "Opt out ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0215", "inbound_text": "Opt out  ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0216", "inbound_text": "Opt out\n", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0217", "inbound_text": "opt-out", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0218", "inbound_text": "opt-out.", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0219", "inbound_text": "opt-out!", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0220", "inbound_text": "opt-out ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0221", "inbound_text": "opt-out  ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0222", "inbound_text": "opt-out\n", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0223", "inbound_text": "OPT-OUT", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0224", "inbound_text": "OPT-OUT.", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0225", "inbound_text": "OPT-OUT!", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0226", "inbound_text": "OPT-OUT ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0227", "inbound_text": "OPT-OUT  ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0228", "inbound_text": "OPT-OUT\n", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0229", "inbound_text": "opt-out", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0230", "inbound_text": "opt-out.", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0231", "inbound_text": "opt-out!", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0232", "inbound_text": "opt-out ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0233", "inbound_text": "opt-out  ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0234", "inbound_text": "opt-out\n", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0235", "inbound_text": "Opt-out", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0236", "inbound_text": "Opt-out.", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0237", "inbound_text": "Opt-out!", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0238", "inbound_text": "Opt-out ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0239", "inbound_text": "Opt-out  ", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0240", "inbound_text": "Opt-out\n", "expected_class": "opt_out", "tags": ["synthetic", "carrier-keyword"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0241", "inbound_text": "Hi, please stop texting me", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0242", "inbound_text": "Sorry but please stop texting me.", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0243", "inbound_text": "Sorry but please stop texting me!!", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0244", "inbound_text": "Hi, please stop texting me thanks", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0245", "inbound_text": "ok please stop texting me!!", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0246", "inbound_text": "ok please stop texting me", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0247", "inbound_text": "Honestly stop texting me\n", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0248", "inbound_text": "Hey Angela, stop texting me!!", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0249", "inbound_text": "stop texting me 🛑", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0250", "inbound_text": "ok stop texting me thanks", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0251", "inbound_text": "Hi, stop texting me", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0252", "inbound_text": "Sorry but stop texting me\n", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0253", "inbound_text": "Sorry but don't text me again", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0254", "inbound_text": "Hey Angela, don't text me again!", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0255", "inbound_text": "don't text me again thanks", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0256", "inbound_text": "ok don't text me again please", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0257", "inbound_text": "Sorry but don't text me again!", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0258", "inbound_text": "Hi, don't text me again 🙏", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0259", "inbound_text": "ok do not text me thanks", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0260", "inbound_text": "Hey Angela, do not text me 🙏", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0261", "inbound_text": "Hey Angela, do not text me please", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0262", "inbound_text": "Sorry but do not text me", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0263", "inbound_text": "ok do not text me!", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0264", "inbound_text": "do not text me please", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0265", "inbound_text": "Hi, dont text me anymore", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0266", "inbound_text": "Honestly dont text me anymore!", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0267", "inbound_text": "Honestly dont text me anymore", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0268", "inbound_text": "Hi, dont text me anymore\n", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0269", "inbound_text": "Sorry but dont text me anymore", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0270", "inbound_text": "Hey Angela, dont text me anymore!!", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0271", "inbound_text": "Sorry but remove me from your list 🛑", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0272", "inbound_text": "Honestly remove me from your list 🛑", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0273", "inbound_text": "Hi, remove me from your list thanks", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0274", "inbound_text": "ok remove me from your list thanks", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0275", "inbound_text": "ok remove me from your list 🙏", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0276", "inbound_text": "ok remove me from your list!!", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0277", "inbound_text": "take me off this list 🛑", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0278", "inbound_text": "Hey Angela, take me off this list", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0279", "inbound_text": "Honestly take me off this list\n", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0280", "inbound_text": "Honestly take me off this list!!", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0281", "inbound_text": "Hi, take me off this list", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0282", "inbound_text": "ok take me off this list 🛑", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0283", "inbound_text": "take me off your list!", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0284", "inbound_text": "Hey Angela, take me off your list 🙏", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0285", "inbound_text": "Sorry but take me off your list\n", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0286", "inbound_text": "Hi, take me off your list 🛑", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0287", "inbound_text": "Hey Angela, take me off your list", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0288", "inbound_text": "Honestly take me off your list 🙏", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0289", "inbound_text": "Honestly no more texts please 🛑", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0290", "inbound_text": "ok no more texts please", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0291", "inbound_text": "no more texts please thanks", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0292", "inbound_text": "Hi, no more texts please please", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0293", "inbound_text": "Sorry but no more texts please\n", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0294", "inbound_text": "Sorry but no more texts please 🙏", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0295", "inbound_text": "Hi, no more messages thanks", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0296", "inbound_text": "ok no more messages 🛑", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0297", "inbound_text": "Honestly no more messages thanks", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0298", "inbound_text": "Sorry but no more messages 🙏", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0299", "inbound_text": "Sorry but no more messages thanks", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0300", "inbound_text": "ok no more messages", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0301", "inbound_text": "Sorry but stop sending me messages\n", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0302", "inbound_text": "stop sending me messages.", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0303", "inbound_text": "Honestly stop sending me messages thanks", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0304", "inbound_text": "stop sending me messages 🛑", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0305", "inbound_text": "ok stop sending me messages please", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0306", "inbound_text": "Sorry but stop sending me messages", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0307", "inbound_text": "stop sending these\n", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0308", "inbound_text": "Hi, stop sending these\n", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0309", "inbound_text": "stop sending these.", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0310", "inbound_text": "Hey Angela, stop sending these 🛑", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0311", "inbound_text": "Hey Angela, stop sending these thanks", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0312", "inbound_text": "stop sending these 🛑", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0313", "inbound_text": "ok stop contacting me.", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0314", "inbound_text": "Sorry but stop contacting me!", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0315", "inbound_text": "Honestly stop contacting me", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0316", "inbound_text": "Hi, stop contacting me\n", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0317", "inbound_text": "Honestly stop contacting me\n", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0318", "inbound_text": "Hey Angela, stop contacting me!!", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0319", "inbound_text": "Sorry but lose my number thanks", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0320", "inbound_text": "ok lose my number 🛑", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0321", "inbound_text": "ok lose my number.", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0322", "inbound_text": "lose my number 🛑", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0323", "inbound_text": "Hi, lose my number thanks", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0324", "inbound_text": "Sorry but lose my number", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0325", "inbound_text": "Hi, do not message me again 🙏", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0326", "inbound_text": "Honestly do not message me again.", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0327", "inbound_text": "Hey Angela, do not message me again", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0328", "inbound_text": "Hi, do not message me again\n", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0329", "inbound_text": "do not message me again please", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0330", "inbound_text": "Sorry but do not message me again 🛑", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0331", "inbound_text": "Sorry but unsubscribe me please", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0332", "inbound_text": "Hi, unsubscribe me please", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0333", "inbound_text": "Hey Angela, unsubscribe me!", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0334", "inbound_text": "Sorry but unsubscribe me.", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0335", "inbound_text": "ok unsubscribe me 🙏", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0336", "inbound_text": "ok unsubscribe me!", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0337", "inbound_text": "ok please stop 🛑", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0338", "inbound_text": "Honestly please stop\n", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0339", "inbound_text": "Honestly please stop!", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0340", "inbound_text": "ok please stop please", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0341", "inbound_text": "Hi, please stop\n", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0342", "inbound_text": "Sorry but please stop thanks", "expected_class": "opt_out", "tags": ["synthetic", "natural-explicit"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0343", "inbound_text": "STOP. this gave me a rash", "expected_class": "opt_out", "tags": ["synthetic", "keyword-then-more"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0344", "inbound_text": "stop. this gave me a rash", "expected_class": "opt_out", "tags": ["synthetic", "keyword-then-more"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0345", "inbound_text": "Stop! who is this", "expected_class": "opt_out", "tags": ["synthetic", "keyword-then-more"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0346", "inbound_text": "stop! who is this", "expected_class": "opt_out", "tags": ["synthetic", "keyword-then-more"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0347", "inbound_text": "STOP, I'm not interested", "expected_class": "opt_out", "tags": ["synthetic", "keyword-then-more"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0348", "inbound_text": "stop, i'm not interested", "expected_class": "opt_out", "tags": ["synthetic", "keyword-then-more"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0349", "inbound_text": "stop. wrong number", "expected_class": "opt_out", "tags": ["synthetic", "keyword-then-more"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0350", "inbound_text": "stop. wrong number", "expected_class": "opt_out", "tags": ["synthetic", "keyword-then-more"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0351", "inbound_text": "UNSUBSCRIBE. thanks", "expected_class": "opt_out", "tags": ["synthetic", "keyword-then-more"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0352", "inbound_text": "unsubscribe. thanks", "expected_class": "opt_out", "tags": ["synthetic", "keyword-then-more"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0353", "inbound_text": "Stop!!! never message me", "expected_class": "opt_out", "tags": ["synthetic", "keyword-then-more"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0354", "inbound_text": "stop!!! never message me", "expected_class": "opt_out", "tags": ["synthetic", "keyword-then-more"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0355", "inbound_text": "STOP\nsent from my iPhone", "expected_class": "opt_out", "tags": ["synthetic", "keyword-then-more"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0356", "inbound_text": "stop\nsent from my iphone", "expected_class": "opt_out", "tags": ["synthetic", "keyword-then-more"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0357", "inbound_text": "stop - not interested", "expected_class": "opt_out", "tags": ["synthetic", "keyword-then-more"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0358", "inbound_text": "stop - not interested", "expected_class": "opt_out", "tags": ["synthetic", "keyword-then-more"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0359", "inbound_text": "STOP STOP STOP", "expected_class": "opt_out", "tags": ["synthetic", "keyword-then-more"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0360", "inbound_text": "stop stop stop", "expected_class": "opt_out", "tags": ["synthetic", "keyword-then-more"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0361", "inbound_text": "stop stop", "expected_class": "opt_out", "tags": ["synthetic", "keyword-then-more"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0362", "inbound_text": "stop stop", "expected_class": "opt_out", "tags": ["synthetic", "keyword-then-more"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0363", "inbound_text": "stop it", "expected_class": "opt_out", "tags": ["synthetic", "keyword-then-more"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0364", "inbound_text": "stop it", "expected_class": "opt_out", "tags": ["synthetic", "keyword-then-more"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0365", "inbound_text": "Stop it!", "expected_class": "opt_out", "tags": ["synthetic", "keyword-then-more"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0366", "inbound_text": "stop it!", "expected_class": "opt_out", "tags": ["synthetic", "keyword-then-more"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0367", "inbound_text": "STOPPP", "expected_class": "opt_out", "tags": ["synthetic", "keyword-then-more"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0368", "inbound_text": "stoppp", "expected_class": "opt_out", "tags": ["synthetic", "keyword-then-more"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0369", "inbound_text": "stooop", "expected_class": "opt_out", "tags": ["synthetic", "keyword-then-more"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0370", "inbound_text": "stooop", "expected_class": "opt_out", "tags": ["synthetic", "keyword-then-more"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0371", "inbound_text": "STOPPPP!!!", "expected_class": "opt_out", "tags": ["synthetic", "keyword-then-more"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0372", "inbound_text": "stopppp!!!", "expected_class": "opt_out", "tags": ["synthetic", "keyword-then-more"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0373", "inbound_text": "who is this? please stop texting me", "expected_class": "escalation", "tags": ["synthetic", "explicit-with-wrong-number"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1", "kernel_expected": "explicit"}
+{"id": "a4s-0374", "inbound_text": "who is this? remove me from your list", "expected_class": "escalation", "tags": ["synthetic", "explicit-with-wrong-number"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1", "kernel_expected": "explicit"}
+{"id": "a4s-0375", "inbound_text": "wrong number. please stop texting me", "expected_class": "escalation", "tags": ["synthetic", "explicit-with-wrong-number"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1", "kernel_expected": "explicit"}
+{"id": "a4s-0376", "inbound_text": "wrong number. remove me from your list", "expected_class": "escalation", "tags": ["synthetic", "explicit-with-wrong-number"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1", "kernel_expected": "explicit"}
+{"id": "a4s-0377", "inbound_text": "STOP…", "expected_class": "opt_out", "tags": ["synthetic", "unicode-punctuation"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0378", "inbound_text": "STOP🛑", "expected_class": "opt_out", "tags": ["synthetic", "unicode-punctuation"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0379", "inbound_text": "Stop😡", "expected_class": "opt_out", "tags": ["synthetic", "unicode-punctuation"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0380", "inbound_text": "STOP)", "expected_class": "opt_out", "tags": ["synthetic", "unicode-punctuation"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0381", "inbound_text": "(stop)", "expected_class": "opt_out", "tags": ["synthetic", "unicode-punctuation"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0382", "inbound_text": "STOP-", "expected_class": "opt_out", "tags": ["synthetic", "unicode-punctuation"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0383", "inbound_text": "stop-texting", "expected_class": "opt_out", "tags": ["synthetic", "unicode-punctuation"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0384", "inbound_text": "stoptexting", "expected_class": "opt_out", "tags": ["synthetic", "unicode-punctuation"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0385", "inbound_text": "Please don’t text me", "expected_class": "opt_out", "tags": ["synthetic", "unicode-punctuation"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0386", "inbound_text": "please don’t message me again", "expected_class": "opt_out", "tags": ["synthetic", "unicode-punctuation"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0387", "inbound_text": "ＳＴＯＰ", "expected_class": "opt_out", "tags": ["synthetic", "unicode-punctuation"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0388", "inbound_text": "Ｓｔｏｐ ｔｅｘｔｉｎｇ ｍｅ", "expected_class": "opt_out", "tags": ["synthetic", "unicode-punctuation"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0389", "inbound_text": "STOP ", "expected_class": "opt_out", "tags": ["synthetic", "unicode-punctuation"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0390", "inbound_text": " stop", "expected_class": "opt_out", "tags": ["synthetic", "unicode-punctuation"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0391", "inbound_text": "UNSUBSCRIBE!!!🙏", "expected_class": "opt_out", "tags": ["synthetic", "unicode-punctuation"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0392", "inbound_text": "remove-me", "expected_class": "opt_out", "tags": ["synthetic", "unicode-punctuation"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0393", "inbound_text": "takemeoff your list", "expected_class": "opt_out", "tags": ["synthetic", "unicode-punctuation"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0394", "inbound_text": "Stopping these texts now", "expected_class": "ambiguous_opt_out", "tags": ["synthetic", "stop-word-hold"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0395", "inbound_text": "stops?", "expected_class": "ambiguous_opt_out", "tags": ["synthetic", "stop-word-hold"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0396", "inbound_text": "bus stop was late", "expected_class": "ambiguous_opt_out", "tags": ["synthetic", "stop-word-hold"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0397", "inbound_text": "please stop by friday", "expected_class": "date_request", "tags": ["synthetic", "stop-false-positive"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0398", "inbound_text": "non-stop fun all week", "expected_class": "ordinary", "tags": ["synthetic", "stop-false-positive"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0399", "inbound_text": "Stopped by the store yesterday", "expected_class": "ordinary", "tags": ["synthetic", "stop-false-positive"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0400", "inbound_text": "Hey Angela, not interested 🛑", "expected_class": "ambiguous_opt_out", "tags": ["synthetic", "possible"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0401", "inbound_text": "Hi, not interested!", "expected_class": "ambiguous_opt_out", "tags": ["synthetic", "possible"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0402", "inbound_text": "Hi, not interested\n", "expected_class": "ambiguous_opt_out", "tags": ["synthetic", "possible"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0403", "inbound_text": "ok not interested.", "expected_class": "ambiguous_opt_out", "tags": ["synthetic", "possible"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0404", "inbound_text": "Hey Angela, leave me alone\n", "expected_class": "ambiguous_opt_out", "tags": ["synthetic", "possible"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0405", "inbound_text": "leave me alone please", "expected_class": "ambiguous_opt_out", "tags": ["synthetic", "possible"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0406", "inbound_text": "leave me alone thanks", "expected_class": "ambiguous_opt_out", "tags": ["synthetic", "possible"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0407", "inbound_text": "Honestly leave me alone thanks", "expected_class": "ambiguous_opt_out", "tags": ["synthetic", "possible"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0408", "inbound_text": "Hi, no thanks\n", "expected_class": "ambiguous_opt_out", "tags": ["synthetic", "possible"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0409", "inbound_text": "no thanks 🙏", "expected_class": "ambiguous_opt_out", "tags": ["synthetic", "possible"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0410", "inbound_text": "Hi, no thanks.", "expected_class": "ambiguous_opt_out", "tags": ["synthetic", "possible"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0411", "inbound_text": "ok no thanks 🙏", "expected_class": "ambiguous_opt_out", "tags": ["synthetic", "possible"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0412", "inbound_text": "Hey Angela, no thank you!", "expected_class": "ambiguous_opt_out", "tags": ["synthetic", "possible"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0413", "inbound_text": "ok no thank you.", "expected_class": "ambiguous_opt_out", "tags": ["synthetic", "possible"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0414", "inbound_text": "Honestly no thank you!!", "expected_class": "ambiguous_opt_out", "tags": ["synthetic", "possible"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0415", "inbound_text": "no thank you!!", "expected_class": "ambiguous_opt_out", "tags": ["synthetic", "possible"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0416", "inbound_text": "Sorry but go away 🛑", "expected_class": "ambiguous_opt_out", "tags": ["synthetic", "possible"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0417", "inbound_text": "Hey Angela, go away please", "expected_class": "ambiguous_opt_out", "tags": ["synthetic", "possible"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0418", "inbound_text": "Hi, go away.", "expected_class": "ambiguous_opt_out", "tags": ["synthetic", "possible"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0419", "inbound_text": "Hey Angela, go away!", "expected_class": "ambiguous_opt_out", "tags": ["synthetic", "possible"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0420", "inbound_text": "Hey Angela, i'm good, no thanks 🛑", "expected_class": "ambiguous_opt_out", "tags": ["synthetic", "possible"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0421", "inbound_text": "Sorry but i'm good, no thanks.", "expected_class": "ambiguous_opt_out", "tags": ["synthetic", "possible"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0422", "inbound_text": "i'm good, no thanks.", "expected_class": "ambiguous_opt_out", "tags": ["synthetic", "possible"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0423", "inbound_text": "Hey Angela, i'm good, no thanks 🙏", "expected_class": "ambiguous_opt_out", "tags": ["synthetic", "possible"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0424", "inbound_text": "Hey Angela, not interested at the moment!!", "expected_class": "ambiguous_opt_out", "tags": ["synthetic", "possible"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0425", "inbound_text": "Hi, not interested at the moment 🛑", "expected_class": "ambiguous_opt_out", "tags": ["synthetic", "possible"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0426", "inbound_text": "Sorry but not interested at the moment please", "expected_class": "ambiguous_opt_out", "tags": ["synthetic", "possible"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0427", "inbound_text": "Honestly not interested at the moment.", "expected_class": "ambiguous_opt_out", "tags": ["synthetic", "possible"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0428", "inbound_text": "ok please leave me alone", "expected_class": "ambiguous_opt_out", "tags": ["synthetic", "possible"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0429", "inbound_text": "Hi, please leave me alone", "expected_class": "ambiguous_opt_out", "tags": ["synthetic", "possible"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0430", "inbound_text": "Hi, please leave me alone 🛑", "expected_class": "ambiguous_opt_out", "tags": ["synthetic", "possible"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0431", "inbound_text": "Honestly please leave me alone 🙏", "expected_class": "ambiguous_opt_out", "tags": ["synthetic", "possible"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0432", "inbound_text": "this gave me a rash.", "expected_class": "escalation", "tags": ["synthetic", "concern"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0433", "inbound_text": "ok this gave me a rash thanks", "expected_class": "escalation", "tags": ["synthetic", "concern"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0434", "inbound_text": "Hi, this gave me a rash 🙏", "expected_class": "escalation", "tags": ["synthetic", "concern"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0435", "inbound_text": "Hi, this gave me a rash", "expected_class": "escalation", "tags": ["synthetic", "concern"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0436", "inbound_text": "Honestly my face is burning after the mask 🛑", "expected_class": "escalation", "tags": ["synthetic", "concern"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0437", "inbound_text": "ok my face is burning after the mask!", "expected_class": "escalation", "tags": ["synthetic", "concern"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0438", "inbound_text": "Honestly my face is burning after the mask 🙏", "expected_class": "escalation", "tags": ["synthetic", "concern"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0439", "inbound_text": "ok my face is burning after the mask", "expected_class": "escalation", "tags": ["synthetic", "concern"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0440", "inbound_text": "I broke out after using it", "expected_class": "escalation", "tags": ["synthetic", "concern"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0441", "inbound_text": "Sorry but I broke out after using it 🛑", "expected_class": "escalation", "tags": ["synthetic", "concern"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0442", "inbound_text": "ok I broke out after using it thanks", "expected_class": "escalation", "tags": ["synthetic", "concern"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0443", "inbound_text": "Hi, I broke out after using it!", "expected_class": "escalation", "tags": ["synthetic", "concern"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0444", "inbound_text": "I think I'm having an allergic reaction 🛑", "expected_class": "escalation", "tags": ["synthetic", "concern"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0445", "inbound_text": "Sorry but I think I'm having an allergic reaction\n", "expected_class": "escalation", "tags": ["synthetic", "concern"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0446", "inbound_text": "Honestly I think I'm having an allergic reaction please", "expected_class": "escalation", "tags": ["synthetic", "concern"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0447", "inbound_text": "I think I'm having an allergic reaction thanks", "expected_class": "escalation", "tags": ["synthetic", "concern"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0448", "inbound_text": "my eyes are swollen!", "expected_class": "escalation", "tags": ["synthetic", "concern"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0449", "inbound_text": "Hey Angela, my eyes are swollen!", "expected_class": "escalation", "tags": ["synthetic", "concern"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0450", "inbound_text": "ok my eyes are swollen.", "expected_class": "escalation", "tags": ["synthetic", "concern"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0451", "inbound_text": "Sorry but my eyes are swollen!", "expected_class": "escalation", "tags": ["synthetic", "concern"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0452", "inbound_text": "Sorry but the cleanser made my skin worse\n", "expected_class": "escalation", "tags": ["synthetic", "concern"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0453", "inbound_text": "ok the cleanser made my skin worse 🙏", "expected_class": "escalation", "tags": ["synthetic", "concern"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0454", "inbound_text": "Hey Angela, the cleanser made my skin worse.", "expected_class": "escalation", "tags": ["synthetic", "concern"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0455", "inbound_text": "Hey Angela, the cleanser made my skin worse 🙏", "expected_class": "escalation", "tags": ["synthetic", "concern"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0456", "inbound_text": "Hey Angela, it stings really bad please", "expected_class": "escalation", "tags": ["synthetic", "concern"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0457", "inbound_text": "Sorry but it stings really bad please", "expected_class": "escalation", "tags": ["synthetic", "concern"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0458", "inbound_text": "it stings really bad 🛑", "expected_class": "escalation", "tags": ["synthetic", "concern"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0459", "inbound_text": "it stings really bad 🙏", "expected_class": "escalation", "tags": ["synthetic", "concern"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0460", "inbound_text": "I had to see a dermatologist\n", "expected_class": "escalation", "tags": ["synthetic", "concern"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0461", "inbound_text": "Hey Angela, I had to see a dermatologist!!", "expected_class": "escalation", "tags": ["synthetic", "concern"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0462", "inbound_text": "Honestly I had to see a dermatologist", "expected_class": "escalation", "tags": ["synthetic", "concern"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0463", "inbound_text": "Hi, I had to see a dermatologist!", "expected_class": "escalation", "tags": ["synthetic", "concern"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0464", "inbound_text": "Sorry but hives all over my neck", "expected_class": "escalation", "tags": ["synthetic", "concern"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0465", "inbound_text": "ok hives all over my neck.", "expected_class": "escalation", "tags": ["synthetic", "concern"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0466", "inbound_text": "Sorry but hives all over my neck please", "expected_class": "escalation", "tags": ["synthetic", "concern"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0467", "inbound_text": "ok hives all over my neck thanks", "expected_class": "escalation", "tags": ["synthetic", "concern"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0468", "inbound_text": "Sorry but my skin is peeling and red!!", "expected_class": "escalation", "tags": ["synthetic", "concern"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0469", "inbound_text": "Hi, my skin is peeling and red!", "expected_class": "escalation", "tags": ["synthetic", "concern"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0470", "inbound_text": "Honestly my skin is peeling and red!!", "expected_class": "escalation", "tags": ["synthetic", "concern"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0471", "inbound_text": "Hi, my skin is peeling and red please", "expected_class": "escalation", "tags": ["synthetic", "concern"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0472", "inbound_text": "Hey Angela, went to the ER last night after using it please", "expected_class": "escalation", "tags": ["synthetic", "concern"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0473", "inbound_text": "Hi, went to the ER last night after using it 🛑", "expected_class": "escalation", "tags": ["synthetic", "concern"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0474", "inbound_text": "Hey Angela, went to the ER last night after using it 🛑", "expected_class": "escalation", "tags": ["synthetic", "concern"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0475", "inbound_text": "Hi, went to the ER last night after using it", "expected_class": "escalation", "tags": ["synthetic", "concern"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0476", "inbound_text": "ok blisters on my cheek 🙏", "expected_class": "escalation", "tags": ["synthetic", "concern"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0477", "inbound_text": "ok blisters on my cheek\n", "expected_class": "escalation", "tags": ["synthetic", "concern"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0478", "inbound_text": "ok blisters on my cheek!", "expected_class": "escalation", "tags": ["synthetic", "concern"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0479", "inbound_text": "Hey Angela, blisters on my cheek 🛑", "expected_class": "escalation", "tags": ["synthetic", "concern"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0480", "inbound_text": "Hi, it's itching like crazy\n", "expected_class": "escalation", "tags": ["synthetic", "concern"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0481", "inbound_text": "Sorry but it's itching like crazy 🛑", "expected_class": "escalation", "tags": ["synthetic", "concern"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0482", "inbound_text": "Honestly it's itching like crazy\n", "expected_class": "escalation", "tags": ["synthetic", "concern"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0483", "inbound_text": "Honestly it's itching like crazy!", "expected_class": "escalation", "tags": ["synthetic", "concern"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0484", "inbound_text": "Sorry but wrong number!", "expected_class": "escalation", "tags": ["synthetic", "wrong-number"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0485", "inbound_text": "ok wrong number.", "expected_class": "escalation", "tags": ["synthetic", "wrong-number"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0486", "inbound_text": "Honestly wrong number!", "expected_class": "escalation", "tags": ["synthetic", "wrong-number"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0487", "inbound_text": "Hi, who is this? please", "expected_class": "escalation", "tags": ["synthetic", "wrong-number"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0488", "inbound_text": "Hi, who is this?", "expected_class": "escalation", "tags": ["synthetic", "wrong-number"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0489", "inbound_text": "Sorry but who is this? 🙏", "expected_class": "escalation", "tags": ["synthetic", "wrong-number"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0490", "inbound_text": "Hey Angela, I don't know you please", "expected_class": "escalation", "tags": ["synthetic", "wrong-number"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0491", "inbound_text": "I don't know you please", "expected_class": "escalation", "tags": ["synthetic", "wrong-number"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0492", "inbound_text": "ok I don't know you please", "expected_class": "escalation", "tags": ["synthetic", "wrong-number"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0493", "inbound_text": "Honestly you have the wrong person please", "expected_class": "escalation", "tags": ["synthetic", "wrong-number"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0494", "inbound_text": "Sorry but you have the wrong person!!", "expected_class": "escalation", "tags": ["synthetic", "wrong-number"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0495", "inbound_text": "you have the wrong person thanks", "expected_class": "escalation", "tags": ["synthetic", "wrong-number"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0496", "inbound_text": "who's this please", "expected_class": "escalation", "tags": ["synthetic", "wrong-number"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0497", "inbound_text": "ok who's this please", "expected_class": "escalation", "tags": ["synthetic", "wrong-number"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0498", "inbound_text": "Honestly who's this.", "expected_class": "escalation", "tags": ["synthetic", "wrong-number"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0499", "inbound_text": "Sorry but not Angela, wrong person", "expected_class": "escalation", "tags": ["synthetic", "wrong-number"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0500", "inbound_text": "Hi, not Angela, wrong person.", "expected_class": "escalation", "tags": ["synthetic", "wrong-number"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0501", "inbound_text": "not Angela, wrong person.", "expected_class": "escalation", "tags": ["synthetic", "wrong-number"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0502", "inbound_text": "ok i don't know who you are 🛑", "expected_class": "escalation", "tags": ["synthetic", "wrong-number"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0503", "inbound_text": "Hey Angela, i don't know who you are 🙏", "expected_class": "escalation", "tags": ["synthetic", "wrong-number"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0504", "inbound_text": "Hi, i don't know who you are!", "expected_class": "escalation", "tags": ["synthetic", "wrong-number"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0505", "inbound_text": "thanks! see you then", "expected_class": "ordinary", "tags": ["synthetic", "ordinary"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0506", "inbound_text": "got it, thank you", "expected_class": "ordinary", "tags": ["synthetic", "ordinary"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0507", "inbound_text": "love it, thanks so much!", "expected_class": "ordinary", "tags": ["synthetic", "ordinary"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0508", "inbound_text": "stop by anytime, I'd love a sample", "expected_class": "ordinary", "tags": ["synthetic", "ordinary"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0509", "inbound_text": "the nonstop compliments are amazing", "expected_class": "ordinary", "tags": ["synthetic", "ordinary"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0510", "inbound_text": "stopped by the store yesterday, loved it", "expected_class": "ordinary", "tags": ["synthetic", "ordinary"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0511", "inbound_text": "sounds good", "expected_class": "ordinary", "tags": ["synthetic", "ordinary"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0512", "inbound_text": "ok 👍", "expected_class": "ordinary", "tags": ["synthetic", "ordinary"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0513", "inbound_text": "yes please!", "expected_class": "ordinary", "tags": ["synthetic", "ordinary"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}
+{"id": "a4s-0514", "inbound_text": "perfect, thank you", "expected_class": "ordinary", "tags": ["synthetic", "ordinary"], "provenance": "synthetic-generated:make_synthetic_cases.py@v1"}

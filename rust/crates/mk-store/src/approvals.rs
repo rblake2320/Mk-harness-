@@ -142,7 +142,7 @@ pub async fn get(
     let tenant = tx.tenant();
     let q =
         format!("SELECT {COLS} FROM kernel.approvals WHERE tenant_id = $1 AND approval_id = $2");
-    let r = sqlx::query(&q)
+    let r = sqlx::query(sqlx::AssertSqlSafe(q))
         .bind(tenant.0)
         .bind(approval_id.0)
         .fetch_optional(tx.conn())
@@ -162,7 +162,7 @@ pub async fn live_for_action_locked(
         "SELECT {COLS} FROM kernel.approvals WHERE tenant_id = $1 AND action_id = $2
          AND decision = 'approved' AND consumed_at IS NULL AND revoked_at IS NULL FOR UPDATE"
     );
-    let r = sqlx::query(&q)
+    let r = sqlx::query(sqlx::AssertSqlSafe(q))
         .bind(tenant.0)
         .bind(action_id.0)
         .fetch_optional(tx.conn())
@@ -329,7 +329,7 @@ pub async fn consumed_for_action(
         "SELECT {COLS} FROM kernel.approvals WHERE tenant_id = $1 AND action_id = $2
          AND decision = 'approved' AND consumed_at IS NOT NULL ORDER BY created_at DESC LIMIT 1"
     );
-    let r = sqlx::query(&q)
+    let r = sqlx::query(sqlx::AssertSqlSafe(q))
         .bind(tenant.0)
         .bind(action_id.0)
         .fetch_optional(tx.conn())

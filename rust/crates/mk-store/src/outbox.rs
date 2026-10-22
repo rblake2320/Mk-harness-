@@ -279,7 +279,8 @@ pub async fn record_attempt_end(
     now: DateTime<Utc>,
 ) -> Result<(), StoreError> {
     sqlx::query(
-        "UPDATE kernel.action_attempts SET finished_at = $4, outcome = $5, error_code = $6, adapter_id = $7, external_ref = $8, result_digest = $9
+        "UPDATE kernel.action_attempts SET finished_at = $4, outcome = $5, error_code = $6,
+           adapter_id = COALESCE($7, adapter_id), external_ref = COALESCE($8, external_ref), result_digest = COALESCE($9, result_digest)
          WHERE tenant_id = $1 AND action_id = $2 AND attempt = $3",
     )
     .bind(tx.tenant().0)

@@ -101,6 +101,21 @@ pub async fn global_dispatch_enabled(pool: &PgPool) -> Result<bool, StoreError> 
         .unwrap_or(false))
 }
 
+/// The global switch read on an already-open tenant transaction. Request paths
+/// MUST use this instead of [`global_dispatch_enabled`] while they hold a
+/// `TenantTx`: acquiring a second pooled connection inside a transaction
+/// deadlocks the pool under load (every connection held by a transaction
+/// waiting for another connection — found by the 2× load run). `kill_switches`
+/// is not under row-level security, so the global row is visible here.
+pub async fn global_dispatch_enabled_tx(tx: &mut TenantTx<'_>) -> Result<bool, StoreError> {
+    let r = sqlx::query("SELECT dispatch_enabled FROM kernel.kill_switches WHERE scope = 'global'")
+        .fetch_optional(tx.conn())
+        .await?;
+    Ok(r.map(|r| r.try_get("dispatch_enabled"))
+        .transpose()?
+        .unwrap_or(false))
+}
+
 pub async fn set_global_dispatch(
     pool: &PgPool,
     enabled: bool,

@@ -167,7 +167,9 @@ async fn crash_after_publish_before_mark_yields_duplicate_not_loss() {
         store.pool(),
         "relay-a",
         chrono::Duration::seconds(1),
-        50,
+        // The test database is shared with suites running in parallel (and may hold
+        // backlog): claim enough that this tenant's row is always in the batch.
+        100_000,
         chrono::Utc::now(),
     )
     .await
@@ -192,23 +194,36 @@ async fn crash_after_publish_before_mark_yields_duplicate_not_loss() {
         batch: 50,
         lease: Duration::from_secs(30),
     };
+    // Run relay B until THIS row is marked published (other suites' rows may be
+    // published first), collecting deliveries of this action as we go.
     let mut republished = false;
-    for _ in 0..40 {
-        let stats = run_relay_once(&store, &stream, &cfg)
+    let mut n = 0;
+    for _ in 0..80 {
+        run_relay_once(&store, &stream, &cfg)
             .await
             .unwrap_or_else(|e| panic!("{e:?}"));
-        if stats.published >= 1 {
+        let got = stream
+            .read("worker-1", 1000, 50, 60_000)
+            .await
+            .unwrap_or_else(|e| panic!("{e:?}"));
+        n += got.iter().filter(|d| d.message.action_id == id).count();
+        let published: bool = sqlx::query_scalar(
+            "SELECT published_at IS NOT NULL FROM kernel.outbox_events WHERE outbox_id = $1",
+        )
+        .bind(oid)
+        .fetch_one(store.pool())
+        .await
+        .unwrap_or(false);
+        if published && n >= 2 {
             republished = true;
             break;
         }
         tokio::time::sleep(Duration::from_millis(250)).await;
     }
-    assert!(republished, "row republished by relay B");
-    let got = stream
-        .read("worker-1", 100, 200, 60_000)
-        .await
-        .unwrap_or_else(|e| panic!("{e:?}"));
-    let n = got.iter().filter(|d| d.message.action_id == id).count();
+    assert!(
+        republished,
+        "row republished by relay B (deliveries seen: {n})"
+    );
     assert_eq!(
         n, 2,
         "at-least-once: duplicate delivery is expected and must be absorbed by the worker"

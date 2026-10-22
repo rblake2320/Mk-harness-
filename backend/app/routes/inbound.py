@@ -38,10 +38,22 @@ class ProcessIn(BaseModel):
     limit: int = 50
 
 
-def _customers_for_fingerprint(db: Session, tenant_id: str, fp: str) -> list[Customer]:
+def _event_fingerprints(ev: dict) -> list[str]:
+    """Every hex fingerprint the kernel holds for the sender: the current-key hash
+    plus each `kid:hex` tag, so matching survives a kernel fingerprint-key rotation."""
+    out = [ev["source_destination_hash"]]
+    for tag in ev.get("destination_fingerprints") or []:
+        hexpart = tag.split(":", 1)[-1]
+        if hexpart not in out:
+            out.append(hexpart)
+    return out
+
+
+def _customers_for_fingerprint(db: Session, tenant_id: str, fp: str | list[str]) -> list[Customer]:
     rows = db.scalars(select(CustomerDestination).where(
         CustomerDestination.tenant_id == tenant_id, CustomerDestination.channel == "sms",
-        CustomerDestination.fingerprint == fp, CustomerDestination.retired_at.is_(None))).all()
+        CustomerDestination.fingerprint.in_([fp] if isinstance(fp, str) else fp),
+        CustomerDestination.retired_at.is_(None))).all()
     seen, out = set(), []
     for d in rows:
         if d.customer_id not in seen:
@@ -96,7 +108,7 @@ async def process_inbound(body: ProcessIn, p: Principal = Depends(principal), us
             continue
         text = ev.get("body") or ""
         klass = classify_inbound(text)
-        customers = _customers_for_fingerprint(db, user.tenant_id, ev["source_destination_hash"])
+        customers = _customers_for_fingerprint(db, user.tenant_id, _event_fingerprints(ev))
         customer = customers[0] if len(customers) == 1 else None
         created: list[str] = []
         if ev.get("opt_out_signal") == "explicit":
@@ -139,7 +151,17 @@ async def process_inbound(body: ProcessIn, p: Principal = Depends(principal), us
                                              "source": "inbound_rules"})
                 hold = hr.status_code
             except KernelUnavailable as e:
+                db.rollback()
                 raise HTTPException(503, {"code": e.code, "detail": e.detail})
+            if hold != 201:
+                # The hold did not land: discard this event's application objects and
+                # leave it unprocessed so the next run applies it again. Recording it
+                # as done would let sales follow-up continue after a concern (C7).
+                db.rollback()
+                results.append({"event_id": event_id, "class": label, "customer_id": customer.id if customer else None,
+                                "matches": len(customers), "created": [], "hold": hold, "marked_processed": None,
+                                "retry": True})
+                continue
         db.add(InboundApplication(tenant_id=user.tenant_id, source_reference=source_ref, kernel_event_id=event_id,
                                   label=label, customer_id=customer.id if customer else None,
                                   created_json=json.dumps(created), hold_status=hold))

@@ -18,6 +18,7 @@ pub mod assertions;
 pub mod audit;
 pub mod consent;
 pub mod error;
+pub mod fingerprint;
 pub mod human_approval;
 pub mod idempotency;
 pub mod keys;
@@ -134,6 +135,16 @@ pub fn migrator() -> sqlx::migrate::Migrator {
             "permission destination binding",
             include_str!("../../../../migrations/kernel/0007_permission_destination.sql"),
         ),
+        (
+            8,
+            "versioned destination fingerprints",
+            include_str!("../../../../migrations/kernel/0008_fingerprint_versions.sql"),
+        ),
+        (
+            9,
+            "tenant directory",
+            include_str!("../../../../migrations/kernel/0009_tenant_directory.sql"),
+        ),
     ];
     let migrations: Vec<Migration> = FILES
         .iter()
@@ -142,7 +153,7 @@ pub fn migrator() -> sqlx::migrate::Migrator {
                 *version,
                 Cow::Borrowed(description),
                 MigrationType::Simple,
-                Cow::Borrowed(sql),
+                sqlx::SqlStr::from_static(sql),
                 false,
             )
         })

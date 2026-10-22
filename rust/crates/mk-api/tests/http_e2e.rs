@@ -165,7 +165,13 @@ impl Harness {
 
 async fn harness() -> Option<Harness> {
     let url = mk_testkit::test_database_url()?;
-    let store = Store::connect(&url, 8).await.ok()?;
+    // MK_TEST_POOL_SIZE=1 (CI) makes any second pooled-connection acquisition
+    // inside an open transaction fail fast instead of deadlocking under load.
+    let pool = std::env::var("MK_TEST_POOL_SIZE")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(8);
+    let store = Store::connect(&url, pool).await.ok()?;
     store.migrate().await.ok()?;
     let signer = AssertionSigner::generate("k1");
     let verifier =
@@ -185,6 +191,8 @@ async fn harness() -> Option<Harness> {
         store,
         verifier,
         keyring: mk_crypto::Keyring::legacy(&master),
+        fingerprints: Arc::new(mk_store::fingerprint::FingerprintKeys::from_master(&master)),
+        limiter: mk_api::limits::Limiter::new(test_limits()),
         master,
         tools: Arc::new(ToolAllowlist::v1()),
         metrics: Arc::new(Metrics::new()),
@@ -208,6 +216,17 @@ async fn harness() -> Option<Harness> {
         resolver: Arc::new(MapResolver(Mutex::new(HashMap::new()))),
         ctx_registry_secret_slot: Arc::new(Mutex::new(None)),
     })
+}
+
+/// Generous limits for the functional suites; the O2 test builds tight ones.
+fn test_limits() -> mk_api::limits::LimitConfig {
+    mk_api::limits::LimitConfig {
+        read_rps: 10_000.0,
+        read_burst: 10_000.0,
+        write_rps: 10_000.0,
+        write_burst: 10_000.0,
+        max_inflight: 1024,
+    }
 }
 
 const RP_ID: &str = "approve.test.invalid";
@@ -1910,12 +1929,10 @@ async fn inbound_stop_suppresses_cancels_and_dedupes_and_the_control_path_is_ser
         "+15555550199",
     )
     .await;
-    let dest = mk_api::routes::destination_hash(
-        &h.state.master,
-        h.tenant,
-        mk_domain::Channel::Sms,
-        "+15555550199",
-    );
+    let dest = h
+        .state
+        .fingerprints
+        .compute(h.tenant, mk_domain::Channel::Sms, "+15555550199");
     // Hold the control path in an outside transaction (as a dispatch in phase 1 would),
     // fire the inbound STOP concurrently (it must block), then release.
     let store = h.state.store.clone();
@@ -2127,4 +2144,284 @@ async fn ambiguous_submission_becomes_submission_unknown_and_inbound_pause_defer
         ),
         "{out:?}"
     );
+}
+
+/// O2: per-tenant limits refuse with 429 + Retry-After after the assertion
+/// verifies; one tenant exhausting its budget never affects another tenant or
+/// its own write budget; a full replica refuses /internal/v1 with 503 +
+/// Retry-After immediately, while provider webhooks and health are never shed.
+#[tokio::test]
+async fn per_tenant_limits_and_graceful_rejection_above_capacity() {
+    let Some(mut h) = harness().await else {
+        eprintln!("skipping");
+        return;
+    };
+    let mut st = h.state.clone();
+    st.limiter = mk_api::limits::Limiter::new(mk_api::limits::LimitConfig {
+        read_rps: 0.5,
+        read_burst: 3.0,
+        write_rps: 0.5,
+        write_burst: 2.0,
+        max_inflight: 1,
+    });
+    h.app = router(st.clone());
+    h.state = st;
+    let user = UserId::new();
+    let path = "/internal/v1/approvals/pending";
+    for i in 0..3 {
+        let (s, v) = h
+            .call("GET", path, Some(&h.token(user, &["manager"])), None)
+            .await;
+        assert_ne!(
+            s,
+            StatusCode::TOO_MANY_REQUESTS,
+            "request {i} within burst: {v}"
+        );
+    }
+    let req = Request::builder()
+        .method("GET")
+        .uri(path)
+        .header(
+            "authorization",
+            format!("Bearer {}", h.token(user, &["manager"])),
+        )
+        .body(Body::empty())
+        .unwrap_or_default();
+    let resp = h
+        .app
+        .clone()
+        .oneshot(req)
+        .await
+        .unwrap_or_else(|e| panic!("{e:?}"));
+    assert_eq!(resp.status(), StatusCode::TOO_MANY_REQUESTS);
+    let ra: u64 = resp.headers()["retry-after"]
+        .to_str()
+        .unwrap_or("0")
+        .parse()
+        .unwrap_or(0);
+    assert!((1..=2).contains(&ra), "Retry-After {ra}");
+    // An unauthenticated or forged caller cannot spend (or probe) the bucket: 401, not 429.
+    let (s, _) = h.call("GET", path, Some("not-a-token"), None).await;
+    assert_eq!(s, StatusCode::UNAUTHORIZED);
+    // Writes have their own budget.
+    let (s, v) = h
+        .call(
+            "POST",
+            "/internal/v1/actions",
+            Some(&h.token(user, &["agent"])),
+            Some(json!({"junk": true})),
+        )
+        .await;
+    assert_ne!(s, StatusCode::TOO_MANY_REQUESTS, "{v}");
+    // Another tenant is unaffected.
+    let own = h.tenant;
+    h.tenant = TenantId::new();
+    let (s, v) = h
+        .call(
+            "GET",
+            path,
+            Some(&h.token(UserId::new(), &["manager"])),
+            None,
+        )
+        .await;
+    assert_ne!(s, StatusCode::TOO_MANY_REQUESTS, "{v}");
+    h.tenant = own;
+    // Replica full: hold the only permit.
+    let held = h
+        .state
+        .limiter
+        .try_enter()
+        .unwrap_or_else(|| panic!("permit"));
+    let other = TenantId::new();
+    h.tenant = other;
+    let req = Request::builder()
+        .method("GET")
+        .uri(path)
+        .header(
+            "authorization",
+            format!("Bearer {}", h.token(UserId::new(), &["manager"])),
+        )
+        .header("x-request-id", "shed-1")
+        .body(Body::empty())
+        .unwrap_or_default();
+    let resp = h
+        .app
+        .clone()
+        .oneshot(req)
+        .await
+        .unwrap_or_else(|e| panic!("{e:?}"));
+    assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(resp.headers()["retry-after"], "1");
+    let body = resp
+        .into_body()
+        .collect()
+        .await
+        .map(http_body_util::Collected::to_bytes)
+        .unwrap_or_default();
+    let v: Value = serde_json::from_slice(&body).unwrap_or(Value::Null);
+    assert_eq!(v["code"], json!("OVER_CAPACITY"), "{v}");
+    // Never shed: health and the provider webhook (an inbound STOP must be heard).
+    let (s, _) = h.call("GET", "/health/live", None, None).await;
+    assert_eq!(s, StatusCode::OK);
+    let req = Request::builder()
+        .method("POST")
+        .uri(format!("/webhooks/twilio/inbound/{}", Uuid::now_v7()))
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body(Body::from(
+            "From=%2B15555550100&To=%2B15555550101&Body=STOP&MessageSid=SMx",
+        ))
+        .unwrap_or_default();
+    let resp = h
+        .app
+        .clone()
+        .oneshot(req)
+        .await
+        .unwrap_or_else(|e| panic!("{e:?}"));
+    assert_ne!(
+        resp.status(),
+        StatusCode::SERVICE_UNAVAILABLE,
+        "webhooks are never shed"
+    );
+    // Stop/revoke controls are never shed or rate-limited: with the replica full
+    // and well past the write budget, suppressions and the tenant kill switch
+    // still reach their handlers.
+    let admin = UserId::new();
+    for _ in 0..5 {
+        let (s, v) = h
+            .call(
+                "POST",
+                "/internal/v1/suppressions",
+                Some(&h.token(admin, &["tenant_admin"])),
+                Some(json!({"channel": "sms", "destination": "+15555550808", "reason": "STOP", "permanent": true, "source": "operator"})),
+            )
+            .await;
+        assert!(
+            s != StatusCode::SERVICE_UNAVAILABLE && s != StatusCode::TOO_MANY_REQUESTS,
+            "suppression shed/limited: {s} {v}"
+        );
+    }
+    let (s, v) = h
+        .call(
+            "POST",
+            "/internal/v1/kill-switch/tenant",
+            Some(&h.token(admin, &["tenant_admin"])),
+            Some(json!({"dispatch_enabled": false})),
+        )
+        .await;
+    assert!(
+        s != StatusCode::SERVICE_UNAVAILABLE && s != StatusCode::TOO_MANY_REQUESTS,
+        "kill switch shed/limited: {s} {v}"
+    );
+    drop(held);
+    let (s, _) = h
+        .call(
+            "GET",
+            path,
+            Some(&h.token(UserId::new(), &["manager"])),
+            None,
+        )
+        .await;
+    assert_ne!(
+        s,
+        StatusCode::SERVICE_UNAVAILABLE,
+        "capacity returns once the permit is released"
+    );
+    h.tenant = own;
+    let metrics = h.state.metrics.encode();
+    assert!(
+        metrics.contains("mk_requests_rejected_total{code=\"tenant_read\"}"),
+        "{metrics}"
+    );
+    assert!(metrics.contains("mk_requests_rejected_total{code=\"over_capacity\"}"));
+}
+
+/// C3/C4: a provider-accepted submission whose status callbacks outlive the
+/// lease is completed (the message exists exactly once at the provider; the
+/// delivery record keeps following callbacks) — it is NOT sent to
+/// reconciliation. A Dispatching action with no provider message id at lease
+/// expiry still is (the effect may or may not have happened).
+#[tokio::test]
+async fn lease_expiry_completes_provider_accepted_and_reconciles_only_the_unknown() {
+    let Some(h) = harness().await else {
+        eprintln!("skipping");
+        return;
+    };
+    let mut r = provider_rig(&h, mk_adapters::twilio_sim::TwilioSimMode::Accept).await;
+    health_ok(&h, r.admin).await;
+    let (aid, _) = approved_action(
+        &h,
+        &mut r,
+        "Hi! Your order shipped. Reply STOP to opt out.",
+        "+15555550100",
+    )
+    .await;
+    assert_eq!(
+        run_dispatch(&r, h.tenant, &aid).await,
+        DispatchOutcome::Dispatched {
+            pending_callback: true
+        }
+    );
+    let (aid2, _) = approved_action(
+        &h,
+        &mut r,
+        "Hi! A second note. Reply STOP to opt out.",
+        "+15555550100",
+    )
+    .await;
+    let pool = h.state.store.pool();
+    // aid2: dispatching with submission started and no provider id (worker died mid-call).
+    sqlx::query("UPDATE kernel.actions SET state = 'dispatching' WHERE action_id = $1::uuid")
+        .bind(&aid2)
+        .execute(pool)
+        .await
+        .unwrap_or_else(|e| panic!("{e:?}"));
+    sqlx::query(
+        "INSERT INTO kernel.execution_leases (tenant_id, action_id, worker_id, lease_token, acquired_at, expires_at)
+         VALUES ($1, $2::uuid, 'dead-worker', gen_random_uuid(), now() - interval '10 minutes', now() - interval '5 minutes')",
+    )
+    .bind(h.tenant.0)
+    .bind(&aid2)
+    .execute(pool)
+    .await
+    .unwrap_or_else(|e| panic!("{e:?}"));
+    sqlx::query("UPDATE kernel.execution_leases SET expires_at = now() - interval '1 minute' WHERE action_id = $1::uuid")
+        .bind(&aid)
+        .execute(pool)
+        .await
+        .unwrap_or_else(|e| panic!("{e:?}"));
+    let stats = mk_worker::housekeeping::run_once(
+        &h.state.store,
+        &[h.tenant],
+        "hk-test",
+        chrono::Utc::now(),
+    )
+    .await
+    .unwrap_or_else(|e| panic!("{e:?}"));
+    assert_eq!(stats.accepted_completed, 1, "{stats:?}");
+    assert!(stats.leases_recovered >= 2, "{stats:?}");
+    let get = |id: String| {
+        let h = &h;
+        let tok = h.token(r.manager, &["manager"]);
+        async move {
+            h.call(
+                "GET",
+                &format!("/internal/v1/actions/{id}"),
+                Some(&tok),
+                None,
+            )
+            .await
+            .1
+        }
+    };
+    let v = get(aid.clone()).await;
+    assert_eq!(v["state"], json!("completed"), "{v}");
+    assert_eq!(
+        v["message_state"],
+        json!("provider_accepted"),
+        "delivery truth is still pending: {v}"
+    );
+    let v2 = get(aid2.clone()).await;
+    assert_eq!(v2["state"], json!("reconciliation_required"), "{v2}");
+    // Exactly one provider message for the accepted action; nothing re-sent.
+    assert_eq!(r.sim.created_messages().await.len(), 1);
 }

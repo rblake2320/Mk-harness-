@@ -26,16 +26,31 @@ async fn main() -> anyhow::Result<()> {
     let callback_base = std::env::var("MK_TWSIM_CALLBACK_BASE").ok();
     let sim = TwilioSimulator::start_on(&bind, &account, token, mode).await?;
     eprintln!("mk-twilio-sim listening on {} (mode {mode:?})", sim.addr);
+    // Callbacks are posted concurrently (bounded), as Twilio does: a serial
+    // poster caps throughput and, under load, makes the simulator — not the
+    // kernel — the bottleneck being measured.
+    let sim = std::sync::Arc::new(sim);
+    let permits = std::sync::Arc::new(tokio::sync::Semaphore::new(64));
     loop {
-        tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
         if let Some(base) = &callback_base {
             for m in sim.take_uncalled().await {
-                for status in ["sent", "delivered"] {
-                    match sim.post_status_for(&m, base, status).await {
-                        Ok((code, _)) => eprintln!("callback {status} for {} → {code}", m["sid"]),
-                        Err(e) => eprintln!("callback {status} failed: {e}"),
+                let (sim, base) = (std::sync::Arc::clone(&sim), base.clone());
+                let Ok(permit) = std::sync::Arc::clone(&permits).acquire_owned().await else {
+                    break;
+                };
+                tokio::spawn(async move {
+                    // In order per message: sent, then delivered.
+                    for status in ["sent", "delivered"] {
+                        match sim.post_status_for(&m, &base, status).await {
+                            Ok((code, _)) => {
+                                eprintln!("callback {status} for {} → {code}", m["sid"]);
+                            }
+                            Err(e) => eprintln!("callback {status} failed: {e}"),
+                        }
                     }
-                }
+                    drop(permit);
+                });
             }
         }
     }

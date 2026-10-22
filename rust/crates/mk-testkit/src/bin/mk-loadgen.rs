@@ -123,6 +123,10 @@ struct Counters {
     optout_blocked: AtomicU64,
     optout_not_blocked: AtomicU64,
     duplicate_provider_messages: AtomicU64,
+    /// 429 TENANT_RATE_LIMITED / 503 OVER_CAPACITY: graceful refusals (O2), not errors.
+    capacity_rejected: AtomicU64,
+    /// Any other 5xx: a real failure under load.
+    server_errors: AtomicU64,
 }
 
 impl Counters {
@@ -144,6 +148,8 @@ impl Counters {
             optout_blocked: AtomicU64::new(0),
             optout_not_blocked: AtomicU64::new(0),
             duplicate_provider_messages: AtomicU64::new(0),
+            capacity_rejected: AtomicU64::new(0),
+            server_errors: AtomicU64::new(0),
         }
     }
 }
@@ -166,6 +172,7 @@ struct Rig {
     signer: AssertionSigner,
     account_sid: String,
     auth_token: String,
+    number_base: u64,
     rp_id: String,
     origin: String,
     counters: Counters,
@@ -215,7 +222,19 @@ impl Rig {
         let resp = r.send().await?;
         let status = resp.status().as_u16();
         let v = resp.json::<Value>().await.unwrap_or(Value::Null);
+        if Self::is_capacity(status, &v) {
+            self.counters
+                .capacity_rejected
+                .fetch_add(1, Ordering::Relaxed);
+        } else if status >= 500 {
+            self.counters.server_errors.fetch_add(1, Ordering::Relaxed);
+        }
         Ok((status, v))
+    }
+
+    /// The kernel's graceful refusals: per-tenant limit or replica capacity.
+    fn is_capacity(status: u16, v: &Value) -> bool {
+        status == 429 || (status == 503 && v["code"] == "OVER_CAPACITY")
     }
 
     /// Local-noon zone for the contact so contact-hours policy passes at any UTC hour.
@@ -240,10 +259,9 @@ impl Rig {
     async fn setup_tenant(&self, i: usize) -> anyhow::Result<Tenant> {
         let id = Uuid::now_v7();
         let (admin, agent, approver) = (Uuid::now_v7(), Uuid::now_v7(), Uuid::now_v7());
-        let from_number = format!(
-            "+1500555{:04}",
-            (u64::from(rand::random::<u16>()) + i as u64) % 10000
-        );
+        // Unique per tenant within a run (a random per-run base plus the index,
+        // mod 10 000): sender numbers are unique per business by design.
+        let from_number = format!("+1500555{:04}", (self.number_base + i as u64) % 10000);
         let (s, v) = self
             .call(
                 reqwest::Method::POST,
@@ -325,6 +343,9 @@ impl Rig {
                             "granted_at": "2026-10-01T00:00:00Z", "expires_at": "2027-10-01T00:00:00Z"})),
             )
             .await?;
+        if Self::is_capacity(s, &v) {
+            anyhow::bail!("capacity");
+        }
         anyhow::ensure!(s == 201, "permission {s}: {v}");
         t.contacts.lock().await.push((contact, to.clone(), 1));
         Ok((contact, to))
@@ -349,11 +370,15 @@ impl Rig {
 
     /// Propose → approve → observe to delivered. Records every latency.
     async fn one_message(self: Arc<Self>, t: Arc<Tenant>) {
-        let Ok((contact, to)) = self.contact(&t).await else {
-            self.counters
-                .proposals_error
-                .fetch_add(1, Ordering::Relaxed);
-            return;
+        let (contact, to) = match self.contact(&t).await {
+            Ok(c) => c,
+            Err(e) if e.to_string() == "capacity" => return, // counted in call()
+            Err(_) => {
+                self.counters
+                    .proposals_error
+                    .fetch_add(1, Ordering::Relaxed);
+                return;
+            }
         };
         let body = Self::proposal(
             &t,
@@ -376,6 +401,9 @@ impl Rig {
                 .fetch_add(1, Ordering::Relaxed);
             return;
         };
+        if Self::is_capacity(s, &v) {
+            return; // graceful refusal, counted in call()
+        }
         self.lat_propose.push(t0.elapsed().as_secs_f64()).await;
         if s != 202 {
             self.counters
@@ -405,6 +433,9 @@ impl Rig {
                 .fetch_add(1, Ordering::Relaxed);
             return;
         };
+        if Self::is_capacity(s, &ch) {
+            return;
+        }
         if (400..500).contains(&s) {
             self.counters
                 .approvals_refused
@@ -425,7 +456,7 @@ impl Rig {
             json!({"credential_id": B64URL.encode(&a.credential_id), "client_data_json": B64URL.encode(&cdj),
                    "authenticator_data": B64URL.encode(&ad), "signature": B64URL.encode(&sig)})
         };
-        let Ok((s, _)) = self
+        let Ok((s, av)) = self
             .call(
                 reqwest::Method::POST,
                 &format!("/internal/v1/actions/{aid}/approve"),
@@ -439,6 +470,9 @@ impl Rig {
                 .fetch_add(1, Ordering::Relaxed);
             return;
         };
+        if Self::is_capacity(s, &av) {
+            return;
+        }
         let approved_at = Instant::now();
         self.lat_approve.push(t1.elapsed().as_secs_f64()).await;
         if (400..500).contains(&s) {
@@ -459,8 +493,9 @@ impl Rig {
         // Observe: dispatch start = first state past queued; delivered = provider callbacks applied.
         let mut started: Option<f64> = None;
         let deadline = Instant::now() + Duration::from_secs(90);
+        let mut poll = Duration::from_millis(250);
         while Instant::now() < deadline {
-            tokio::time::sleep(Duration::from_millis(100)).await;
+            tokio::time::sleep(poll).await;
             let Ok((s, v)) = self
                 .call(
                     reqwest::Method::GET,
@@ -472,9 +507,15 @@ impl Rig {
             else {
                 continue;
             };
+            if Self::is_capacity(s, &v) {
+                // Honour the kernel's refusal like a well-behaved client: back off.
+                poll = Duration::from_secs(1);
+                continue;
+            }
             if s != 200 {
                 continue;
             }
+            poll = Duration::from_millis(250);
             let ms = v["message_state"].as_str().unwrap_or("");
             if started.is_none() && ms != "queued" && ms != "awaiting_approval" {
                 started = Some(approved_at.elapsed().as_secs_f64());
@@ -529,6 +570,7 @@ impl Rig {
                 self.lat_read.push(t0.elapsed().as_secs_f64()).await;
                 self.counters.reads_ok.fetch_add(1, Ordering::Relaxed);
             }
+            Ok((s, v)) if Self::is_capacity(s, &v) => {}
             _ => {
                 self.counters.reads_error.fetch_add(1, Ordering::Relaxed);
             }
@@ -628,6 +670,9 @@ impl Rig {
                     .await;
                 self.counters.optout_blocked.fetch_add(1, Ordering::Relaxed);
             }
+            // Refused for capacity: nothing was authorized, but the probe proves
+            // nothing about suppression either — counted under capacity_rejected only.
+            Ok((st, v)) if Self::is_capacity(st, &v) => {}
             _ => {
                 self.counters
                     .optout_not_blocked
@@ -677,6 +722,7 @@ async fn main() -> anyhow::Result<()> {
         ),
         account_sid: env("MK_TWSIM_ACCOUNT_SID")?,
         auth_token: env("MK_TWSIM_AUTH_TOKEN")?,
+        number_base: u64::from(rand::random::<u16>()),
         rp_id: std::env::var("MK_LOAD_RP_ID").unwrap_or_else(|_| "localhost".into()),
         origin: std::env::var("MK_LOAD_ORIGIN").unwrap_or_else(|_| "http://localhost:8000".into()),
         counters: Counters::new(),
@@ -793,7 +839,7 @@ async fn main() -> anyhow::Result<()> {
             target: "10 / 60",
             measured: json!({"p95": start.p95, "p99": start.p99, "count": start.count}),
             pass: Some(start.count > 0 && start.p95 <= 10.0 && start.p99 <= 60.0),
-            note: "observed by polling at 100 ms; includes outbox relay + stream + worker lease",
+            note: "observed by polling at 250 ms (1 s after a capacity refusal); includes outbox relay + stream + worker lease",
         },
         SloRow {
             id: "O3-delivered",
@@ -836,6 +882,14 @@ async fn main() -> anyhow::Result<()> {
             note: "",
         },
         SloRow {
+            id: "O2-graceful-rejection",
+            requirement: "above capacity the kernel refuses with 429/503 + Retry-After, never fails",
+            target: "0 other 5xx",
+            measured: json!({"capacity_rejected": g(&c.capacity_rejected), "other_5xx": g(&c.server_errors)}),
+            pass: Some(g(&c.server_errors) == 0),
+            note: "capacity refusals are excluded from O4-errors; a run that never reaches a limit reports capacity_rejected = 0",
+        },
+        SloRow {
             id: "O4-envelope",
             requirement: "8 h at envelope (20 proposal/s, 100 read/s, 10 dispatch/s), 30 min at 2×, 24 h at ½",
             target: "run length and rates",
@@ -860,7 +914,8 @@ async fn main() -> anyhow::Result<()> {
             "reads_ok": g(&c.reads_ok), "reads_error": g(&c.reads_error),
             "inbound_ok": g(&c.inbound_ok), "inbound_error": g(&c.inbound_error),
             "optout_blocked": g(&c.optout_blocked), "optout_not_blocked": g(&c.optout_not_blocked),
-            "duplicate_provider_message_ids": g(&c.duplicate_provider_messages)
+            "duplicate_provider_message_ids": g(&c.duplicate_provider_messages),
+            "capacity_rejected": g(&c.capacity_rejected), "other_5xx": g(&c.server_errors)
         },
         "latency_secs": {"propose": propose, "approve": approve, "approved_to_dispatch_start": start, "approved_to_delivered": delivered, "read_pending_approvals": read, "inbound_webhook": inbound, "optout_to_block": optout},
         "slo": rows,

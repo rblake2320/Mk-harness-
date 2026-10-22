@@ -184,10 +184,14 @@ pub async fn head_consistent(tx: &mut TenantTx<'_>) -> Result<bool, StoreError> 
     })
 }
 
-/// List tenant ids that have an audit head (verifier iterates these). Runs
-/// outside a tenant transaction under the read-only role policy.
+/// Every known tenant id: `kernel.tenant_directory` (migration 0009, not under
+/// RLS — readable by every kernel role) plus any audit head visible to the
+/// caller (the read-only role's policy). Cross-tenant operator work iterates
+/// these and does each tenant's work inside that tenant's transaction.
 pub async fn all_tenants(pool: &sqlx::PgPool) -> Result<Vec<TenantId>, StoreError> {
-    let rows = sqlx::query("SELECT tenant_id FROM kernel.audit_heads ORDER BY tenant_id")
+    let rows = sqlx::query(
+        "SELECT tenant_id FROM kernel.tenant_directory UNION SELECT tenant_id FROM kernel.audit_heads ORDER BY tenant_id",
+    )
         .fetch_all(pool)
         .await?;
     rows.into_iter()

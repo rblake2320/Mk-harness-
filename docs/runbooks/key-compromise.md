@@ -15,7 +15,7 @@ resume**. Dispatch stays disabled until verification passes.
 | **Assertion private key** (FastAPI → kernel, Ed25519) | FastAPI env `KERNEL_ASSERTION_PRIVATE_KEY` | attacker can mint principals and act as any role **except** approve (approval needs a passkey) and except global enable (needs operator passkey) | 1. kill switch off. 2. `mk-devkeys gen` → new kid; add the public key to `MK_ASSERTION_KEYS` **alongside** the old one; deploy FastAPI with the new private key/kid; remove the old kid; restart api. 3. `kernel.assertion_jtis` audit: any jti minted after the suspected leak that FastAPI did not log → incident. 4. Revoke sessions issued in the window (`POST /revocations`) |
 | **Approver passkey** (a user's device) | user's authenticator; public key in `kernel.approval_credentials` | approvals on that user's behalf | `POST /approval-credentials/{id}/revoke`; live approvals bound to that credential are cancelled by the kernel; user re-registers |
 | **DB credentials** (per-process logins) | secrets manager | read (readonly), write within RLS (api/worker/relay) — never cross-tenant without the owner login | `ALTER ROLE … PASSWORD` for the affected login; rolling restart of that process type only; owner login password rotated the same way; check `pg_stat_activity` for unknown clients |
-| **`MK_MASTER_KEY`** | secrets manager | unseal legacy (version 0) ciphertext **and** compute destination fingerprints | 1. kill switch off. 2. Ensure every row is under a KEK-wrapped version: `mk-keyctl reencrypt`, `retire 0`, `MK_LEGACY_SEAL_RETIRED=1`. 3. Generate a new master key; fingerprints (`destination_hash`) are HMACs under it, so **suppressions keyed by the old fingerprint must be re-keyed**: run the suppression re-fingerprint job (owner login; computes new hash from the sealed destination value where available, otherwise marks the suppression `requires_manual_rebind`) before any dispatch resumes. 4. Resume only after `kernel.suppressions` count unchanged and a spot check of opted-out numbers is still refused at proposal |
+| **`MK_MASTER_KEY`** / **`MK_FINGERPRINT_KEYS`** | secrets manager | unseal legacy (version 0) ciphertext; `m0` destination-fingerprint key unless `MK_FINGERPRINT_KEYS` lists others | 1. kill switch off. 2. Ensure every row is under a KEK-wrapped version: `mk-keyctl reencrypt`, `retire 0`, `MK_LEGACY_SEAL_RETIRED=1`. 3. Generate a new fingerprint key and deploy API + keyctl with `MK_FINGERPRINT_KEYS=k2=<new>,m0=master` (first entry = current; old key still listed). 4. `mk-keyctl fingerprint-rekey` (owner login) — adds the `k2` tag to every suppression, permission and inbound row from its sealed destination and to every action from its canonical `to`; unsealed provider opt-outs are recovered through the action that shares their fingerprint. 5. `mk-keyctl fingerprint-status` must exit 0 (`lacking_current=0 orphaned=0 unverified=0` for all four tables, `tenants=` the expected count). An `unresolved`/`unverified` row is a suppression filed from a bare hash with no raw destination anywhere in the kernel: re-file it with the destination itself (`POST /internal/v1/suppressions` with `destination`), then re-run `fingerprint-rekey` — the sealed row teaches the hash-only one, which is then verified. Never lift it to make status pass. 6. Only once `python -m app.tools.refingerprint status` (application) is also clean: remove `m0` from `MK_FINGERPRINT_KEYS` and the application's `FINGERPRINT_KEYS`, redeploy, then `mk-keyctl fingerprint-prune m0` to strip the compromised HMACs and rewrite hash columns. 7. Generate a new `MK_MASTER_KEY` only after steps 2 and 6 (`MK_FINGERPRINT_KEYS` must then name `m0` by explicit base64, never `master`, if it is still listed). 8. Resume only after `kernel.suppressions` count unchanged and a spot check of opted-out numbers is still refused at proposal. In step 3 give the application the same `FINGERPRINT_KEYS` value and in step 4 also run `python -m app.tools.refingerprint rekey`; the application matches inbound senders through the kernel's `destination_fingerprints` tags, so customer matching holds throughout. |
 | **`MK_KEK`** (KMS data key / env KEK) | KMS or secrets manager | unwrap every DEK version → all sealed data | 1. kill switch off. 2. New KEK (`MK_KEK`/`MK_KEK_ID`), `mk-keyctl rotate` (new version wrapped by the new KEK), `reencrypt`, `retire` each version wrapped by the old KEK, destroy the old KEK. 3. `mk-restore-gate` report mode → `credentials_unseal.unreadable == 0`. (Versions wrapped by an old KEK cannot be loaded once the KEK id changes: `load_keyring` refuses a mixed ring, so the rotation must complete in one maintenance window) |
 | **JWT secret** (FastAPI) | env | application sessions | rotate; all sessions invalidated; kernel unaffected (it trusts assertions, not JWTs) |
 | **Tenant encryption material** | per-row AAD + key versions (no per-tenant key today) | n/a | covered by KEK/master rows; per-tenant keys are **Not demonstrated** |
@@ -29,9 +29,24 @@ resume**. Dispatch stays disabled until verification passes.
 * One signed provider callback accepted, one opted-out proposal refused.
 * Enable sequence with passkey step-up; record who/when in the incident log.
 
-## Known gap (tracked, not hidden)
+## Known gaps (tracked, not hidden)
 
-Master-key rotation re-fingerprinting of suppressions is **Not demonstrated**:
-the job named above does not exist yet; until it does, a master-key rotation
-would orphan destination-keyed suppressions. This row blocks S10 from
-*Independently verified*.
+Kernel destination-fingerprint rotation is **Implemented** (migration 0008,
+`mk_store::fingerprint`, `mk-keyctl fingerprint-status|fingerprint-rekey|fingerprint-prune`;
+author-run tests `fingerprint_key_rotation_never_orphans_suppressions_or_consent`,
+`fingerprint_rekey_rejects_inconsistent_raw_destination`,
+`test_customer_match_survives_kernel_fingerprint_rotation`). It is not
+*Independently verified* until a second person runs the drill on staging and
+records it under `evidence/releases/`.
+
+Application-side fingerprint rotation is **Implemented** (author-run):
+`FINGERPRINT_KEYS` (same value as the kernel's `MK_FINGERPRINT_KEYS`, first =
+current; unset = master key as `m0`) and `python -m app.tools.refingerprint
+status|rekey` — re-fingerprints every `CustomerDestination` from its sealed value
+and moves each `SuppressionEvent`/`ImportRow` with it; `status` exits 1 while any
+row is not under the current key or any suppression maps to no destination
+(test `test_app_fingerprint_key_rotation_never_orphans_suppressions`). Run the
+app `rekey` together with the kernel's `fingerprint-rekey` (step 4) and remove the
+old kid from **both** lists only when both `status` commands are clean.
+Not demonstrated: rotation of the application's *sealing* key (`MASTER_KEY` for
+`seal()`), which needs its own decrypt/re-encrypt job. This blocks S10 from *Independently verified*.

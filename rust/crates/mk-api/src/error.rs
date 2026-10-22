@@ -15,6 +15,8 @@ pub struct ApiError {
     pub title: String,
     pub detail: Option<String>,
     pub request_id: String,
+    /// Seconds for a `Retry-After` header (429/503 capacity refusals).
+    pub retry_after: Option<u64>,
 }
 
 impl ApiError {
@@ -26,7 +28,14 @@ impl ApiError {
             title: title.to_owned(),
             detail: None,
             request_id: String::new(),
+            retry_after: None,
         }
+    }
+
+    #[must_use]
+    pub fn with_retry_after(mut self, secs: u64) -> Self {
+        self.retry_after = Some(secs);
+        self
     }
 
     #[must_use]
@@ -65,6 +74,9 @@ impl From<StoreError> for ApiError {
             StoreError::Transition(_) => (StatusCode::CONFLICT, "Illegal state transition"),
             StoreError::Contract(_) => (StatusCode::UNPROCESSABLE_ENTITY, "Contract violation"),
             StoreError::Unavailable(_) => (StatusCode::SERVICE_UNAVAILABLE, "Store unavailable"),
+            StoreError::Transient(_) => {
+                (StatusCode::SERVICE_UNAVAILABLE, "Transient conflict; retry")
+            }
             _ => (StatusCode::INTERNAL_SERVER_ERROR, "Internal error"),
         };
         tracing::error!(code = e.code(), error = %e, "store error");
@@ -99,6 +111,12 @@ impl IntoResponse for ApiError {
             p = p.with_detail(d);
         }
         let mut resp = (self.status, Json(p)).into_response();
+        if let Some(secs) = self.retry_after {
+            resp.headers_mut().insert(
+                axum::http::header::RETRY_AFTER,
+                axum::http::HeaderValue::from(secs),
+            );
+        }
         if let Ok(v) = "application/problem+json".parse() {
             resp.headers_mut()
                 .insert(axum::http::header::CONTENT_TYPE, v);

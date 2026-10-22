@@ -63,3 +63,28 @@ scripts/kernel-load.sh --duration-secs 120 --proposals-per-sec 20 --reads-per-se
 # envelope (someone other than the author, on the staging topology):
 scripts/kernel-load.sh --duration-secs 28800 --proposals-per-sec 20 --reads-per-sec 100 --inbound-per-sec 10 --tenants 50 --workers 4
 ```
+
+### 30 min at 2× the envelope rates (author run, 2026-10-21) — `2026-10-21-author-run-1800s-2x-rates.json`
+
+Same single container, 4 workers, **100 tenants**, target 40 proposal/s + 200 read/s + 4 inbound/s.
+The container saturated: achieved ≈ 27.7 proposals/s (49 946 in 1 804 s). Part of the run overlapped
+with test suites on the same CPU. Treat latencies as an upper bound for this hardware, not a
+measurement of a production deployment.
+
+| Result | Value |
+|---|---|
+| duplicate provider messages / unauthorized sends | **0** / **0** |
+| API errors (transport + non-capacity 5xx) | **0** |
+| reconciliation_required / dead letters / audit head mismatches at end | 0 / 0 / 0 |
+| opt-out probes blocked | 66 / 66 |
+| capacity refusals (429 / 503 OVER_CAPACITY), all graceful | 227 460 (mostly the load tool's own status polling) |
+| propose p95 / p99 | **1.90 s / 2.23 s — FAILS O3 (≤ 0.5 s / ≤ 1.5 s)** |
+| approve p95 / p99 | **4.46 s / 5.11 s — FAILS O3** |
+| approved → dispatch start p95 / p99 | 2.96 s / 4.36 s (passes ≤ 10 s / ≤ 60 s) |
+| inbound persistence p99 | 1.56 s (passes ≤ 2 s) |
+
+Defects this run class found and fixed before this run: a connection-pool deadlock under load
+(second pooled connection inside a transaction) and lease-expiry over-reconciliation of
+provider-accepted sends (`git log --grep "2x load"`). **O3 latency at 2× is Not demonstrated**
+and fails on this hardware; whether it holds on the target deployment is an open question for
+the staging run.

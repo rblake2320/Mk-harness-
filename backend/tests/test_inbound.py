@@ -199,3 +199,65 @@ def test_failed_processed_mark_never_duplicates_application_records(client, kern
     assert len(ex) == 1 and ex[0]["kind"] == "product_concern", ex
     drafts = [c for c in client.get(f"/api/commitments?customer_id={cid}", headers=h).json() if c["kind"] == "customer_date"]
     assert len(drafts) == 1, drafts
+
+
+def test_customer_match_survives_kernel_fingerprint_rotation(client, kernel_env):
+    """After the kernel rotates its fingerprint key, `source_destination_hash` is the
+    new key's value; the application's stored fingerprint is the old (`m0`) one and
+    must still match through the event's `destination_fingerprints` tags. A tag for
+    an unrelated number must not match."""
+    tok = _signup(client, uuid.uuid4().hex[:6])
+    h = auth_headers(tok)
+    cid, _, fp = _customer(client, h, phone="+15555557101")
+    rotated = "a" * 64
+    ev = _event(rotated, "my order never arrived", sid="SMrot")
+    ev["destination_fingerprints"] = [f"k2:{rotated}", f"m0:{fp}"]
+    stray = _event("b" * 64, "my order never arrived", sid="SMstray")
+    stray["destination_fingerprints"] = ["k2:" + "b" * 64, "m0:" + "c" * 64]
+    with respx.mock(assert_all_called=False) as m:
+        m.get(f"{KERNEL}/internal/v1/inbound/pending?limit=50").mock(return_value=_pending([ev, stray]))
+        m.post(f"{KERNEL}/internal/v1/suppressions").mock(return_value=httpx.Response(201, json={"suppression_id": str(uuid.uuid4()), "suppressed_actions": 0}))
+        m.post(url__regex=rf"{KERNEL}/internal/v1/inbound/[0-9a-f-]+/processed$").mock(return_value=httpx.Response(204))
+        r = client.post("/api/inbound/process", json={"limit": 50}, headers=h)
+    assert r.status_code == 200, r.text
+    by_sid = {e["event_id"]: e for e in r.json()["events"]}
+    assert by_sid[ev["event_id"]]["customer_id"] == cid
+    assert by_sid[stray["event_id"]]["customer_id"] is None
+
+
+def test_classifier_findings_from_the_synthetic_set():
+    """A keyword followed by a sentence break, repeated keywords and emphatic spellings
+    are explicit opt-outs; 'stopped' is not a stop request; plural concern words match."""
+    for t in ("STOP. this gave me a rash", "Stop! who is this", "STOP, I'm not interested", "STOP\nsent from my iPhone",
+              "stop - not interested", "STOP STOP STOP", "STOPPP", "stooop", "stopall, thanks"):
+        assert classify_inbound(t).label == "opt_out", t
+    assert classify_inbound("Stopped by the store yesterday, loved it").label == "ordinary"
+    assert classify_inbound("bus stop was late").label == "ambiguous_opt_out", "a bare 'stop' still holds"
+    for t in ("blisters on my cheek", "rashes everywhere", "my lips swelled up"):
+        assert classify_inbound(t).label == "product_concern", t
+
+
+def test_failed_hold_leaves_the_event_unprocessed_and_records_nothing(client, kernel_env):
+    """C7: if the kernel does not confirm the hold (any non-201), the concern is not
+    recorded as handled — no ledger row, no exception, not marked processed — so the
+    next run applies it again instead of letting sales follow-up continue."""
+    tok = _signup(client, uuid.uuid4().hex[:6])
+    h = auth_headers(tok)
+    _customer(client, h, phone="+15555557301")
+    _, _, fp = _customer(client, h, name="Cara", phone="+15555557302")
+    ev = _event(fp, "this gave me a rash", sid="SMholdfail")
+    marked = []
+    for status, expect_marked in ((503, False), (201, True)):
+        with respx.mock(assert_all_called=False) as m:
+            m.get(f"{KERNEL}/internal/v1/inbound/pending?limit=50").mock(return_value=_pending([ev]))
+            m.post(f"{KERNEL}/internal/v1/suppressions").mock(return_value=httpx.Response(
+                status, json={"suppression_id": str(uuid.uuid4()), "suppressed_actions": 0} if status == 201 else {"code": "OVER_CAPACITY"}))
+            m.post(url__regex=rf"{KERNEL}/internal/v1/inbound/[0-9a-f-]+/processed$").mock(
+                side_effect=lambda req: (marked.append(1), httpx.Response(204))[1])
+            r = client.post("/api/inbound/process", json={"limit": 50}, headers=h)
+        assert r.status_code == 200, r.text
+        e = r.json()["events"][0]
+        assert (e["marked_processed"] is not None) == expect_marked, e
+        ex = client.get("/api/exceptions", headers=h).json()
+        assert (len([x for x in ex if x["kind"] == "product_concern"]) == 1) == expect_marked, ex
+    assert len(marked) == 1

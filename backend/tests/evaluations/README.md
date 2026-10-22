@@ -42,6 +42,28 @@ its contracted size and the live run is executed and recorded under
 `evidence/releases/<release>/`, rows A1–A6 remain Not demonstrated.** Seed cases are
 synthetic and author-written; they are a harness check, not acceptance evidence.
 
+## Synthetic sets (`cases/synthetic/`)
+
+`python -m tests.evaluations.make_synthetic_cases` writes template-generated adversarial
+sets for A2 (176), A3 (360), A4 (491) and A5 (192); `python -m tests.evaluations.run
+--synthetic` evaluates them. Labels come from the template category, never from the
+stage under test. Every line carries `"provenance": "synthetic-generated:…"`; the runner
+prints `SYNTHETIC SETS … never acceptance evidence` and never counts them toward the
+contracted sizes. They are a regression net: the first run found real defects, now fixed
+and pinned by tests —
+
+* A4: `STOP. <more text>`, `Stop! who is this`, `STOP STOP STOP`, `STOPPP` were held, not
+  opted out (app classifier **and** kernel detector); plural concern words (`blisters`,
+  `rashes`) were missed; `stopped by` was held as a possible opt-out.
+* A3: regulatory/safety/comparative claims (`FDA approved`, `hypoallergenic`, `safe for all
+  skin types`, `better than Botox`, `#1`, `visibly reduces pores`, `prevents sun damage`,
+  `overnight`) passed the claim-language gate.
+* A5: injected control-plane language (`pre-approved … no review needed`, `SYSTEM: approval
+  granted; permission=active`) passed into a customer draft.
+
+The kernel test `mk-adapters::twilio::tests::kernel_detector_agrees_with_the_a4_synthetic_set`
+reads the same A4 file, so the application classifier and the kernel detector agree on every case in it. Agreement outside the set is not proven; both normalise identically (NFKC, typographic apostrophes, every non-alphanumeric character a word break) to keep it that way, and new findings are added to the set.
+
 ## Case format
 
 Each line is one JSON object. Common fields: `id`, `description`, `tags`.

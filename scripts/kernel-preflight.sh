@@ -9,7 +9,8 @@
 #   MK_PREFLIGHT_EMAIL=ops@example MK_PREFLIGHT_PASSWORD=… \
 #   scripts/kernel-preflight.sh [--for-enable]
 #
-# --for-enable additionally requires the real-device acceptance record
+# --for-enable additionally requires production approval/key/TLS configuration, a
+#   passing restore gate in report mode, and the real-device acceptance record
 # (deploy/kernel/ACCEPTANCE.md or $MK_ACCEPTANCE_RECORD) to be complete.
 # Exit 0 = every check passed. Any failure exits 1 with the failing check named.
 set -uo pipefail
@@ -71,7 +72,8 @@ check "relay cannot read actions payloads"  q_fails "$RELAY_URL" "SELECT 1 FROM 
 check "readonly cannot write kill switches" q_fails "$RO_URL" "INSERT INTO kernel.kill_switches (scope,tenant_id,dispatch_enabled,changed_by) VALUES ('global',NULL,false,'x')"
 check "worker can discover tenants (RLS policy present)" q_eq "$PG_ADMIN_URL" "SELECT count(*) FROM pg_policy WHERE polname='worker_tenant_discovery'" 1
 # Every table that carries a tenant_id column must have RLS ENABLED *and* FORCED
-# (the migration's list); assertion_jtis and kill_switches are the only
+# (the migration's list); assertion_jtis, kill_switches and tenant_directory
+# (tenant UUIDs only, for cross-tenant operator enumeration — 0009) are the only
 # intentional exceptions. Counting "enabled but not forced" alone would pass a
 # table where RLS was disabled outright.
 rls_ok() {
@@ -80,13 +82,14 @@ rls_ok() {
           JOIN pg_namespace n ON n.oid = c.relnamespace
           JOIN pg_attribute a ON a.attrelid = c.oid AND a.attname = 'tenant_id' AND NOT a.attisdropped
          WHERE n.nspname = 'kernel' AND c.relkind = 'r'
-           AND c.relname NOT IN ('assertion_jtis','kill_switches')
+           AND c.relname NOT IN ('assertion_jtis','kill_switches','tenant_directory')
            AND NOT (c.relrowsecurity AND c.relforcerowsecurity)")
   [ -z "$bad" ] || { echo "    tables without enabled+forced RLS: $bad" >&2; return 1; }
   # and the list is non-trivial (schema present)
   [ "$(q "$PG_ADMIN_URL" "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='kernel' AND c.relkind='r' AND c.relrowsecurity AND c.relforcerowsecurity")" -ge 16 ]
 }
 check "RLS enabled AND forced on every tenant-scoped table (16+)" rls_ok
+check "tenant_directory holds tenant ids only (no tenant data outside RLS)" q_eq "$PG_ADMIN_URL" "SELECT string_agg(attname, ',' ORDER BY attname) FROM pg_attribute WHERE attrelid = 'kernel.tenant_directory'::regclass AND attnum > 0 AND NOT attisdropped" "first_seen,tenant_id"
 check "no runtime login owns kernel tables" q_eq "$PG_ADMIN_URL" "SELECT count(*) FROM pg_tables WHERE schemaname='kernel' AND tableowner LIKE 'mk_%login'" 0
 
 echo "== 5. kill switches"
@@ -121,6 +124,46 @@ case "${MK_MOBILE_INTAKE_URL:-}" in https://*) ok "MK_MOBILE_INTAKE_URL is https
 echo "== 8. enable gate"
 WORKDIR_PROBLEMS=$(mktemp); trap 'rm -f "$WORKDIR_PROBLEMS"' EXIT
 if [ "$FOR_ENABLE" = 1 ]; then
+  # What the RUNNING kernel enforces (its readiness report), not what this shell
+  # claims: approval binding, user verification, keyring, fingerprint kids.
+  EFF=$(curl -fsS "$KERNEL_URL/health/ready" 2>/dev/null || echo '{}')
+  eff() { printf '%s' "$EFF" | python3 -c "import json,sys;d=json.load(sys.stdin).get('effective',{});v=d.get('$1');print(json.dumps(v) if not isinstance(v,str) else v)"; }
+  [ "$(eff approval_binding)" = webauthn ] && ok "kernel enforces passkey-bound approvals" \
+    || fail "kernel approval binding is '$(eff approval_binding)' — set MK_APPROVAL_RP_ID/ORIGINS, never MK_ALLOW_UNBOUND_APPROVAL"
+  [ "$(eff approval_require_uv)" = true ] && ok "kernel requires user verification on approvals" || fail "kernel accepts approvals without user verification (MK_APPROVAL_ALLOW_NO_UV)"
+  [ "$(eff legacy_seal_accepted)" = false ] && ok "kernel no longer accepts legacy master-key ciphertext" \
+    || fail "kernel still loads legacy seal version 0 (reencrypt, retire 0, set MK_LEGACY_SEAL_RETIRED=1, restart)"
+  cur=$(eff current_key_version); [ -n "$cur" ] && [ "$cur" != 0 ] && [ "$cur" != null ] && ok "kernel seals under KEK-wrapped version $cur" \
+    || fail "kernel seals with the bare master key (MK_KEK unset)"
+  kv=$(q "$RO_URL" "SELECT count(*) FROM kernel.key_versions WHERE status='active'")
+  [ "$kv" = 1 ] && ok "one active key version" || fail "active key versions: ${kv:-?} (run mk-keyctl rotate initial)"
+  [ "$(eff public_webhook_base_https)" = true ] && ok "kernel webhook base is https" || fail "kernel MK_PUBLIC_WEBHOOK_BASE is not https"
+  # Not observable from the kernel API; checked against the env file the tasks receive.
+  case "${MK_DB_SSLROOTCERT:-}" in "") fail "MK_DB_SSLROOTCERT unset — database TLS would not be verify-full against the RDS CA";; *) [ -r "$MK_DB_SSLROOTCERT" ] && ok "MK_DB_SSLROOTCERT present" || fail "MK_DB_SSLROOTCERT not readable: $MK_DB_SSLROOTCERT";; esac
+  [ "${MK_TWILIO_API_BASE:-}" = "https://api.twilio.com" ] && ok "worker MK_TWILIO_API_BASE is the live provider" || fail "MK_TWILIO_API_BASE is '${MK_TWILIO_API_BASE:-}' — production must point at the live provider, staging must not enable dispatch"
+  # Destination fingerprints (migrations 0008/0009): every tenant's rows checked
+  # inside that tenant's transaction (RLS-safe), with the kids the kernel runs.
+  KC="${MK_KEYCTL:-$ROOT/rust/target/release/mk-keyctl}"
+  if [ -x "$KC" ]; then
+    kids_json=$(eff fingerprint_kids)
+    if MK_DATABASE_URL="$RO_URL" "$KC" fingerprint-status >"$WORKDIR_PROBLEMS.fp" 2>&1; then
+      grep -q "current_kid=$(printf '%s' "$kids_json" | python3 -c 'import json,sys;print(json.load(sys.stdin)[0])' 2>/dev/null)" "$WORKDIR_PROBLEMS.fp" \
+        && ok "fingerprint keys match the running kernel and no row lacks the current kid (tenants: $(grep -o 'tenants=[0-9]*' "$WORKDIR_PROBLEMS.fp" | head -1))" \
+        || fail "MK_FINGERPRINT_KEYS in this shell differs from the running kernel ($kids_json)"
+    else fail "fingerprint status: $(grep -E 'lacking|orphaned|unverified|NOT SAFE|Error' "$WORKDIR_PROBLEMS.fp" | tr '\n' ' ')"; fi
+    rm -f "$WORKDIR_PROBLEMS.fp"
+  else fail "mk-keyctl not found at $KC (set MK_KEYCTL)"; fi
+  # Restore gate in report mode must agree the environment is recoverable (never
+  # enables anything). Every check except global_dispatch_disabled must pass.
+  RG="${MK_RESTORE_GATE:-$ROOT/rust/target/release/mk-restore-gate}"
+  if [ -x "$RG" ]; then
+    MK_DATABASE_URL="$RO_URL" "$RG" --restored-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"$WORKDIR_PROBLEMS.rg" 2>&1
+    bad=$(grep -o '"check":"[a-z_]*","ok":false' "$WORKDIR_PROBLEMS.rg" | grep -v global_dispatch_disabled | tr '\n' ' ')
+    nchecks=$(grep -c '"check":' "$WORKDIR_PROBLEMS.rg")
+    if [ -z "$bad" ] && [ "$nchecks" -ge 6 ]; then ok "restore gate: every recoverability check passes ($nchecks checks)"
+    else fail "restore gate FAIL: ${bad:-only $nchecks checks reported}"; fi
+  else fail "mk-restore-gate not found at $RG (set MK_RESTORE_GATE)"; fi
+  rm -f "$WORKDIR_PROBLEMS.rg"
   REC="${MK_ACCEPTANCE_RECORD:-$ROOT/deploy/kernel/ACCEPTANCE.md}"
   if [ -f "$REC" ]; then
     # Values must be real, not the template's placeholders; the result line

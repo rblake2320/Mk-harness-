@@ -54,11 +54,16 @@ locals {
         { name = "MK_APPROVAL_RP_ID", value = var.approval_rp_id },
         { name = "MK_APPROVAL_ORIGINS", value = join(",", var.approval_origins) },
         { name = "MK_DB_USER", value = "mk_api_login" },
+        # O2 per-replica limits (docs/load/limits.md); totals scale with desired_count.
+        { name = "MK_TENANT_READ_RPS", value = "20" },
+        { name = "MK_TENANT_WRITE_RPS", value = "5" },
+        { name = "MK_MAX_INFLIGHT", value = "256" },
         # RUST_ACTION_KERNEL_ENABLED is deliberately NOT set here: enabling is the
         # release owner's step (deploy/kernel/README.md enable sequence).
       ])
       secrets = [
         { name = "MK_MASTER_KEY", valueFrom = local.secret["master_key"] },
+        { name = "MK_FINGERPRINT_KEYS", valueFrom = local.secret["fingerprint_keys"] },
         { name = "MK_KEK", valueFrom = local.secret["kek"] },
         { name = "MK_DB_PASSWORD", valueFrom = local.secret["db_api_credential"] },
       ]
@@ -101,6 +106,8 @@ locals {
       ]
       secrets = [
         { name = "MASTER_KEY", valueFrom = local.secret["master_key"] },
+        # Same secret as the kernel's MK_FINGERPRINT_KEYS: one value, never two.
+        { name = "FINGERPRINT_KEYS", valueFrom = local.secret["fingerprint_keys"] },
         { name = "KERNEL_ASSERTION_PRIVATE_KEY", valueFrom = local.secret["assertion_private"] },
         { name = "JWT_SECRET", valueFrom = local.secret["jwt_secret"] },
         { name = "DB_PASSWORD", valueFrom = local.secret["db_app_credential"] },

@@ -129,39 +129,115 @@ pub const SEALED_COLUMNS: &[(&str, &str, &str)] = &[
         "auth_token_sealed",
     ),
     ("kernel.inbound_events", "event_id", "content_sealed"),
+    ("kernel.inbound_events", "event_id", "destination_sealed"),
+    (
+        "kernel.suppressions",
+        "suppression_id",
+        "destination_sealed",
+    ),
+    (
+        "kernel.contact_permissions",
+        "permission_id",
+        "destination_sealed",
+    ),
 ];
 
-/// Operator: count rows still sealed under versions other than the current one.
+/// One sealed value with the AAD its owning module uses.
+struct SealedRow {
+    table: &'static str,
+    pk: &'static str,
+    col: &'static str,
+    id: uuid::Uuid,
+    aad: String,
+    sealed: Vec<u8>,
+}
+
+/// Every sealed value of one tenant, read inside that tenant's transaction
+/// (row-level security is forced on every table and production logins are
+/// NOBYPASSRLS: a cross-tenant query outside a tenant context sees nothing).
+async fn sealed_rows(tx: &mut crate::TenantTx<'_>) -> Result<Vec<SealedRow>, StoreError> {
+    let t = tx.tenant().0;
+    let mut out = Vec::new();
+    for r in sqlx::query("SELECT adapter_id, credential_id, secret_ciphertext FROM kernel.adapter_credentials WHERE tenant_id = $1")
+        .bind(t).fetch_all(tx.conn()).await?
+    {
+        let (a, c): (uuid::Uuid, uuid::Uuid) = (r.try_get("adapter_id")?, r.try_get("credential_id")?);
+        out.push(SealedRow { table: "adapter_credentials", pk: "credential_id", col: "secret_ciphertext", id: c,
+            aad: format!("mk-adapter-credential:{t}:{a}:{c}"), sealed: r.try_get("secret_ciphertext")? });
+    }
+    for r in sqlx::query("SELECT sender_identity_id, auth_token_sealed FROM kernel.sender_identities WHERE tenant_id = $1")
+        .bind(t).fetch_all(tx.conn()).await?
+    {
+        let id: uuid::Uuid = r.try_get("sender_identity_id")?;
+        out.push(SealedRow { table: "sender_identities", pk: "sender_identity_id", col: "auth_token_sealed", id,
+            aad: format!("sender:{t}:{id}"), sealed: r.try_get("auth_token_sealed")? });
+    }
+    for r in sqlx::query("SELECT event_id, content_sealed, destination_sealed FROM kernel.inbound_events WHERE tenant_id = $1")
+        .bind(t).fetch_all(tx.conn()).await?
+    {
+        let id: uuid::Uuid = r.try_get("event_id")?;
+        out.push(SealedRow { table: "inbound_events", pk: "event_id", col: "content_sealed", id,
+            aad: format!("inbound:{t}:{id}"), sealed: r.try_get("content_sealed")? });
+        if let Some(d) = r.try_get::<Option<Vec<u8>>, _>("destination_sealed")? {
+            out.push(SealedRow { table: "inbound_events", pk: "event_id", col: "destination_sealed", id,
+                aad: crate::fingerprint::destination_aad("inbound_events", tx.tenant(), id), sealed: d });
+        }
+    }
+    for (table, pk) in [
+        ("suppressions", "suppression_id"),
+        ("contact_permissions", "permission_id"),
+    ] {
+        for r in sqlx::query(sqlx::AssertSqlSafe(format!(
+            "SELECT {pk} AS id, destination_sealed FROM kernel.{table} WHERE tenant_id = $1 AND destination_sealed IS NOT NULL"
+        )))
+        .bind(t).fetch_all(tx.conn()).await?
+        {
+            let id: uuid::Uuid = r.try_get("id")?;
+            out.push(SealedRow { table, pk, col: "destination_sealed", id,
+                aad: crate::fingerprint::destination_aad(table, tx.tenant(), id), sealed: r.try_get("destination_sealed")? });
+        }
+    }
+    Ok(out)
+}
+
+async fn tenants_for(
+    pool: &PgPool,
+    tenant: Option<mk_domain::TenantId>,
+) -> Result<Vec<mk_domain::TenantId>, StoreError> {
+    match tenant {
+        Some(t) => Ok(vec![t]),
+        None => crate::audit::all_tenants(pool).await,
+    }
+}
+
+/// Operator: count rows still sealed under versions other than the current one,
+/// per `table.column`, over every tenant (each in its own tenant transaction).
 pub async fn stale_counts(
     pool: &PgPool,
     keyring: &Keyring,
     tenant: Option<mk_domain::TenantId>,
 ) -> Result<Vec<(String, u64)>, StoreError> {
-    let mut out = Vec::new();
-    let filter = tenant.map_or(String::new(), |t| format!(" WHERE tenant_id = '{}'", t.0));
-    for (table, pk, col) in SEALED_COLUMNS {
-        let rows = sqlx::query(&format!(
-            "SELECT {pk}::text AS id, {col} AS sealed FROM {table}{filter}"
-        ))
-        .fetch_all(pool)
-        .await?;
-        let stale = rows
-            .iter()
-            .filter(|r| {
-                r.try_get::<Vec<u8>, _>("sealed").map_or(true, |b| {
-                    Keyring::version_of(&b) != keyring.current_version()
-                })
-            })
-            .count();
-        out.push((
-            (*table).to_owned(),
-            u64::try_from(stale).unwrap_or(u64::MAX),
-        ));
+    let mut out: Vec<(String, u64)> = SEALED_COLUMNS
+        .iter()
+        .map(|(t, _, c)| (format!("{t}.{c}"), 0))
+        .collect();
+    let store = crate::Store::from_pool(pool.clone());
+    for t in tenants_for(pool, tenant).await? {
+        let mut tx = store.begin(t).await?;
+        for row in sealed_rows(&mut tx).await? {
+            if Keyring::version_of(&row.sealed) != keyring.current_version() {
+                let key = format!("kernel.{}.{}", row.table, row.col);
+                if let Some(e) = out.iter_mut().find(|(k, _)| *k == key) {
+                    e.1 += 1;
+                }
+            }
+        }
+        tx.commit().await?;
     }
     Ok(out)
 }
 
-/// Operator: retire a version. Refused while any row is still sealed under it.
+/// Operator: retire a version. Refused while any row (any tenant) is still sealed under it.
 pub async fn retire(
     pool: &PgPool,
     keyring: &Keyring,
@@ -172,20 +248,19 @@ pub async fn retire(
     if v == keyring.current_version() {
         return Err(StoreError::Conflict("cannot retire the active version"));
     }
-    for (table, pk, col) in SEALED_COLUMNS {
-        let rows = sqlx::query(&format!(
-            "SELECT {pk}::text AS id, {col} AS sealed FROM {table}"
-        ))
-        .fetch_all(pool)
-        .await?;
-        if rows.iter().any(|r| {
-            r.try_get::<Vec<u8>, _>("sealed")
-                .is_ok_and(|b| Keyring::version_of(&b) == v)
-        }) {
+    let store = crate::Store::from_pool(pool.clone());
+    for t in tenants_for(pool, None).await? {
+        let mut tx = store.begin(t).await?;
+        if sealed_rows(&mut tx)
+            .await?
+            .iter()
+            .any(|r| Keyring::version_of(&r.sealed) == v)
+        {
             return Err(StoreError::Conflict(
                 "rows are still sealed under this version; run reencrypt first",
             ));
         }
+        tx.commit().await?;
     }
     let n = sqlx::query("UPDATE kernel.key_versions SET status = 'retired', retired_at = $2 WHERE version = $1 AND status = 'retiring'")
         .bind(version)
@@ -232,70 +307,38 @@ pub struct ReencryptReport {
     pub unreadable: u64,
 }
 
-/// Operator: re-seal every row not under the current version. Each row is
-/// updated in its own statement with the AAD the owning module uses, so a
-/// crash mid-way leaves a mix of versions that is still fully readable (the
-/// old version stays `retiring` until `retire`).
+/// Operator: re-seal every row not under the current version, one tenant
+/// transaction per tenant. Each row is resealed with the AAD its owning module
+/// uses; a crash mid-way leaves a mix of versions that is still fully readable
+/// (the old version stays `retiring` until `retire`).
 pub async fn reencrypt(
     pool: &PgPool,
     keyring: &Keyring,
     tenant: Option<mk_domain::TenantId>,
 ) -> Result<ReencryptReport, StoreError> {
     let mut rep = ReencryptReport::default();
-    let filter = tenant.map_or(String::new(), |t| format!(" WHERE tenant_id = '{}'", t.0));
-    // adapter_credentials: AAD = tenant:adapter:credential (see adapters::aad)
-    let rows = sqlx::query(&format!("SELECT tenant_id, adapter_id, credential_id, secret_ciphertext FROM kernel.adapter_credentials{filter}")).fetch_all(pool).await?;
-    for r in rows {
-        let (t, a, c): (uuid::Uuid, uuid::Uuid, uuid::Uuid) = (
-            r.try_get("tenant_id")?,
-            r.try_get("adapter_id")?,
-            r.try_get("credential_id")?,
-        );
-        let sealed: Vec<u8> = r.try_get("secret_ciphertext")?;
-        match keyring.reseal(&format!("mk-adapter-credential:{t}:{a}:{c}"), &sealed) {
-            Ok(Some(new)) => {
-                sqlx::query("UPDATE kernel.adapter_credentials SET secret_ciphertext = $3 WHERE tenant_id = $1 AND credential_id = $2")
-                    .bind(t).bind(c).bind(new).execute(pool).await?;
-                rep.resealed += 1;
+    let store = crate::Store::from_pool(pool.clone());
+    for t in tenants_for(pool, tenant).await? {
+        let mut tx = store.begin(t).await?;
+        for row in sealed_rows(&mut tx).await? {
+            match keyring.reseal(&row.aad, &row.sealed) {
+                Ok(Some(new)) => {
+                    sqlx::query(sqlx::AssertSqlSafe(format!(
+                        "UPDATE kernel.{} SET {} = $3 WHERE tenant_id = $1 AND {} = $2",
+                        row.table, row.col, row.pk
+                    )))
+                    .bind(t.0)
+                    .bind(row.id)
+                    .bind(new)
+                    .execute(tx.conn())
+                    .await?;
+                    rep.resealed += 1;
+                }
+                Ok(None) => {}
+                Err(_) => rep.unreadable += 1,
             }
-            Ok(None) => {}
-            Err(_) => rep.unreadable += 1,
         }
-    }
-    // sender_identities: AAD = sender:tenant:id
-    let rows = sqlx::query(&format!("SELECT tenant_id, sender_identity_id, auth_token_sealed FROM kernel.sender_identities{filter}")).fetch_all(pool).await?;
-    for r in rows {
-        let (t, id): (uuid::Uuid, uuid::Uuid) =
-            (r.try_get("tenant_id")?, r.try_get("sender_identity_id")?);
-        let sealed: Vec<u8> = r.try_get("auth_token_sealed")?;
-        match keyring.reseal(&format!("sender:{t}:{id}"), &sealed) {
-            Ok(Some(new)) => {
-                sqlx::query("UPDATE kernel.sender_identities SET auth_token_sealed = $3 WHERE tenant_id = $1 AND sender_identity_id = $2")
-                    .bind(t).bind(id).bind(new).execute(pool).await?;
-                rep.resealed += 1;
-            }
-            Ok(None) => {}
-            Err(_) => rep.unreadable += 1,
-        }
-    }
-    // inbound_events: AAD = inbound:tenant:event
-    let rows = sqlx::query(&format!(
-        "SELECT tenant_id, event_id, content_sealed FROM kernel.inbound_events{filter}"
-    ))
-    .fetch_all(pool)
-    .await?;
-    for r in rows {
-        let (t, id): (uuid::Uuid, uuid::Uuid) = (r.try_get("tenant_id")?, r.try_get("event_id")?);
-        let sealed: Vec<u8> = r.try_get("content_sealed")?;
-        match keyring.reseal(&format!("inbound:{t}:{id}"), &sealed) {
-            Ok(Some(new)) => {
-                sqlx::query("UPDATE kernel.inbound_events SET content_sealed = $3 WHERE tenant_id = $1 AND event_id = $2")
-                    .bind(t).bind(id).bind(new).execute(pool).await?;
-                rep.resealed += 1;
-            }
-            Ok(None) => {}
-            Err(_) => rep.unreadable += 1,
-        }
+        tx.commit().await?;
     }
     Ok(rep)
 }

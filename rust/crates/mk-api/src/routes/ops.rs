@@ -21,6 +21,24 @@ pub struct Ready {
     pub database: bool,
     pub dispatch_enabled: bool,
     pub rust_kernel_enabled: bool,
+    /// Effective security configuration of THIS process (no secrets), so the
+    /// enable pre-flight checks what the running kernel enforces rather than
+    /// what an operator's shell claims.
+    pub effective: Effective,
+}
+
+#[derive(Debug, Serialize)]
+pub struct Effective {
+    /// `webauthn` (approvals need a kernel-verified passkey) or `unbound`.
+    pub approval_binding: &'static str,
+    pub approval_require_uv: bool,
+    /// Keyring versions loaded; `0` present = legacy master-key seal still accepted.
+    pub key_versions: Vec<u32>,
+    pub current_key_version: u32,
+    pub legacy_seal_accepted: bool,
+    /// Destination-fingerprint kids, current first.
+    pub fingerprint_kids: Vec<String>,
+    pub public_webhook_base_https: bool,
 }
 
 /// Readiness fails when PostgreSQL is unreachable: no DB, no authority.
@@ -40,6 +58,27 @@ pub async fn ready(State(st): State<AppState>) -> (StatusCode, Json<Ready>) {
             database,
             dispatch_enabled,
             rust_kernel_enabled: st.rust_kernel_enabled,
+            effective: Effective {
+                approval_binding: if st.approval_rp.is_some() {
+                    "webauthn"
+                } else {
+                    "unbound"
+                },
+                approval_require_uv: st.approval_rp.as_ref().is_some_and(|r| r.require_uv),
+                key_versions: st.keyring.versions(),
+                current_key_version: st.keyring.current_version(),
+                legacy_seal_accepted: st.keyring.versions().contains(&mk_crypto::LEGACY_VERSION),
+                fingerprint_kids: st
+                    .fingerprints
+                    .kids()
+                    .iter()
+                    .map(|k| (*k).to_owned())
+                    .collect(),
+                public_webhook_base_https: st
+                    .public_webhook_base
+                    .as_deref()
+                    .is_some_and(|b| b.starts_with("https://")),
+            },
         }),
     )
 }
@@ -113,21 +152,26 @@ pub async fn global_kill_switch(
             .with_request_id(&headers));
         };
         let now = Utc::now();
-        let mut tx = st
-            .store
-            .begin(p.tenant)
-            .await
-            .map_err(|e| ApiError::from(e).with_request_id(&headers))?;
-        super::human_approval::verify_operator_step_up(
+        // Burn first on its own connection, then verify in the decision transaction.
+        let challenge = super::human_approval::burn_step_up_challenge(
             &st,
-            &mut tx,
             &p,
+            mk_store::human_approval::ChallengeKind::Operator,
+            mk_domain::ActionId::from_uuid(uuid::Uuid::nil()),
             &super::human_approval::global_enable_op_digest(),
             w,
             now,
         )
         .await
         .map_err(|e| e.with_request_id(&headers))?;
+        let mut tx = st
+            .store
+            .begin(p.tenant)
+            .await
+            .map_err(|e| ApiError::from(e).with_request_id(&headers))?;
+        super::human_approval::verify_step_up(&st, &mut tx, &p, &challenge, w, now)
+            .await
+            .map_err(|e| e.with_request_id(&headers))?;
         tx.commit()
             .await
             .map_err(|e| ApiError::from(e).with_request_id(&headers))?;

@@ -20,6 +20,9 @@ pub struct HousekeepingStats {
     pub challenges_purged: u64,
     /// Queued actions re-enqueued after the queue lost their message (O5: Redis data loss).
     pub stranded_requeued: usize,
+    /// Dispatching actions whose provider accepted the message but whose status
+    /// callback outlived the lease: completed, not sent to reconciliation.
+    pub accepted_completed: usize,
 }
 
 /// Expire overdue actions for one tenant, recover expired leases (moving a
@@ -60,9 +63,40 @@ pub async fn run_once(
     for (tenant, action_id) in outbox::expired_leases(store.pool(), now, 200).await? {
         let mut tx = store.begin(tenant).await?;
         let a = actions::get_for_update(&mut tx, action_id).await?;
-        // Worker died mid-call or a callback never came: the effect may
-        // have happened. Never silently retry.
-        if a.state == ActionState::Dispatching {
+        // A provider-accepted submission whose status callbacks are slower than
+        // the lease is NOT ambiguous: the message exists exactly once at the
+        // provider (we hold its id). Complete the action; the delivery record keeps
+        // following callbacks (sent/delivered/failed) and is what the UI shows.
+        // Marking it reconciliation_required would page operators for every
+        // provider callback delay (found by the 2x load run).
+        if a.state == ActionState::Dispatching
+            && mk_store::messaging::provider_accepted(&mut tx, action_id, a.attempt).await?
+        {
+            actions::transition(
+                &mut tx,
+                action_id,
+                Transition::Complete,
+                Some(mk_store::messaging::ACCEPTED_CALLBACK_PENDING),
+                actor,
+                now,
+            )
+            .await?;
+            outbox::record_attempt_end(
+                &mut tx,
+                action_id,
+                a.attempt,
+                "completed",
+                Some(mk_store::messaging::ACCEPTED_CALLBACK_PENDING),
+                None,
+                None,
+                None,
+                now,
+            )
+            .await?;
+            stats.accepted_completed += 1;
+        } else if a.state == ActionState::Dispatching {
+            // Worker died mid-call or a callback never came: the effect may
+            // have happened. Never silently retry.
             actions::transition(
                 &mut tx,
                 action_id,

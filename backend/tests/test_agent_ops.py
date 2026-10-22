@@ -160,6 +160,30 @@ def test_get_retries_once_on_transport_failure(client, kernel_env):
     assert r.status_code == 200 and route.call_count == 2
 
 
+def test_kernel_capacity_refusals_pass_through_with_retry_after(client, kernel_env):
+    """O2: a kernel 429/503 capacity refusal reaches the caller unchanged, with
+    Retry-After, and is never retried by the proxy (writes) or repaired."""
+    tok = _signup(client, uuid.uuid4().hex[:6])
+    aid = uuid.uuid4()
+    with respx.mock() as m:
+        route = m.get(f"{KERNEL}/internal/v1/actions/{aid}").mock(return_value=httpx.Response(
+            429, headers={"retry-after": "3"}, json={"code": "TENANT_RATE_LIMITED", "status": 429}))
+        r = client.get(f"/api/agent-ops/actions/{aid}", headers=auth_headers(tok))
+    assert r.status_code == 429 and r.headers["retry-after"] == "3" and r.json()["code"] == "TENANT_RATE_LIMITED"
+    assert route.call_count == 1, "an HTTP answer is a verdict, not a transport failure"
+    with respx.mock() as m:
+        m.get(f"{KERNEL}/internal/v1/actions/{aid}").mock(return_value=httpx.Response(
+            503, headers={"retry-after": "1"}, json={"code": "OVER_CAPACITY", "status": 503}))
+        r = client.get(f"/api/agent-ops/actions/{aid}", headers=auth_headers(tok))
+    assert r.status_code == 503 and r.headers["retry-after"] == "1"
+    # A non-numeric Retry-After from upstream is never forwarded (header injection guard).
+    with respx.mock() as m:
+        m.get(f"{KERNEL}/internal/v1/actions/{aid}").mock(return_value=httpx.Response(
+            429, headers={"retry-after": "1\r\nX-Evil: 1"}, json={"code": "TENANT_RATE_LIMITED"}))
+        r = client.get(f"/api/agent-ops/actions/{aid}", headers=auth_headers(tok))
+    assert r.status_code == 429 and "retry-after" not in r.headers and "x-evil" not in r.headers
+
+
 def test_health_requires_live_kernel(client, kernel_env):
     tok = _signup(client, uuid.uuid4().hex[:6])
     with respx.mock() as m:

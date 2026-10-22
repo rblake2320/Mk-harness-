@@ -56,6 +56,8 @@ pub struct Metrics {
     pub approvals_pending: Gauge,
     pub callbacks_applied: Counter,
     pub callbacks_duplicate: Counter,
+    /// Requests refused for capacity: `reason` = tenant_read | tenant_write | over_capacity.
+    pub rejected: Family<AuthFailLabels, Counter>,
 }
 
 impl Default for Metrics {
@@ -76,6 +78,7 @@ impl Metrics {
         let decisions = Family::<DecisionLabels, Counter>::default();
         let assertion_failures = Family::<AuthFailLabels, Counter>::default();
         let hmac_failures = Family::<AuthFailLabels, Counter>::default();
+        let rejected = Family::<AuthFailLabels, Counter>::default();
         let approvals_pending = Gauge::default();
         let callbacks_applied = Counter::default();
         let callbacks_duplicate = Counter::default();
@@ -124,6 +127,11 @@ impl Metrics {
             "Idempotent duplicate callbacks",
             callbacks_duplicate.clone(),
         );
+        registry.register(
+            "mk_requests_rejected",
+            "Requests refused by per-tenant limits or replica capacity (label code = reason)",
+            rejected.clone(),
+        );
         Self {
             registry: Mutex::new(registry),
             requests,
@@ -135,6 +143,7 @@ impl Metrics {
             approvals_pending,
             callbacks_applied,
             callbacks_duplicate,
+            rejected,
         }
     }
 
