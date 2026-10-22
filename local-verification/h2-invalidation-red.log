@@ -1,0 +1,21 @@
+   Compiling mk-api v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-api)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.10s
+     Running tests/http_e2e.rs (/tmp/mk-release-acceptance-target/debug/deps/http_e2e-05ff1a20f14da3a3)
+
+running 1 test
+test editing_draft_fences_queued_and_future_proposals ... 
+thread 'editing_draft_fences_queued_and_future_proposals' (581437) panicked at crates/mk-api/tests/http_e2e.rs:1655:5:
+assertion `left == right` failed: null
+  left: 404
+ right: 200
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED
+
+failures:
+
+failures:
+    editing_draft_fences_queued_and_future_proposals
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 12 filtered out; finished in 0.31s
+
+error: test failed, to rerun pass `-p mk-api --test http_e2e`

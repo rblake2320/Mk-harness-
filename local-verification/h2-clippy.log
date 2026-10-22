@@ -1,0 +1,29 @@
+    Checking mk-audit v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-audit)
+    Checking mk-store v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-store)
+error: this `if` statement can be collapsed
+  --> crates/mk-store/src/drafts.rs:17:9
+   |
+17 | /         if e...
+18 | |             ...
+19 | |             ...
+20 | |             ...
+...  |
+24 | |         }
+   | |_________^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#collapsible_if
+   = note: `-D clippy::collapsible-if` implied by `-D warnings`
+   = help: to override `-D warnings` add `#[allow(clippy::collapsible_if)]`
+help: collapse nested if block
+   |
+17 ~         if e.evidence_type == "document"
+18 ~             && let Some(id) = e.id.strip_prefix("draft:") {
+19 |                 ids.push(
+...
+22 |                 );
+23 ~             }
+   |
+
+error: could not compile `mk-store` (lib) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `mk-store` (lib test) due to 1 previous error

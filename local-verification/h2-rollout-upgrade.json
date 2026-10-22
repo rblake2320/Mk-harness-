@@ -1,0 +1,9 @@
+{
+  "environment": "task-owned real PostgreSQL 16; isolated database cloned from migration 12",
+  "rollout_gap_reproduced": 1,
+  "recovered_action_refs": 1,
+  "refs_after_repeat_backfill": 1,
+  "result": "Worked",
+  "disposable_database": "mk_h2_upgrade_0a9a430c533e4d1a8fe6025ab52d10d1",
+  "disposable_database_removed": true
+}

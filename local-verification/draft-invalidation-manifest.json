@@ -1,0 +1,110 @@
+{
+  "source_commit": "d9c46f2ebe392b45915477cb9215cf3fc0064444",
+  "classification": "author_run_local_verification_not_release_closure",
+  "artifacts": [
+    {
+      "path": "local-verification/h2-app-targeted-v2.xml",
+      "sha256": "a93b9f9820e0a18774e87a8a95e20bbf721401b650b624aa20192c542c79fec9"
+    },
+    {
+      "path": "local-verification/h2-app-targeted.xml",
+      "sha256": "39d0cc2cc0286b69d9815f7ff58b8db6e54a3a0b615e90448859a546dcd6f364"
+    },
+    {
+      "path": "local-verification/h2-browser-run.log",
+      "sha256": "728b0e154f13ba7e45314eedc51293c29f3919416ac492a44b400dab2440ab9d"
+    },
+    {
+      "path": "local-verification/h2-browser-scroll-check.log",
+      "sha256": "56f1c6740f93ba459775edeead2b7ec9329a3712f5e11d5615a481641a51a92f"
+    },
+    {
+      "path": "local-verification/h2-browser-scroll-check/draft-edit-browser.json",
+      "sha256": "c84640d5656b286ea9078ae01c0aa883221ee988e0d70bc497715d0e64a39c8e"
+    },
+    {
+      "path": "local-verification/h2-browser-scroll-check/edited-version-360.png",
+      "sha256": "df2137728752d62497e16b908fa3b9e71f82c762f02e38d4573ecda2793f28b6"
+    },
+    {
+      "path": "local-verification/h2-browser-scroll-check/late-edit-blocked-360.png",
+      "sha256": "3b0f973e2ab61258d3f3ed570bb8d1c37d3e864a9c662d094691b0035fce419d"
+    },
+    {
+      "path": "local-verification/h2-browser/draft-edit-browser.json",
+      "sha256": "c60255914d744e80844644d95da0299878e188ce632a9bf07296b215fa0da3bf"
+    },
+    {
+      "path": "local-verification/h2-browser/edited-version-360.png",
+      "sha256": "df2137728752d62497e16b908fa3b9e71f82c762f02e38d4573ecda2793f28b6"
+    },
+    {
+      "path": "local-verification/h2-browser/late-edit-blocked-360.png",
+      "sha256": "3b0f973e2ab61258d3f3ed570bb8d1c37d3e864a9c662d094691b0035fce419d"
+    },
+    {
+      "path": "local-verification/h2-clippy-final.log",
+      "sha256": "0bbf05e8dfb07ef0d7fd229669b5d4302d55f33b86850bd4c4843561552670d7"
+    },
+    {
+      "path": "local-verification/h2-clippy-v2.log",
+      "sha256": "bbf01af35306fc975a9f30019a32f9772739b80922542b3c53fd1365fa69054f"
+    },
+    {
+      "path": "local-verification/h2-clippy.log",
+      "sha256": "a76ec3738ad54e27fadf3f7f964162569243297749d9945aac3c9e46d1733948"
+    },
+    {
+      "path": "local-verification/h2-invalidation-kernel-v2.log",
+      "sha256": "0ab64957ad289717b97b6d053e4f8f8300411cb65f2d7aa7163b401d3d25be10"
+    },
+    {
+      "path": "local-verification/h2-invalidation-kernel-v3.log",
+      "sha256": "f6769fbe8a47dec0226c5f3cea6d6a77d8f1386edaa9b630d78673b4869bb957"
+    },
+    {
+      "path": "local-verification/h2-invalidation-kernel-v4.log",
+      "sha256": "7d4c161d3a0a0c287e04c1ad6033128eae951f80528617006cbd382e3f23c01b"
+    },
+    {
+      "path": "local-verification/h2-invalidation-kernel-v5.log",
+      "sha256": "8d90b3270ca2b93d9d01742d4c9bf4d82f7b4fcf9d4afa102678d06f301042b2"
+    },
+    {
+      "path": "local-verification/h2-invalidation-kernel-v6.log",
+      "sha256": "26d9e51061d2769e75b0c5a980ac9ea08bb5a21da710f5caafcfc8f8c5b0f8a9"
+    },
+    {
+      "path": "local-verification/h2-invalidation-kernel.log",
+      "sha256": "db65937ed35cfe27a7163b60812d4f4840e907b70d93dc49ee6db088ad9b1e80"
+    },
+    {
+      "path": "local-verification/h2-invalidation-red.log",
+      "sha256": "76b83b8043c01db42cd2c0c948eb78abfceadc2fd2240c243ca90ffc2e77c9b5"
+    },
+    {
+      "path": "local-verification/h2-migration-readback.json",
+      "sha256": "4a70161a15ea54a8ad9033aadd8602659655354017cd89a5a65d55c8800ee48b"
+    },
+    {
+      "path": "local-verification/h2-python-full.xml",
+      "sha256": "7e1e05c24cc46031ab8599f114a74f12733ca89357015fefaa4447e6bb86492a"
+    },
+    {
+      "path": "local-verification/h2-rollout-upgrade.json",
+      "sha256": "83e1078fa7abd7dd5e14f042be76056f57726534c6a2063eef4e0ac0eabcc071"
+    },
+    {
+      "path": "local-verification/h2-rust-final.log",
+      "sha256": "d21986e5db1dabbaf04e80b443d8e4c78cdf66d9307baa8277d4105101c4b307"
+    },
+    {
+      "path": "local-verification/h2-rust-full.log",
+      "sha256": "800013161c935064ec579bef7ebc309415b242c8cf15b4f3bda4efd9ade22b45"
+    },
+    {
+      "path": "local-verification/h2-web-tests.json",
+      "sha256": "5ae80294141b9d0187aa5a313883b3684e70bc62331e42fe8cd13e9efdfec63c"
+    }
+  ]
+}
