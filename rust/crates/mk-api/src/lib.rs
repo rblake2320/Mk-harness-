@@ -26,6 +26,7 @@ pub const MAX_BODY_BYTES: usize = 256 * 1024;
 
 pub fn router(state: AppState) -> Router {
     let internal = Router::new()
+        .route("/privacy/erase", post(routes::privacy::erase))
         .route("/actions", post(routes::actions::propose))
         .route(
             "/drafts/{draft_id}/invalidate",

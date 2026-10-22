@@ -63,6 +63,11 @@ pub async fn grant_permission(
     actor: Actor<'_>,
     now: DateTime<Utc>,
 ) -> Result<Uuid, StoreError> {
+    crate::privacy::check_subject(tx, crate::privacy::SubjectKind::Contact, contact_id.0).await?;
+    crate::privacy::check_subject(tx, crate::privacy::SubjectKind::Account, recorded_by.0).await?;
+    if crate::privacy::destination_erased(tx, channel.as_str(), destination).await? {
+        return Err(StoreError::Erased);
+    }
     let id = Uuid::now_v7();
     let sealed = seal_destination(seal, "contact_permissions", tx.tenant(), id)?;
     sqlx::query(

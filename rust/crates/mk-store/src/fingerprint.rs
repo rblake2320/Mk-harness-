@@ -283,6 +283,13 @@ pub const FINGERPRINT_TABLES: &[(&str, &str, &str)] = &[
         "normalized_destination_hash",
     ),
     ("contact_permissions", "permission_id", "destination_hash"),
+    // Hash-only privacy fences must block retirement when the replacement
+    // key cannot match them. Never silently omit them from orphan checks.
+    (
+        "privacy_destination_fences",
+        "request_id",
+        "destination_hash",
+    ),
 ];
 
 /// Per-table rotation status (summed over the tenants scanned).

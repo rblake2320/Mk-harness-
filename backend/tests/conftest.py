@@ -49,6 +49,7 @@ def client(monkeypatch, request):
     async def idle_worker(stop):
         await stop.wait()
     monkeypatch.setattr("app.main.revocation_worker", idle_worker)
+    monkeypatch.setattr("app.main.privacy_worker", idle_worker)
     if not request.node.get_closest_marker('real_mfa'):
         # Feature tests isolate their own behavior. Dedicated real_mfa tests and
         # deployed entrypoints keep mandatory MFA and fresh-step-up enforcement.

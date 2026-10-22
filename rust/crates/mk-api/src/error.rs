@@ -70,6 +70,7 @@ impl From<StoreError> for ApiError {
     fn from(e: StoreError) -> Self {
         let (status, title) = match &e {
             StoreError::NotFound => (StatusCode::NOT_FOUND, "Not found"),
+            StoreError::Erased => (StatusCode::GONE, "Content erased"),
             StoreError::Conflict(_) => (StatusCode::CONFLICT, "Conflict"),
             StoreError::Transition(_) => (StatusCode::CONFLICT, "Illegal state transition"),
             StoreError::Contract(_) => (StatusCode::UNPROCESSABLE_ENTITY, "Contract violation"),

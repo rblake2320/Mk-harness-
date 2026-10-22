@@ -81,7 +81,7 @@ pub async fn dispatch_one(
     // routing facts unlocked first, take the advisory locks, then lock the row.
     let pre = match actions::get(&mut tx, action_id).await {
         Ok(a) => a,
-        Err(StoreError::NotFound) => {
+        Err(StoreError::NotFound | StoreError::Erased) => {
             return Ok(DispatchOutcome::Skipped {
                 ack: true,
                 reason: "unknown_action",
@@ -95,7 +95,24 @@ pub async fn dispatch_one(
             reason: "not_queued",
         });
     }
+    if let Err(error) = mk_store::privacy::check_intake(&mut tx, &pre.request).await {
+        if matches!(error, StoreError::Erased) {
+            return Ok(DispatchOutcome::Skipped {
+                ack: true,
+                reason: "privacy_erased",
+            });
+        }
+        return Err(error.into());
+    }
     let pre_fps = pre.destination_fingerprints_set();
+    if let (Some(ch), Some(dest)) = (pre.channel, pre_fps.as_ref())
+        && mk_store::privacy::destination_erased(&mut tx, ch.as_str(), dest).await?
+    {
+        return Ok(DispatchOutcome::Skipped {
+            ack: true,
+            reason: "privacy_erased",
+        });
+    }
     let outreach_path = match (pre.channel, pre_fps.as_ref()) {
         (Some(ch), Some(dest))
             if pre.request.action_kind.is_outreach()
@@ -116,7 +133,7 @@ pub async fn dispatch_one(
     };
     let action = match actions::get_for_update(&mut tx, action_id).await {
         Ok(a) => a,
-        Err(StoreError::NotFound) => {
+        Err(StoreError::NotFound | StoreError::Erased) => {
             return Ok(DispatchOutcome::Skipped {
                 ack: true,
                 reason: "unknown_action",

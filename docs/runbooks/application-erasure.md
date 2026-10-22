@@ -64,8 +64,42 @@ The completion contract supplies engineering defaults: content 12 months; ordina
 resolved work and content-free audit 24 months; minimal consent five years; backup
 35 days. A privacy/legal owner must approve exceptions and restricted legal holds.
 This batch does not add an unaudited admin override or silently treat every record
-as being under legal hold. Automated expiry/hold enforcement and kernel/provider
-erasure are still required before production qualification.
+as being under legal hold. Automated expiry/hold enforcement and provider erasure
+are still required before production qualification.
+
+## Kernel delivery and pending work
+
+The application starts a durable privacy worker independently of session-revocation
+delivery. It leases only `kernel_contact` and `kernel_account` tasks, validates their
+identity against the immutable application tombstone, and calls the kernel's exact
+`POST /internal/v1/privacy/erase` service route. A `privacy_eraser` assertion cannot
+read data, propose, approve, register passkeys or invoke another operator route.
+Receipt tenant/request/subject identities and all integer counts must match. A 201
+alone never confirms a task: active content must be erased and every pending count
+must be zero. Lost responses are retried with the same erasure request identity.
+
+The kernel serializes erasure ahead of ordinary tenant transaction locks, cancels
+cancellable actions through its state machine, revokes approvals, clears canonical
+request/message bodies and free-text metadata, and preserves the original action
+digest with an audit tombstone. Late inbound content is discarded at the database
+write boundary; dedupe and a pending provider-deletion job remain. Late authenticated
+delivery receipts remain usable without resurrecting content. UUID subject matching
+handles compact, hyphenated, braced and URN spellings used by previous clients.
+
+Unresolved/in-flight submissions report `blocked_actions`; retain their resolution
+evidence and use the existing passkey resolution workflow. Nonterminal provider
+delivery likewise remains pending. Account-owned sender credentials remain disabled
+with `pending_sender_cleanup` until provider-resource cleanup has its own receipt.
+`privacy_provider_deletions` is a durable queue, not a deletion receipt. Its consumer
+and provider-backup evidence are still required; no live provider was contacted by
+this author-run verification. Twilio documents that Message DELETE returns 204, and
+message bodies may remain in its backups for up to 30 days after deletion
+([Twilio Message resource](https://www.twilio.com/docs/messaging/api/message-resource#delete-a-message-resource)).
+
+Hash-only destination fences are included in fingerprint-key retirement inventory.
+If their raw destination has been erased and a replacement key cannot derive a new
+tag, retirement remains blocked; never omit these fences to make an inventory green.
+The privacy-preserving key-transition/retention policy remains a release task.
 
 ## Executable checks
 
@@ -79,3 +113,12 @@ and restore-ledger refusal cases. The mandatory app PostgreSQL CI job includes i
 built image, takes a real `pg_dump`, deletes, restores, and replays the ledger. With
 `--browser-url` it drives the real production web UI through a transparent loopback
 proxy to that image, including logout, receipt download and a 360px viewport.
+
+`tools/verification/test_privacy_bridge.py` uses two fresh PostgreSQL databases, the
+restricted application runtime and a distinct restricted kernel login, a real Rust
+API process, and the actual Python assertion/client/delivery code. Set
+`MK_PRIVACY_KERNEL_BINARY` to the built API and `MK_APP_TEST_ADMIN_URL` to the explicit
+disposable cluster. It removes only its own UUID databases/login/process. The app
+PostgreSQL CI job runs this bridge for all four accepted UUID spellings. Rust HTTP
+tests additionally cover forced RLS, service authority, in-flight DB lock waits,
+queued dispatch refusal, uncertain submissions and late inbound/delivery webhooks.

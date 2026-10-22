@@ -26,6 +26,7 @@ pub mod keys;
 pub mod messaging;
 pub mod outbox;
 pub mod policy;
+pub mod privacy;
 pub mod probes;
 pub mod resolutions;
 pub mod tx;
@@ -182,6 +183,11 @@ pub fn migrator() -> sqlx::migrate::Migrator {
             16,
             "draft rollout backfill",
             include_str!("../../../../migrations/kernel/0016_draft_rollout_backfill.sql"),
+        ),
+        (
+            17,
+            "privacy erasure and subject fences",
+            include_str!("../../../../migrations/kernel/0017_privacy_erasure.sql"),
         ),
     ];
     let migrations: Vec<Migration> = FILES

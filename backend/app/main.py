@@ -9,6 +9,7 @@ from fastapi.responses import HTMLResponse
 from .config import get_settings, require_secret
 from .db import init_engine
 from .auth_sessions import revocation_worker
+from .privacy_delivery import privacy_worker
 from .routes import (
     account, agent_ops, auth, billing, chat, commitments, consent, customers, drafting, foundation, inbound, outreach,
     keys, mfa, profile, skin, skindata, usage,
@@ -139,13 +140,13 @@ async def lifespan(app: FastAPI):
             if writer_kid != settings.seal_key_list[0][0]:
                 raise RuntimeError("Application sealing writer differs from the database fence; finish the authorized key rollout")
     stop = asyncio.Event()
-    worker = asyncio.create_task(revocation_worker(stop))
+    workers = [asyncio.create_task(revocation_worker(stop)), asyncio.create_task(privacy_worker(stop))]
     try:
         yield
     finally:
         stop.set()
         try:
-            await asyncio.wait_for(worker, timeout=15)
+            await asyncio.wait_for(asyncio.gather(*workers), timeout=15)
         except asyncio.TimeoutError:
             pass  # cancellation leaves the durable lease for the next worker
 

@@ -87,6 +87,16 @@ pub async fn propose(
     let actor = actor_of(&p, &actor_id);
 
     let mut tx = st.store.begin(p.tenant).await.map_err(|e| rid(e.into()))?;
+    mk_store::privacy::check_intake(&mut tx, &req)
+        .await
+        .map_err(|e| rid(e.into()))?;
+    if let (Some(ch), Some(destination)) = (channel, dest.as_ref())
+        && mk_store::privacy::destination_erased(&mut tx, ch.as_str(), destination)
+            .await
+            .map_err(|e| rid(e.into()))?
+    {
+        return Err(rid(mk_store::StoreError::Erased.into()));
+    }
     mk_store::drafts::check_intake(&mut tx, &req)
         .await
         .map_err(|e| rid(e.into()))?;

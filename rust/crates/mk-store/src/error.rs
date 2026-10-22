@@ -15,6 +15,8 @@ pub enum StoreError {
     Transient(#[source] sqlx::Error),
     #[error("not found")]
     NotFound,
+    #[error("content erased by privacy request")]
+    Erased,
     #[error("conflict: {0}")]
     Conflict(&'static str),
     #[error("illegal transition")]
@@ -64,6 +66,7 @@ impl StoreError {
             Self::Db(_) => "STORE_ERROR",
             Self::Transient(_) => "STORE_TRANSIENT",
             Self::NotFound => "NOT_FOUND",
+            Self::Erased => "CONTENT_ERASED",
             Self::Conflict(_) => "CONFLICT",
             Self::Transition(_) => "ILLEGAL_TRANSITION",
             Self::Audit(_) => "AUDIT_ERROR",

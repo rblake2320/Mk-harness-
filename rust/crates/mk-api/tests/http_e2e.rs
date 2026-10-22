@@ -1614,6 +1614,619 @@ async fn approval_preview_binds_sender_schedule_and_current_self_policy() {
 }
 
 #[tokio::test]
+async fn privacy_erasure_removes_queued_content_and_blocks_dispatch_and_reintake() {
+    use mk_adapters::twilio_sim::TwilioSimMode;
+    let h = harness()
+        .await
+        .expect("privacy acceptance requires actual PostgreSQL and migrations");
+    let mut r = provider_rig(&h, TwilioSimMode::Accept).await;
+    let private_text = "Synthetic erasure acceptance message. Reply STOP to opt out.";
+    let (aid, digest) = approved_action(&h, &mut r, private_text, "+15555550100").await;
+    let request_id = Uuid::new_v4();
+    let body =
+        json!({"request_id": request_id, "subject_kind": "contact", "subject_id": r.contact});
+    let (status, erased) = h
+        .call(
+            "POST",
+            "/internal/v1/privacy/erase",
+            Some(&h.token(UserId::new(), &["privacy_eraser"])),
+            Some(body.clone()),
+        )
+        .await;
+    assert_eq!(status, StatusCode::CREATED, "{erased}");
+    assert_eq!(erased["request_id"], request_id.to_string());
+    assert_eq!(erased["subject_id"], r.contact.to_string());
+    assert_eq!(erased["active_content_erased"], true);
+    assert_eq!(erased["pending_provider_deletions"], 0);
+    let mut tx = h.state.store.begin(h.tenant).await.unwrap();
+    let stored: (Vec<u8>, String, String) = sqlx::query_as(
+        "SELECT canonical_request,action_digest,state FROM kernel.actions WHERE tenant_id=$1 AND action_id=$2")
+        .bind(h.tenant.0).bind(aid.parse::<Uuid>().unwrap()).fetch_one(tx.raw_conn()).await.unwrap();
+    assert!(stored.0.is_empty());
+    assert_eq!(stored.1, digest.as_str().unwrap());
+    assert_eq!(stored.2, "cancelled");
+    mk_store::audit::verify_tenant(&mut tx).await.unwrap();
+    tx.commit().await.unwrap();
+    health_ok(&h, r.admin).await;
+    assert!(matches!(
+        run_dispatch(&r, h.tenant, &aid).await,
+        DispatchOutcome::Skipped { ack: true, .. }
+    ));
+    assert_eq!(r.sim.calls(), 0);
+    assert_eq!(
+        h.call(
+            "GET",
+            &format!("/internal/v1/actions/{aid}"),
+            Some(&h.token(r.manager, &["manager"])),
+            None
+        )
+        .await
+        .0,
+        StatusCode::GONE
+    );
+    let (status, denied) = h
+        .call(
+            "POST",
+            "/internal/v1/actions",
+            Some(&h.token(r.admin, &["agent"])),
+            Some(provider_proposal(
+                r.contact,
+                r.sender_id,
+                private_text,
+                "+15555550100",
+            )),
+        )
+        .await;
+    assert_eq!(status, StatusCode::GONE, "{denied}");
+    assert_eq!(
+        h.call(
+            "POST",
+            "/internal/v1/privacy/erase",
+            Some(&h.token(UserId::new(), &["privacy_eraser"])),
+            Some(body)
+        )
+        .await
+        .0,
+        StatusCode::CREATED
+    );
+}
+
+async fn privacy_webhook(h: &Harness, path: &str, form: Vec<(String, String)>) -> StatusCode {
+    let signature = mk_adapters::twilio::twilio_signature(
+        &AdapterSecret::new(TOKEN),
+        &format!("{WEBHOOK_BASE}{path}"),
+        &form,
+    );
+    let body = url::form_urlencoded::Serializer::new(String::new())
+        .extend_pairs(&form)
+        .finish();
+    let request = Request::builder()
+        .method("POST")
+        .uri(path)
+        .header("content-type", "application/x-www-form-urlencoded")
+        .header("x-twilio-signature", signature)
+        .body(Body::from(body))
+        .unwrap();
+    h.app.clone().oneshot(request).await.unwrap().status()
+}
+
+async fn privacy_inbound(h: &Harness, r: &ProviderRig, sid: &str, body: &str) -> StatusCode {
+    privacy_webhook(
+        h,
+        &format!("/webhooks/twilio/inbound/{}", r.sender_id),
+        vec![
+            ("MessageSid".into(), sid.into()),
+            ("AccountSid".into(), ACCOUNT_SID.into()),
+            ("From".into(), "+15555550100".into()),
+            ("To".into(), r.from_number.clone()),
+            ("Body".into(), body.into()),
+            ("NumMedia".into(), "0".into()),
+        ],
+    )
+    .await
+}
+
+#[tokio::test]
+async fn privacy_erasure_authority_rls_and_legacy_writes_fail_closed() {
+    let mut h = harness().await.expect("actual PostgreSQL required");
+    let mut r = provider_rig(&h, mk_adapters::twilio_sim::TwilioSimMode::Accept).await;
+    let (aid, _) = approved_action(
+        &h,
+        &mut r,
+        "Private fixture. Reply STOP to opt out.",
+        "+15555550100",
+    )
+    .await;
+    let pool = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(1)
+        .after_connect(|conn, _| {
+            Box::pin(async move {
+                sqlx::query("SET ROLE mk_kernel_api").execute(conn).await?;
+                Ok(())
+            })
+        })
+        .connect(&mk_testkit::test_database_url().unwrap())
+        .await
+        .unwrap();
+    let runtime = Store::from_pool(pool);
+    let mut state = h.state.clone();
+    state.store = runtime.clone();
+    h.app = router(state);
+    let rid = Uuid::new_v4();
+    let body = json!({"request_id":rid,"subject_kind":"contact","subject_id":r.contact});
+    for roles in [
+        vec!["tenant_admin"],
+        vec!["manager"],
+        vec!["privacy_eraser", "tenant_admin"],
+        vec!["session_revoker"],
+    ] {
+        assert_eq!(
+            h.call(
+                "POST",
+                "/internal/v1/privacy/erase",
+                Some(&h.token(UserId::new(), &roles)),
+                Some(body.clone())
+            )
+            .await
+            .0,
+            StatusCode::FORBIDDEN
+        );
+    }
+    for (method, path) in [
+        ("GET", "/internal/v1/senders"),
+        ("POST", "/internal/v1/actions"),
+        ("POST", "/internal/v1/approval-credentials/register/begin"),
+    ] {
+        assert_eq!(
+            h.call(
+                method,
+                path,
+                Some(&h.token(UserId::new(), &["privacy_eraser"])),
+                Some(json!({}))
+            )
+            .await
+            .0,
+            StatusCode::FORBIDDEN
+        );
+    }
+    let (status, receipt) = h
+        .call(
+            "POST",
+            "/internal/v1/privacy/erase",
+            Some(&h.token(UserId::new(), &["privacy_eraser"])),
+            Some(body.clone()),
+        )
+        .await;
+    assert_eq!(status, StatusCode::CREATED, "{receipt}");
+    assert_eq!(receipt["active_content_erased"], true);
+    let mut foreign = runtime.begin(TenantId::new()).await.unwrap();
+    for table in [
+        "privacy_erasure_requests",
+        "privacy_provider_deletions",
+        "privacy_destination_fences",
+    ] {
+        let n: i64 = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
+            "SELECT count(*) FROM kernel.{table}"
+        )))
+        .fetch_one(foreign.raw_conn())
+        .await
+        .unwrap();
+        assert_eq!(n, 0, "{table}");
+    }
+    foreign.commit().await.unwrap();
+    let mut changed = body;
+    changed["subject_id"] = json!(Uuid::new_v4());
+    assert_eq!(
+        h.call(
+            "POST",
+            "/internal/v1/privacy/erase",
+            Some(&h.token(UserId::new(), &["privacy_eraser"])),
+            Some(changed)
+        )
+        .await
+        .0,
+        StatusCode::CONFLICT
+    );
+    for sql in [
+        "UPDATE kernel.actions SET canonical_request='reintroduced'::bytea WHERE action_id=$1",
+        "UPDATE kernel.actions SET content_erased_at=NULL WHERE action_id=$1",
+        "UPDATE kernel.actions SET state='queued' WHERE action_id=$1",
+    ] {
+        let mut tx = runtime.begin(h.tenant).await.unwrap();
+        let error = sqlx::query(sql)
+            .bind(aid.parse::<Uuid>().unwrap())
+            .execute(tx.raw_conn())
+            .await
+            .unwrap_err();
+        assert_eq!(
+            error.as_database_error().unwrap().code().as_deref(),
+            Some("23514")
+        );
+        tx.rollback().await.unwrap();
+    }
+    let mut tx = runtime.begin(h.tenant).await.unwrap();
+    assert!(
+        sqlx::query("DELETE FROM kernel.privacy_erasure_requests")
+            .execute(tx.raw_conn())
+            .await
+            .is_err()
+    );
+    tx.rollback().await.unwrap();
+    // A new customer UUID cannot bypass the erased destination fence.
+    let (s, v) = h
+        .call(
+            "POST",
+            "/internal/v1/actions",
+            Some(&h.token(r.admin, &["agent"])),
+            Some(provider_proposal(
+                ContactId::new(),
+                r.sender_id,
+                "Blocked. Reply STOP to opt out.",
+                "+15555550100",
+            )),
+        )
+        .await;
+    assert_eq!(s, StatusCode::GONE, "{v}");
+    let keys = mk_store::fingerprint::FingerprintKeys::parse(
+        "k2=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=,m0=master",
+        &h.state.master,
+    )
+    .unwrap();
+    let status = mk_store::fingerprint::status(h.state.store.pool(), &keys, Some(h.tenant))
+        .await
+        .unwrap();
+    assert!(
+        status
+            .iter()
+            .any(|s| s.table == "privacy_destination_fences" && s.lacking_current > 0),
+        "hash-only erasure fences must block blind key retirement"
+    );
+}
+
+#[tokio::test]
+async fn privacy_erasure_clears_inbound_and_late_webhooks_without_false_provider_receipts() {
+    let h = harness().await.expect("actual PostgreSQL required");
+    let mut r = provider_rig(&h, mk_adapters::twilio_sim::TwilioSimMode::Accept).await;
+    let (aid, _) = approved_action(
+        &h,
+        &mut r,
+        "Private outbound. Reply STOP to opt out.",
+        "+15555550100",
+    )
+    .await;
+    let sid = format!("SM{}", Uuid::new_v4().simple());
+    assert_eq!(
+        privacy_inbound(&h, &r, &sid, "Synthetic private inbound canary").await,
+        StatusCode::OK
+    );
+    let request =
+        json!({"request_id":Uuid::new_v4(),"subject_kind":"contact","subject_id":r.contact});
+    let (s, v) = h
+        .call(
+            "POST",
+            "/internal/v1/privacy/erase",
+            Some(&h.token(UserId::new(), &["privacy_eraser"])),
+            Some(request.clone()),
+        )
+        .await;
+    assert_eq!(s, StatusCode::CREATED, "{v}");
+    assert_eq!(v["active_content_erased"], true);
+    assert_eq!(v["pending_provider_deletions"], 1);
+    let late = format!("SM{}", Uuid::new_v4().simple());
+    assert_eq!(
+        privacy_inbound(&h, &r, &late, "Another synthetic private inbound canary").await,
+        StatusCode::OK
+    );
+    assert_eq!(
+        privacy_inbound(&h, &r, &late, "Another synthetic private inbound canary").await,
+        StatusCode::OK
+    );
+    let mut tx = h.state.store.begin(h.tenant).await.unwrap();
+    let n:i64=sqlx::query_scalar("SELECT count(*) FROM kernel.inbound_events WHERE tenant_id=$1 AND content_erased_at IS NOT NULL AND octet_length(content_sealed)=0 AND destination_sealed IS NULL AND processed_at IS NOT NULL")
+        .bind(h.tenant.0).fetch_one(tx.raw_conn()).await.unwrap();
+    assert_eq!(n, 2);
+    assert!(
+        mk_store::messaging::pending_inbound(&mut tx, &h.state.keyring, 100)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    let unsafe_tasks: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM kernel.outbox_events WHERE tenant_id=$1 AND payload::text LIKE $2",
+    )
+    .bind(h.tenant.0)
+    .bind(format!("%{late}%"))
+    .fetch_one(tx.raw_conn())
+    .await
+    .unwrap();
+    assert_eq!(unsafe_tasks, 0);
+    mk_store::audit::verify_tenant(&mut tx).await.unwrap();
+    tx.commit().await.unwrap();
+    let (_, v) = h
+        .call(
+            "POST",
+            "/internal/v1/privacy/erase",
+            Some(&h.token(UserId::new(), &["privacy_eraser"])),
+            Some(request),
+        )
+        .await;
+    assert_eq!(
+        v["pending_provider_deletions"], 2,
+        "a duplicate webhook must not multiply deletion jobs"
+    );
+    assert!(matches!(
+        run_dispatch(&r, h.tenant, &aid).await,
+        DispatchOutcome::Skipped { ack: true, .. }
+    ));
+    assert_eq!(r.sim.calls(), 0);
+}
+
+#[tokio::test]
+async fn privacy_erasure_blocks_uncertain_submission_until_authenticated_resolution() {
+    let h = harness().await.expect("actual PostgreSQL required");
+    let mut r = provider_rig(
+        &h,
+        mk_adapters::twilio_sim::TwilioSimMode::AcceptButDropResponse,
+    )
+    .await;
+    health_ok(&h, r.admin).await;
+    let (aid, _) = approved_action(
+        &h,
+        &mut r,
+        "Uncertain fixture. Reply STOP to opt out.",
+        "+15555550100",
+    )
+    .await;
+    assert_eq!(
+        run_dispatch(&r, h.tenant, &aid).await,
+        DispatchOutcome::ReconciliationRequired
+    );
+    let request =
+        json!({"request_id":Uuid::new_v4(),"subject_kind":"contact","subject_id":r.contact});
+    let (s, v) = h
+        .call(
+            "POST",
+            "/internal/v1/privacy/erase",
+            Some(&h.token(UserId::new(), &["privacy_eraser"])),
+            Some(request.clone()),
+        )
+        .await;
+    assert_eq!(s, StatusCode::CREATED, "{v}");
+    assert_eq!(v["active_content_erased"], false);
+    assert_eq!(v["blocked_actions"], 1);
+    let mut tx = h.state.store.begin(h.tenant).await.unwrap();
+    let retained:bool=sqlx::query_scalar("SELECT octet_length(canonical_request)>0 AND content_erased_at IS NULL FROM kernel.actions WHERE tenant_id=$1 AND action_id=$2")
+        .bind(h.tenant.0).bind(aid.parse::<Uuid>().unwrap()).fetch_one(tx.raw_conn()).await.unwrap();
+    assert!(retained);
+    tx.commit().await.unwrap();
+    assert!(matches!(
+        run_dispatch(&r, h.tenant, &aid).await,
+        DispatchOutcome::Skipped { .. }
+    ));
+    assert_eq!(r.sim.calls(), 1);
+}
+
+#[tokio::test]
+async fn privacy_erasure_completed_delivery_accepts_late_receipts() {
+    let h = harness().await.expect("actual PostgreSQL required");
+    let mut r = provider_rig(&h, mk_adapters::twilio_sim::TwilioSimMode::Accept).await;
+    health_ok(&h, r.admin).await;
+    let (aid, _) = approved_action(
+        &h,
+        &mut r,
+        "Delivered fixture. Reply STOP to opt out.",
+        "+15555550100",
+    )
+    .await;
+    assert!(matches!(
+        run_dispatch(&r, h.tenant, &aid).await,
+        DispatchOutcome::Dispatched { .. }
+    ));
+    let sid = r.sim.created_messages().await[0]["sid"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let status_form = |status: &str| {
+        vec![
+            ("MessageSid".into(), sid.clone()),
+            ("MessageStatus".into(), status.into()),
+            ("AccountSid".into(), ACCOUNT_SID.into()),
+        ]
+    };
+    let path = format!("/webhooks/twilio/status/{}", r.sender_id);
+    assert_eq!(
+        privacy_webhook(&h, &path, status_form("delivered")).await,
+        StatusCode::OK
+    );
+    let request =
+        json!({"request_id":Uuid::new_v4(),"subject_kind":"contact","subject_id":r.contact});
+    let (s, v) = h
+        .call(
+            "POST",
+            "/internal/v1/privacy/erase",
+            Some(&h.token(UserId::new(), &["privacy_eraser"])),
+            Some(request),
+        )
+        .await;
+    assert_eq!(s, StatusCode::CREATED, "{v}");
+    assert_eq!(v["active_content_erased"], true);
+    assert_eq!(v["pending_provider_deletions"], 1);
+    assert_eq!(
+        privacy_webhook(&h, &path, status_form("sent")).await,
+        StatusCode::OK
+    );
+    assert_eq!(
+        privacy_webhook(&h, &path, status_form("delivered")).await,
+        StatusCode::OK
+    );
+    assert_eq!(r.sim.calls(), 1);
+    let mut tx = h.state.store.begin(h.tenant).await.unwrap();
+    mk_store::audit::verify_tenant(&mut tx).await.unwrap();
+    tx.commit().await.unwrap();
+}
+
+#[tokio::test]
+async fn privacy_erasure_serializes_before_dispatch_intake_and_inbound() {
+    use mk_audit::ActorType;
+    let h = harness().await.expect("actual PostgreSQL required");
+    let mut r = provider_rig(&h, mk_adapters::twilio_sim::TwilioSimMode::Accept).await;
+    health_ok(&h, r.admin).await;
+    let (aid, _) = approved_action(
+        &h,
+        &mut r,
+        "Racing fixture. Reply STOP to opt out.",
+        "+15555550100",
+    )
+    .await;
+    let separate = Store::connect(&mk_testkit::test_database_url().unwrap(), 2)
+        .await
+        .unwrap();
+    let mut deletion = separate.begin_erasure(h.tenant).await.unwrap();
+    let receipt = mk_store::privacy::erase(
+        &mut deletion,
+        Uuid::new_v4(),
+        mk_store::privacy::SubjectKind::Contact,
+        r.contact.0,
+        UserId::new(),
+        mk_store::actions::Actor {
+            actor_type: ActorType::System,
+            actor_id: "privacy-race",
+            trace_id: None,
+            policy_version: mk_policy::POLICY_VERSION.0,
+        },
+        chrono::Utc::now(),
+    )
+    .await
+    .unwrap();
+    assert!(receipt.active_content_erased);
+    let mut dispatch = Box::pin(run_dispatch(&r, h.tenant, &aid));
+    assert!(
+        tokio::time::timeout(Duration::from_millis(100), &mut dispatch)
+            .await
+            .is_err()
+    );
+    // Observe the actual database wait, not only a slow async future.
+    let waiting:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND wait_event='advisory' AND query LIKE '%privacy_tenant_lock%')")
+        .fetch_one(separate.pool()).await.unwrap();
+    assert!(waiting);
+    deletion.commit().await.unwrap();
+    assert!(matches!(
+        dispatch.await,
+        DispatchOutcome::Skipped { ack: true, .. }
+    ));
+    assert_eq!(r.sim.calls(), 0);
+    let mut deletion = separate.begin_erasure(h.tenant).await.unwrap();
+    let token = h.token(r.admin, &["agent"]);
+    let mut intake = Box::pin(h.call(
+        "POST",
+        "/internal/v1/actions",
+        Some(&token),
+        Some(provider_proposal(
+            r.contact,
+            r.sender_id,
+            "Late proposal. Reply STOP to opt out.",
+            "+15555550100",
+        )),
+    ));
+    assert!(
+        tokio::time::timeout(Duration::from_millis(100), &mut intake)
+            .await
+            .is_err()
+    );
+    deletion.commit().await.unwrap();
+    assert_eq!(intake.await.0, StatusCode::GONE);
+    deletion = separate.begin_erasure(h.tenant).await.unwrap();
+    let sid = format!("SM{}", Uuid::new_v4().simple());
+    let mut inbound = Box::pin(privacy_inbound(
+        &h,
+        &r,
+        &sid,
+        "Private content arriving during erasure",
+    ));
+    assert!(
+        tokio::time::timeout(Duration::from_millis(100), &mut inbound)
+            .await
+            .is_err()
+    );
+    deletion.commit().await.unwrap();
+    assert_eq!(inbound.await, StatusCode::OK);
+    let erased:bool=sqlx::query_scalar("SELECT content_erased_at IS NOT NULL AND octet_length(content_sealed)=0 AND destination_sealed IS NULL FROM kernel.inbound_events WHERE tenant_id=$1 AND provider_event_id=$2")
+        .bind(h.tenant.0).bind(sid).fetch_one(separate.pool()).await.unwrap();
+    assert!(erased);
+}
+
+#[tokio::test]
+async fn privacy_account_erasure_revokes_sessions_approvals_and_reports_sender_cleanup() {
+    let h = harness().await.expect("actual PostgreSQL required");
+    let mut r = provider_rig(&h, mk_adapters::twilio_sim::TwilioSimMode::Accept).await;
+    let (aid, _) = approved_action(
+        &h,
+        &mut r,
+        "Owner erasure. Reply STOP to opt out.",
+        "+15555550100",
+    )
+    .await;
+    let request =
+        json!({"request_id":Uuid::new_v4(),"subject_kind":"account","subject_id":r.manager});
+    let (s, v) = h
+        .call(
+            "POST",
+            "/internal/v1/privacy/erase",
+            Some(&h.token(UserId::new(), &["privacy_eraser"])),
+            Some(request.clone()),
+        )
+        .await;
+    assert_eq!(s, StatusCode::CREATED, "{v}");
+    assert_eq!(v["active_content_erased"], false);
+    assert_eq!(v["pending_sender_cleanup"], 1);
+    assert_eq!(
+        h.call(
+            "GET",
+            "/internal/v1/senders",
+            Some(&h.token(r.manager, &["manager"])),
+            None
+        )
+        .await
+        .0,
+        StatusCode::UNAUTHORIZED
+    );
+    assert!(matches!(
+        run_dispatch(&r, h.tenant, &aid).await,
+        DispatchOutcome::Skipped { ack: true, .. }
+    ));
+    assert_eq!(r.sim.calls(), 0);
+    let mut tx = h.state.store.begin(h.tenant).await.unwrap();
+    let disabled:bool=sqlx::query_scalar("SELECT status='disabled' FROM kernel.sender_identities WHERE tenant_id=$1 AND sender_identity_id=$2")
+        .bind(h.tenant.0).bind(r.sender_id).fetch_one(tx.raw_conn()).await.unwrap();
+    assert!(disabled);
+    mk_store::audit::verify_tenant(&mut tx).await.unwrap();
+    tx.commit().await.unwrap();
+    assert_eq!(
+        h.call(
+            "POST",
+            "/internal/v1/privacy/erase",
+            Some(&h.token(UserId::new(), &["privacy_eraser"])),
+            Some(request)
+        )
+        .await
+        .0,
+        StatusCode::CREATED
+    );
+    let request =
+        json!({"request_id":Uuid::new_v4(),"subject_kind":"account","subject_id":r.admin});
+    let (s, v) = h
+        .call(
+            "POST",
+            "/internal/v1/privacy/erase",
+            Some(&h.token(UserId::new(), &["privacy_eraser"])),
+            Some(request),
+        )
+        .await;
+    assert_eq!(s, StatusCode::CREATED, "{v}");
+    assert_eq!(v["active_content_erased"], true);
+}
+
+#[tokio::test]
 async fn session_outbox_authority_is_narrow_and_revokes_real_queued_approval() {
     let Some(h) = harness().await else {
         eprintln!("skipping");

@@ -93,6 +93,22 @@ impl FromRequestParts<AppState> for Principal {
         // Application outbox authority is not a human role. Constrain it before
         // every handler, including reads and passkey registration. Combining it
         // with another role never escalates its authority.
+        if assertion.roles.iter().any(|r| r == "privacy_eraser")
+            && (assertion.roles.len() != 1
+                || parts.method != axum::http::Method::POST
+                || parts
+                    .extensions
+                    .get::<axum::extract::OriginalUri>()
+                    .map_or(parts.uri.path(), |uri| uri.0.path())
+                    != "/internal/v1/privacy/erase")
+        {
+            return Err(ApiError::new(
+                StatusCode::FORBIDDEN,
+                "PRIVACY_ONLY",
+                "Privacy delivery authority is restricted to erasure",
+            )
+            .with_request_id(&parts.headers));
+        }
         if assertion.roles.iter().any(|r| r == "session_revoker")
             && (assertion.roles.len() != 1
                 || parts.method != axum::http::Method::POST

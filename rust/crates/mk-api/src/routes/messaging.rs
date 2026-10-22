@@ -241,9 +241,33 @@ pub async fn twilio_status(
     .map_err(|e| rid(e.into()))?;
     if let EventOutcome::Recorded { .. } = outcome {
         // Drive the kernel action lifecycle from provider evidence.
-        let action = actions::get_for_update(&mut tx, delivery.action_id)
-            .await
-            .map_err(|e| rid(e.into()))?;
+        let action = match actions::get_for_update(&mut tx, delivery.action_id).await {
+            Ok(action) => action,
+            Err(mk_store::StoreError::Erased) => {
+                // A late authenticated receipt is still evidence. Keep its
+                // monotonic metadata without loading or resurrecting content.
+                mk_store::audit::append_event(
+                    &mut tx,
+                    mk_audit::NewEvent {
+                        tenant_id: sender.tenant_id,
+                        occurred_at: now,
+                        actor_type: mk_audit::ActorType::System,
+                        actor_id: "twilio-webhook",
+                        action_id: Some(delivery.action_id),
+                        event_type: mk_audit::EventType::DeliveryEvent,
+                        payload_redacted: json!({"content_erased":true,"provider_status":status,
+                        "folded_state":folded.as_str(),"raw_event_digest":raw_digest.to_string()}),
+                        trace_id: None,
+                        policy_version: mk_policy::POLICY_VERSION.0,
+                    },
+                )
+                .await
+                .map_err(|e| rid(e.into()))?;
+                tx.commit().await.map_err(|e| rid(e.into()))?;
+                return Ok(twiml_ok());
+            }
+            Err(error) => return Err(rid(error.into())),
+        };
         let actor = actions::Actor {
             actor_type: mk_audit::ActorType::System,
             actor_id: "twilio-webhook",
@@ -553,7 +577,7 @@ async fn inbound_tx(
     .await
     .map_err(|e| ident(e.into()))?;
     let event_id = match rec {
-        InboundOutcome::Duplicate(id) => {
+        InboundOutcome::Duplicate(id) | InboundOutcome::Erased(id) => {
             // Redelivery: no new suppression, no new hold, no new task.
             tx.commit().await.map_err(|e| ident(e.into()))?;
             let _ = id;

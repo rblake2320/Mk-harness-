@@ -500,7 +500,10 @@ pub async fn delivery_for_callback(
         return Ok(None);
     };
     let preliminary = row_to_delivery(&row)?;
-    crate::actions::get_for_update(tx, preliminary.action_id).await?;
+    match crate::actions::get_for_update(tx, preliminary.action_id).await {
+        Ok(_) | Err(StoreError::Erased) => {} // the row lock is held in both cases
+        Err(error) => return Err(error),
+    }
     let q = format!(
         "SELECT {DCOLS} FROM kernel.message_deliveries
         WHERE tenant_id = $1 AND delivery_id = $2 FOR UPDATE"
@@ -661,6 +664,7 @@ pub async fn claim_reconciliation_checks(
 pub enum InboundOutcome {
     Recorded(Uuid),
     Duplicate(Uuid),
+    Erased(Uuid),
 }
 
 /// Durable, deduplicated inbound record (C5 steps 2–5). The body is sealed with
@@ -720,6 +724,11 @@ pub async fn record_inbound(
             .await?;
         return Ok(InboundOutcome::Duplicate(existing));
     };
+    let erased: bool = sqlx::query_scalar("SELECT content_erased_at IS NOT NULL FROM kernel.inbound_events WHERE tenant_id=$1 AND event_id=$2")
+        .bind(tx.tenant().0).bind(e).fetch_one(tx.conn()).await?;
+    if erased {
+        return Ok(InboundOutcome::Erased(e));
+    }
     append_event(
         tx,
         NewEvent {
@@ -781,7 +790,7 @@ pub async fn pending_inbound(
     let rows = sqlx::query(
         "SELECT event_id, provider_event_id, sender_identity_id, source_destination_hash, destination_fingerprints, received_at, provider_timestamp,
                 content_sealed, opt_out_signal, disposition
-         FROM kernel.inbound_events WHERE tenant_id = $1 AND processed_at IS NULL ORDER BY received_at LIMIT $2",
+         FROM kernel.inbound_events WHERE tenant_id = $1 AND processed_at IS NULL AND content_erased_at IS NULL ORDER BY received_at LIMIT $2",
     )
     .bind(tx.tenant().0)
     .bind(limit)
