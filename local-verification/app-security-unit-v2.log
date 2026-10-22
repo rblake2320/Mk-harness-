@@ -1,0 +1,322 @@
+.FFFFFFFFFFFFFFFFFFFFFFFFFF.................                             [100%]
+=================================== FAILURES ===================================
+____________ test_encrypted_recovery_tampering_is_rejected[digest] _____________
+backend/tests/test_security_recovery.py:44: in test_encrypted_recovery_tampering_is_rejected
+    key, cutoff, privacy, raw = archive(client)
+                                ^^^^^^^^^^^^^^^
+backend/tests/test_security_recovery.py:17: in archive
+    signup(client)
+backend/tests/conftest.py:65: in signup
+    assert r.status_code == 201, r.text
+E   AssertionError: {"detail":"Email already registered"}
+E   assert 409 == 201
+E    +  where 409 = <Response [409 Conflict]>.status_code
+____________ test_encrypted_recovery_tampering_is_rejected[privacy] ____________
+backend/tests/test_security_recovery.py:44: in test_encrypted_recovery_tampering_is_rejected
+    key, cutoff, privacy, raw = archive(client)
+                                ^^^^^^^^^^^^^^^
+backend/tests/test_security_recovery.py:17: in archive
+    signup(client)
+backend/tests/conftest.py:65: in signup
+    assert r.status_code == 201, r.text
+E   AssertionError: {"detail":"Email already registered"}
+E   assert 409 == 201
+E    +  where 409 = <Response [409 Conflict]>.status_code
+______________ test_encrypted_recovery_tampering_is_rejected[key] ______________
+backend/tests/test_security_recovery.py:44: in test_encrypted_recovery_tampering_is_rejected
+    key, cutoff, privacy, raw = archive(client)
+                                ^^^^^^^^^^^^^^^
+backend/tests/test_security_recovery.py:17: in archive
+    signup(client)
+backend/tests/conftest.py:65: in signup
+    assert r.status_code == 201, r.text
+E   AssertionError: {"detail":"Email already registered"}
+E   assert 409 == 201
+E    +  where 409 = <Response [409 Conflict]>.status_code
+__________ test_encrypted_recovery_tampering_is_rejected[ciphertext] ___________
+backend/tests/test_security_recovery.py:44: in test_encrypted_recovery_tampering_is_rejected
+    key, cutoff, privacy, raw = archive(client)
+                                ^^^^^^^^^^^^^^^
+backend/tests/test_security_recovery.py:17: in archive
+    signup(client)
+backend/tests/conftest.py:65: in signup
+    assert r.status_code == 201, r.text
+E   AssertionError: {"detail":"Email already registered"}
+E   assert 409 == 201
+E    +  where 409 = <Response [409 Conflict]>.status_code
+_____________ test_encrypted_recovery_tampering_is_rejected[nonce] _____________
+backend/tests/test_security_recovery.py:44: in test_encrypted_recovery_tampering_is_rejected
+    key, cutoff, privacy, raw = archive(client)
+                                ^^^^^^^^^^^^^^^
+backend/tests/test_security_recovery.py:17: in archive
+    signup(client)
+backend/tests/conftest.py:65: in signup
+    assert r.status_code == 201, r.text
+E   AssertionError: {"detail":"Email already registered"}
+E   assert 409 == 201
+E    +  where 409 = <Response [409 Conflict]>.status_code
+___________ test_encrypted_recovery_tampering_is_rejected[ephemeral] ___________
+backend/tests/test_security_recovery.py:44: in test_encrypted_recovery_tampering_is_rejected
+    key, cutoff, privacy, raw = archive(client)
+                                ^^^^^^^^^^^^^^^
+backend/tests/test_security_recovery.py:17: in archive
+    signup(client)
+backend/tests/conftest.py:65: in signup
+    assert r.status_code == 201, r.text
+E   AssertionError: {"detail":"Email already registered"}
+E   assert 409 == 201
+E    +  where 409 = <Response [409 Conflict]>.status_code
+____________ test_encrypted_recovery_tampering_is_rejected[schema] _____________
+backend/tests/test_security_recovery.py:44: in test_encrypted_recovery_tampering_is_rejected
+    key, cutoff, privacy, raw = archive(client)
+                                ^^^^^^^^^^^^^^^
+backend/tests/test_security_recovery.py:17: in archive
+    signup(client)
+backend/tests/conftest.py:65: in signup
+    assert r.status_code == 201, r.text
+E   AssertionError: {"detail":"Email already registered"}
+E   assert 409 == 201
+E    +  where 409 = <Response [409 Conflict]>.status_code
+____________ test_encrypted_recovery_tampering_is_rejected[format] _____________
+backend/tests/test_security_recovery.py:44: in test_encrypted_recovery_tampering_is_rejected
+    key, cutoff, privacy, raw = archive(client)
+                                ^^^^^^^^^^^^^^^
+backend/tests/test_security_recovery.py:17: in archive
+    signup(client)
+backend/tests/conftest.py:65: in signup
+    assert r.status_code == 201, r.text
+E   AssertionError: {"detail":"Email already registered"}
+E   assert 409 == 201
+E    +  where 409 = <Response [409 Conflict]>.status_code
+____________ test_encrypted_recovery_tampering_is_rejected[unknown] ____________
+backend/tests/test_security_recovery.py:44: in test_encrypted_recovery_tampering_is_rejected
+    key, cutoff, privacy, raw = archive(client)
+                                ^^^^^^^^^^^^^^^
+backend/tests/test_security_recovery.py:17: in archive
+    signup(client)
+backend/tests/conftest.py:65: in signup
+    assert r.status_code == 201, r.text
+E   AssertionError: {"detail":"Email already registered"}
+E   assert 409 == 201
+E    +  where 409 = <Response [409 Conflict]>.status_code
+___________ test_encrypted_recovery_tampering_is_rejected[duplicate] ___________
+backend/tests/test_security_recovery.py:44: in test_encrypted_recovery_tampering_is_rejected
+    key, cutoff, privacy, raw = archive(client)
+                                ^^^^^^^^^^^^^^^
+backend/tests/test_security_recovery.py:17: in archive
+    signup(client)
+backend/tests/conftest.py:65: in signup
+    assert r.status_code == 201, r.text
+E   AssertionError: {"detail":"Email already registered"}
+E   assert 409 == 201
+E    +  where 409 = <Response [409 Conflict]>.status_code
+____________ test_encrypted_recovery_tampering_is_rejected[future] _____________
+backend/tests/test_security_recovery.py:44: in test_encrypted_recovery_tampering_is_rejected
+    key, cutoff, privacy, raw = archive(client)
+                                ^^^^^^^^^^^^^^^
+backend/tests/test_security_recovery.py:17: in archive
+    signup(client)
+backend/tests/conftest.py:65: in signup
+    assert r.status_code == 201, r.text
+E   AssertionError: {"detail":"Email already registered"}
+E   assert 409 == 201
+E    +  where 409 = <Response [409 Conflict]>.status_code
+_____________ test_encrypted_recovery_tampering_is_rejected[stale] _____________
+backend/tests/test_security_recovery.py:44: in test_encrypted_recovery_tampering_is_rejected
+    key, cutoff, privacy, raw = archive(client)
+                                ^^^^^^^^^^^^^^^
+backend/tests/test_security_recovery.py:17: in archive
+    signup(client)
+backend/tests/conftest.py:65: in signup
+    assert r.status_code == 201, r.text
+E   AssertionError: {"detail":"Email already registered"}
+E   assert 409 == 201
+E    +  where 409 = <Response [409 Conflict]>.status_code
+___________ test_encrypted_recovery_tampering_is_rejected[oversized] ___________
+backend/tests/test_security_recovery.py:44: in test_encrypted_recovery_tampering_is_rejected
+    key, cutoff, privacy, raw = archive(client)
+                                ^^^^^^^^^^^^^^^
+backend/tests/test_security_recovery.py:17: in archive
+    signup(client)
+backend/tests/conftest.py:65: in signup
+    assert r.status_code == 201, r.text
+E   AssertionError: {"detail":"Email already registered"}
+E   assert 409 == 201
+E    +  where 409 = <Response [409 Conflict]>.status_code
+_________ test_decrypted_security_records_are_closed_and_typed[owner] __________
+backend/tests/test_security_recovery.py:72: in test_decrypted_security_records_are_closed_and_typed
+    key, cutoff, privacy, raw = archive(client)
+                                ^^^^^^^^^^^^^^^
+backend/tests/test_security_recovery.py:17: in archive
+    signup(client)
+backend/tests/conftest.py:65: in signup
+    assert r.status_code == 201, r.text
+E   AssertionError: {"detail":"Email already registered"}
+E   assert 409 == 201
+E    +  where 409 = <Response [409 Conflict]>.status_code
+__________ test_decrypted_security_records_are_closed_and_typed[role] __________
+backend/tests/test_security_recovery.py:72: in test_decrypted_security_records_are_closed_and_typed
+    key, cutoff, privacy, raw = archive(client)
+                                ^^^^^^^^^^^^^^^
+backend/tests/test_security_recovery.py:17: in archive
+    signup(client)
+backend/tests/conftest.py:65: in signup
+    assert r.status_code == 201, r.text
+E   AssertionError: {"detail":"Email already registered"}
+E   assert 409 == 201
+E    +  where 409 = <Response [409 Conflict]>.status_code
+_________ test_decrypted_security_records_are_closed_and_typed[argon] __________
+backend/tests/test_security_recovery.py:72: in test_decrypted_security_records_are_closed_and_typed
+    key, cutoff, privacy, raw = archive(client)
+                                ^^^^^^^^^^^^^^^
+backend/tests/test_security_recovery.py:17: in archive
+    signup(client)
+backend/tests/conftest.py:65: in signup
+    assert r.status_code == 201, r.text
+E   AssertionError: {"detail":"Email already registered"}
+E   assert 409 == 201
+E    +  where 409 = <Response [409 Conflict]>.status_code
+_______ test_decrypted_security_records_are_closed_and_typed[argon_cost] _______
+backend/tests/test_security_recovery.py:72: in test_decrypted_security_records_are_closed_and_typed
+    key, cutoff, privacy, raw = archive(client)
+                                ^^^^^^^^^^^^^^^
+backend/tests/test_security_recovery.py:17: in archive
+    signup(client)
+backend/tests/conftest.py:65: in signup
+    assert r.status_code == 201, r.text
+E   AssertionError: {"detail":"Email already registered"}
+E   assert 409 == 201
+E    +  where 409 = <Response [409 Conflict]>.status_code
+_____ test_decrypted_security_records_are_closed_and_typed[duplicate_user] _____
+backend/tests/test_security_recovery.py:72: in test_decrypted_security_records_are_closed_and_typed
+    key, cutoff, privacy, raw = archive(client)
+                                ^^^^^^^^^^^^^^^
+backend/tests/test_security_recovery.py:17: in archive
+    signup(client)
+backend/tests/conftest.py:65: in signup
+    assert r.status_code == 201, r.text
+E   AssertionError: {"detail":"Email already registered"}
+E   assert 409 == 201
+E    +  where 409 = <Response [409 Conflict]>.status_code
+______ test_decrypted_security_records_are_closed_and_typed[factor_owner] ______
+backend/tests/test_security_recovery.py:72: in test_decrypted_security_records_are_closed_and_typed
+    key, cutoff, privacy, raw = archive(client)
+                                ^^^^^^^^^^^^^^^
+backend/tests/test_security_recovery.py:17: in archive
+    signup(client)
+backend/tests/conftest.py:65: in signup
+    assert r.status_code == 201, r.text
+E   AssertionError: {"detail":"Email already registered"}
+E   assert 409 == 201
+E    +  where 409 = <Response [409 Conflict]>.status_code
+____ test_decrypted_security_records_are_closed_and_typed[recovery_digest] _____
+backend/tests/test_security_recovery.py:72: in test_decrypted_security_records_are_closed_and_typed
+    key, cutoff, privacy, raw = archive(client)
+                                ^^^^^^^^^^^^^^^
+backend/tests/test_security_recovery.py:17: in archive
+    signup(client)
+backend/tests/conftest.py:65: in signup
+    assert r.status_code == 201, r.text
+E   AssertionError: {"detail":"Email already registered"}
+E   assert 409 == 201
+E    +  where 409 = <Response [409 Conflict]>.status_code
+_____ test_decrypted_security_records_are_closed_and_typed[session_owner] ______
+backend/tests/test_security_recovery.py:72: in test_decrypted_security_records_are_closed_and_typed
+    key, cutoff, privacy, raw = archive(client)
+                                ^^^^^^^^^^^^^^^
+backend/tests/test_security_recovery.py:17: in archive
+    signup(client)
+backend/tests/conftest.py:65: in signup
+    assert r.status_code == 201, r.text
+E   AssertionError: {"detail":"Email already registered"}
+E   assert 409 == 201
+E    +  where 409 = <Response [409 Conflict]>.status_code
+________ test_decrypted_security_records_are_closed_and_typed[unknown] _________
+backend/tests/test_security_recovery.py:72: in test_decrypted_security_records_are_closed_and_typed
+    key, cutoff, privacy, raw = archive(client)
+                                ^^^^^^^^^^^^^^^
+backend/tests/test_security_recovery.py:17: in archive
+    signup(client)
+backend/tests/conftest.py:65: in signup
+    assert r.status_code == 201, r.text
+E   AssertionError: {"detail":"Email already registered"}
+E   assert 409 == 201
+E    +  where 409 = <Response [409 Conflict]>.status_code
+______ test_decrypted_security_records_are_closed_and_typed[boolean_int] _______
+backend/tests/test_security_recovery.py:72: in test_decrypted_security_records_are_closed_and_typed
+    key, cutoff, privacy, raw = archive(client)
+                                ^^^^^^^^^^^^^^^
+backend/tests/test_security_recovery.py:17: in archive
+    signup(client)
+backend/tests/conftest.py:65: in signup
+    assert r.status_code == 201, r.text
+E   AssertionError: {"detail":"Email already registered"}
+E   assert 409 == 201
+E    +  where 409 = <Response [409 Conflict]>.status_code
+_________ test_decrypted_security_records_are_closed_and_typed[future] _________
+backend/tests/test_security_recovery.py:72: in test_decrypted_security_records_are_closed_and_typed
+    key, cutoff, privacy, raw = archive(client)
+                                ^^^^^^^^^^^^^^^
+backend/tests/test_security_recovery.py:17: in archive
+    signup(client)
+backend/tests/conftest.py:65: in signup
+    assert r.status_code == 201, r.text
+E   AssertionError: {"detail":"Email already registered"}
+E   assert 409 == 201
+E    +  where 409 = <Response [409 Conflict]>.status_code
+_________ test_decrypted_security_records_are_closed_and_typed[naive] __________
+backend/tests/test_security_recovery.py:72: in test_decrypted_security_records_are_closed_and_typed
+    key, cutoff, privacy, raw = archive(client)
+                                ^^^^^^^^^^^^^^^
+backend/tests/test_security_recovery.py:17: in archive
+    signup(client)
+backend/tests/conftest.py:65: in signup
+    assert r.status_code == 201, r.text
+E   AssertionError: {"detail":"Email already registered"}
+E   assert 409 == 201
+E    +  where 409 = <Response [409 Conflict]>.status_code
+_____ test_decrypted_security_records_are_closed_and_typed[missing_tenant] _____
+backend/tests/test_security_recovery.py:72: in test_decrypted_security_records_are_closed_and_typed
+    key, cutoff, privacy, raw = archive(client)
+                                ^^^^^^^^^^^^^^^
+backend/tests/test_security_recovery.py:17: in archive
+    signup(client)
+backend/tests/conftest.py:65: in signup
+    assert r.status_code == 201, r.text
+E   AssertionError: {"detail":"Email already registered"}
+E   assert 409 == 201
+E    +  where 409 = <Response [409 Conflict]>.status_code
+=============================== warnings summary ===============================
+../../../../tmp/mk-security-python-20261022/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /tmp/mk-security-python-20261022/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED backend/tests/test_security_recovery.py::test_encrypted_recovery_tampering_is_rejected[digest]
+FAILED backend/tests/test_security_recovery.py::test_encrypted_recovery_tampering_is_rejected[privacy]
+FAILED backend/tests/test_security_recovery.py::test_encrypted_recovery_tampering_is_rejected[key]
+FAILED backend/tests/test_security_recovery.py::test_encrypted_recovery_tampering_is_rejected[ciphertext]
+FAILED backend/tests/test_security_recovery.py::test_encrypted_recovery_tampering_is_rejected[nonce]
+FAILED backend/tests/test_security_recovery.py::test_encrypted_recovery_tampering_is_rejected[ephemeral]
+FAILED backend/tests/test_security_recovery.py::test_encrypted_recovery_tampering_is_rejected[schema]
+FAILED backend/tests/test_security_recovery.py::test_encrypted_recovery_tampering_is_rejected[format]
+FAILED backend/tests/test_security_recovery.py::test_encrypted_recovery_tampering_is_rejected[unknown]
+FAILED backend/tests/test_security_recovery.py::test_encrypted_recovery_tampering_is_rejected[duplicate]
+FAILED backend/tests/test_security_recovery.py::test_encrypted_recovery_tampering_is_rejected[future]
+FAILED backend/tests/test_security_recovery.py::test_encrypted_recovery_tampering_is_rejected[stale]
+FAILED backend/tests/test_security_recovery.py::test_encrypted_recovery_tampering_is_rejected[oversized]
+FAILED backend/tests/test_security_recovery.py::test_decrypted_security_records_are_closed_and_typed[owner]
+FAILED backend/tests/test_security_recovery.py::test_decrypted_security_records_are_closed_and_typed[role]
+FAILED backend/tests/test_security_recovery.py::test_decrypted_security_records_are_closed_and_typed[argon]
+FAILED backend/tests/test_security_recovery.py::test_decrypted_security_records_are_closed_and_typed[argon_cost]
+FAILED backend/tests/test_security_recovery.py::test_decrypted_security_records_are_closed_and_typed[duplicate_user]
+FAILED backend/tests/test_security_recovery.py::test_decrypted_security_records_are_closed_and_typed[factor_owner]
+FAILED backend/tests/test_security_recovery.py::test_decrypted_security_records_are_closed_and_typed[recovery_digest]
+FAILED backend/tests/test_security_recovery.py::test_decrypted_security_records_are_closed_and_typed[session_owner]
+FAILED backend/tests/test_security_recovery.py::test_decrypted_security_records_are_closed_and_typed[unknown]
+FAILED backend/tests/test_security_recovery.py::test_decrypted_security_records_are_closed_and_typed[boolean_int]
+FAILED backend/tests/test_security_recovery.py::test_decrypted_security_records_are_closed_and_typed[future]
+FAILED backend/tests/test_security_recovery.py::test_decrypted_security_records_are_closed_and_typed[naive]
+FAILED backend/tests/test_security_recovery.py::test_decrypted_security_records_are_closed_and_typed[missing_tenant]
+26 failed, 18 passed, 1 warning in 4.29s

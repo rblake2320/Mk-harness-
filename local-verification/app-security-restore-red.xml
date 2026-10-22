@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="4" skipped="0" tests="4" time="10.766" timestamp="2026-10-22T07:07:40.911902-05:00" hostname="DESKTOP-CM6G60N"><testcase classname="tools.verification.test_app_security_restore" name="test_application_access_withdrawal_survives_backup_restore[logout]" time="4.648"><failure message="AssertionError: restoration reauthorized a revoked application session&#10;assert 200 == 401&#10; +  where 200 = &lt;Response [200 OK]&gt;.status_code&#10; +    where &lt;Response [200 OK]&gt; = get('/api/auth/me', headers={'Authorization': 'Bearer [redacted synthetic fixture token]'})&#10; +      where get = &lt;starlette.testclient.TestClient object at 0x7fadca780500&gt;.get">tools/verification/test_app_security_restore.py:45: in test_application_access_withdrawal_survives_backup_restore
+    assert client.get("/api/auth/me",headers=headers).status_code==401, "restoration reauthorized a revoked application session"
+E   AssertionError: restoration reauthorized a revoked application session
+E   assert 200 == 401
+E    +  where 200 = &lt;Response [200 OK]&gt;.status_code
+E    +    where &lt;Response [200 OK]&gt; = get('/api/auth/me', headers={'Authorization': 'Bearer [redacted synthetic fixture token]'})
+E    +      where get = &lt;starlette.testclient.TestClient object at 0x7fadca780500&gt;.get</failure></testcase><testcase classname="tools.verification.test_app_security_restore" name="test_application_access_withdrawal_survives_backup_restore[password]" time="1.821"><failure message="AssertionError: 403&#10;assert 403 == 200&#10; +  where 403 = &lt;Response [403 Forbidden]&gt;.status_code">tools/verification/test_app_security_restore.py:33: in test_application_access_withdrawal_survives_backup_restore
+    assert result.status_code==200,result.status_code
+E   AssertionError: 403
+E   assert 403 == 200
+E    +  where 403 = &lt;Response [403 Forbidden]&gt;.status_code</failure></testcase><testcase classname="tools.verification.test_app_security_restore" name="test_application_access_withdrawal_survives_backup_restore[demote]" time="1.611"><failure message="AssertionError: 403&#10;assert 403 == 201&#10; +  where 403 = &lt;Response [403 Forbidden]&gt;.status_code">tools/verification/test_app_security_restore.py:21: in test_application_access_withdrawal_survives_backup_restore
+    assert member.status_code==201,member.status_code
+E   AssertionError: 403
+E   assert 403 == 201
+E    +  where 403 = &lt;Response [403 Forbidden]&gt;.status_code</failure></testcase><testcase classname="tools.verification.test_app_security_restore" name="test_application_access_withdrawal_survives_backup_restore[disable]" time="1.574"><failure message="AssertionError: 403&#10;assert 403 == 201&#10; +  where 403 = &lt;Response [403 Forbidden]&gt;.status_code">tools/verification/test_app_security_restore.py:21: in test_application_access_withdrawal_survives_backup_restore
+    assert member.status_code==201,member.status_code
+E   AssertionError: 403
+E   assert 403 == 201
+E    +  where 403 = &lt;Response [403 Forbidden]&gt;.status_code</failure></testcase></testsuite></testsuites>
