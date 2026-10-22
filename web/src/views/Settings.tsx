@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { client } from '../App.tsx';
 import type { AuthSession } from '../../../packages/sdk/src/index.ts';
 import { MfaScreen } from '../components/Mfa.tsx';
+import MemberAccess from '../components/MemberAccess.tsx';
 
 const PROVIDERS = ['anthropic', 'openai', 'gemini', 'ollama'] as const;
 
@@ -16,6 +17,7 @@ export default function SettingsView({ role }: { role: string }) {
   const [usage, setUsage] = useState<any[]>([]);
   const [teamUsage, setTeamUsage] = useState<any[]>([]);
   const [invite, setInvite] = useState({ email: '', password: '' });
+  const [inviteRole, setInviteRole] = useState('consultant');
   const [sessions, setSessions] = useState<AuthSession[]>([]);
   const [revoking, setRevoking] = useState<string | null>(null);
   const [mfaStatus, setMfaStatus] = useState<{ enrolled: boolean; recovery_codes_remaining: number } | null>(null);
@@ -23,11 +25,13 @@ export default function SettingsView({ role }: { role: string }) {
   const [replacingFactor, setReplacingFactor] = useState(false);
 
   function refresh() {
-    client.keyStatus().then(setStatus).catch(e => setErr(e.message));
-    client.myUsage().then(setUsage).catch(() => {});
+    if (role !== 'auditor') {
+      client.keyStatus().then(setStatus).catch(e => setErr(e.message));
+      client.myUsage().then(setUsage).catch(() => {});
+    }
     client.sessions().then(setSessions).catch(e => setErr(e.message));
     client.mfaStatus().then(setMfaStatus).catch(() => {});
-    if (role === 'admin') client.tenantUsage().then(setTeamUsage).catch(() => {});
+    if (role === 'admin' || role === 'manager') client.tenantUsage().then(setTeamUsage).catch(() => {});
   }
   useEffect(refresh, []);
 
@@ -45,7 +49,7 @@ export default function SettingsView({ role }: { role: string }) {
   async function sendInvite() {
     setErr(''); setMsg('');
     try {
-      await client.addMember(invite.email, invite.password);
+      await client.addMember(invite.email, invite.password, inviteRole);
       setMsg(`Added ${invite.email}. Share their starting password securely.`);
       setInvite({ email: '', password: '' });
     } catch (e: any) { setErr(e.message); }
@@ -97,6 +101,7 @@ export default function SettingsView({ role }: { role: string }) {
         </div>)}
       </section>
 
+      {role !== 'auditor' && <>
       <div className="card" style={{ maxWidth: 720 }}>
         <h3 style={{ marginTop: 0 }}>AI engines</h3>
         <p className="muted">
@@ -168,7 +173,7 @@ export default function SettingsView({ role }: { role: string }) {
         )}
       </div>
 
-      {role === 'admin' && (
+      {(role === 'admin' || role === 'manager') && (
         <>
           <div className="card" style={{ maxWidth: 720, marginTop: 18 }}>
             <h3 style={{ marginTop: 0 }}>Team usage</h3>
@@ -187,7 +192,7 @@ export default function SettingsView({ role }: { role: string }) {
             )}
           </div>
 
-          <div className="card" style={{ maxWidth: 720, marginTop: 18, display: 'grid', gap: 10 }}>
+          {role === 'admin' && <div className="card" style={{ maxWidth: 720, marginTop: 18, display: 'grid', gap: 10 }}>
             <h3 style={{ margin: 0 }}>Add a team member</h3>
             <div className="row">
               <input placeholder="Email" style={{ flex: 1 }} value={invite.email}
@@ -195,12 +200,17 @@ export default function SettingsView({ role }: { role: string }) {
               <input placeholder="Starting password (10+ chars)" type="password" style={{ flex: 1 }}
                      value={invite.password}
                      onChange={e => setInvite({ ...invite, password: e.target.value })} />
+              <select aria-label="New member role" value={inviteRole} onChange={e => setInviteRole(e.target.value)} style={{ maxWidth: 160 }}>
+                {['consultant', 'manager', 'auditor', 'admin'].map(role => <option key={role}>{role}</option>)}
+              </select>
               <button className="btn" onClick={sendInvite}
                       disabled={!invite.email || invite.password.length < 10}>Add</button>
             </div>
-          </div>
+          </div>}
+          {role === 'admin' && <MemberAccess />}
         </>
       )}
+      </>}
     </div>
   );
 }

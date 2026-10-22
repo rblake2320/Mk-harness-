@@ -84,18 +84,19 @@ export default function App() {
   if (!tokens) return <AuthScreen notice={authNotice} onAuthed={t => { setAuthNotice(''); setTokens(t); }} />;
   if (tokens.mfa_state && tokens.mfa_state !== 'verified') return <MfaScreen key={tokens.session_id}
     client={client} tokens={tokens} onVerified={setTokens} onSignOut={signOut} />;
+  const shownView = tokens.role === 'auditor' ? 'settings' : view;
 
   return (
     <div className="shell">
       <a className="skip-link" href="#main">Skip to content</a>
-      <AiNoticeModal />
+      {tokens.role !== 'auditor' && <AiNoticeModal />}
       {stepUp && <StepUpDialog client={client} onClose={ok => { stepUp.finish(ok); setStepUp(null); }} />}
       <nav className="rail" aria-label="Main">
         <div className="brand display">Consultant <em>Studio</em></div>
         {([['brief', "Today's brief"], ['approvals', 'Approvals'], ['inbox', 'Inbox & exceptions'],
            ['customers', 'My customers'], ['chat', 'Ask anything'], ['skin', 'Skin studio'],
-           ['billing', 'Plan & billing'], ['settings', 'Settings']] as const).map(([k, label]) => (
-          <button key={k} className={view === k ? 'active' : ''} aria-current={view === k ? 'page' : undefined}
+           ['billing', 'Plan & billing'], ['settings', 'Settings']] as const).filter(([k]) => tokens.role !== 'auditor' || k === 'settings').map(([k, label]) => (
+          <button key={k} className={shownView === k ? 'active' : ''} aria-current={shownView === k ? 'page' : undefined}
                   onClick={() => { setView(k); if (k !== 'customers') setOpenCustomer(null); }}>
             {label}
           </button>
@@ -114,16 +115,16 @@ export default function App() {
         </button>
       </div>
       <main className="main" id="main">
-        {view === 'brief' && <BriefView onOpenCustomer={goCustomer} />}
-        {view === 'approvals' && <ApprovalsView />}
-        {view === 'inbox' && <InboxView onOpenCustomer={goCustomer} />}
-        {view === 'chat' && <ChatView />}
-        {view === 'skin' && <SkinView />}
-        {view === 'customers' && (openCustomer
+        {shownView === 'brief' && <BriefView onOpenCustomer={goCustomer} />}
+        {shownView === 'approvals' && <ApprovalsView />}
+        {shownView === 'inbox' && <InboxView onOpenCustomer={goCustomer} />}
+        {shownView === 'chat' && <ChatView />}
+        {shownView === 'skin' && <SkinView />}
+        {shownView === 'customers' && (openCustomer
           ? <CustomerDetail customer={openCustomer} onBack={() => setOpenCustomer(null)} />
           : <CustomersView onOpen={c => setOpenCustomer(c)} />)}
-        {view === 'billing' && <BillingView />}
-        {view === 'settings' && (<>
+        {shownView === 'billing' && <BillingView />}
+        {shownView === 'settings' && (<>
           <SettingsView role={tokens.role} />
           <GovernanceSettings role={tokens.role} userId={me?.id ?? ''} />
         </>)}

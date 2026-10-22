@@ -58,11 +58,13 @@ export default function App() {
         }}><Text style={s.muted}>Sign out</Text></Pressable>
       </View>
       <View style={{ flex: 1 }}>
+        {tokens.role === 'auditor' ? <AuditAccess /> : <>
         {tab === 'chat' && <Chat />}
         {tab === 'skin' && <Skin />}
         {tab === 'customers' && <Customers />}
+        </>}
       </View>
-      <View style={s.tabbar}>
+      {tokens.role !== 'auditor' && <View style={s.tabbar}>
         {(['chat', 'skin', 'customers'] as Tab[]).map(t => (
           <Pressable key={t} style={s.tab} onPress={() => setTab(t)}>
             <Text style={[s.tabLabel, tab === t && { color: C.rose }]}>
@@ -70,9 +72,24 @@ export default function App() {
             </Text>
           </Pressable>
         ))}
-      </View>
+      </View>}
     </View>
   );
+}
+
+function AuditAccess() {
+  const [audit, setAudit] = useState('');
+  const [busy, setBusy] = useState(false);
+  return <ScrollView contentContainerStyle={{ padding: 24, gap: 14 }}>
+    <Text style={s.h1}>Audit access</Text>
+    <Text style={s.muted}>Your role can read your tenant's audit evidence. Customer, AI and messaging actions are unavailable.</Text>
+    <Pressable disabled={busy} style={s.btn} onPress={async () => {
+      setBusy(true);
+      try { setAudit(await client.exportAudit()); } catch (e: any) { Alert.alert('Audit export failed', e.message); }
+      finally { setBusy(false); }
+    }}><Text style={s.btnText}>{busy ? 'Loading…' : 'Read audit evidence'}</Text></Pressable>
+    {audit !== '' && <Text selectable style={{ color: C.text }}>{audit}</Text>}
+  </ScrollView>;
 }
 
 function Auth({ onAuthed }: { onAuthed: (t: Tokens) => void }) {

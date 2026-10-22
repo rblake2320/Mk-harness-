@@ -32,7 +32,8 @@ from ..kernel import KernelClient, KernelUnavailable, get_kernel_client
 from ..kernel.assertions import roles_for
 from ..models import ActionLink, AuditLog, BriefItem, Commitment, Customer, CustomerDestination, DraftVersion, User
 from ..ratelimit import check_rate
-from ..security import require_admin
+from ..security import require_audit_reader
+from ..authorization import TEAM_REVIEWERS
 from .agent_ops import Principal, _select_sender, principal
 
 router = APIRouter(tags=["outreach"])
@@ -143,7 +144,7 @@ async def delivery_exceptions(after: uuid.UUID | None = None, limit: int = Query
         link = _link_for(db, user.tenant_id, item["action_id"])
         if link:
             try:
-                if user.role == "admin":
+                if user.role in TEAM_REVIEWERS:
                     customer = db.get(Customer, link.customer_id)
                     if not customer or customer.tenant_id != user.tenant_id:
                         continue
@@ -181,7 +182,7 @@ async def pending_approvals(p: Principal = Depends(principal), user: User = Depe
         aid = str(res.get("action_id", ""))
         link = _link_for(db, user.tenant_id, aid)
         cust = db.get(Customer, link.customer_id) if link else None
-        if cust and (cust.tenant_id != user.tenant_id or (cust.user_id != user.id and user.role != "admin")):
+        if cust and (cust.tenant_id != user.tenant_id or (cust.user_id != user.id and user.role not in TEAM_REVIEWERS)):
             continue  # another consultant's customer: not this approver's to see
         commitment = db.get(Commitment, link.commitment_id) if link and link.commitment_id else None
         if commitment and (commitment.tenant_id != user.tenant_id or not cust or commitment.customer_id != cust.id):
@@ -234,7 +235,7 @@ async def action_status(action_id: str, p: Principal = Depends(principal), user:
         raise HTTPException(r.status_code, r.body)
     link = _link_for(db, user.tenant_id, action_id)
     if link:
-        own_customer(db, user.tenant_id, user.id, link.customer_id) if user.role != "admin" else None
+        own_customer(db, user.tenant_id, user.id, link.customer_id) if user.role not in TEAM_REVIEWERS else None
         st = str((r.body or {}).get("state", link.last_known_state))
         if st != link.last_known_state:
             link.last_known_state, link.version = st, link.version + 1
@@ -265,7 +266,7 @@ MESSAGE_STATE_DEFINITIONS = {
 
 
 @router.get("/audit/export.jsonl", response_class=PlainTextResponse)
-def audit_export(admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+def audit_export(admin: User = Depends(require_audit_reader), db: Session = Depends(get_db)):
     """Application audit log for this tenant as JSON lines (admin). Kernel evidence
     (hash-chained action/approval/dispatch events) is exported separately with
     `mk-audit-verifier` from the read-only database identity — see deploy/kernel/README.md."""

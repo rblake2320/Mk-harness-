@@ -14,6 +14,8 @@ export interface AuthSession {
   id: string; current: boolean; created_at: string; expires_at: string; revoked_at: string | null;
 }
 export interface RevocationResult { revoked: boolean; kernel_revocation: 'confirmed' | 'pending' }
+export type AppRole = 'admin' | 'manager' | 'consultant' | 'auditor';
+export interface TeamMember { id: string; email: string; display_name: string; role: AppRole; is_active: boolean }
 export interface SkinObservation { category: string; level: string; note: string }
 export interface SkinResult {
   observations: SkinObservation[]; care_focus: string[];
@@ -231,6 +233,11 @@ export class MKClient {
   addMember(email: string, password: string, role = 'consultant') {
     return this.request('/api/auth/members', {
       method: 'POST', body: JSON.stringify({ email, password, role }) });
+  }
+  members() { return this.request<TeamMember[]>('/api/auth/members'); }
+  changeMemberAccess(id: string, changes: { role?: AppRole; is_active?: boolean }) {
+    return this.request<TeamMember & { kernel_revocation: string }>(`/api/auth/members/${encodeURIComponent(id)}`, {
+      method: 'PATCH', body: JSON.stringify(changes) });
   }
 
   // ---- chat (SSE over fetch) ----

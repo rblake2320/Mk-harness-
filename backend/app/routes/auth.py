@@ -1,10 +1,12 @@
 """Auth: tenant signup (creates org + admin), login, refresh, member invite."""
 import hmac
+import json
 import secrets
 import threading
 import time
 import uuid
 from datetime import datetime, timedelta, timezone
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -16,6 +18,7 @@ from ..cache import get_redis, log_redis_runtime_failure
 from ..db import get_db
 from ..models import AuditLog, AuthFactor, AuthRevocation, AuthSession, Tenant, User
 from .. import security
+from ..authorization import APP_ROLES, require_known_role
 from ..auth_sessions import deliver_revocation, nonce_digest, revoke_local
 from ..config import get_settings
 from ..kernel import KernelClient, get_kernel_client
@@ -126,6 +129,7 @@ class TokenOut(BaseModel):
 
 def _tokens(user: User, db: Session, session: AuthSession | None = None, nonce: str | None = None,
             *, verified: bool = False) -> TokenOut:
+    require_known_role(user.role)
     nonce = nonce or secrets.token_hex(32)
     if session is None:
         verified = verified or not security.mfa_required()
@@ -180,6 +184,7 @@ def login(body: LoginIn, db: Session = Depends(get_db)):
         raise HTTPException(401, "Invalid email or password")
     if not user.is_active:
         raise HTTPException(403, "Account deactivated")
+    require_known_role(user.role)
     _clear_failures(body.email.lower())
     return _tokens(user, db)
 
@@ -248,8 +253,8 @@ class InviteIn(BaseModel):
 @router.post("/members", status_code=201)
 def add_member(body: InviteIn, admin: User = Depends(require_admin),
                db: Session = Depends(get_db)):
-    if body.role not in ("admin", "consultant"):
-        raise HTTPException(422, "role must be admin or consultant")
+    if body.role not in APP_ROLES:
+        raise HTTPException(422, "role must be admin, manager, consultant or auditor")
     if db.scalar(select(User).where(User.email == body.email.lower())):
         raise HTTPException(409, "Email already registered")
     user = User(tenant_id=admin.tenant_id, email=body.email.lower(),
@@ -261,6 +266,50 @@ def add_member(body: InviteIn, admin: User = Depends(require_admin),
                     action="member.add", detail=body.email.lower()))
     db.commit()
     return {"id": user.id, "email": user.email, "role": user.role}
+
+
+@router.get('/members')
+def list_members(admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    return [{'id': member.id, 'email': member.email, 'display_name': member.display_name,
+             'role': member.role, 'is_active': member.is_active}
+            for member in db.scalars(select(User).where(User.tenant_id == admin.tenant_id).order_by(User.created_at))]
+
+
+class MemberAccessIn(BaseModel):
+    role: Literal['admin', 'manager', 'consultant', 'auditor'] | None = None
+    is_active: bool | None = None
+
+
+@router.patch('/members/{member_id}')
+def change_member_access(member_id: str, body: MemberAccessIn, admin: User = Depends(require_admin),
+                         db: Session = Depends(get_db)):
+    if body.role is None and body.is_active is None:
+        raise HTTPException(422, 'Provide a role or active state')
+    # Tenant-level serialization: two admins cannot disable each other using
+    # requests that authenticated before either change committed.
+    db.execute(update(Tenant).where(Tenant.id == admin.tenant_id).values(name=Tenant.name))
+    db.refresh(admin)
+    if admin.role != 'admin' or not admin.is_active:
+        raise HTTPException(403, 'Administrator access changed; sign in again')
+    target = db.get(User, member_id, populate_existing=True)
+    if not target or target.tenant_id != admin.tenant_id:
+        raise HTTPException(404, 'Member not found')
+    if target.id == admin.id and (body.role not in (None, 'admin') or body.is_active is False):
+        raise HTTPException(409, 'Another administrator must change your access; self-removal is refused')
+    before = {'role': target.role, 'is_active': target.is_active}
+    if body.role is not None:
+        target.role = body.role
+    if body.is_active is not None:
+        target.is_active = body.is_active
+    after = {'role': target.role, 'is_active': target.is_active}
+    if before != after:
+        for session in db.scalars(select(AuthSession).where(AuthSession.user_id == target.id,
+            AuthSession.tenant_id == admin.tenant_id, AuthSession.revoked_at.is_(None))):
+            revoke_local(db, session, by=admin.id, reason='member_access_changed')
+        db.add(AuditLog(tenant_id=admin.tenant_id, user_id=admin.id, action='member.access_change',
+                       detail=json.dumps({'member_id': target.id, 'before': before, 'after': after}, sort_keys=True)))
+    db.commit()
+    return {'id': target.id, **after, 'kernel_revocation': 'pending' if before != after else 'unchanged'}
 
 
 @router.get("/me")

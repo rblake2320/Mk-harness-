@@ -8,6 +8,8 @@ import { MESSAGE_STATE_DEFINITIONS } from '../../../packages/sdk/src/message-sta
  */
 const EXPLANATIONS: Record<string, { what: string; next: string }> = {
   MFA_REQUIRED: { what: 'Second-factor verification is required.', next: 'Complete the authenticator sign-in, or sign out and sign in again.' },
+  ROLE_INVALID: { what: 'Your account has an unrecognized role.', next: 'Ask a tenant administrator to correct your account access.' },
+  ROLE_FORBIDDEN: { what: 'Your role does not permit this action.', next: 'Ask a tenant administrator if you need different access.' },
   MFA_INVALID: { what: 'The password or second-factor code is invalid or already used.', next: 'Check the password and use the next authenticator code, or a different one-use recovery code.' },
   MFA_LOCKED: { what: 'Second-factor verification is temporarily locked.', next: 'Wait 15 minutes, then sign in again. New sessions do not bypass this protection.' },
   STEP_UP_REQUIRED: { what: 'This change needs a fresh identity check.', next: 'Confirm your password and a fresh authenticator or recovery code, then retry.' },

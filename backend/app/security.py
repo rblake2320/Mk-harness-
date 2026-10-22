@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 from .config import get_settings
 from .db import get_db
 from .models import AuthSession, User
+from .authorization import AUDIT_READERS, TEAM_REVIEWERS, authorize_route, require_known_role
 
 _ph = PasswordHasher()
 
@@ -109,6 +110,7 @@ def get_authenticated_user(request: Request, db: Session = Depends(get_db)) -> U
     user = db.get(User, payload["sub"])
     if not user or not user.is_active:
         raise HTTPException(401, "User not found or deactivated")
+    require_known_role(user.role)
     # Reject tokens minted before the most recent password change.
     # compare_digest: constant-time — no oracle on how many chars matched.
     if not hmac.compare_digest(str(payload.get("pv") or ""),
@@ -132,6 +134,7 @@ def mfa_required() -> bool:
 # immediate safety controls. Enabling sending gets its handler-level step-up.
 SENSITIVE_ROUTES = frozenset({
     ('POST', '/api/auth/members'), ('POST', '/api/auth/change-password'),
+    ('PATCH', '/api/auth/members/{member_id}'),
     ('GET', '/api/account/export'), ('DELETE', '/api/account'),
     ('GET', '/api/customers/export.csv'), ('GET', '/api/audit/export.jsonl'),
     ('GET', '/api/me/skin-data/export'), ('DELETE', '/api/me/skin-data'),
@@ -161,12 +164,14 @@ def enforce_step_up(session: AuthSession) -> None:
 
 
 def get_current_user(request: Request, user: User = Depends(get_authenticated_user)) -> User:
+    route = request.scope.get('route')
+    path = getattr(route, 'path', '')
+    authorize_route(user.role, request.method, path)
     if mfa_required():
         session = request.state.auth_session
         if session.mfa_verified_at is None:
             raise HTTPException(403, {'code': 'MFA_REQUIRED', 'message': 'Complete second-factor verification before using the app.'})
-        route = request.scope.get('route')
-        if (request.method, getattr(route, 'path', '')) in SENSITIVE_ROUTES:
+        if (request.method, path) in SENSITIVE_ROUTES:
             enforce_step_up(session)
     return user
 
@@ -174,4 +179,16 @@ def get_current_user(request: Request, user: User = Depends(get_authenticated_us
 def require_admin(user: User = Depends(get_current_user)) -> User:
     if user.role != "admin":
         raise HTTPException(403, "Admin role required")
+    return user
+
+
+def require_team_reviewer(user: User = Depends(get_current_user)) -> User:
+    if user.role not in TEAM_REVIEWERS:
+        raise HTTPException(403, 'Manager or admin role required')
+    return user
+
+
+def require_audit_reader(user: User = Depends(get_current_user)) -> User:
+    if user.role not in AUDIT_READERS:
+        raise HTTPException(403, 'Auditor or admin role required')
     return user

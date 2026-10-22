@@ -133,10 +133,16 @@ def roles_for(app_role: str, *, as_agent: bool = False) -> list[str]:
     cannot touch consent). It is used only for proposals raised by the AI
     layer on the user's behalf.
     """
+    # Never silently turn an unknown/read-only application role into a human
+    # consultant or agent. Read-only auditors have no kernel credential path.
+    if app_role not in ('admin', 'manager', 'consultant'):
+        raise ValueError('Application role has no action-kernel authority')
     if as_agent:
         return [ROLE_AGENT]
     if app_role == "admin":
         return [ROLE_CONSULTANT, ROLE_TENANT_ADMIN]
+    if app_role == 'manager':
+        return ['manager']
     return [ROLE_CONSULTANT]
 
 
