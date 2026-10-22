@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="7" skipped="0" tests="7" time="3.402" timestamp="2026-10-22T05:36:11.969559-05:00" hostname="DESKTOP-CM6G60N"><testcase classname="tests.test_billing_privacy" name="test_late_valid_webhook_cannot_rewrite_erased_account_billing[checkout.session.completed]" time="0.418"><failure message="AssertionError: assert {'id': '41ef3...Control', ...} == {'id': '41ef3...Control', ...}&#10;  &#10;  Omitting 11 identical items, use -vv to show&#10;  Differing items:&#10;  {'stripe_subscription_id': 'sub_NewLateObject'} != {'stripe_subscription_id': 'sub_PrivacyControl'}&#10;  {'updated_at': datetime.datetime(2026, 10, 22, 10, 36, 12, 584664)} != {'updated_at': datetime.datetime(2026, 10, 22, 10, 36, 12, 579653)}&#10;  Use -v to get more diff">backend/tests/test_billing_privacy.py:62: in test_late_valid_webhook_cannot_rewrite_erased_account_billing
+    assert normalize(after) == normalize(before)
+E   AssertionError: assert {'id': '41ef3...Control', ...} == {'id': '41ef3...Control', ...}
+E     
+E     Omitting 11 identical items, use -vv to show
+E     Differing items:
+E     {'stripe_subscription_id': 'sub_NewLateObject'} != {'stripe_subscription_id': 'sub_PrivacyControl'}
+E     {'updated_at': datetime.datetime(2026, 10, 22, 10, 36, 12, 584664)} != {'updated_at': datetime.datetime(2026, 10, 22, 10, 36, 12, 579653)}
+E     Use -v to get more diff</failure></testcase><testcase classname="tests.test_billing_privacy" name="test_late_valid_webhook_cannot_rewrite_erased_account_billing[customer.subscription.created]" time="0.390"><failure message="AssertionError: assert {'id': 'f06b2...Control', ...} == {'id': 'f06b2...Control', ...}&#10;  &#10;  Omitting 10 identical items, use -vv to show&#10;  Differing items:&#10;  {'status': 'active'} != {'status': 'deletion_pending'}&#10;  {'stripe_subscription_id': 'sub_NewLateObject'} != {'stripe_subscription_id': 'sub_PrivacyControl'}&#10;  {'updated_at': datetime.datetime(2026, 10, 22, 10, 36, 13, 288064)} != {'updated_at': datetime.datetime(2026, 10, 22, 10, 36, 13, 284086)}&#10;  Use -v to get more diff">backend/tests/test_billing_privacy.py:62: in test_late_valid_webhook_cannot_rewrite_erased_account_billing
+    assert normalize(after) == normalize(before)
+E   AssertionError: assert {'id': 'f06b2...Control', ...} == {'id': 'f06b2...Control', ...}
+E     
+E     Omitting 10 identical items, use -vv to show
+E     Differing items:
+E     {'status': 'active'} != {'status': 'deletion_pending'}
+E     {'stripe_subscription_id': 'sub_NewLateObject'} != {'stripe_subscription_id': 'sub_PrivacyControl'}
+E     {'updated_at': datetime.datetime(2026, 10, 22, 10, 36, 13, 288064)} != {'updated_at': datetime.datetime(2026, 10, 22, 10, 36, 13, 284086)}
+E     Use -v to get more diff</failure></testcase><testcase classname="tests.test_billing_privacy" name="test_late_valid_webhook_cannot_rewrite_erased_account_billing[customer.subscription.updated]" time="0.410"><failure message="AssertionError: assert {'id': 'c0810...Control', ...} == {'id': 'c0810...Control', ...}&#10;  &#10;  Omitting 10 identical items, use -vv to show&#10;  Differing items:&#10;  {'status': 'active'} != {'status': 'deletion_pending'}&#10;  {'stripe_subscription_id': 'sub_NewLateObject'} != {'stripe_subscription_id': 'sub_PrivacyControl'}&#10;  {'updated_at': datetime.datetime(2026, 10, 22, 10, 36, 13, 709979)} != {'updated_at': datetime.datetime(2026, 10, 22, 10, 36, 13, 706288)}&#10;  Use -v to get more diff">backend/tests/test_billing_privacy.py:62: in test_late_valid_webhook_cannot_rewrite_erased_account_billing
+    assert normalize(after) == normalize(before)
+E   AssertionError: assert {'id': 'c0810...Control', ...} == {'id': 'c0810...Control', ...}
+E     
+E     Omitting 10 identical items, use -vv to show
+E     Differing items:
+E     {'status': 'active'} != {'status': 'deletion_pending'}
+E     {'stripe_subscription_id': 'sub_NewLateObject'} != {'stripe_subscription_id': 'sub_PrivacyControl'}
+E     {'updated_at': datetime.datetime(2026, 10, 22, 10, 36, 13, 709979)} != {'updated_at': datetime.datetime(2026, 10, 22, 10, 36, 13, 706288)}
+E     Use -v to get more diff</failure></testcase><testcase classname="tests.test_billing_privacy" name="test_late_valid_webhook_cannot_rewrite_erased_account_billing[customer.subscription.deleted]" time="0.378"><failure message="AssertionError: assert {'id': '662ab...Control', ...} == {'id': '662ab...Control', ...}&#10;  &#10;  Omitting 11 identical items, use -vv to show&#10;  Differing items:&#10;  {'status': 'canceled'} != {'status': 'deletion_pending'}&#10;  {'updated_at': datetime.datetime(2026, 10, 22, 10, 36, 14, 100261)} != {'updated_at': datetime.datetime(2026, 10, 22, 10, 36, 14, 96553)}&#10;  Use -v to get more diff">backend/tests/test_billing_privacy.py:62: in test_late_valid_webhook_cannot_rewrite_erased_account_billing
+    assert normalize(after) == normalize(before)
+E   AssertionError: assert {'id': '662ab...Control', ...} == {'id': '662ab...Control', ...}
+E     
+E     Omitting 11 identical items, use -vv to show
+E     Differing items:
+E     {'status': 'canceled'} != {'status': 'deletion_pending'}
+E     {'updated_at': datetime.datetime(2026, 10, 22, 10, 36, 14, 100261)} != {'updated_at': datetime.datetime(2026, 10, 22, 10, 36, 14, 96553)}
+E     Use -v to get more diff</failure></testcase><testcase classname="tests.test_billing_privacy" name="test_late_valid_webhook_cannot_rewrite_erased_account_billing[invoice.paid]" time="0.388"><failure message="AssertionError: assert {'id': '3e971...Control', ...} == {'id': '3e971...Control', ...}&#10;  &#10;  Omitting 11 identical items, use -vv to show&#10;  Differing items:&#10;  {'updated_at': datetime.datetime(2026, 10, 22, 10, 36, 14, 501137)} != {'updated_at': datetime.datetime(2026, 10, 22, 10, 36, 14, 497244)}&#10;  {'first_paid_at': datetime.datetime(2026, 10, 22, 10, 36, 14, 501130)} != {'first_paid_at': None}&#10;  Use -v to get more diff">backend/tests/test_billing_privacy.py:62: in test_late_valid_webhook_cannot_rewrite_erased_account_billing
+    assert normalize(after) == normalize(before)
+E   AssertionError: assert {'id': '3e971...Control', ...} == {'id': '3e971...Control', ...}
+E     
+E     Omitting 11 identical items, use -vv to show
+E     Differing items:
+E     {'updated_at': datetime.datetime(2026, 10, 22, 10, 36, 14, 501137)} != {'updated_at': datetime.datetime(2026, 10, 22, 10, 36, 14, 497244)}
+E     {'first_paid_at': datetime.datetime(2026, 10, 22, 10, 36, 14, 501130)} != {'first_paid_at': None}
+E     Use -v to get more diff</failure></testcase><testcase classname="tests.test_billing_privacy" name="test_late_valid_webhook_cannot_rewrite_erased_account_billing[invoice.payment_succeeded]" time="0.412"><failure message="AssertionError: assert {'id': '40a31...Control', ...} == {'id': '40a31...Control', ...}&#10;  &#10;  Omitting 11 identical items, use -vv to show&#10;  Differing items:&#10;  {'updated_at': datetime.datetime(2026, 10, 22, 10, 36, 14, 925845)} != {'updated_at': datetime.datetime(2026, 10, 22, 10, 36, 14, 921838)}&#10;  {'first_paid_at': datetime.datetime(2026, 10, 22, 10, 36, 14, 925835)} != {'first_paid_at': None}&#10;  Use -v to get more diff">backend/tests/test_billing_privacy.py:62: in test_late_valid_webhook_cannot_rewrite_erased_account_billing
+    assert normalize(after) == normalize(before)
+E   AssertionError: assert {'id': '40a31...Control', ...} == {'id': '40a31...Control', ...}
+E     
+E     Omitting 11 identical items, use -vv to show
+E     Differing items:
+E     {'updated_at': datetime.datetime(2026, 10, 22, 10, 36, 14, 925845)} != {'updated_at': datetime.datetime(2026, 10, 22, 10, 36, 14, 921838)}
+E     {'first_paid_at': datetime.datetime(2026, 10, 22, 10, 36, 14, 925835)} != {'first_paid_at': None}
+E     Use -v to get more diff</failure></testcase><testcase classname="tests.test_billing_privacy" name="test_future_referral_payment_cannot_recreate_deleted_referrers_billing" time="0.416"><failure message="AssertionError: assert (not True)&#10; +  where True = &lt;Route &lt;Scheme eq 'https'&gt; AND &lt;Host eq 'api.stripe.com'&gt; AND &lt;Path eq '/v1/customers'&gt; AND &lt;Method eq 'POST'&gt;&gt;.called">backend/tests/test_billing_privacy.py:77: in test_future_referral_payment_cannot_recreate_deleted_referrers_billing
+    assert not create.called and not credit.called
+E   AssertionError: assert (not True)
+E    +  where True = &lt;Route &lt;Scheme eq 'https'&gt; AND &lt;Host eq 'api.stripe.com'&gt; AND &lt;Path eq '/v1/customers'&gt; AND &lt;Method eq 'POST'&gt;&gt;.called</failure></testcase></testsuite></testsuites>

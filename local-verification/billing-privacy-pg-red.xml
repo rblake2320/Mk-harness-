@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="2" time="3.620" timestamp="2026-10-22T05:38:12.205116-05:00" hostname="DESKTOP-CM6G60N"><testcase classname="tools.verification.test_app_billing_privacy" name="test_late_runtime_sql_cannot_revive_or_rebind_erased_billing" time="1.411"><failure message="psycopg.errors.UndefinedTable: relation &quot;subscriptions&quot; does not exist&#10;LINE 1: UPDATE subscriptions SET status='active' WHERE id=$1&#10;               ^">tools/verification/test_app_billing_privacy.py:44: in test_late_runtime_sql_cannot_revive_or_rebind_erased_billing
+    connection.execute(statement, parameters)
+/tmp/mk-security-python-20261022/lib/python3.12/site-packages/psycopg/connection.py:257: in execute
+    raise ex.with_traceback(None)
+E   psycopg.errors.UndefinedTable: relation "subscriptions" does not exist
+E   LINE 1: UPDATE subscriptions SET status='active' WHERE id=$1
+E                  ^</failure></testcase><testcase classname="tools.verification.test_app_billing_privacy" name="test_erased_billing_only_allows_terminal_cleanup_not_new_business_fields" time="1.347"><failure message="psycopg.errors.UndefinedTable: relation &quot;subscriptions&quot; does not exist&#10;LINE 1: UPDATE subscriptions SET status='canceled',stripe_customer_i...&#10;               ^">tools/verification/test_app_billing_privacy.py:58: in test_erased_billing_only_allows_terminal_cleanup_not_new_business_fields
+    connection.execute("UPDATE subscriptions SET status='canceled',stripe_customer_id=NULL,stripe_subscription_id=NULL WHERE id=%s", (subscription_id,))
+/tmp/mk-security-python-20261022/lib/python3.12/site-packages/psycopg/connection.py:257: in execute
+    raise ex.with_traceback(None)
+E   psycopg.errors.UndefinedTable: relation "subscriptions" does not exist
+E   LINE 1: UPDATE subscriptions SET status='canceled',stripe_customer_i...
+E                  ^</failure></testcase></testsuite></testsuites>

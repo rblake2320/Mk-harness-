@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "D:\projects\mk-release-acceptance-20261021\tools\verification\app_database_image.py", line 412, in <module>
+    main()
+    ~~~~^^
+  File "D:\projects\mk-release-acceptance-20261021\tools\verification\app_database_image.py", line 254, in main
+    assert connection.execute(billing_query, (billing_user,)).fetchone() == frozen_billing
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError
