@@ -29,6 +29,7 @@ pub mod policy;
 pub mod privacy;
 pub mod privacy_ledger;
 pub mod probes;
+mod recovery_restrictions;
 pub mod resolutions;
 pub mod tx;
 
@@ -199,6 +200,11 @@ pub fn migrator() -> sqlx::migrate::Migrator {
             19,
             "privacy intake privileges",
             include_str!("../../../../migrations/kernel/0019_privacy_intake_privileges.sql"),
+        ),
+        (
+            20,
+            "recovered_session_revocations",
+            include_str!("../../../../migrations/kernel/0020_recovered_session_revocations.sql"),
         ),
     ];
     let migrations: Vec<Migration> = FILES

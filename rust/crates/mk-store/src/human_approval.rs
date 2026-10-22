@@ -455,9 +455,17 @@ pub async fn revoke(
     Ok(id)
 }
 
-/// Pool-level (pre-tenant-context) check used while authenticating a request:
-/// is this `(tenant, user, session)` revoked? A user revocation covers every
-/// session; a session revocation covers that session only.
+/// Domain-separated recovery identity; raw session IDs never enter the ledger.
+pub fn session_revocation_digest(tenant: TenantId, user: UserId, session_id: &str) -> String {
+    let mut input = b"mk-session-revocation-v1\0".to_vec();
+    input.extend_from_slice(tenant.0.as_bytes());
+    input.extend_from_slice(user.0.as_bytes());
+    input.extend_from_slice(session_id.as_bytes());
+    Digest::of(&input).to_string()
+}
+
+/// Pool-level authentication check. User revocations cover every session;
+/// session revocations cover only the same tenant, user and session.
 pub async fn is_revoked(
     pool: &PgPool,
     tenant: TenantId,
@@ -471,11 +479,12 @@ pub async fn is_revoked(
     }
     let n: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM kernel.revocations
-         WHERE tenant_id = $1 AND user_id = $2 AND (kind = 'user' OR (kind = 'session' AND session_id = $3))",
+         WHERE tenant_id = $1 AND user_id = $2 AND (kind = 'user' OR (kind = 'session' AND (session_id = $3 OR session_digest = $4)))",
     )
     .bind(tenant.0)
     .bind(user.0)
     .bind(session_id)
+    .bind(session_revocation_digest(tenant, user, session_id))
     .fetch_one(pool)
     .await?;
     Ok(n > 0)
@@ -495,11 +504,12 @@ pub async fn approver_revoked_since(
     let n: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM kernel.revocations
          WHERE tenant_id = $1 AND user_id = $2
-           AND (kind = 'user' OR (kind = 'session' AND session_id = $3))",
+           AND (kind = 'user' OR (kind = 'session' AND (session_id = $3 OR session_digest = $4)))",
     )
     .bind(tx.tenant().0)
     .bind(approver.0)
     .bind(session_id)
+    .bind(session_id.map(|sid| session_revocation_digest(tx.tenant(), approver, sid)))
     .fetch_one(tx.conn())
     .await?;
     Ok(n > 0)

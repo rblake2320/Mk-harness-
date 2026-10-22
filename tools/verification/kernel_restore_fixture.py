@@ -64,10 +64,11 @@ class Recovery:
             *pin, *(["--apply"] if apply else []), *(["--inspection-only"] if inspection else []),
             env={**self.env, "MK_DATABASE_URL":raw(target or self.database)})
 
-    def export(self, filename="ledger.json"):
+    def export(self, filename="ledger.json", target=None):
         not_before = utc()
         path = self.tmp/filename
-        result = self.run(self.api.with_name("mk-privacy-ledger"), "export", "--ledger", path, check=True)
+        result = self.run(self.api.with_name("mk-privacy-ledger"), "export", "--ledger", path,
+            env={**self.env, "MK_DATABASE_URL":raw(target or self.database)}, check=True)
         digest = "sha256:"+hashlib.sha256(path.read_bytes()).hexdigest()
         assert records(result)[0]["sha256"] == digest
         if os.name != "nt": assert path.stat().st_mode & 0o777 == 0o600
@@ -98,11 +99,11 @@ class Recovery:
             try: process.wait(timeout=5)
             except subprocess.TimeoutExpired: process.kill(); process.wait(timeout=5)
 
-    def call(self, client, tid, uid, route, body, roles=("agent",)):
+    def call(self, client, tid, uid, route, body, roles=("agent",), session_id="restore-fixture"):
         return asyncio.run(client.call("POST",route,user_id=uid,tenant_id=tid,
-            roles=list(roles),session_id="restore-fixture",json=body))
+            roles=list(roles),session_id=session_id,json=body))
 
-    def propose(self, client, tid, uid, cid, phone="+15555550100", **overrides):
+    def propose(self, client, tid, uid, cid, phone="+15555550100", session_id="restore-fixture", **overrides):
         now = datetime.now(timezone.utc)
         proposal = {"schema_version":"mk.action.v1", "tenant_id":tid, "requested_by":uid,
             "origin":{"type":"agent"},"workflow":"customer_follow_up","action_kind":"send_sms",
@@ -111,7 +112,7 @@ class Recovery:
             "purpose":"restore_private_purpose","risk":"high","requested_at":now.isoformat(),
             "expires_at":(now+timedelta(minutes=10)).isoformat(),"idempotency_key":"private-"+uuid.uuid4().hex,"evidence":[]}
         proposal.update(overrides)
-        return self.call(client,tid,uid,"/actions",proposal)
+        return self.call(client,tid,uid,"/actions",proposal,session_id=session_id)
 
     def erase(self, client, tid, cid, request=None):
         request = request or str(uuid.uuid4())

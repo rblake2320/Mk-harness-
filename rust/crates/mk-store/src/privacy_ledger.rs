@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 use crate::{Store, StoreError, TenantTx, privacy::SubjectKind};
 
-const FORMAT: &str = "mk-kernel-erasure-ledger-v1";
+const FORMAT: &str = "mk-kernel-erasure-ledger-v2";
 pub const MAX_LEDGER_BYTES: usize = 64 * 1024 * 1024;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -20,6 +20,7 @@ pub struct Ledger {
     exported_at: DateTime<Utc>,
     requests: Vec<Request>,
     fences: Vec<Fence>,
+    restrictions: crate::recovery_restrictions::Restrictions,
     #[serde(skip)]
     authenticated_digest: Option<Digest>,
 }
@@ -74,6 +75,7 @@ pub fn load(
     if ledger.format != FORMAT || ledger.exported_at < not_before || ledger.exported_at > now {
         return Err(StoreError::Conflict("privacy ledger version or freshness"));
     }
+    ledger.restrictions.validate(ledger.exported_at)?;
     let mut requests = BTreeMap::new();
     let mut subjects = BTreeSet::new();
     for request in &ledger.requests {
@@ -152,6 +154,7 @@ pub async fn export(store: &Store) -> Result<Vec<u8>, StoreError> {
             .await?;
     let mut requests = Vec::new();
     let mut fences = Vec::new();
+    let mut restrictions = crate::recovery_restrictions::Restrictions::default();
     for tenant in tenants {
         sqlx::query("SELECT set_config('kernel.tenant_id',$1,true)")
             .bind(tenant.to_string())
@@ -169,6 +172,7 @@ pub async fn export(store: &Store) -> Result<Vec<u8>, StoreError> {
             fences.push(Fence { tenant_id:tenant,request_id:row.try_get("request_id")?,channel:row.try_get("channel")?,
                 destination_hash:row.try_get("destination_hash")?,destination_fingerprints:row.try_get("destination_fingerprints")? });
         }
+        restrictions.export_tenant(&mut tx, tenant).await?;
     }
     tx.commit().await?;
     let ledger = Ledger {
@@ -176,6 +180,7 @@ pub async fn export(store: &Store) -> Result<Vec<u8>, StoreError> {
         exported_at: Utc::now(),
         requests,
         fences,
+        restrictions,
         authenticated_digest: None,
     };
     let raw = serde_json::to_vec(&ledger)
@@ -195,7 +200,10 @@ pub struct ReplayReport {
     pub applied: bool,
     pub requests: usize,
     pub fences: usize,
+    pub suppressions: usize,
+    pub revocations: usize,
     pub pending_content: usize,
+    pub pending_restrictions: usize,
     pub enforced: bool,
 }
 
@@ -242,6 +250,7 @@ pub async fn replay(
     let tenants: BTreeSet<_> = known
         .into_iter()
         .chain(ledger.requests.iter().map(|r| r.tenant_id))
+        .chain(ledger.restrictions.tenants())
         .collect();
     // Acquire every exclusive gate in deterministic order before row/audit locks.
     for tenant in &tenants {
@@ -257,6 +266,7 @@ pub async fn replay(
         .collect();
     for tenant in &tenants {
         scope(&mut tx, *tenant).await?;
+        ledger.restrictions.validate_retained(&mut tx).await?;
         for row in sqlx::query("SELECT request_id,subject_kind,subject_id,requested_at FROM kernel.privacy_erasure_requests WHERE tenant_id=$1")
             .bind(tenant).fetch_all(tx.conn()).await? {
             let id:Uuid=row.try_get("request_id")?;
@@ -270,6 +280,10 @@ pub async fn replay(
     }
     let now = Utc::now();
     if apply {
+        for tenant in &tenants {
+            scope(&mut tx, *tenant).await?;
+            ledger.restrictions.apply(&mut tx, digest, now).await?;
+        }
         for request in &ledger.requests {
             scope(&mut tx, request.tenant_id).await?;
             sqlx::query("INSERT INTO kernel.privacy_erasure_requests(tenant_id,request_id,subject_kind,subject_id,requested_at)
@@ -327,6 +341,11 @@ pub async fn replay(
             }
         }
     }
+    let mut pending_restrictions = 0;
+    for tenant in &tenants {
+        scope(&mut tx, *tenant).await?;
+        pending_restrictions += ledger.restrictions.pending(&mut tx).await?;
+    }
     let mut pending_content = 0;
     for request in &ledger.requests {
         scope(&mut tx, request.tenant_id).await?;
@@ -360,8 +379,11 @@ pub async fn replay(
         applied: apply,
         requests: ledger.requests.len(),
         fences: ledger.fences.len(),
+        suppressions: ledger.restrictions.counts().0,
+        revocations: ledger.restrictions.counts().1,
         pending_content,
-        enforced: pending_content == 0,
+        pending_restrictions,
+        enforced: pending_content == 0 && pending_restrictions == 0,
     };
     if apply {
         tx.commit().await?;
@@ -380,7 +402,8 @@ mod tests {
     fn fixture() -> Value {
         json!({"format":FORMAT,"exported_at":"2026-10-22T00:00:00Z",
             "requests":[{"tenant_id":Uuid::new_v4(),"request_id":Uuid::new_v4(),
-            "subject_kind":"contact","subject_id":Uuid::new_v4(),"requested_at":"2026-10-21T00:00:00Z"}],"fences":[]})
+            "subject_kind":"contact","subject_id":Uuid::new_v4(),"requested_at":"2026-10-21T00:00:00Z"}],"fences":[],
+            "restrictions":{"suppressions":[],"revocations":[]}})
     }
 
     fn checked(value: &Value) -> Result<Ledger, StoreError> {
@@ -455,5 +478,57 @@ mod tests {
         assert!(unchecked.authenticated_digest.is_none());
         assert!(checked(&value).unwrap().authenticated_digest.is_some());
         assert!(load(&raw, "sha256:wrong", Utc::now(), Utc::now()).is_err());
+    }
+
+    #[test]
+    fn restriction_shapes_are_closed_and_version_one_is_refused() {
+        let mut good = fixture();
+        good["restrictions"]["suppressions"] = json!([{"tenant_id":Uuid::new_v4(),
+            "suppression_id":Uuid::new_v4(),"channel":"sms","destination_hash":"a".repeat(64),
+            "destination_fingerprints":[format!("m0:{}","a".repeat(64))],"scope":"destination",
+            "permanent":true,"created_at":"2026-10-21T00:00:00Z"}]);
+        good["restrictions"]["revocations"] = json!([{"tenant_id":Uuid::new_v4(),
+            "revocation_id":Uuid::new_v4(),"user_id":Uuid::new_v4(),"kind":"session",
+            "session_digest":format!("sha256:{}","b".repeat(64)),"revoked_at":"2026-10-21T00:00:00Z"}]);
+        assert!(checked(&good).is_ok());
+        for (collection, field, invalid) in [
+            ("suppressions", "scope", json!("unbounded")),
+            ("suppressions", "channel", json!("unknown")),
+            ("suppressions", "destination_hash", json!("raw-phone")),
+            ("suppressions", "created_at", json!("2099-01-01T00:00:00Z")),
+            ("suppressions", "tenant_id", json!(Uuid::nil())),
+            ("suppressions", "destination_fingerprints", json!([])),
+            (
+                "suppressions",
+                "destination_fingerprints",
+                json!(["m0:bad"]),
+            ),
+            ("suppressions", "reason", json!("private")),
+            ("revocations", "kind", json!("user")),
+            ("revocations", "session_digest", json!(null)),
+            ("revocations", "session_digest", json!("raw-session")),
+            ("revocations", "user_id", json!(Uuid::nil())),
+            ("revocations", "revoked_at", json!("2099-01-01T00:00:00Z")),
+            ("revocations", "session_id", json!("private")),
+        ] {
+            let mut value = good.clone();
+            value["restrictions"][collection][0][field] = invalid;
+            assert!(checked(&value).is_err(), "{collection}.{field}");
+        }
+        for collection in ["suppressions", "revocations"] {
+            let mut value = good.clone();
+            let duplicate = value["restrictions"][collection][0].clone();
+            value["restrictions"][collection]
+                .as_array_mut()
+                .unwrap()
+                .push(duplicate);
+            assert!(checked(&value).is_err());
+        }
+        let mut value = good.clone();
+        value["format"] = json!("mk-kernel-erasure-ledger-v1");
+        assert!(checked(&value).is_err());
+        value = good;
+        value.as_object_mut().unwrap().remove("restrictions");
+        assert!(checked(&value).is_err());
     }
 }

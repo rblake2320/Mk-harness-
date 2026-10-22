@@ -41,6 +41,70 @@ def test_empty_pinned_ledger_and_inspection_never_authorizes_restore(recovery):
         assert conn.execute("SELECT dispatch_enabled FROM kernel.kill_switches WHERE scope='global'").fetchone() == (False,)
 
 
+@pytest.mark.parametrize("new_tenant", [False, True])
+@pytest.mark.parametrize("restriction", ["suppression", "channel", "tenant", "session_revocation", "user_revocation"])
+def test_post_backup_contact_and_principal_restrictions_survive_recovery(recovery, restriction, new_tenant):
+    tid, uid, cid, admin = (str(uuid.uuid4()) for _ in range(4))
+    is_suppression = restriction in {"suppression", "channel", "tenant"}
+    dump = recovery.backup() if new_tenant else None
+    with recovery.client() as client:
+        proposed = recovery.propose(client, tid, uid, cid)
+        assert proposed.status_code in {202, 403}, proposed.body
+        if dump is None: dump = recovery.backup()
+        if is_suppression:
+            body = {"reason": "POST-BACKUP-PRIVATE-REASON", "permanent": True, "source": "operator"}
+            if restriction != "tenant": body["channel"] = "sms"
+            if restriction == "suppression": body["destination"] = "+15555550100"
+            restricted = recovery.call(client, tid, admin, "/suppressions", body, ("tenant_admin",))
+        else:
+            body = {"user_id": uid, "reason": "POST-BACKUP-PRIVATE-REASON"}
+            if restriction == "session_revocation": body["session_id"] = "restore-fixture"
+            restricted = recovery.call(client, tid, admin, "/revocations", body, ("tenant_admin",))
+        assert restricted.status_code == 201, restricted.body
+        if not is_suppression:
+            assert recovery.propose(client, tid, uid, cid).status_code == 401
+    pin = recovery.export()
+    exported = Path(pin[1]).read_bytes()
+    assert all(value not in exported for value in (b"POST-BACKUP-PRIVATE-REASON", b"+15555550100", b"restore-fixture"))
+    with recovery.restored(dump) as target:
+        assert recovery.gate(target, pin=pin).returncode != 0
+        with psycopg.connect(raw(target)) as connection:
+            assert connection.execute("SELECT count(*) FROM kernel.suppressions").fetchone() == (0,)
+            assert connection.execute("SELECT count(*) FROM kernel.revocations").fetchone() == (0,)
+        result = recovery.gate(target, pin=pin, apply=True)
+        assert result.returncode == 0, (result.stdout, result.stderr)
+        assert recovery.gate(target, pin=pin, apply=True).returncode == 0
+        assert recovery.gate(target, pin=pin).returncode == 0
+        replayed_pin = recovery.export("reexport.json", target)
+        assert json.loads(Path(replayed_pin[1]).read_bytes())["restrictions"] == json.loads(exported)["restrictions"]
+        with psycopg.connect(raw(target)) as connection:
+            if is_suppression:
+                count = connection.execute("SELECT count(*) FROM kernel.suppressions WHERE tenant_id=%s AND permanent AND lifted_at IS NULL", (tid,)).fetchone()[0]
+            else:
+                kind = "session" if restriction == "session_revocation" else "user"
+                count = connection.execute("SELECT count(*) FROM kernel.revocations WHERE tenant_id=%s AND user_id=%s AND kind=%s", (tid, uid, kind)).fetchone()[0]
+            assert count == 1, "post-backup restriction disappeared even though restore gate passed"
+            assert connection.execute("SELECT dispatch_enabled FROM kernel.kill_switches WHERE scope='global'").fetchone() == (False,)
+        if not is_suppression:
+            with recovery.client(target) as client:
+                assert recovery.propose(client, tid, uid, cid).status_code == 401
+                other = recovery.propose(client, tid, uid, cid, session_id="unrevoked-session")
+                assert other.status_code == (401 if restriction == "user_revocation" else 403), other.body
+                assert recovery.propose(client, tid, admin, cid).status_code == 403
+                assert recovery.propose(client, str(uuid.uuid4()), uid, cid).status_code == 403
+        else:
+            # Enable only the disposable, API-only fixture; no worker, relay or
+            # provider is configured. Exercise the real proposal policy boundary.
+            assert target.database.startswith("mk_kernel_restored_")
+            with psycopg.connect(raw(target)) as connection:
+                connection.execute("UPDATE kernel.kill_switches SET dispatch_enabled=true WHERE scope='global'")
+            with recovery.client(target) as client:
+                denied = recovery.propose(client, tid, uid, cid)
+                assert denied.status_code == 403, denied.body
+                assert denied.body["decision"]["code"] == "suppressed", denied.body
+            recovery.disable(target)
+
+
 @pytest.mark.parametrize("switch", ["enabled", "missing"])
 def test_replay_refuses_non_disabled_global_dispatch(recovery, switch):
     pin = recovery.export()
@@ -48,6 +112,64 @@ def test_replay_refuses_non_disabled_global_dispatch(recovery, switch):
         if switch == "enabled": conn.execute("UPDATE kernel.kill_switches SET dispatch_enabled=true WHERE scope='global'")
         else: conn.execute("DELETE FROM kernel.kill_switches WHERE scope='global'")
     assert recovery.gate(pin=pin,apply=True).returncode != 0
+
+
+def test_restriction_conflicts_omissions_and_mid_replay_failure_are_atomic(recovery):
+    tid, uid, cid = (str(uuid.uuid4()) for _ in range(3))
+    dump = recovery.backup()
+    with recovery.client() as client:
+        assert recovery.call(client, tid, uid, "/suppressions", {
+            "channel":"sms", "destination":"+15555550100", "reason":"test", "permanent":True,
+            "source":"operator"}, ("tenant_admin",)).status_code == 201
+        assert recovery.call(client, tid, uid, "/revocations", {
+            "user_id":str(uuid.uuid4()), "session_id":"PRIVATE-SESSION-CANARY", "reason":"test"},
+            ("tenant_admin",)).status_code == 201
+    pin = recovery.export()
+    value = json.loads(Path(pin[1]).read_text())
+    for collection, field, replacement in (("suppressions","permanent",False),
+            ("revocations","user_id",str(uuid.uuid4()))):
+        for mutation in ("conflict", "omission"):
+            altered = json.loads(json.dumps(value))
+            if mutation == "omission": altered["restrictions"][collection] = []
+            else: altered["restrictions"][collection][0][field] = replacement
+            path = recovery.tmp/(collection+mutation+".json")
+            path.write_text(json.dumps(altered))
+            bad = [*pin]; bad[1] = str(path); bad[3] = "sha256:"+hashlib.sha256(path.read_bytes()).hexdigest()
+            with psycopg.connect(raw(recovery.database)) as conn:
+                baseline = conn.execute("SELECT count(*) FROM kernel.audit_events").fetchone()
+            assert recovery.gate(pin=bad, apply=True).returncode != 0
+            with psycopg.connect(raw(recovery.database)) as conn:
+                assert conn.execute("SELECT count(*) FROM kernel.audit_events").fetchone() == baseline
+                assert conn.execute("SELECT count(*) FROM kernel.suppressions WHERE permanent").fetchone() == (1,)
+                assert conn.execute("SELECT count(*) FROM kernel.revocations").fetchone() == (1,)
+    with recovery.restored(dump) as target:
+        # Revocations follow suppressions: fail after opt-out and audit writes.
+        with psycopg.connect(raw(target)) as conn:
+            conn.execute("""CREATE FUNCTION kernel.restriction_test_fault() RETURNS trigger LANGUAGE plpgsql AS $$
+                BEGIN RAISE EXCEPTION 'synthetic restriction recovery fault'; END $$""")
+            conn.execute("CREATE TRIGGER restriction_test_fault BEFORE INSERT ON kernel.revocations FOR EACH ROW EXECUTE FUNCTION kernel.restriction_test_fault()")
+        assert recovery.gate(target, pin=pin, apply=True).returncode != 0
+        with psycopg.connect(raw(target)) as conn:
+            for table in ("suppressions", "revocations", "audit_events", "tenant_directory"):
+                assert conn.execute(sql.SQL("SELECT count(*) FROM kernel.{}").format(sql.Identifier(table))).fetchone() == (0,)
+            conn.execute("DROP TRIGGER restriction_test_fault ON kernel.revocations")
+        result = recovery.gate(target, pin=pin, apply=True)
+        assert result.returncode == 0, (result.stdout, result.stderr)
+
+
+def test_recovered_session_shape_and_runtime_immutability(recovery):
+    tid, uid, rid = (str(uuid.uuid4()) for _ in range(3))
+    statement = """INSERT INTO kernel.revocations(tenant_id,revocation_id,user_id,kind,session_id,session_digest,revoked_by,reason)
+        VALUES(%s,%s,%s,'session',%s,%s,%s,'test')"""
+    for session, digest in ((None,None), (None,"not-a-digest"), ("raw","sha256:"+"a"*64)):
+        with psycopg.connect(raw(recovery.database), autocommit=True) as conn:
+            with pytest.raises(psycopg.errors.CheckViolation):
+                conn.execute(statement, (tid,rid,uid,session,digest,uid))
+    with psycopg.connect(raw(recovery.database)) as conn:
+        conn.execute(statement, (tid,rid,uid,None,"sha256:"+"a"*64,uid))
+    with psycopg.connect(raw(recovery.database.set(username=recovery.login,password=recovery.password)), autocommit=True) as conn:
+        for statement in ("UPDATE kernel.revocations SET session_digest=NULL", "DELETE FROM kernel.revocations", "TRUNCATE kernel.revocations"):
+            with pytest.raises(psycopg.errors.InsufficientPrivilege): conn.execute(statement)
 
 
 def test_standalone_replay_and_strict_cli_options(recovery):

@@ -119,6 +119,12 @@ def main():
         dump=subprocess.run(["docker","exec",container,"pg_dump","-U",conninfo["user"],
             "-d",database,"--format=custom","--no-owner"],check=True,capture_output=True,timeout=60).stdout
         assert dump.startswith(b"PGDMP")
+        restriction_user=str(uuid.uuid4())
+        assert call("POST","/suppressions",["tenant_admin"],{"channel":"sms",
+            "destination":"+15555550104","reason":"synthetic post-backup opt-out",
+            "source":"operator","permanent":True}).status_code==201
+        assert call("POST","/revocations",["tenant_admin"],{"user_id":restriction_user,
+            "session_id":"image-recovery-session-canary","reason":"synthetic post-backup revocation"}).status_code==201
         erased=call("POST","/privacy/erase",["privacy_eraser"],
             {"request_id":request,"subject_kind":"contact","subject_id":contact})
         assert erased.status_code==201 and erased.body["active_content_erased"] is True
@@ -187,9 +193,12 @@ def main():
         with psycopg.connect(restored_dsn) as conn:
             assert conn.execute("SELECT octet_length(canonical_request),content_erased_at IS NOT NULL FROM kernel.actions WHERE action_id=%s",(aid,)).fetchone()==(0,True)
             assert conn.execute("SELECT count(*) FROM kernel.privacy_destination_fences").fetchone()==(1,)
+            assert conn.execute("SELECT count(*) FROM kernel.suppressions WHERE permanent AND lifted_at IS NULL").fetchone()==(1,)
+            assert conn.execute("SELECT count(*) FROM kernel.revocations WHERE user_id=%s AND kind='session' AND session_id IS NULL AND session_digest LIKE 'sha256:%%'",(restriction_user,)).fetchone()==(1,)
             assert conn.execute("SELECT dispatch_enabled FROM kernel.kill_switches WHERE scope='global'").fetchone()==(False,)
         report["privacy_restore"]={"actual_pg_dump_restore":True,"without_external_ledger_refused":True,
             "preview_refused_unreplayed_content":True,"apply_scrubbed_content":True,"restored_fences":1,
+            "post_backup_suppressions":1,"post_backup_session_revocations":1,"raw_session_not_restored":True,
             "dispatch_enabled":False,"repeat_report_passed":True,"runtime_user":state["Config"]["User"],
             "ledger_sha256":export_receipt["sha256"],"gate":gate_report}
         if args.provider_fixture_image:

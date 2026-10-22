@@ -9,14 +9,14 @@
 //!     --privacy-sha256 <independent pin> --privacy-not-before <RFC3339> [--apply]
 //!
 //! Without `--apply` it reports what it would change. With `--apply` it:
-//!   * replays independently retained deletion identities and destination fences;
+//!   * replays independently retained deletion, opt-out and principal restrictions;
 //!   * marks in-flight actions (dispatching) as reconciliation_required and
 //!     their delivery records as submission_unknown ("uncertain → unknown");
 //!   * revokes every live approval created before `--restored-at` and cancels
 //!     the queued actions they authorised (pre-restore approvals are invalid);
 //!
 //! Checks (all must pass): global dispatch disabled; audit chain verifies for
-//! every tenant; suppression ledger readable with row count; every active
+//! every tenant; external restriction replay verified plus tenant-scoped counts; every active
 //! sender credential and adapter credential unseals with the configured
 //! keyring; no action left in dispatching; no delivery left in
 //! submission_started; no live approval older than the restore point.
@@ -160,18 +160,29 @@ async fn main() -> anyhow::Result<()> {
         json!({"tenants": tenants.len(), "failures": chain_failures}),
     );
 
-    // 4. Suppression / deletion ledger present and readable.
-    let sup: i64 =
-        sqlx::query_scalar("SELECT count(*) FROM kernel.suppressions WHERE lifted_at IS NULL")
-            .fetch_one(pool)
-            .await?;
-    let rev: i64 = sqlx::query_scalar("SELECT count(*) FROM kernel.revocations")
-        .fetch_one(pool)
+    // 4. Inventory only. Completeness/enforcement is checked against the
+    // independently pinned ledger above, never inferred from readable tables.
+    // Scope every count so recovery/inspection works without a BYPASSRLS login.
+    let (mut sup, mut rev) = (0i64, 0i64);
+    for tenant in &tenants {
+        let mut tx = store.begin(*tenant).await?;
+        sup += sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM kernel.suppressions WHERE tenant_id=$1 AND lifted_at IS NULL",
+        )
+        .bind(tenant.0)
+        .fetch_one(tx.raw_conn())
         .await?;
+        rev += sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM kernel.revocations WHERE tenant_id=$1",
+        )
+        .bind(tenant.0)
+        .fetch_one(tx.raw_conn())
+        .await?;
+    }
     ok(
         "suppression_ledger_loaded",
         true,
-        json!({"live_suppressions": sup, "revocations": rev}),
+        json!({"live_suppressions": sup, "revocations": rev, "inventory_only": true}),
     );
 
     // 5. Sender bindings and adapter credentials unseal with the loaded keyring.
