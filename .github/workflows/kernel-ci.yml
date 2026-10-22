@@ -3,9 +3,7 @@ name: Rust action kernel
 on:
   push:
     branches: [main]
-    paths: ["rust/**", "contracts/**", "migrations/**", "deploy/**", "evidence/**", "scripts/**", "tools/**", "infra/**", "backend/app/kernel/**", "backend/app/routes/agent_ops.py", "docker-compose.kernel.yml", ".github/workflows/kernel-ci.yml"]
   pull_request:
-    paths: ["rust/**", "contracts/**", "migrations/**", "deploy/**", "evidence/**", "scripts/**", "tools/**", "infra/**", "backend/app/kernel/**", "backend/app/routes/agent_ops.py", "docker-compose.kernel.yml", ".github/workflows/kernel-ci.yml"]
 
 permissions:
   contents: read

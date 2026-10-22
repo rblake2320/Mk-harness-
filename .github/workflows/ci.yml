@@ -23,7 +23,7 @@ jobs:
       - run: pip install --require-hashes -r requirements.txt
       - name: Image report gate refuses missing and substituted evidence
         working-directory: .
-        run: python -m pytest tools/verification/test_image_security.py -q
+        run: python -m pytest tools/verification/test_image_security.py tools/release/test_deployment_source.py tools/release/test_deployment_workflow.py tools/release/test_image_provenance.py -q
       - name: pytest
         run: |
           set +e -o pipefail   # GitHub runs bash -e: keep going after the pipeline fails so diagnostics print

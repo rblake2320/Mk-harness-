@@ -43,7 +43,7 @@ def digest(path):
 
 
 def run(parts, log=None):
-    result = subprocess.run(parts, capture_output=True, text=True, timeout=720)
+    result = subprocess.run(parts, capture_output=True, text=True, encoding="utf-8", timeout=720)
     if log:
         log.write_text(result.stdout + result.stderr, encoding="utf-8")
     if result.returncode:
