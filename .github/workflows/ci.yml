@@ -136,7 +136,7 @@ jobs:
         with: {python-version: "3.12"}
       - run: pip install -r backend/requirements.txt
       - name: Actual runtime role, migration, retained-data upgrade and MFA transactions
-        run: python -m pytest tools/verification/test_app_database.py tools/verification/test_app_privacy.py -q --tb=short --junitxml=app-postgres.xml
+        run: python -m pytest tools/verification/test_app_database.py tools/verification/test_app_privacy.py tools/verification/test_app_billing_privacy.py -q --tb=short --junitxml=app-postgres.xml
         env:
           MK_APP_TEST_ADMIN_URL: postgresql+psycopg://postgres:isolated-ci-app-test-only@127.0.0.1:5432/mk_app_test_admin
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1, pinned Rust compiler

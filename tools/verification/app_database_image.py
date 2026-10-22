@@ -7,6 +7,7 @@ import argparse
 import base64
 import json
 import hashlib
+import hmac
 import os
 import secrets
 import subprocess
@@ -29,10 +30,13 @@ def main():
     parser.add_argument("--rotate-seal", action="store_true")
     parser.add_argument("--erase", action="store_true")
     parser.add_argument("--audit-privacy", action="store_true")
+    parser.add_argument("--billing-privacy", action="store_true")
     parser.add_argument("--browser-url", help="Local production web preview for the actual deletion UI drill")
     args = parser.parse_args()
     if args.erase and args.rotate_seal:
         parser.error("Run erasure and rotation as separate, independently retained drills")
+    if args.billing_privacy and not args.erase:
+        parser.error("Billing privacy verification requires the erasure drill")
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
     report = {"scope": "author-run shipped container, real PostgreSQL, real HTTP; synthetic fixtures only"}
@@ -88,6 +92,10 @@ def main():
         runtime_env = {**env, "DB_USER": "mk_app_login", "DB_PASSWORD": runtime_pw,
                        "JWT_SECRET": secrets.token_urlsafe(40), "MASTER_KEY": base64.b64encode(secrets.token_bytes(32)).decode(),
                        "APP_SEAL_KEYS": "", "RATE_LIMIT_PER_MINUTE": "10000"}
+        if args.billing_privacy:
+            # Only an incoming synthetic webhook is enabled. No Stripe API key
+            # is supplied and this fixture never performs provider operations.
+            runtime_env["STRIPE_WEBHOOK_SECRET"] = secrets.token_urlsafe(32)
         options = ["run", "--detach", "--name", app_name, "--network", owned, "--read-only",
                    "--cap-drop=ALL", "--security-opt=no-new-privileges", "--tmpfs", "/tmp:rw,noexec,nosuid,size=64m",
                    "--label", "codex.task=mk-87-rows", "--publish", "127.0.0.1::8000"]
@@ -148,6 +156,17 @@ def main():
             assert retained.status_code == 200 and retained.json()["name"] == "Retained synthetic image customer"
             report["after_restart_customer_status"] = retained.status_code
             if args.erase:
+                if args.billing_privacy:
+                    billing_dsn = psycopg.conninfo.make_conninfo(admin, dbname=database, user="mk_app_login", password=runtime_pw)
+                    with psycopg.connect(billing_dsn) as connection:
+                        billing_user, billing_tenant = connection.execute(
+                            "SELECT id,tenant_id FROM mk_app.users WHERE email='image@example.com'").fetchone()
+                        connection.execute("""INSERT INTO mk_app.subscriptions
+                            (id,tenant_id,user_id,stripe_customer_id,stripe_subscription_id,tier,interval,status,created_at,updated_at)
+                            VALUES (%s,%s,%s,'cus_ImagePrivacy','sub_ImagePrivacy','solo','year','active',now(),now())
+                            ON CONFLICT(user_id) DO UPDATE SET stripe_customer_id='cus_ImagePrivacy',
+                                stripe_subscription_id='sub_ImagePrivacy',status='active'""",
+                            (uuid.uuid4().hex, billing_tenant, billing_user))
                 added = client.post(f"/api/customers/{customer_id}/destinations", headers=headers,
                                     json={"channel": "sms", "value": "+15005550006"})
                 assert added.status_code == 201
@@ -214,6 +233,26 @@ def main():
                 status = client.post("/api/account/erasure-status", json={"status_token": receipt["status_token"]})
                 assert status.status_code == 200 and status.json()["request_id"] == receipt["request_id"]
                 report["unauthenticated_receipt_status"] = status.status_code
+                if args.billing_privacy:
+                    billing_query = "SELECT status,stripe_customer_id,stripe_subscription_id,first_paid_at,updated_at FROM mk_app.subscriptions WHERE user_id=%s"
+                    with psycopg.connect(billing_dsn) as connection:
+                        frozen_billing = connection.execute(billing_query, (billing_user,)).fetchone()
+                        assert frozen_billing[0] == "deletion_pending"
+                        event_statuses = {}
+                        for event_type in ("checkout.session.completed", "customer.subscription.created",
+                                "customer.subscription.updated", "customer.subscription.deleted", "invoice.paid", "invoice.payment_succeeded"):
+                            payload = json.dumps({"type": event_type, "data": {"object": {
+                                "id": "sub_MustNotRevive", "customer": "cus_ImagePrivacy", "subscription": "sub_MustNotRevive",
+                                "client_reference_id": billing_user, "status": "active"}}}).encode()
+                            stamp = int(time.time())
+                            signature = hmac.new(runtime_env["STRIPE_WEBHOOK_SECRET"].encode(), str(stamp).encode() + b"." + payload, hashlib.sha256).hexdigest()
+                            reply = client.post("/api/billing/webhook", content=payload,
+                                headers={"Stripe-Signature": f"t={stamp},v1={signature}", "Content-Type": "application/json"})
+                            event_statuses[event_type] = reply.status_code
+                            report["billing_late_webhook_statuses"] = event_statuses
+                            assert reply.status_code == 200
+                            assert connection.execute(billing_query, (billing_user,)).fetchone() == frozen_billing
+                    report["billing_erasure_mirror_unchanged"] = True
                 exporter = ("import sys; from sqlalchemy.orm import Session; from app.db import init_engine; "
                             "from app.tools.privacy_ledger import export_ledger; "
                             "s=Session(init_engine()); sys.stdout.buffer.write(export_ledger(s)); s.close()")
@@ -251,6 +290,16 @@ def main():
                 assert all(report["restored_after_ledger"][name] == 0 for name in ("customers", "customer_destinations", "provider_keys", "auth_factors"))
                 report["restore_erasure_repeat"] = json.loads(once(["python", "-c", replayer], restore_env))
                 assert report["restored_after_ledger"]["erasure_requests"] == 2
+                if args.billing_privacy:
+                    report["restored_billing_reactivation_refused"] = False
+                    with psycopg.connect(restored_runtime_dsn) as connection:
+                        assert connection.execute("SELECT status FROM mk_app.subscriptions WHERE user_id=%s", (billing_user,)).fetchone()[0] == "deletion_pending"
+                        try:
+                            connection.execute("UPDATE mk_app.subscriptions SET status='active' WHERE user_id=%s", (billing_user,))
+                        except psycopg.errors.CheckViolation as exc:
+                            report["restored_billing_reactivation_refused"] = "PRIVACY_BILLING_FROZEN" in str(exc)
+                            connection.rollback()
+                    assert report["restored_billing_reactivation_refused"]
             if args.rotate_seal:
                 created_key = client.put("/api/keys/mine", headers=headers,
                                          json={"provider": "anthropic", "api_key": "synthetic-image-provider-key"})

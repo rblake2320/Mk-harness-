@@ -158,3 +158,34 @@ provider. It holds Redis unavailable, kills the worker after provider deletion b
 before the response, expires the recorded lease, and restarts the process. Cleanup
 must recover exactly one audit receipt without a send or a false backup completion.
 This process drill runs in the mandatory app PostgreSQL CI job.
+
+## Billing state after account erasure
+
+Late authenticated Stripe checkout, subscription and payment webhooks are
+acknowledged without changing an erased account's billing mirror. They cannot
+reactivate a subscription, replace provider identifiers or record a new first
+payment after the tombstone. A later referred customer's payment also cannot
+create a Stripe customer or award credit for an erased/inactive referrer.
+
+Migration `0004_billing_erasure_fence.sql` enforces this at the restricted
+PostgreSQL write boundary, including writers already waiting when erasure
+commits. New/rebound billing rows, active states and new business fields are
+refused. Terminal cleanup may retain or clear the existing provider identifiers
+and use `deletion_pending`/`canceled`; that local update never confirms an erasure
+task or certifies an external cancellation. The migration is additive; old
+migration files are unchanged, and a newer image refuses an older ledger until
+the separate migrator upgrades it.
+
+Verification includes seven application regressions, direct runtime SQL,
+concurrent-write and existing-data upgrade tests. The actual shipped-image drill
+supports `--erase --billing-privacy`: it reproduces late-event resurrection in
+the old image, checks all six signed webhook variants in the repaired image,
+then restores the pre-deletion backup, replays the separately pinned erasure
+ledger and confirms the restored billing row cannot be reactivated. The drill
+uses a synthetic incoming-webhook secret, supplies no Stripe API key and makes
+no external billing call.
+
+Provider cancellation/customer cleanup, durable creation-race recovery and
+provider/legal-retention evidence remain separate work. Existing
+`billing_customer` and `billing_subscription` tasks stay pending; do not mark
+them confirmed based on these mirror/fence tests.
