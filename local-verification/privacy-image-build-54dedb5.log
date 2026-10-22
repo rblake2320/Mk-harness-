@@ -1,0 +1,47 @@
+#0 building with "desktop-linux" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 794B done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/python:3.12-slim
+#2 DONE 0.1s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 113B done
+#3 DONE 0.0s
+
+#4 [internal] load build context
+#4 transferring context: 10.63kB done
+#4 DONE 0.0s
+
+#5 [1/6] FROM docker.io/library/python:3.12-slim@sha256:a6e34c598f2467ed0e9a8d349809fcd8b5c603269512df273a0bb1784edc11b1
+#5 resolve docker.io/library/python:3.12-slim@sha256:a6e34c598f2467ed0e9a8d349809fcd8b5c603269512df273a0bb1784edc11b1 0.1s done
+#5 DONE 0.1s
+
+#6 [2/6] RUN test -n "90a6f1a7978a1b1b096dca6c57511ca48d3b8cf052f8e704baf358f34ea2f21b"  && mkdir -p /etc/mk  && python -c "import urllib.request; urllib.request.urlretrieve('https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem', '/etc/mk/rds-global-bundle.pem')"  && echo "90a6f1a7978a1b1b096dca6c57511ca48d3b8cf052f8e704baf358f34ea2f21b  /etc/mk/rds-global-bundle.pem" | sha256sum -c -
+#6 CACHED
+
+#7 [3/6] WORKDIR /app
+#7 CACHED
+
+#8 [4/6] COPY requirements.txt .
+#8 CACHED
+
+#9 [5/6] RUN pip install --no-cache-dir -r requirements.txt
+#9 CACHED
+
+#10 [6/6] COPY app ./app
+#10 DONE 0.1s
+
+#11 exporting to image
+#11 exporting layers
+#11 exporting layers 0.2s done
+#11 exporting manifest sha256:be32b6aa50ebc03305e99e12f8e05abf5ca286dbaf447aa6ecc203a83497000e 0.0s done
+#11 exporting config sha256:2995814b51e970f1e257acd0abec00bba5ce1fae320800babc1ac2ed41704f1c 0.0s done
+#11 exporting attestation manifest sha256:276b48b6da9dba9172c3a9702481c828c307c2bfec89e60067fc92807d408bff
+#11 exporting attestation manifest sha256:276b48b6da9dba9172c3a9702481c828c307c2bfec89e60067fc92807d408bff 0.0s done
+#11 exporting manifest list sha256:7c0292687d2be8c579ee7d7ef67a087d8293164549d9e75b7ec09ccfddd18527 0.0s done
+#11 naming to docker.io/library/mk-app-acceptance:privacy-54dedb5 done
+#11 unpacking to docker.io/library/mk-app-acceptance:privacy-54dedb5 0.0s done
+#11 DONE 0.4s

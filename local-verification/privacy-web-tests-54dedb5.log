@@ -1,0 +1,70 @@
+
+> mk-harness-web@1.0.0 test:a11y
+> playwright test
+
+[WebServer] (node:102096) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:110460) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 29 tests using 7 workers
+
+(node:118300) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:83044) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:76236) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:70668) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:118300) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:121792) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:106728) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:30944) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:83044) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:76236) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:70668) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:106728) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:121792) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:30944) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok 5 session-security.spec.ts:5:1 › SDK coalesces refreshes and handles a delayed old-token 401 without a second refresh (29ms)
+  ok 8 session-security.spec.ts:35:1 › SDK cannot resurrect a session if sign-out happens during refresh (2ms)
+  ok 9 session-security.spec.ts:51:1 › SDK never replays an old-session operation under a new login (3ms)
+  ok 7 mfa.spec.ts:6:1 › SDK coalesces step-up, retries only explicit refusal and guards changed sessions (25ms)
+  ok 1 approval.spec.ts:7:1 › approval screen shows every H1 field and requires an explicit per-message passkey gesture (1.3s)
+  ok 3 draft-edit.spec.ts:4:1 › editing after proposal withdraws the old version and offers a fresh proposal (1.3s)
+  ok 10 session-security.spec.ts:70:3 › Sign out reports confirmed and clears browser tokens (967ms)
+  ok 2 privacy.spec.ts:10:1 › account deletion clears auth and shows a saveable pending receipt (1.3s)
+  ok 4 a11y.spec.ts:13:3 › Today's brief has no WCAG 2.2 A/AA violations (1.7s)
+  ok 6 rbac.spec.ts:5:1 › auditor sees only account security and audit evidence, never customer or action UI (1.5s)
+  ok 12 approval.spec.ts:44:1 › a changed digest between display and approval is refused client-side (657ms)
+  ok 13 session-security.spec.ts:70:3 › Sign out reports pending and clears browser tokens (704ms)
+  ok 14 privacy.spec.ts:27:1 › customer deletion reports downstream pending and displays server refusal (714ms)
+  ok 16 rbac.spec.ts:22:1 › administrator can change another member role but not own access (620ms)
+  ok 17 approval.spec.ts:57:1 › self-approval policy is displayed and refusal disables the ceremony (598ms)
+  ok 18 session-security.spec.ts:70:3 › Sign out reports offline and clears browser tokens (551ms)
+  ok 15 a11y.spec.ts:13:3 › Approvals has no WCAG 2.2 A/AA violations (1.2s)
+  ok 19 approval.spec.ts:69:1 › a missing selected sender disables approval instead of guessing another identity (519ms)
+  ok 20 session-security.spec.ts:90:1 › Session list revokes another session and reports pending delivery honestly (560ms)
+  ok 11 mfa.spec.ts:34:1 › enrollment keeps recovery codes out of storage, gates the app and fits 360px (3.1s)
+  ok 22 approval.spec.ts:77:1 › approval refuses a user-verification downgrade before requesting a signature (514ms)
+  ok 21 a11y.spec.ts:13:3 › Inbox & exceptions has no WCAG 2.2 A/AA violations (990ms)
+  ok 24 approval.spec.ts:92:1 › brief offers drafting when the permission observation is active (545ms)
+  ok 23 mfa.spec.ts:56:1 › sensitive change uses a modal keyboard check, cancel sends nothing, then confirmation retries once (1.1s)
+  ok 26 approval.spec.ts:100:3 › brief retains source and safe controls without drafting when permission is none (429ms)
+  ok 25 a11y.spec.ts:13:3 › My customers has no WCAG 2.2 A/AA violations (918ms)
+  ok 27 approval.spec.ts:100:3 › brief retains source and safe controls without drafting when permission is suppressed (424ms)
+  ok 28 a11y.spec.ts:13:3 › Settings has no WCAG 2.2 A/AA violations (1.0s)
+  ok 29 a11y.spec.ts:23:1 › customer page has no WCAG 2.2 A/AA violations (913ms)
+
+  29 passed (10.0s)
