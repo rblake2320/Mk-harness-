@@ -395,7 +395,7 @@ log "no PII in kernel/agent logs"
 log "gate 8: production pre-flight passes against this stack (and refuses --for-enable without an acceptance record)"
 export KERNEL_URL="$API" APP_URL="$APP" PG_HOST="${HOSTDB%/*}" PG_DB="${HOSTDB##*/}" PG_ADMIN_URL="$PGURL" \
   MK_DB_API_PASSWORD="api-$PW" MK_DB_WORKER_PASSWORD="worker-$PW" MK_DB_RELAY_PASSWORD="relay-$PW" MK_DB_READONLY_PASSWORD="readonly-$PW" \
-  MK_PREFLIGHT_EMAIL=admin@smoke.example.com MK_PREFLIGHT_PASSWORD='superSecret123!' \
+  MK_PREFLIGHT_ACCESS_TOKEN="$TOK" \
   MK_AUDIT_VERIFIER="$BIN/mk-audit-verifier" MK_EGRESS_AUTHORITIES=127.0.0.1:8787 MK_MOBILE_INTAKE_URL="https://127.0.0.1:8787/work-orders"
 bash "$ROOT/scripts/kernel-preflight.sh" > "$WORK/preflight.log" 2>&1 || { cat "$WORK/preflight.log"; die "pre-flight failed"; }
 grep -E "passed, 0 failed" "$WORK/preflight.log" >/dev/null || { cat "$WORK/preflight.log"; die "pre-flight"; }

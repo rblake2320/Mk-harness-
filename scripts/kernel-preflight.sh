@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # Production pre-flight for the MK action kernel. Run against a DEPLOYED stack
 # (staging or prod) before anyone sets RUST_ACTION_KERNEL_ENABLED=1, and again
-# after every deploy. Read-only except for one login that mints a session.
+# after every deploy. Read-only except operator login/MFA when a verified
+# session is not supplied. Never run this script with shell tracing enabled.
 #
 #   KERNEL_URL=http://kernel-api:8090 APP_URL=https://app.example \
 #   PG_HOST=db PG_DB=mkharness PG_ADMIN_URL=postgres://mk:…@db/mkharness \
 #   MK_DB_API_PASSWORD=… MK_DB_WORKER_PASSWORD=… MK_DB_RELAY_PASSWORD=… MK_DB_READONLY_PASSWORD=… \
-#   MK_PREFLIGHT_EMAIL=ops@example MK_PREFLIGHT_PASSWORD=… \
+#   MK_PREFLIGHT_ACCESS_TOKEN=<already MFA-verified operator session> \
 #   scripts/kernel-preflight.sh [--for-enable]
 #
 # --for-enable additionally requires production approval/key/TLS configuration, a
@@ -18,7 +19,9 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 FOR_ENABLE=0; [ "${1:-}" = "--for-enable" ] && FOR_ENABLE=1
 : "${KERNEL_URL:?}" "${APP_URL:?}" "${PG_HOST:?}" "${PG_DB:?}" "${PG_ADMIN_URL:?}"
 : "${MK_DB_API_PASSWORD:?}" "${MK_DB_WORKER_PASSWORD:?}" "${MK_DB_RELAY_PASSWORD:?}" "${MK_DB_READONLY_PASSWORD:?}"
-: "${MK_PREFLIGHT_EMAIL:?}" "${MK_PREFLIGHT_PASSWORD:?}"
+# Alternatively supply EMAIL/PASSWORD and exactly one fresh MK_PREFLIGHT_TOTP
+# or MK_PREFLIGHT_RECOVERY_CODE. Repeated preflights should reuse an authorized
+# access token, not replay the same one-use second-factor credential.
 VERIFIER="${MK_AUDIT_VERIFIER:-$ROOT/rust/target/release/mk-audit-verifier}"
 PASS=0; FAIL=0
 ok()   { PASS=$((PASS+1)); printf '  \033[32mPASS\033[0m %s\n' "$*"; }
@@ -42,10 +45,8 @@ check "kernel /metrics served"           metrics_ok
 check "kernel internal API not reachable without assertion (401)" http_is 401 "$KERNEL_URL/internal/v1/approvals/pending"
 
 echo "== 2. FastAPI ↔ kernel assertion pairing"
-TOK=$(curl -fsS "$APP_URL/api/auth/login" -H 'content-type: application/json' \
-  -d "{\"email\":\"$MK_PREFLIGHT_EMAIL\",\"password\":\"$MK_PREFLIGHT_PASSWORD\"}" 2>/dev/null \
-  | python3 -c 'import sys,json;print(json.load(sys.stdin).get("access_token",""))' 2>/dev/null)
-if [ -z "$TOK" ]; then fail "app login for pre-flight user"; else ok "app login"; fi
+TOK=$(APP_URL="$APP_URL" python3 "$ROOT/tools/verification/preflight_auth.py")
+if [ -z "$TOK" ]; then fail "MFA-authenticated app session for pre-flight user"; else ok "MFA-authenticated app session"; fi
 H=(-H "authorization: Bearer $TOK")
 check "app → kernel health 200 (kernel configured in app)"          http_is 200 "${H[@]}" "$APP_URL/api/agent-ops/health"
 check "app-minted assertion accepted by kernel (GET pending → 200)"  http_is 200 "${H[@]}" "$APP_URL/api/agent-ops/approvals/pending"
