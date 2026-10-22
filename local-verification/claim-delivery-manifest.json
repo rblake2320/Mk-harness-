@@ -1,0 +1,80 @@
+{
+  "source_commit": "9de02f4c4cfde6e011c1b282c0d76404989c051c",
+  "environment": "author-run Windows browser/Python and WSL Ubuntu 24.04 Python 3.12/Rust 1.97 with isolated PostgreSQL 16 and Redis",
+  "independent_verification": false,
+  "release_rows_closed": 0,
+  "artifacts": [
+    {
+      "path": "c3-c7-a11y.json",
+      "sha256": "5cd9cf45a1495ed5921ffe77a84b1cc853e3ec8dd996b382fb268b9a66765266"
+    },
+    {
+      "path": "c4-c7-kernel-http-retest.log",
+      "sha256": "eec9d98e94bc437367fbb61514db3a8793af5fc72eeaff4f2d92ce49cfe55e4c"
+    },
+    {
+      "path": "c4-c7-kernel-http.log",
+      "sha256": "3abcc20bd380c253f31e6b3950a24ecaeedd9d93517621cf59f433b09af018af"
+    },
+    {
+      "path": "c4-c7-rust-final.log",
+      "sha256": "74f70fd52ac7a59a69f07ef6051320033c88c67dea13c28bf2965e1431421617"
+    },
+    {
+      "path": "c4-c7-rust-suite.log",
+      "sha256": "0cb82342bd3faca1a4f754c3be31293cfa6a5aed6c3925b857bce6fb30ab68c2"
+    },
+    {
+      "path": "c4-clippy.log",
+      "sha256": "4dd2ecaa8d88d014d9abb3f20b3fce20e52348f449c497f7d4774e34a79cacfc"
+    },
+    {
+      "path": "c4-reconciliation-targeted.log",
+      "sha256": "d378d8980738dce8a0086c6067361df35f272dfbff2c043fc9b41f9285bb4bf6"
+    },
+    {
+      "path": "c7-app-test-setup-failure.xml",
+      "sha256": "e73f9803dd77959cd00f4f64de8d6854399e7928df4e5988777ac6f43dd16663"
+    },
+    {
+      "path": "c7-app.xml",
+      "sha256": "474974e2f299e448fdc81e5c9069342e6f5a788887bc3d2194f26dddea83030a"
+    },
+    {
+      "path": "claim-delivery-linux-final.xml",
+      "sha256": "792cdc489ff023b62169ea37bfdd4ecb04932ca340c5c433b48ca7a22cad0ba1"
+    },
+    {
+      "path": "delivery-queue-360.png",
+      "sha256": "5b9987a68373984a8b6e165a5236ad8b851ecc5c2b7e97fd167417f6fff9760e"
+    },
+    {
+      "path": "delivery-queue-browser.json",
+      "sha256": "33635b30448d095971dc5665af656b53034b0223598ef8fc9aff117ca81ad424"
+    },
+    {
+      "path": "delivery-queue-desktop.png",
+      "sha256": "f4bd0786057bedd1b0c1e69d3c7ee6c44de5c216ce5bf4509068c5349e02559e"
+    },
+    {
+      "path": "p2-backend-final.xml",
+      "sha256": "5e1d912e1719cdfcb2c5c1f2da1ff4241d0946641caa3ee8d5077046dddcf3a5"
+    },
+    {
+      "path": "p2-before.xml",
+      "sha256": "1dc4697b9a3b782f028e97e990a6199de9ed22736c1a5171e8f129ecba8afa18"
+    },
+    {
+      "path": "p2-boundaries.xml",
+      "sha256": "1e2b291fecb09a21810f8583092abf3b2f50e559dea008ba5a3513c4b16771a9"
+    },
+    {
+      "path": "p2-c3-c7-python-final.xml",
+      "sha256": "91262c535addd52167f0374fe9c91e3a214439813724a9c04f4d8cd7976b535e"
+    },
+    {
+      "path": "p2-retest.xml",
+      "sha256": "13e0aaa2d96fbb4a905aa62bc141dab09e1f7cdcbdd1424cd98e9d702397bc05"
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+   Compiling mk-store v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-store)
+   Compiling mk-queue v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-queue)
+   Compiling mk-adapters v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-adapters)
+   Compiling mk-api v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-api)
+   Compiling mk-worker v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-worker)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 6.35s
+     Running tests/http_e2e.rs (/tmp/mk-release-acceptance-target/debug/deps/http_e2e-18de0e99f101486d)
+
+running 9 tests
+test oversized_and_malformed_bodies_are_rejected_before_policy ... ok
+test per_tenant_limits_and_graceful_rejection_above_capacity ... ok
+test automatic_provider_reconciliation_recovers_missing_callbacks_without_resending ... ok
+test provider_sms_path_with_authenticated_callbacks_and_monotonic_states ... ok
+
+thread 'lease_expiry_completes_provider_accepted_and_reconciles_only_the_unknown' (385709) panicked at crates/mk-api/tests/http_e2e.rs:2552:5:
+assertion `left == right` failed: HousekeepingStats { expired: 0, leases_recovered: 3, nonces_purged: 0, jtis_purged: 16, challenges_purged: 1, stranded_requeued: 0, accepted_completed: 2 }
+  left: 2
+ right: 1
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test lease_expiry_completes_provider_accepted_and_reconciles_only_the_unknown ... FAILED
+test ambiguous_submission_becomes_submission_unknown_and_inbound_pause_defers_dispatch ... ok
+test full_governed_path_over_http ... ok
+test human_approval_authority_resists_forgery_replay_transplant_and_revocation ... ok
+test inbound_stop_suppresses_cancels_and_dedupes_and_the_control_path_is_serialized ... ok
+
+failures:
+
+failures:
+    lease_expiry_completes_provider_accepted_and_reconciles_only_the_unknown
+
+test result: FAILED. 8 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.06s
+
+error: test failed, to rerun pass `-p mk-api --test http_e2e`

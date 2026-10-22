@@ -1,0 +1,281 @@
+   Compiling bitflags v2.13.2
+   Compiling mk-contracts v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-contracts)
+   Compiling linux-raw-sys v0.12.1
+   Compiling fastrand v2.5.0
+   Compiling wait-timeout v0.2.1
+   Compiling bit-vec v0.10.1
+   Compiling quick-error v1.2.3
+   Compiling rand_xorshift v0.5.0
+   Compiling unarray v0.1.4
+   Compiling core_detect v1.0.0
+   Compiling sqlx-postgres v0.9.0
+   Compiling tower-http v0.6.11
+   Compiling bit-set v0.11.1
+   Compiling rustix v1.1.5
+   Compiling mk-policy v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-policy)
+   Compiling reqwest v0.12.28
+   Compiling tempfile v3.27.0
+   Compiling rusty-fork v0.3.1
+   Compiling proptest v1.12.0
+   Compiling sqlx v0.9.0
+   Compiling mk-store v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-store)
+   Compiling mk-testkit v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-testkit)
+   Compiling mk-queue v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-queue)
+   Compiling mk-adapters v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-adapters)
+   Compiling mk-worker v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-worker)
+   Compiling mk-api v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-api)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 15.64s
+     Running unittests src/lib.rs (/tmp/mk-release-acceptance-target/debug/deps/mk_adapters-1822567f3db7be4c)
+
+running 8 tests
+test twilio::tests::delivery_state_is_monotonic_and_never_time_upgraded ... ok
+test twilio::tests::classification_is_conservative ... ok
+test egress::tests::ssrf_and_shape_rejections ... ok
+test egress::tests::allowlisted_https_passes ... ok
+test twilio::tests::form_requires_exactly_one_sender_and_e164 ... ok
+test twilio::tests::signature_matches_twilio_documented_example ... ok
+test twilio::tests::opt_out_detection_separates_explicit_from_possible ... ok
+test twilio::tests::kernel_detector_agrees_with_the_a4_synthetic_set ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running unittests src/bin/simulator.rs (/tmp/mk-release-acceptance-target/debug/deps/mk_simulator-8d911991bb77fbab)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/twilio_sim.rs (/tmp/mk-release-acceptance-target/debug/deps/mk_twilio_sim-68424cc8b619447c)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/mobile_simulator.rs (/tmp/mk-release-acceptance-target/debug/deps/mobile_simulator-11d3f7e363ef35e4)
+
+running 4 tests
+test unreachable_agent_is_transient_and_bad_inputs_are_permanent ... ok
+test wrong_secret_is_rejected_by_simulator ... ok
+test accept_mode_delivers_valid_signed_order ... ok
+test retry_classification_by_status ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.09s
+
+     Running tests/twilio_simulator.rs (/tmp/mk-release-acceptance-target/debug/deps/twilio_simulator-2ad89c996332a380)
+
+running 8 tests
+test egress_outside_allowlist_is_refused_at_construction ... ok
+test wrong_tenant_or_unknown_sender_is_refused_before_any_network_call ... ok
+test rate_limit_is_classified_with_backoff ... ok
+test accept_returns_provider_message_id_and_pending_callback ... ok
+test observation_requires_recorded_id_and_matching_tenant_sender_destination ... ok
+test server_error_and_lost_response_are_ambiguous_never_retried_blindly ... ok
+test provider_opt_out_and_invalid_destination_are_permanent_and_distinct ... ok
+test ambiguous_submission_reconciles_to_exactly_one_provider_message ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (/tmp/mk-release-acceptance-target/debug/deps/mk_api-d5c312a74faed1a6)
+
+running 12 tests
+test limits::tests::a_tenant_cannot_hold_more_than_its_share_of_inflight_permits ... ok
+test limits::tests::burst_then_refuse_then_refill ... ok
+test limits::tests::clock_going_backwards_never_mints_tokens ... ok
+test limits::tests::config_rejects_nonsense ... ok
+test limits::tests::inflight_cap_refuses_without_queueing ... ok
+test limits::tests::retry_after_reflects_the_refill_time ... ok
+test limits::tests::safety_controls_are_recognised_only_for_their_exact_shapes ... ok
+test limits::tests::tenants_and_classes_are_isolated ... ok
+test routes::actions::tests::agent_cannot_claim_human_or_system_origin ... ok
+test routes::tests::destination_hash_matches_python_vector ... ok
+test limits::tests::eviction_judges_each_bucket_by_its_own_class ... ok
+test limits::tests::bucket_map_is_bounded ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+     Running unittests src/bin/api.rs (/tmp/mk-release-acceptance-target/debug/deps/mk_action_api-3376c7e0fbfc6ac3)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/http_e2e.rs (/tmp/mk-release-acceptance-target/debug/deps/http_e2e-dd010507e85f7370)
+
+running 9 tests
+test oversized_and_malformed_bodies_are_rejected_before_policy ... ok
+test per_tenant_limits_and_graceful_rejection_above_capacity ... ok
+test automatic_provider_reconciliation_recovers_missing_callbacks_without_resending ... ok
+test provider_sms_path_with_authenticated_callbacks_and_monotonic_states ... ok
+test lease_expiry_completes_provider_accepted_and_reconciles_only_the_unknown ... ok
+test ambiguous_submission_becomes_submission_unknown_and_inbound_pause_defers_dispatch ... ok
+test full_governed_path_over_http ... ok
+test human_approval_authority_resists_forgery_replay_transplant_and_revocation ... ok
+test inbound_stop_suppresses_cancels_and_dedupes_and_the_control_path_is_serialized ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.04s
+
+     Running unittests src/lib.rs (/tmp/mk-release-acceptance-target/debug/deps/mk_contracts-11f2985339eac252)
+
+running 22 tests
+test message_state::tests::derivation_never_overclaims ... ok
+test message_state::tests::vocabulary_matches_contract_exactly ... ok
+test problem::tests::detail_is_capped ... ok
+test schema::tests::mobile_work_order_schema_is_pinned ... ok
+test schema::tests::oversized_rejected ... ok
+test schema::tests::depth_bomb_rejected ... ok
+test schema::tests::violation_message_is_capped ... ok
+test mobile::tests::callbacks_parse_by_schema_and_reject_mismatch ... ok
+test problem::tests::matches_error_schema ... ok
+test mobile::tests::verified_on_device_true_is_rejected_by_contract ... ok
+test mobile::tests::valid_order_passes_published_schema ... ok
+test mobile::tests::open_url_must_be_https_and_targets_closed ... ok
+test mobile::tests::step_limits_and_task_id_shape ... ok
+test action::tests::prompt_injection_in_free_text_is_just_data ... ok
+test action::tests::rejects_bad_time_windows_and_bad_resource ... ok
+test action::tests::body_tenant_is_overwritten_by_binding ... ok
+test action::tests::fixture_validates_and_digests_stably ... ok
+test action::tests::tool_id_pattern ... ok
+test action::tests::digest_changes_on_any_material_edit ... ok
+test action::tests::rejects_unknown_version_and_fields ... ok
+test action::tests::rejects_credential_like_arguments ... ok
+test schema::tests::schemas_compile ... ok
+
+test result: ok. 22 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
+
+     Running tests/hmac_vectors.rs (/tmp/mk-release-acceptance-target/debug/deps/hmac_vectors-d3047fa3d248ef20)
+
+running 3 tests
+test algorithm_is_pinned ... ok
+test every_vector_signs_identically ... ok
+test every_vector_verifies_and_every_mutation_fails ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (/tmp/mk-release-acceptance-target/debug/deps/mk_store-60066f65affd6e04)
+
+running 10 tests
+test database_url_tests::composed_url_percent_encodes_the_password_and_requires_tls ... ok
+test database_url_tests::empty_url_falls_through_and_missing_parts_is_an_error ... ok
+test database_url_tests::verbatim_url_wins ... ok
+test database_url_tests::explicit_root_cert_switches_to_verify_full ... ok
+test fingerprint::tests::debug_never_prints_key_material ... ok
+test fingerprint::tests::lock_keys_are_sorted_and_deduped ... ok
+test fingerprint::tests::default_key_reproduces_the_python_vector ... ok
+test fingerprint::tests::parse_rejects_bad_specs ... ok
+test fingerprint::tests::rotated_set_keeps_the_old_tag_and_switches_primary ... ok
+test tests::migrations_are_registered ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/postgres.rs (/tmp/mk-release-acceptance-target/debug/deps/postgres-f76fda24e67241a2)
+
+running 19 tests
+test api_role_cannot_delete_or_update_jti_rows ... ok
+test audit_rows_cannot_be_updated_or_deleted_even_by_owner ... ok
+test fingerprint_rekey_rejects_inconsistent_raw_destination ... ok
+test approval_with_wrong_digest_is_not_consumable ... ok
+test nonce_replay_and_idempotency ... ok
+test adapter_rotation_overlap_and_revocation ... ok
+test api_role_can_run_every_callback_statement ... ok
+test cross_tenant_access_is_invisible_even_with_raw_sql ... ok
+test illegal_transition_persists_nothing ... ok
+test hash_only_suppressions_are_unverified_until_rekey_and_old_binaries_are_tagged ... ok
+test outbox_claim_publish_and_leases ... ok
+test full_lifecycle_with_verified_audit_chain ... ok
+test assertion_jti_is_single_use_across_pools_and_purgeable ... ok
+test tenant_kill_switch_applies_without_policy_row ... ok
+test revocation_finds_pending_actions_and_policy_roundtrip ... ok
+test fingerprint_key_rotation_never_orphans_suppressions_or_consent ... ok
+test concurrent_consumers_cannot_both_consume ... ok
+test worker_role_can_discover_tenants_and_purge_nonces_across_tenants ... ok
+test envelope_key_rotation_drill ... ok
+
+test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.58s
+
+     Running unittests src/lib.rs (/tmp/mk-release-acceptance-target/debug/deps/mk_worker-83e0d2f2d6adcacf)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/worker.rs (/tmp/mk-release-acceptance-target/debug/deps/mk_action_worker-502cd65891d1c5f0)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/verifier.rs (/tmp/mk-release-acceptance-target/debug/deps/mk_audit_verifier-59fc4f0b6bf871c5)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/healthcheck.rs (/tmp/mk-release-acceptance-target/debug/deps/mk_healthcheck-3e65226e10cd693d)
+
+running 2 tests
+test tests::two_hundred_is_healthy ... ok
+test tests::five_hundred_and_refused_and_non_loopback_are_unhealthy ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/keyctl.rs (/tmp/mk-release-acceptance-target/debug/deps/mk_keyctl-fb23122de80e4095)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/relay.rs (/tmp/mk-release-acceptance-target/debug/deps/mk_outbox_relay-a14fea03f30c1fd2)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/restore_gate.rs (/tmp/mk-release-acceptance-target/debug/deps/mk_restore_gate-2c045b18cb043828)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/dispatch_e2e.rs (/tmp/mk-release-acceptance-target/debug/deps/dispatch_e2e-bc031d65dd6935de)
+
+running 7 tests
+test revocation_after_queue_suppresses_before_dispatch ... ok
+test happy_path_then_duplicate_delivery_is_absorbed ... ok
+test frequency_cap_is_enforced_at_dispatch_not_only_at_proposal ... ok
+test permanent_rejection_dead_letters ... ok
+test transient_failure_retries_with_consumed_approval_then_succeeds ... ok
+test metrics_sampler_reports_queue_lease_and_switch_state_without_identifiers ... ok
+test suppression_after_approval_and_kill_switch_block_dispatch ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.25s
+
+   Doc-tests mk_adapters
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests mk_api
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests mk_contracts
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests mk_store
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests mk_worker
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
