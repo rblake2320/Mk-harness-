@@ -161,7 +161,7 @@ pub async fn run_once(
             audit::append_event(&mut tx, NewEvent {
                 tenant_id: *tenant, occurred_at: now, actor_type: ActorType::Worker,
                 actor_id: &ctx.worker_id, action_id: Some(delivery.action_id), event_type: EventType::DeliveryEvent,
-                payload_redacted: json!({"source":"provider_reconciliation", "provider_status":observation.status,
+                payload_redacted: json!({"source":"provider_reconciliation",
                     "folded_state":folded.as_str(), "raw_event_digest":observation.digest.to_string()}),
                 trace_id: None, policy_version: mk_policy::POLICY_VERSION.0,
             }).await?;

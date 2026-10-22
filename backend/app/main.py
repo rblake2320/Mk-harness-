@@ -10,6 +10,7 @@ from .config import get_settings, require_secret
 from .db import init_engine
 from .auth_sessions import revocation_worker
 from .privacy_delivery import privacy_worker
+from .telemetry import PrivateHttpTelemetry
 from .routes import (
     account, agent_ops, auth, billing, chat, commitments, consent, customers, drafting, foundation, inbound, outreach,
     keys, mfa, profile, skin, skindata, usage,
@@ -191,6 +192,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["Authorization", "Content-Type"],
 )
+app.add_middleware(PrivateHttpTelemetry)
 
 # foundation before customers: its /customers/import/* and /customers/export.csv paths
 # must win over customers' /customers/{cid}.

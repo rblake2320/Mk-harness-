@@ -102,7 +102,7 @@ class Recovery:
         return asyncio.run(client.call("POST",route,user_id=uid,tenant_id=tid,
             roles=list(roles),session_id="restore-fixture",json=body))
 
-    def propose(self, client, tid, uid, cid, phone="+15555550100"):
+    def propose(self, client, tid, uid, cid, phone="+15555550100", **overrides):
         now = datetime.now(timezone.utc)
         proposal = {"schema_version":"mk.action.v1", "tenant_id":tid, "requested_by":uid,
             "origin":{"type":"agent"},"workflow":"customer_follow_up","action_kind":"send_sms",
@@ -110,6 +110,7 @@ class Recovery:
             "arguments":{"contact_id":cid,"to":phone,"rendered_text":"RESTORE-PRIVATE-CANARY. Reply STOP to opt out."},
             "purpose":"restore_private_purpose","risk":"high","requested_at":now.isoformat(),
             "expires_at":(now+timedelta(minutes=10)).isoformat(),"idempotency_key":"private-"+uuid.uuid4().hex,"evidence":[]}
+        proposal.update(overrides)
         return self.call(client,tid,uid,"/actions",proposal)
 
     def erase(self, client, tid, cid, request=None):

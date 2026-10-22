@@ -262,8 +262,9 @@ def add_member(body: InviteIn, admin: User = Depends(require_admin),
                 display_name=body.display_name or body.email.split("@")[0], role=body.role,
                 referral_code=_gen_referral_code(db))
     db.add(user)
+    db.flush()
     db.add(AuditLog(tenant_id=admin.tenant_id, user_id=admin.id,
-                    action="member.add", detail=body.email.lower()))
+                    action="member.add", detail=json.dumps({"member_id":user.id,"role":user.role},sort_keys=True)))
     db.commit()
     return {"id": user.id, "email": user.email, "role": user.role}
 

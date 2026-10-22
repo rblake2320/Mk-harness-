@@ -66,7 +66,7 @@ def _customers_for_fingerprint(db: Session, tenant_id: str, fp: str | list[str])
 
 def _exception(db: Session, tenant_id: str, user_id: str, customer_id: str | None, kind: str, source_ref: str,
                detail: str) -> ExceptionRecord:
-    aref = audit(db, tenant_id, user_id, "inbound.exception", {"kind": kind, "source_reference": source_ref,
+    aref = audit(db, tenant_id, user_id, "inbound.exception", {"kind": kind, "has_source_reference": bool(source_ref),
                                                                "customer_id": customer_id})
     ex = ExceptionRecord(tenant_id=tenant_id, customer_id=customer_id, kind=kind, source_reference=source_ref,
                          detail_enc=seal(tenant_id, "exception", detail), audit_ref=aref)
@@ -96,7 +96,7 @@ def _mirror_kernel_suppression(db: Session, user: User, event: dict, label: str,
             SuppressionEvent.channel == "sms", SuppressionEvent.lifted_at.is_(None))).all()
         if not any(s.permanent or not permanent for s in existing):
             aref = audit(db, user.tenant_id, user.id, "inbound.suppression", {
-                "source_reference": source_ref, "customer_id": customer_id, "permanent": permanent})
+                "has_source_reference": bool(source_ref), "customer_id": customer_id, "permanent": permanent})
             db.add(SuppressionEvent(tenant_id=user.tenant_id, customer_id=customer_id,
                                     channel="sms", fingerprint=fingerprint, reason=f"inbound:{label}",
                                     source="sms_reply", permanent=permanent, created_by=user.id, audit_ref=aref))

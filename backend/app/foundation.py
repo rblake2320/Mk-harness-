@@ -89,9 +89,22 @@ def unseal(tenant_id: str, kind: str, ciphertext: str) -> str:
 def audit(db: Session, tenant_id: str, user_id: str, action: str, detail: dict) -> str:
     """Attribution record for every permission-relevant change (F8). Detail must not
     carry raw destinations or message text; callers pass fingerprints and ids."""
-    forbidden = {"phone", "email", "to", "destination", "text", "rendered_text"}
-    if forbidden & set(detail):
-        raise RuntimeError("audit detail must not carry raw destinations or text")
+    forbidden = {"phone", "email", "to", "destination", "text", "rendered_text",
+                 "password", "secret", "token", "authorization", "api_key", "assertion"}
+    business_only = {"reason", "source_reference", "source_version", "product_id", "claim_id", "claims_used"}
+    def inspect(value, depth=0):
+        if depth > 16:
+            raise RuntimeError("audit detail nesting limit")
+        if isinstance(value, dict):
+            for key, child in value.items():
+                lower = str(key).lower()
+                if lower in business_only or any(lower == word or lower.endswith("_"+word) for word in forbidden):
+                    raise RuntimeError("audit detail must not carry raw destinations, text or secrets")
+                inspect(child, depth+1)
+        elif isinstance(value, (list, tuple)):
+            for child in value:
+                inspect(child, depth+1)
+    inspect(detail)
     row = AuditLog(tenant_id=tenant_id, user_id=user_id, action=action,
                    detail=json.dumps(detail, sort_keys=True, separators=(",", ":")))
     db.add(row)

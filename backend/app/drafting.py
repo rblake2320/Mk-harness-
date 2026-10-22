@@ -190,7 +190,7 @@ def require_current_draft_claims(db: Session, tenant_id: str, draft: DraftVersio
 def refuse_draft(db: Session, *, tenant_id: str, user_id: str, customer: Customer,
                  commitment: Commitment | None, brief_item_id: str | None,
                  reason: str, kind: str = "unsupported_claim") -> DraftOutcome:
-    aref = audit(db, tenant_id, user_id, "draft.refused", {"customer_id": customer.id, "reason": reason, "kind": kind})
+    aref = audit(db, tenant_id, user_id, "draft.refused", {"customer_id": customer.id, "has_reason": bool(reason), "kind": kind})
     ex = ExceptionRecord(tenant_id=tenant_id, customer_id=customer.id, kind="draft_review",
                          source_reference=commitment.id if commitment else (brief_item_id or ""),
                          detail_enc=seal(tenant_id, "exception", reason), audit_ref=aref)
@@ -293,8 +293,8 @@ def assemble(db: Session, *, tenant_id: str, user_id: str, customer: Customer, c
         spans.append({"claim_id": m.group(1), "approved_text": by_id[m.group(1)].approved_text})
     source_versions = {c.claim_id: c.source_version for c in candidates if c.claim_id in placeholders}
     aref = audit(db, tenant_id, user_id, "draft.generate",
-                 {"customer_id": customer.id, "claims_used": sorted(set(placeholders)),
-                  "text_digest": _digest(text), "generated_by": generated_by})
+                 {"customer_id": customer.id, "claim_count": len(set(placeholders)),
+                  "text_digest": _digest(text), "has_generator": bool(generated_by)})
     dv = DraftVersion(tenant_id=tenant_id, customer_id=customer.id, brief_item_id=brief_item_id,
                       commitment_id=commitment.id if commitment else None,
                       text_enc=seal(tenant_id, "draft", text), text_digest=_digest(text),

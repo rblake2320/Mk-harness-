@@ -49,13 +49,12 @@ class SourceIn(BaseModel):
 
 @router.post("/knowledge/sources", status_code=201)
 def add_source(body: SourceIn, admin: User = Depends(require_admin), db: Session = Depends(get_db)):
-    aref = audit(db, admin.tenant_id, admin.id, "knowledge.source.add",
-                 {"source_reference": body.source_reference, "source_version": body.source_version})
     src = KnowledgeSource(tenant_id=admin.tenant_id, title=body.title, source_reference=body.source_reference,
                           source_version=body.source_version, content_digest="sha256:" + body.content_sha256,
-                          market=body.market, effective_at=body.effective_at or utcnow(), expires_at=body.expires_at,
-                          audit_ref=aref)
+                          market=body.market, effective_at=body.effective_at or utcnow(), expires_at=body.expires_at)
     db.add(src)
+    db.flush()
+    src.audit_ref = audit(db, admin.tenant_id, admin.id, "knowledge.source.add", {"source_id":src.id})
     db.commit()
     return {"id": src.id, "review_status": src.review_status}
 
@@ -91,13 +90,13 @@ def add_claim(body: ClaimIn, admin: User = Depends(require_admin), db: Session =
     src = db.get(KnowledgeSource, body.source_id)
     if not src or src.tenant_id not in (None, admin.tenant_id):
         raise HTTPException(404, "Source not found")
-    aref = audit(db, admin.tenant_id, admin.id, "knowledge.claim.add",
-                 {"claim_id": body.claim_id, "product_id": body.product_id, "source_version": src.source_version})
     row = ApprovedClaim(tenant_id=admin.tenant_id, claim_id=body.claim_id, product_id=body.product_id,
                         approved_text=body.approved_text, source_id=src.id, source_reference=src.source_reference,
                         source_version=src.source_version, market=body.market,
-                        effective_at=body.effective_at or utcnow(), expires_at=body.expires_at, audit_ref=aref)
+                        effective_at=body.effective_at or utcnow(), expires_at=body.expires_at)
     db.add(row)
+    db.flush()
+    row.audit_ref = audit(db, admin.tenant_id, admin.id, "knowledge.claim.add", {"claim_row_id":row.id,"source_id":src.id})
     db.commit()
     return {"id": row.id, "claim_id": row.claim_id, "review_status": row.review_status}
 

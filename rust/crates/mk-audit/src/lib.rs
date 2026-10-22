@@ -173,7 +173,7 @@ pub enum AuditError {
 
 /// Keys that must never appear anywhere in an audit payload. Checked
 /// recursively; producers redact before calling.
-const FORBIDDEN_PAYLOAD_KEYS: [&str; 10] = [
+const FORBIDDEN_PAYLOAD_KEYS: [&str; 18] = [
     "secret",
     "token",
     "api_key",
@@ -184,6 +184,14 @@ const FORBIDDEN_PAYLOAD_KEYS: [&str; 10] = [
     "email",
     "destination",
     "assertion",
+    "reason",
+    "source_reference",
+    "source_version",
+    "platform",
+    "capabilities",
+    "callback_authority",
+    "provider_status",
+    "agent_id",
 ];
 
 fn scan_forbidden(v: &Value) -> Result<(), AuditError> {
@@ -191,9 +199,10 @@ fn scan_forbidden(v: &Value) -> Result<(), AuditError> {
         Value::Object(m) => {
             for (k, val) in m {
                 let lk = k.to_ascii_lowercase();
-                if FORBIDDEN_PAYLOAD_KEYS
-                    .iter()
-                    .any(|f| lk == *f || lk.ends_with(&format!("_{f}")))
+                if FORBIDDEN_PAYLOAD_KEYS.iter().any(|f| lk == *f)
+                    || FORBIDDEN_PAYLOAD_KEYS[..10]
+                        .iter()
+                        .any(|f| lk.ends_with(&format!("_{f}")))
                 {
                     return Err(AuditError::ForbiddenPayloadKey(k.clone()));
                 }
@@ -272,7 +281,12 @@ pub fn append(head: &ChainHead, new: NewEvent<'_>) -> Result<(AuditEvent, ChainH
         payload_digest,
         previous_event_hash: head.last_hash.clone(),
         event_hash: event_hash.clone(),
-        trace_id: new.trace_id.map(str::to_owned),
+        // A caller-supplied correlation string can contain an address or body.
+        // Preserve only the UUID representation minted by supported clients.
+        trace_id: new
+            .trace_id
+            .and_then(|id| Uuid::parse_str(id).ok())
+            .map(|id| id.to_string()),
         policy_version: new.policy_version.to_owned(),
     };
     let next = ChainHead {
@@ -521,6 +535,11 @@ mod tests {
             "Phone",
             "adapter_secret",
             "AUTHORIZATION",
+            "reason",
+            "source_reference",
+            "platform",
+            "capabilities",
+            "provider_status",
         ] {
             let r = append(
                 &head,

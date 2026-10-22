@@ -6,6 +6,8 @@ Uses generated test keys and synthetic content; no external provider requests.
 import argparse
 import asyncio
 import base64
+import hashlib
+import hmac
 import json
 import os
 import secrets
@@ -51,7 +53,7 @@ def main():
             env={**os.environ,**(env or {})})
         if result.returncode:
             raise RuntimeError(f"Docker {parts[0]} failed with exit {result.returncode}")
-        return result.stdout.strip()
+        return (result.stdout+(result.stderr if parts[0]=="logs" else "")).strip()
 
     info=json.loads(docker("inspect",container))[0]
     assert info["Config"]["Labels"].get("codex.task")=="mk-87-rows"
@@ -62,7 +64,8 @@ def main():
         "MK_MASTER_KEY":base64.b64encode(os.urandom(32)).decode(),
         "MK_ASSERTION_KEYS":f"privacy-image={key.public_key_b64url()}",
         "MK_APPROVAL_RP_ID":"localhost","MK_APPROVAL_ORIGINS":"http://localhost:8000",
-        "RUST_ACTION_KERNEL_ENABLED":"1","MK_BIND":"0.0.0.0:8090","RUST_LOG":"warn"}
+        "RUST_ACTION_KERNEL_ENABLED":"1","MK_BIND":"0.0.0.0:8090","RUST_LOG":"warn",
+        "MK_PUBLIC_WEBHOOK_BASE":"https://example.invalid"}
     try:
         with psycopg.connect(dsn,autocommit=True) as conn:
             conn.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(database)))
@@ -242,6 +245,40 @@ def main():
             report["provider_cleanup"]={**fixture_state,"redis_unavailable":True,"sigkill_after_external_effect":True,
                 "restart_recovered_lease":True,"active_receipts":receipts,"backup_pending":True,"restricted_worker_role":True,
                 "worker_user":worker_state["Config"]["User"],"worker_read_only":True,"killed_exit_code":137}
+        # Fresh synthetic tenant: content must not become telemetry even when
+        # accepted as business data or rejected as an unrecognized tool/status.
+        tenant,user=(str(uuid.uuid4()) for _ in range(2))
+        canary="synthetic_private_person_"+uuid.uuid4().hex
+        suppressed=call("POST","/suppressions",["consultant"],{"channel":"sms",
+            "destination":"+15555550103","reason":canary,"source":"test","permanent":True})
+        assert suppressed.status_code==201,suppressed.body
+        registered=call("POST","/adapters",["tenant_admin"],{"agent_id":canary,"name":canary,
+            "platform":canary,"version":"1","capabilities":[canary],"allowed_actions":["send_sms"],
+            "callback_authority":"127.0.0.1:8787"})
+        assert registered.status_code==201,registered.body
+        rejected=call("POST","/actions",["agent"],{**proposal,"tenant_id":tenant,"requested_by":user,
+            "tool_id":canary+".v1","idempotency_key":uuid.uuid4().hex})
+        assert rejected.status_code==403,rejected.body
+        account,token="AC"+uuid.uuid4().hex,secrets.token_hex(24)
+        sender=call("POST","/senders",["tenant_admin"],{"owner_user_id":user,"display_name":canary,
+            "account_sid":account,"auth_token":token,"from_number":"+15555550102"})
+        assert sender.status_code==201,sender.body
+        path=f"/webhooks/twilio/status/{sender.body['sender_identity_id']}"
+        form={"AccountSid":account,"MessageSid":"SM"+uuid.uuid4().hex,"MessageStatus":canary,"ErrorCode":canary}
+        signed="https://example.invalid"+path+"".join(k+v for k,v in sorted(form.items()))
+        signature=base64.b64encode(hmac.new(token.encode(),signed.encode(),hashlib.sha1).digest()).decode()
+        assert httpx.post(base+path,data=form,headers={"X-Twilio-Signature":signature}).status_code==200
+        assert httpx.get(base+"/"+canary,params={"private":canary}).status_code==404
+        metrics=httpx.get(base+"/metrics").text
+        logs=docker("logs",owned)
+        with psycopg.connect(psycopg.conninfo.make_conninfo(dsn,dbname=database)) as conn:
+            rows=conn.execute("SELECT actor_id,trace_id,payload_redacted FROM kernel.audit_events WHERE tenant_id=%s",(tenant,)).fetchall()
+        assert rows and canary not in json.dumps(rows) and canary not in metrics and canary not in logs
+        assert registered.body["enrollment_secret"] not in json.dumps(rows)
+        (output/"api.log").write_text(logs+"\n",encoding="utf-8")
+        (output/"metrics.txt").write_text(metrics,encoding="utf-8")
+        report["audit_privacy"]={"events_scanned":len(rows),"audit_canary_absent":True,
+            "metric_canary_absent":True,"log_canary_absent":True,"signed_provider_callback_status":200}
         report["outcome"]="Worked"
     except Exception as exc:
         report.update(outcome="Failed",error_type=type(exc).__name__)

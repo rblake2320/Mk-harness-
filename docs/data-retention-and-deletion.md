@@ -6,6 +6,10 @@ changes them. Implementation and the deletion lifecycle test: WP03/WP09.
 
 ## Data map
 
+The [implemented field and telemetry inventory](data-map.md) distinguishes
+field-sealed columns from private business columns relying on storage encryption.
+The table below records proposed retention targets, not completed automation.
+
 | Data | Store | Protection | Default retention | Deletable on request |
 |---|---|---|---|---|
 | Customer records, normalized destinations, preferences | Postgres (app) | tenant scope, destination field-encrypted | life of relationship | yes (anonymize) |

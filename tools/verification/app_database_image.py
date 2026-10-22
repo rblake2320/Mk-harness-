@@ -28,6 +28,7 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--rotate-seal", action="store_true")
     parser.add_argument("--erase", action="store_true")
+    parser.add_argument("--audit-privacy", action="store_true")
     parser.add_argument("--browser-url", help="Local production web preview for the actual deletion UI drill")
     args = parser.parse_args()
     if args.erase and args.rotate_seal:
@@ -320,6 +321,15 @@ def main():
                 restore_env["APP_SEAL_KEYS"] = runtime_env["APP_SEAL_KEYS"]
                 report["restored_backup_new_key_only"] = json.loads(once(["python", "-m", "app.tools.reseal", "status"], restore_env))
                 assert report["restored_backup_new_key_only"]["unreadable"] == 0
+            if args.audit_privacy:
+                canary="SYNTHETIC-PRIVATE-URL-"+uuid.uuid4().hex
+                assert client.get("/api/health/ready",params={"customer":canary}).status_code==200
+                assert client.get("/"+canary).status_code==404
+                logs=docker("logs",app_name)
+                report["audit_privacy"]={"url_canary_absent_from_logs":canary not in logs,
+                    "safe_request_events_present":"http_request method=" in logs}
+                assert report["audit_privacy"]["url_canary_absent_from_logs"]
+                assert report["audit_privacy"]["safe_request_events_present"]
         live = psycopg.conninfo.make_conninfo(admin, dbname=database, user="mk_app_login", password=runtime_pw)
         with psycopg.connect(live) as conn:
             report["database_identity"] = conn.execute("SELECT session_user, current_user").fetchone()

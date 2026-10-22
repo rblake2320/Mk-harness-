@@ -178,8 +178,8 @@ def create_draft(db: Session, *, tenant_id: str, user_id: str, customer: Custome
         ws, we = window_for(relative_window, now_local)
     digest = "sha256:" + hashlib.sha256(evidence_text.encode()).hexdigest()
     aref = audit(db, tenant_id, user_id, "commitment.draft",
-                 {"customer_id": customer.id, "kind": kind, "source_type": source_type,
-                  "source_reference": source_reference, "evidence_digest": digest, "created_by": created_by})
+                 {"customer_id": customer.id, "kind": kind,
+                  "has_source_reference": bool(source_reference), "evidence_digest": digest})
     c = Commitment(tenant_id=tenant_id, customer_id=customer.id, owner_user_id=user_id, kind=kind,
                    source_type=source_type, source_reference=source_reference, source_version=source_version,
                    source_evidence_reference=digest, commitment_text=text[:500], due_at=due_at,
@@ -303,7 +303,7 @@ def generate_brief(db: Session, *, tenant_id: str, user_id: str, brief_date: dat
             return
         pstate, pts = permission_snapshot(db, tenant_id, customer)
         aref = audit(db, tenant_id, user_id, "brief.item",
-                     {"customer_id": customer.id, "rule": rule, "source_type": source_type, "source_reference": source_ref})
+                     {"customer_id": customer.id, "rule": rule, "has_source_reference": bool(source_ref)})
         item = BriefItem(tenant_id=tenant_id, user_id=user_id, customer_id=customer.id,
                          brief_date=brief_date.isoformat(), rule=rule, rank_category=rank,
                          source_type=source_type, source_reference=source_ref, due_at=due_at,

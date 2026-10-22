@@ -179,7 +179,13 @@ pub async fn twilio_status(
         .or_else(|| field(&form, "SmsStatus"))
         .unwrap_or_default()
         .to_owned();
-    let error_code = field(&form, "ErrorCode").map(ToOwned::to_owned);
+    // A signed provider payload is still untrusted business input. Only the
+    // provider's bounded numeric code can become an action/audit error code.
+    let error_code = field(&form, "ErrorCode")
+        .filter(|code| {
+            !code.is_empty() && code.len() <= 6 && code.bytes().all(|b| b.is_ascii_digit())
+        })
+        .map(ToOwned::to_owned);
     if !mk_adapters::twilio::valid_message_sid(&message_sid) || status.is_empty() {
         return Err(rid(ApiError::new(
             StatusCode::UNPROCESSABLE_ENTITY,
@@ -212,7 +218,9 @@ pub async fn twilio_status(
                 actor_id: "twilio-webhook",
                 action_id: None,
                 event_type: mk_audit::EventType::DeliveryEvent,
-                payload_redacted: json!({"unmatched": true, "provider_status": status, "raw_event_digest": raw_digest.to_string()}),
+                payload_redacted: json!({"unmatched": true,
+                    "recognized_state": DeliveryState::from_twilio_status(&status).map(DeliveryState::as_str),
+                    "raw_event_digest": raw_digest.to_string()}),
                 trace_id: None,
                 policy_version: mk_policy::POLICY_VERSION.0,
             },
@@ -255,7 +263,7 @@ pub async fn twilio_status(
                         actor_id: "twilio-webhook",
                         action_id: Some(delivery.action_id),
                         event_type: mk_audit::EventType::DeliveryEvent,
-                        payload_redacted: json!({"content_erased":true,"provider_status":status,
+                        payload_redacted: json!({"content_erased":true,
                         "folded_state":folded.as_str(),"raw_event_digest":raw_digest.to_string()}),
                         trace_id: None,
                         policy_version: mk_policy::POLICY_VERSION.0,
@@ -393,7 +401,7 @@ pub async fn twilio_status(
                 actor_id: "twilio-webhook",
                 action_id: Some(delivery.action_id),
                 event_type: mk_audit::EventType::DeliveryEvent,
-                payload_redacted: json!({"provider_status": status, "folded_state": folded.as_str(), "error_code": error_code,
+                payload_redacted: json!({"folded_state": folded.as_str(), "error_code": error_code,
                                          "raw_event_digest": raw_digest.to_string()}),
                 trace_id: None,
                 policy_version: mk_policy::POLICY_VERSION.0,

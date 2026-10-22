@@ -148,7 +148,8 @@ pub async fn insert_draft(
             action_id: Some(action_id),
             event_type: EventType::ActionProposed,
             payload_redacted: json!({
-                "workflow": req.workflow, "action_kind": req.action_kind, "tool_id": req.tool_id,
+                "workflow": req.workflow, "action_kind": req.action_kind,
+                "tool_id": mk_policy::ToolAllowlist::v1().get(&req.tool_id).map(|tool| tool.tool_id),
                 "risk": req.risk, "origin_type": req.origin.origin_type, "action_digest": digest.to_string(),
                 "resource_type": req.resource.resource_type, "evidence_count": req.evidence.len(),
             }),

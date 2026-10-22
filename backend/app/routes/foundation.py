@@ -203,7 +203,7 @@ async def revoke_consent(cid: str, eid: str, body: RevokeIn, request: Request, u
             return JSONResponse(status_code=r.status_code, content=r.body)
     ev.status, ev.revoked_at, ev.revoked_reason, ev.version = "revoked", utcnow(), body.reason, ev.version + 1
     ev.audit_ref = audit(db, user.tenant_id, user.id, "consent.revoke",
-                         {"customer_id": c.id, "consent_event_id": ev.id, "reason": body.reason})
+                         {"customer_id": c.id, "consent_event_id": ev.id, "has_reason": bool(body.reason)})
     db.commit()
     return {"id": ev.id, "status": "revoked", "revoked_at": ev.revoked_at.isoformat()}
 
@@ -259,7 +259,7 @@ async def add_suppression(body: SuppressIn, request: Request, user: User = Depen
     channel = d.channel
     aref = audit(db, user.tenant_id, user.id, "suppression.add",
                  {"customer_id": c.id, "destination_fingerprint": d.fingerprint, "channel": channel,
-                  "reason": body.reason, "source": body.source})
+                  "has_reason": bool(body.reason), "has_source": bool(body.source)})
     ev = SuppressionEvent(tenant_id=user.tenant_id, customer_id=c.id, channel=channel, fingerprint=d.fingerprint,
                           reason=body.reason, source=body.source, permanent=body.permanent,
                           created_by=user.id, audit_ref=aref)
