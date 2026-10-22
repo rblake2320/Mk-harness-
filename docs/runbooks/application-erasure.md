@@ -237,6 +237,12 @@ retention remain separate release requirements.
 
 ## Restoring post-backup billing obligations
 
+For a full application restore, use the paired encrypted security archive and
+generation-bound session revocations in
+[application security recovery](application-security-recovery.md). The public
+erasure ledger remains deletion-only; passwords, MFA factors and account profiles
+must never be added to that public ledger.
+
 The application erasure ledger now exports `mk-erasure-ledger-v2`, including the
 immutable billing intent and any accepted customer ID for each account request.
 The prior tombstone-only v1 format is refused: produce a new externally retained

@@ -86,5 +86,10 @@ processes, real HTTP MFA/export checks and restart persistence. It accepts only
 the task-labelled disposable test container and removes its own resources.
 Neither script constitutes independent staging qualification.
 
+Application recovery must also use the separately encrypted, independently
+pinned account-security archive and generation-bound kernel revocation receipts
+in [application security recovery](application-security-recovery.md). A successful
+pg_restore or deletion-only replay cannot authorize reopening ingress.
+
 Reference: PostgreSQL [session and privilege inspection](https://www.postgresql.org/docs/16/functions-info.html)
 and SQLAlchemy [structured connection URLs](https://docs.sqlalchemy.org/en/20/core/engines.html#creating-urls-programmatically).

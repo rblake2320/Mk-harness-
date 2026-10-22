@@ -32,6 +32,7 @@ def main():
     parser.add_argument("--audit-privacy", action="store_true")
     parser.add_argument("--billing-privacy", action="store_true")
     parser.add_argument("--billing-restore", action="store_true")
+    parser.add_argument("--security-restore", action="store_true")
     parser.add_argument("--browser-url", help="Local production web preview for the actual deletion UI drill")
     args = parser.parse_args()
     if args.erase and args.rotate_seal:
@@ -40,6 +41,8 @@ def main():
         parser.error("Billing privacy verification requires the erasure drill")
     if args.billing_restore and not (args.erase and args.billing_privacy):
         parser.error("Billing restore verification requires --erase --billing-privacy")
+    if args.security_restore and not args.erase:
+        parser.error("Security restore verification requires --erase")
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
     report = {"scope": "author-run shipped container, real PostgreSQL, real HTTP; synthetic fixtures only"}
@@ -57,11 +60,13 @@ def main():
             raise RuntimeError(f"Docker {parts[0]} failed with {result.returncode}: {result.stderr[-1000:]}")
         return (result.stdout + (result.stderr if parts[0] == "logs" else "")).strip()
 
-    def once(command, env, expected=0):
+    def once(command, env, expected=0, recovery_mount=False):
         options = ["run", "--rm", "--network", owned, "--read-only", "--cap-drop=ALL",
                    "--security-opt=no-new-privileges", "--label", "codex.task=mk-87-rows"]
         for key in env:
             options.extend(["--env", key])
+        if recovery_mount:
+            options.extend(["--mount", f"type=bind,source={output},target=/recovery"])
         return docker(*options, image, *command, env=env, expected=expected)
 
     info = json.loads(docker("inspect", args.database_container))[0]
@@ -265,10 +270,35 @@ def main():
                             assert reply.status_code == 200
                             assert connection.execute(billing_query, (billing_user,)).fetchone() == frozen_billing
                     report["billing_erasure_mirror_unchanged"] = True
-                exporter = ("import sys; from sqlalchemy.orm import Session; from app.db import init_engine; "
-                            "from app.tools.privacy_ledger import export_ledger; "
-                            "s=Session(init_engine()); sys.stdout.buffer.write(export_ledger(s)); s.close()")
-                raw_ledger = (once(["python", "-c", exporter], runtime_env) + "\n").encode()
+                if args.security_restore:
+                    if args.audit_privacy:
+                        canary="SYNTHETIC-PRIVATE-URL-"+uuid.uuid4().hex
+                        assert client.get("/api/health/ready",params={"customer":canary}).status_code==200
+                        assert client.get("/"+canary).status_code==404
+                        logs=docker("logs",app_name)
+                        report["audit_privacy"]={"url_canary_absent_from_logs":canary not in logs,
+                            "safe_request_events_present":"http_request method=" in logs}
+                        assert all(report["audit_privacy"].values())
+                    # Actual source process stop, not a timestamp pretending to
+                    # quiesce active HTTP/security/billing/cleanup writers.
+                    docker("stop",app_name)
+                    report["source_quiesced_before_export"]=True
+                    from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
+                    recovery_key=X25519PrivateKey.generate()
+                    recovery_paths=["--privacy-ledger","/recovery/privacy-ledger.json",
+                        "--security-ledger","/recovery/security-ledger.enc"]
+                    exported=once(["python","-m","app.tools.security_restore","export",*recovery_paths,"--quiesced"],
+                        {**runtime_env,"MK_SECURITY_RECOVERY_PUBLIC_KEY":recovery_key.public_key().public_bytes_raw().hex()},
+                        recovery_mount=True)
+                    report["security_export"]=json.loads(exported)
+                    raw_ledger=(output/"privacy-ledger.json").read_bytes()
+                    security_bytes=(output/"security-ledger.enc").read_bytes()
+                    assert b"image@example.com" not in security_bytes and b"argon2" not in security_bytes
+                else:
+                    exporter = ("import sys; from sqlalchemy.orm import Session; from app.db import init_engine; "
+                                "from app.tools.privacy_ledger import export_ledger; "
+                                "s=Session(init_engine()); sys.stdout.buffer.write(export_ledger(s)); s.close()")
+                    raw_ledger = (once(["python", "-c", exporter], runtime_env) + "\n").encode()
                 ledger_sha = hashlib.sha256(raw_ledger).hexdigest()
                 report["external_ledger"] = {"sha256": ledger_sha, "bytes": len(raw_ledger),
                                              "requests": len(json.loads(raw_ledger)["requests"])}
@@ -297,10 +327,32 @@ def main():
                     "from app.tools.privacy_ledger import load_ledger,replay_ledger,timestamp; "
                     "rows=load_ledger(base64.b64decode(os.environ['PRIVACY_LEDGER_B64']),os.environ['PRIVACY_LEDGER_SHA'],timestamp(os.environ['PRIVACY_LEDGER_NOT_BEFORE'])); "
                     "s=Session(init_engine()); result=replay_ledger(s,rows,apply=True); s.commit(); print(json.dumps(result)); s.close()")
-                report["restore_erasure_replay"] = json.loads(once(["python", "-c", replayer], restore_env))
+                if args.security_restore:
+                    recovery_id=uuid.uuid4().hex
+                    recovery_args=[*recovery_paths,"--privacy-sha256",ledger_sha,"--security-sha256",
+                        report["security_export"]["security_sha256"],"--not-before",not_before,"--recovery-id",recovery_id]
+                    security_env={**restore_env,"MK_SECURITY_RECOVERY_PRIVATE_KEY":recovery_key.private_bytes_raw().hex(),
+                        "MK_SECURITY_RESTORE_DATABASE_URL":f"postgresql+psycopg://mk_app_migrator:{migration_pw}@db:5432/{restored_database}?sslmode=disable"}
+                    command=["python","-m","app.tools.security_restore","replay",*recovery_args,"--apply","--quiesced"]
+                    report["security_replay"]=json.loads(once(command,security_env,recovery_mount=True))
+                    assert report["security_replay"]["pending_kernel_revocations"]>0
+                    assert report["security_replay"]["security_ready"] is False
+                    report["restore_erasure_replay"]=report["security_replay"]["privacy"]
+                    report["security_repeat"]=json.loads(once(command,security_env,recovery_mount=True))
+                    assert report["security_repeat"]["already_applied"]
+                    check=["python","-m","app.tools.security_restore","check",*recovery_args]
+                    report["security_gate_pending"]=json.loads(once(check,security_env,expected=2,recovery_mount=True))
+                    delivery=["python","-m","app.tools.security_restore","deliver","--privacy-sha256",ledger_sha,
+                        "--security-sha256",report["security_export"]["security_sha256"],"--recovery-id",recovery_id]
+                    report["security_delivery_without_kernel"]=json.loads(once(delivery,restore_env,expected=2))
+                    assert report["security_delivery_without_kernel"]["deliveries_recorded"]==0
+                    assert report["security_delivery_without_kernel"]["pending_kernel_revocations"]>0
+                    report["restore_erasure_repeat"]={"applied":True,"already_applied":True}
+                else:
+                    report["restore_erasure_replay"] = json.loads(once(["python", "-c", replayer], restore_env))
+                    report["restore_erasure_repeat"] = json.loads(once(["python", "-c", replayer], restore_env))
                 report["restored_after_ledger"] = privacy_counts()
                 assert all(report["restored_after_ledger"][name] == 0 for name in ("customers", "customer_destinations", "provider_keys", "auth_factors"))
-                report["restore_erasure_repeat"] = json.loads(once(["python", "-c", replayer], restore_env))
                 assert report["restored_after_ledger"]["erasure_requests"] == 2
                 if args.billing_restore:
                     with psycopg.connect(restored_runtime_dsn) as connection:
@@ -391,7 +443,7 @@ def main():
                 restore_env["APP_SEAL_KEYS"] = runtime_env["APP_SEAL_KEYS"]
                 report["restored_backup_new_key_only"] = json.loads(once(["python", "-m", "app.tools.reseal", "status"], restore_env))
                 assert report["restored_backup_new_key_only"]["unreadable"] == 0
-            if args.audit_privacy:
+            if args.audit_privacy and "audit_privacy" not in report:
                 canary="SYNTHETIC-PRIVATE-URL-"+uuid.uuid4().hex
                 assert client.get("/api/health/ready",params={"customer":canary}).status_code==200
                 assert client.get("/"+canary).status_code==404

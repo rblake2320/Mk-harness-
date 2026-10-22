@@ -218,7 +218,7 @@ async def ready():
     from fastapi.responses import JSONResponse
     from sqlalchemy import text, select, func
     from datetime import datetime, timezone
-    from .models import AuthRevocation
+    from .models import AuthRevocation, RecoveredSessionRevocation
 
     from .db import get_db
     from .kernel.client import KernelUnavailable, get_kernel_client
@@ -229,7 +229,11 @@ async def ready():
         db = next(get_db())
         try:
             db.execute(text("SELECT 1"))
-            oldest = db.scalar(select(func.min(AuthRevocation.created_at)).where(AuthRevocation.confirmed_at.is_(None)))
+            pending = [db.scalar(select(func.min(model.created_at)).where(model.confirmed_at.is_(None)))
+                       for model in (AuthRevocation, RecoveredSessionRevocation)]
+            oldest = min((value for value in pending if value is not None), default=None)
+            checks["recovery_security"] = "pending" if pending[1] is not None else "ok"
+            ok = ok and pending[1] is None
             if oldest is not None:
                 age = (datetime.now(timezone.utc) - oldest.replace(tzinfo=timezone.utc)).total_seconds()
                 checks["revocation_delivery"] = "delayed" if age > 60 else "pending"

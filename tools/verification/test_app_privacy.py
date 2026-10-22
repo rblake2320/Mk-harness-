@@ -49,8 +49,11 @@ def test_account_deletion_erases_owned_provider_credential(populated):
     session, records = populated
     # No customer graph: isolate the credential-retention defect.
     from app.models import Base
+    from app.database_policy import READ_ONLY_TABLES, APPEND_ONLY_TABLES
     for table in reversed(Base.metadata.sorted_tables):
-        if table.name not in {"tenants", "users", "provider_keys", "schema_migrations", "application_seal_policy", "audit_logs", "erasure_requests", "retained_consents"}:
+        if table.name in {"security_restore_receipts", "recovered_session_revocations"}:
+            assert session.execute(select(table)).first() is None
+        if table.name not in {"tenants", "users", "provider_keys", "recovered_session_revocations", *READ_ONLY_TABLES, *APPEND_ONLY_TABLES}:
             session.execute(table.delete())
     session.commit()
     result = delete_account(DeleteAccountIn(password="deletion-test-password"), records[User], session)

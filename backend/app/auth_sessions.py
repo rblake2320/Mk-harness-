@@ -13,7 +13,7 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from .kernel import KernelClient, KernelUnavailable, get_kernel_client
-from .models import AuditLog, AuthRevocation, AuthSession
+from .models import AuditLog, AuthRevocation, AuthSession, RecoveredSessionRevocation
 
 
 def nonce_digest(nonce: str) -> str:
@@ -40,21 +40,24 @@ def valid_receipt(status: int, body: object) -> bool:
         return False
 
 
-async def deliver_revocation(db: Session, client: KernelClient, row: AuthRevocation | None) -> bool:
+async def deliver_revocation(db: Session, client: KernelClient, row: AuthRevocation | RecoveredSessionRevocation | None) -> bool:
     if row is None:
         return False
     if row.confirmed_at:
         return True
+    model = type(row)
+    if model not in (AuthRevocation, RecoveredSessionRevocation):
+        raise ValueError("Unknown revocation outbox")
     sid, user_id, tenant_id = row.session_id, row.user_id, row.tenant_id
     attempts = row.attempts + 1
     lease = uuid.uuid4().hex
     now = datetime.now(timezone.utc)
     # Atomic lease coordinates API requests and multiple app workers. A crashed
     # delivery is retried after the lease expires; no database lock spans HTTP.
-    changed = db.execute(update(AuthRevocation).where(AuthRevocation.session_id == sid,
-        AuthRevocation.confirmed_at.is_(None), AuthRevocation.next_attempt_at <= now).values(
+    changed = db.execute(update(model).where(model.session_id == sid,
+        model.confirmed_at.is_(None), model.next_attempt_at <= now).values(
             lease_id=lease, next_attempt_at=now + timedelta(seconds=max(60, client.timeout + 15)),
-            attempts=AuthRevocation.attempts + 1).execution_options(synchronize_session=False)).rowcount
+            attempts=model.attempts + 1).execution_options(synchronize_session=False)).rowcount
     db.commit()
     if not changed:
         return False
@@ -73,23 +76,25 @@ async def deliver_revocation(db: Session, client: KernelClient, row: AuthRevocat
         confirmed = valid_receipt(response.status_code, response.body)
         error = "" if confirmed else f"KERNEL_REVOCATION_UNCONFIRMED_{response.status_code}"
     now = datetime.now(timezone.utc)
-    db.execute(update(AuthRevocation).where(AuthRevocation.session_id == sid, AuthRevocation.lease_id == lease).values(
+    recorded = db.execute(update(model).where(model.session_id == sid, model.lease_id == lease).values(
         confirmed_at=now if confirmed else None, last_error=error, lease_id=None,
-        next_attempt_at=now + timedelta(seconds=min(300, 2 ** min(attempts, 8)))))
+        next_attempt_at=now + timedelta(seconds=min(300, 2 ** min(attempts, 8))))).rowcount
     db.commit()
-    return confirmed
+    return confirmed and recorded == 1
 
 
 async def drain_revocations(db: Session, client: KernelClient, limit: int = 50) -> int:
-    ids = list(db.scalars(select(AuthRevocation.session_id).where(AuthRevocation.confirmed_at.is_(None))
-                         .where(AuthRevocation.next_attempt_at <= datetime.now(timezone.utc))
-                         .order_by(AuthRevocation.created_at).limit(limit)))
-    db.commit()  # do not hold a read transaction while awaiting the kernel
     confirmed = 0
-    for sid in ids:
-        row = db.get(AuthRevocation, sid)
-        if row and await deliver_revocation(db, client, row):
-            confirmed += 1
+    attempted = 0
+    for model in (RecoveredSessionRevocation, AuthRevocation):
+        ids = list(db.scalars(select(model.session_id).where(model.confirmed_at.is_(None))
+            .where(model.next_attempt_at <= datetime.now(timezone.utc))
+            .order_by(model.created_at).limit(max(0, limit-attempted))))
+        db.commit()  # no read transaction held over HTTP
+        for sid in ids:
+            attempted += 1
+            row = db.get(model, sid)
+            if row and await deliver_revocation(db, client, row): confirmed += 1
     return confirmed
 
 

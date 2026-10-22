@@ -7,7 +7,7 @@ from sqlalchemy import inspect, text
 from .models import Base
 
 MIGRATIONS = Path(__file__).parent / "migrations"
-READ_ONLY_TABLES = {"schema_migrations", "application_seal_policy"}
+READ_ONLY_TABLES = {"schema_migrations", "application_seal_policy", "security_restore_receipts"}
 APPEND_ONLY_TABLES = {"audit_logs", "erasure_requests", "retained_consents"}
 
 

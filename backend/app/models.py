@@ -136,6 +136,33 @@ class AuthRevocation(Base):
     lease_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
 
+class SecurityRestoreReceipt(Base):
+    """Operator-only binding of a recovery generation to its pinned inputs."""
+    __tablename__ = "security_restore_receipts"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    ledger_sha256: Mapped[str] = mapped_column(String(64))
+    privacy_sha256: Mapped[str] = mapped_column(String(64))
+    target_binding: Mapped[str] = mapped_column(String(64))
+    source_exported_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    sessions_json: Mapped[str] = mapped_column(Text)
+    applied_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class RecoveredSessionRevocation(Base):
+    """Recovery session fences/outbox survive even when a session is absent."""
+    __tablename__ = "recovered_session_revocations"
+    session_id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(32), index=True)
+    user_id: Mapped[str] = mapped_column(String(32), index=True)
+    restore_id: Mapped[str] = mapped_column(ForeignKey("security_restore_receipts.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    last_error: Mapped[str] = mapped_column(String(80), default="")
+    next_attempt_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, index=True)
+    lease_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+
+
 class AuthFactor(Base):
     __tablename__ = "auth_factors"
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), primary_key=True)

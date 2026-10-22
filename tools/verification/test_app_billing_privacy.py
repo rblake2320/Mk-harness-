@@ -115,7 +115,7 @@ def test_additive_upgrade_protects_existing_erasure_without_rewriting_old_migrat
     # the old database or disable validation to make an upgrade appear valid.
     historical = MetaData()
     for name, table in Base.metadata.tables.items():
-        if name not in {"billing_provisions", "billing_erasure_bindings"}:
+        if name not in {"billing_provisions", "billing_erasure_bindings", "security_restore_receipts", "recovered_session_revocations"}:
             table.to_metadata(historical)
     from app import database_policy
     with monkeypatch.context() as old_release:

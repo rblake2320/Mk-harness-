@@ -95,11 +95,12 @@ def test_bad_kernel_receipt_never_confirms(client, kernel_env, status, body):
     assert result.json() == {'revoked': True, 'kernel_revocation': 'pending'}
 
 
-def test_worker_restart_and_two_worker_delivery_lease(tmp_path):
+@pytest.mark.parametrize("recovered", [False, True])
+def test_worker_restart_and_two_worker_delivery_lease(tmp_path, recovered):
     """File-backed DB: original process/session gone, two new workers race."""
     from sqlalchemy import create_engine, select
     from sqlalchemy.orm import sessionmaker
-    from app.models import Base, Tenant, User, AuthSession, AuthRevocation
+    from app.models import Base, Tenant, User, AuthSession, AuthRevocation, RecoveredSessionRevocation, SecurityRestoreReceipt
     from app.auth_sessions import revoke_local, deliver_revocation, revocation_worker
     from app.kernel.client import KernelResponse, KernelUnavailable
     url = f'sqlite:///{tmp_path / "sessions.db"}'
@@ -107,13 +108,22 @@ def test_worker_restart_and_two_worker_delivery_lease(tmp_path):
     Base.metadata.create_all(database)
     factory = sessionmaker(database, expire_on_commit=False)
     sid = uuid.uuid4().hex
+    outbox = RecoveredSessionRevocation if recovered else AuthRevocation
     with factory() as db:
         tenant = Tenant(id=uuid.uuid4().hex, name='restart fixture')
         user = User(id=uuid.uuid4().hex, tenant_id=tenant.id, email='restart@example.com', password_hash='fixture')
         session = AuthSession(id=sid, tenant_id=tenant.id, user_id=user.id, refresh_digest='0' * 64,
                               expires_at=datetime.now(timezone.utc) + timedelta(days=1))
         db.add_all([tenant, user, session]); db.commit()
-        revoke_local(db, session, by=user.id, reason='test'); db.commit()
+        if recovered:
+            generation = uuid.uuid4().hex
+            db.add(SecurityRestoreReceipt(id=generation,ledger_sha256="0"*64,privacy_sha256="1"*64,
+                target_binding="2"*64,source_exported_at=datetime.now(timezone.utc),sessions_json="[]"))
+            db.flush()
+            db.add(outbox(session_id=sid,tenant_id=tenant.id,user_id=user.id,restore_id=generation))
+            session.revoked_at=datetime.now(timezone.utc)
+        else: revoke_local(db, session, by=user.id, reason='test')
+        db.commit()
     database.dispose()
     database = create_engine(url)
     factory = sessionmaker(database, expire_on_commit=False)
@@ -134,7 +144,7 @@ def test_worker_restart_and_two_worker_delivery_lease(tmp_path):
     kernel = Kernel()
     async def attempt():
         with factory() as db:
-            return await deliver_revocation(db, kernel, db.get(AuthRevocation, sid))
+            return await deliver_revocation(db, kernel, db.get(outbox, sid))
     async def scenario():
         assert await asyncio.gather(attempt(), attempt()) == [False, False]
         assert kernel.calls == 1
@@ -142,7 +152,7 @@ def test_worker_restart_and_two_worker_delivery_lease(tmp_path):
         assert not await attempt()
         assert kernel.calls == 1
         with factory() as db:
-            row = db.get(AuthRevocation, sid)
+            row = db.get(outbox, sid)
             assert row.attempts == 1 and row.confirmed_at is None
             row.next_attempt_at = datetime.now(timezone.utc) - timedelta(seconds=1)
             db.commit()
@@ -151,14 +161,14 @@ def test_worker_restart_and_two_worker_delivery_lease(tmp_path):
         task = asyncio.create_task(revocation_worker(stop, interval=0.01, session_factory=factory, client=kernel))
         for _ in range(100):
             with factory() as db:
-                if db.get(AuthRevocation, sid).confirmed_at:
+                if db.get(outbox, sid).confirmed_at:
                     break
             await asyncio.sleep(0.01)
         stop.set(); await task
         with factory() as db:
-            row = db.get(AuthRevocation, sid)
+            row = db.get(outbox, sid)
             assert row.confirmed_at is not None and row.attempts == 2 and row.last_error == ''
-            assert len(list(db.scalars(select(AuthRevocation)))) == 1
+            assert len(list(db.scalars(select(outbox)))) == 1
         assert kernel.calls == 2
     asyncio.run(scenario())
     database.dispose()
@@ -248,3 +258,40 @@ def test_delayed_delivery_fails_readiness(client):
         row = db.get(AuthRevocation, sid)
         row.created_at = datetime.now(timezone.utc)
         db.commit()
+
+
+def test_old_delivery_cannot_confirm_a_new_recovery_generation(tmp_path):
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from app.models import Base, SecurityRestoreReceipt, RecoveredSessionRevocation
+    from app.auth_sessions import deliver_revocation
+    from app.kernel.client import KernelResponse
+    engine=create_engine(f'sqlite:///{tmp_path / "generation.db"}')
+    Base.metadata.create_all(engine)
+    factory=sessionmaker(engine,expire_on_commit=False)
+    sid,uid,tid,first,second=[uuid.uuid4().hex for _ in range(5)]
+    with factory() as db:
+        for generation in (first,second):
+            db.add(SecurityRestoreReceipt(id=generation,ledger_sha256="0"*64,privacy_sha256="1"*64,
+                target_binding="2"*64,source_exported_at=datetime.now(timezone.utc),sessions_json="[]"))
+        db.flush()
+        db.add(RecoveredSessionRevocation(session_id=sid,user_id=uid,tenant_id=tid,restore_id=first))
+        db.commit()
+    class Kernel:
+        timeout=1
+        async def call(self,*args,**kwargs):
+            # A restore happens while the previous generation's HTTP request is
+            # in flight. Its eventual success cannot attest this new generation.
+            with factory() as db:
+                row=db.get(RecoveredSessionRevocation,sid)
+                row.restore_id=second
+                row.lease_id=row.confirmed_at=None
+                db.commit()
+            return KernelResponse(201,{"revocation_id":str(uuid.uuid4()),
+                "revoked_at":datetime.now(timezone.utc).isoformat(),"approvals_revoked":0},"fixture")
+    with factory() as db:
+        assert asyncio.run(deliver_revocation(db,Kernel(),db.get(RecoveredSessionRevocation,sid))) is False
+    with factory() as db:
+        row=db.get(RecoveredSessionRevocation,sid)
+        assert row.restore_id==second and row.confirmed_at is None
+    engine.dispose()
