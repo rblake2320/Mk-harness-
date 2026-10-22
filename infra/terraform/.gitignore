@@ -3,4 +3,4 @@
 *.tfstate.*
 *.tfvars
 !*.auto.tfvars.example
-.terraform.lock.hcl
+# Provider selections and checksums are release inputs; commit lock files.

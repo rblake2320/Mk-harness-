@@ -65,7 +65,12 @@ def main():
             tool = [sys.executable, ROOT / "tools/release/production_plan.py"]
             package = output / "encrypted-package"
             sealed = execute(tool + ["seal", *common, "--plan", fixture / "plan.bin", "--output", package], fixture, environment)
-            check("real_cli_seals_actual_binary", sealed.returncode == 0, exit=sealed.returncode)
+            try:
+                seal_diagnostic = json.loads(sealed.stdout)
+                seal_error = seal_diagnostic.get("error_type")
+            except (ValueError, AttributeError):
+                seal_error = "NoStructuredCliDiagnostic"
+            check("real_cli_seals_actual_binary", sealed.returncode == 0, exit=sealed.returncode, error_type=seal_error)
             seal_report = json.loads(sealed.stdout)
             check("public_artifact_excludes_private_canary", all(CANARY not in file.read_bytes() for file in package.iterdir()))
             environment.update(PLAN_PRIVATE_KEY=private.private_bytes_raw().hex(),

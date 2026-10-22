@@ -1,6 +1,7 @@
 """The deploy workflow must enforce source gates before requesting cloud tokens."""
 from pathlib import Path
 import re
+import subprocess
 
 import yaml
 
@@ -105,3 +106,10 @@ def test_tofu_wrappers_cannot_export_private_plan_stdout_as_action_outputs():
         for step in job["steps"]:
             if step.get("uses", "").startswith("opentofu/setup-opentofu@"):
                 assert step["with"]["tofu_wrapper"] is False
+
+
+def test_provider_lock_is_a_tracked_release_input_not_a_local_cache():
+    path = "infra/terraform/modules/kernel-platform/.terraform.lock.hcl"
+    tracked = subprocess.check_output(["git", "ls-files", "--", path], cwd=ROOT, text=True, encoding="utf-8").strip()
+    assert tracked == path
+    assert (ROOT / path).is_file()
