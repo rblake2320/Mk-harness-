@@ -17,7 +17,6 @@ another tenant. Cross-tenant reads come back as the kernel's 404.
 """
 from __future__ import annotations
 
-import hashlib
 import uuid
 from typing import Any, Literal
 
@@ -26,13 +25,15 @@ from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 
 from sqlalchemy.orm import Session
+from sqlalchemy import select
 
 from ..config import get_settings
 from ..db import get_db
 from ..foundation import require_dispatch_timezone, preference_for_tz
 from ..kernel import KernelClient, KernelUnavailable, get_kernel_client
 from ..kernel.assertions import ROLE_PLATFORM_OPERATOR, roles_for
-from ..models import Customer, User
+from ..models import AuthRevocation, AuthSession, Customer, User
+from ..auth_sessions import revoke_local, valid_receipt
 from ..ratelimit import check_rate
 from ..security import get_current_user
 
@@ -49,9 +50,9 @@ class Principal:
         self.user_id = user.id
         self.tenant_id = user.tenant_id
         self.app_role = user.role
-        # Session id = stable fingerprint of the bearer token (never the token).
-        auth = request.headers.get("Authorization", "")
-        self.session_id = "jwt:" + hashlib.sha256(auth.encode()).hexdigest()[:24]
+        # One persisted identity spans access-token refreshes, so session
+        # revocation also finds every kernel approval from that login.
+        self.session_id = request.state.auth_session.id
 
 
 def principal(request: Request, user: User = Depends(check_rate)) -> Principal:
@@ -367,7 +368,7 @@ class RevocationIn(BaseModel):
 
 @router.post("/revocations")
 async def revoke_principal(body: RevocationIn, p: Principal = Depends(principal),
-                           client: KernelClient = Depends(get_kernel_client)):
+                           client: KernelClient = Depends(get_kernel_client), db: Session = Depends(get_db)):
     """Revoke a kernel session or user (H9). `session_id` omitted + `user_id`
     omitted → revokes the caller's *current* kernel session."""
     payload: dict[str, Any] = {"reason": body.reason}
@@ -377,7 +378,37 @@ async def revoke_principal(body: RevocationIn, p: Principal = Depends(principal)
         payload["session_id"] = body.session_id
     elif not body.user_id:
         payload["session_id"] = p.session_id
-    return await forward(client, p, "POST", "/revocations", json=payload)
+    target_user = uuid.UUID(body.user_id).hex if body.user_id else p.user_id
+    if target_user != p.user_id and p.app_role != 'admin':
+        raise HTTPException(403, 'Admin role required to revoke another user')
+    target = db.get(User, target_user)
+    if target and target.tenant_id != p.tenant_id:
+        raise HTTPException(404, 'User not found')
+    query = select(AuthSession).where(AuthSession.user_id == target_user, AuthSession.tenant_id == p.tenant_id)
+    if payload.get('session_id'):
+        query = query.where(AuthSession.id == payload['session_id'])
+    elif target:
+        target.is_active = False  # user-wide revocation also prevents a new login
+    affected = list(db.scalars(query))
+    for session in affected:
+        revoke_local(db, session, by=p.user_id, reason='principal_revoked')
+    db.commit()
+    result = await forward(client, p, "POST", "/revocations", json=payload)
+    # A user-wide receipt also acknowledges all queued per-session revocations.
+    # Lost responses remain pending and the narrow outbox worker finishes them.
+    import json as jsonlib
+    from datetime import datetime, timezone
+    try:
+        confirmed = valid_receipt(result.status_code, jsonlib.loads(result.body))
+    except (ValueError, TypeError):
+        confirmed = False
+    if confirmed:
+        for session in affected:
+            row = db.get(AuthRevocation, session.id)
+            if row:
+                row.confirmed_at = datetime.now(timezone.utc)
+        db.commit()
+    return result
 
 
 @router.post("/approvals/{approval_id}/revoke")

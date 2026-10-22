@@ -174,8 +174,8 @@ pub async fn dispatch_one(
         None => None,
     };
     // Row H9: an approval whose approver (user or the approving session) was
-    // revoked after approving must not dispatch, even if the approval row was
-    // not yet marked revoked. Treated exactly like a revoked approval.
+    // revoked must not dispatch, even if an in-flight approval committed after
+    // the revocation cascade. Treated exactly like a revoked approval.
     if let Some(a) = &approval
         && human_approval::approver_revoked_since(
             &mut tx,

@@ -1,5 +1,6 @@
 """MK Consultant Harness API."""
 from contextlib import asynccontextmanager
+import asyncio
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -7,6 +8,7 @@ from fastapi.responses import HTMLResponse
 
 from .config import get_settings, require_secret
 from .db import init_engine
+from .auth_sessions import revocation_worker
 from .routes import (
     account, agent_ops, auth, billing, chat, commitments, consent, customers, drafting, foundation, inbound, outreach,
     keys, profile, skin, skindata, usage,
@@ -122,7 +124,16 @@ async def lifespan(app: FastAPI):
     require_secret(settings)
     settings.master_key_bytes  # fail fast if missing/malformed
     init_engine()
-    yield
+    stop = asyncio.Event()
+    worker = asyncio.create_task(revocation_worker(stop))
+    try:
+        yield
+    finally:
+        stop.set()
+        try:
+            await asyncio.wait_for(worker, timeout=15)
+        except asyncio.TimeoutError:
+            pass  # cancellation leaves the durable lease for the next worker
 
 
 app = FastAPI(title="MK Consultant Harness", version="1.6.2", lifespan=lifespan)
@@ -157,7 +168,9 @@ async def ready():
     so a dead database or kernel counts as downtime. Unauthenticated by design;
     the body carries no tenant data."""
     from fastapi.responses import JSONResponse
-    from sqlalchemy import text
+    from sqlalchemy import text, select, func
+    from datetime import datetime, timezone
+    from .models import AuthRevocation
 
     from .db import get_db
     from .kernel.client import KernelUnavailable, get_kernel_client
@@ -168,6 +181,13 @@ async def ready():
         db = next(get_db())
         try:
             db.execute(text("SELECT 1"))
+            oldest = db.scalar(select(func.min(AuthRevocation.created_at)).where(AuthRevocation.confirmed_at.is_(None)))
+            if oldest is not None:
+                age = (datetime.now(timezone.utc) - oldest.replace(tzinfo=timezone.utc)).total_seconds()
+                checks["revocation_delivery"] = "delayed" if age > 60 else "pending"
+                ok = ok and age <= 60
+            else:
+                checks["revocation_delivery"] = "ok"
         finally:
             db.close()
         checks["database"] = "ok"

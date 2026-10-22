@@ -25,10 +25,11 @@ from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..models import (
-    AuditLog, ConsentRecord, ConsultantProfile, Conversation, Customer,
+    AuditLog, AuthSession, ConsentRecord, ConsultantProfile, Conversation, Customer,
     Message, SkinAnalysis, Subscription, UsageRecord, User,
 )
 from ..security import get_current_user, verify_password
+from ..auth_sessions import revoke_local
 
 router = APIRouter(prefix="/account", tags=["account"])
 
@@ -202,6 +203,9 @@ def delete_account(body: DeleteAccountIn, user: User = Depends(get_current_user)
         cr.revoked_at = cr.revoked_at or datetime.now(timezone.utc)
 
     # Anonymise the user record — invalidate sessions by clearing password hash
+    for session in db.scalars(select(AuthSession).where(AuthSession.user_id == uid,
+                                                       AuthSession.revoked_at.is_(None))):
+        revoke_local(db, session, by=uid, reason='account_deleted')
     user.email = f"deleted_{uid}@deleted"
     user.display_name = ""
     user.password_hash = ""

@@ -55,6 +55,34 @@ class User(Base):
     tenant: Mapped[Tenant] = relationship(back_populates="users")
 
 
+class AuthSession(Base):
+    """Server-side authority for both access and rotating refresh credentials."""
+    __tablename__ = "auth_sessions"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=uid)
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    refresh_digest: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    mfa_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    step_up_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class AuthRevocation(Base):
+    """Durable delivery of a locally revoked session to kernel approval authority."""
+    __tablename__ = "auth_revocations"
+    session_id: Mapped[str] = mapped_column(ForeignKey("auth_sessions.id"), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    last_error: Mapped[str] = mapped_column(String(80), default="")
+    next_attempt_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, index=True)
+    lease_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+
+
 class ProviderKey(Base):
     """Encrypted API keys. scope='tenant' (central, admin-managed) or scope='user' (BYO)."""
     __tablename__ = "provider_keys"

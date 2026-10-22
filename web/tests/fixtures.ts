@@ -13,6 +13,7 @@ export async function mockApi(page: Page, permission: 'active' | 'none' | 'suppr
     const p = url.pathname; const m = route.request().method();
     const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
     if (p === '/api/auth/me') return json({ id: 'u1', email: 'a@x', role: 'admin', display_name: 'Angela' });
+    if (p === '/api/auth/sessions') return json([{ id: 'current', current: true, created_at: '2026-10-22T00:00:00Z', expires_at: '2026-11-05T00:00:00Z', revoked_at: null }]);
     if (p === '/api/brief') return json({ date: '2026-10-21', items: [{
       id: 'b1', customer: { id: 'c1', name: 'Brenda Lee' }, rule: 'due_today', rank_category: 2, source_type: 'commitment', source_reference: 'k1', source: COMMIT,
       due_at: '2026-10-21T14:00:00Z', state: 'open', permission_state: permission, permission_checked_at: '2026-10-21T08:00:00Z',

@@ -59,7 +59,7 @@ input:focus-visible, textarea:focus-visible, select:focus-visible, button:focus-
 .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 
 /* auth */
-.auth-wrap { min-height: 100%; display: grid; place-items: center; padding: 24px;
+.auth-wrap { min-height: 100%; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; padding: 24px;
   background:
     radial-gradient(420px 300px at 18% 12%, rgba(232,168,184,.12), transparent 70%),
     radial-gradient(420px 300px at 85% 88%, rgba(217,176,140,.09), transparent 70%), var(--bg); }
@@ -145,7 +145,11 @@ th { color: var(--muted); font-weight: 500; font-size: 12.5px; text-transform: u
   padding: 10px 0; border-bottom: 1px solid var(--edge); }
 .ph-row:last-child { border-bottom: 0; }
 
+.mobile-session { display: none; }
 @media (max-width: 760px) {
+  .mobile-session { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 16px; }
+  .mobile-session span { overflow-wrap: anywhere; min-width: 0; }
+  .mobile-session button { flex-shrink: 0; }
   .shell { flex-direction: column; }
   .rail { width: 100%; flex-direction: row; overflow-x: auto; padding: 8px; align-items: center; }
   .rail .brand { padding: 0 10px; white-space: nowrap; }

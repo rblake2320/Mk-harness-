@@ -464,6 +464,11 @@ pub async fn is_revoked(
     user: UserId,
     session_id: &str,
 ) -> Result<bool, StoreError> {
+    // Pre-persistent-session app tokens used a per-JWT hash. They have no
+    // revocable session row, so the S2 rollout retires their authority outright.
+    if session_id.starts_with("jwt:") {
+        return Ok(true);
+    }
     let n: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM kernel.revocations
          WHERE tenant_id = $1 AND user_id = $2 AND (kind = 'user' OR (kind = 'session' AND session_id = $3))",
@@ -476,23 +481,25 @@ pub async fn is_revoked(
     Ok(n > 0)
 }
 
-/// Transaction-level check at dispatch: was the approver (user or the session
-/// that approved) revoked at or after the approval was recorded?
+/// Transaction-level check at dispatch. Revocation is irreversible, including
+/// an approval committed by an already-authenticated request after revocation.
 pub async fn approver_revoked_since(
     tx: &mut TenantTx<'_>,
     approver: UserId,
     session_id: Option<&str>,
-    approved_at: DateTime<Utc>,
+    _approved_at: DateTime<Utc>,
 ) -> Result<bool, StoreError> {
+    if session_id.is_some_and(|s| s.starts_with("jwt:")) {
+        return Ok(true);
+    }
     let n: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM kernel.revocations
-         WHERE tenant_id = $1 AND user_id = $2 AND revoked_at >= $4
+         WHERE tenant_id = $1 AND user_id = $2
            AND (kind = 'user' OR (kind = 'session' AND session_id = $3))",
     )
     .bind(tx.tenant().0)
     .bind(approver.0)
     .bind(session_id)
-    .bind(approved_at)
     .fetch_one(tx.conn())
     .await?;
     Ok(n > 0)

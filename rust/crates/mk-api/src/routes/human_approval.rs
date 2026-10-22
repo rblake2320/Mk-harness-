@@ -19,7 +19,10 @@ use crate::error::ApiError;
 use crate::state::{AppState, ApprovalRp};
 
 fn human_only(p: &Principal, what: &str) -> Result<(), ApiError> {
-    if p.has_role("agent") && p.roles.len() == 1 {
+    if !["consultant", "manager", "tenant_admin", "platform_operator"]
+        .iter()
+        .any(|role| p.has_role(role))
+    {
         return Err(ApiError::new(
             StatusCode::FORBIDDEN,
             "AGENT_CANNOT_APPROVE",
@@ -408,7 +411,18 @@ pub async fn revoke_principal(
     Json(body): Json<RevokeBody>,
 ) -> Result<(StatusCode, Json<Value>), ApiError> {
     let rid = |e: ApiError| e.with_request_id(&headers);
-    human_only(&p, "revocation").map_err(rid)?;
+    let delivery = p.has_role("session_revoker");
+    if delivery {
+        if body.user_id.is_none() || body.session_id.is_none() {
+            return Err(rid(ApiError::new(
+                StatusCode::FORBIDDEN,
+                "SESSION_TARGET_REQUIRED",
+                "Delivery authority requires a specific user and session",
+            )));
+        }
+    } else {
+        human_only(&p, "revocation").map_err(rid)?;
+    }
     if body.reason.chars().count() > 500 {
         return Err(rid(ApiError::new(
             StatusCode::UNPROCESSABLE_ENTITY,
@@ -418,7 +432,7 @@ pub async fn revoke_principal(
     }
     // Target user defaults to the caller; naming another user needs tenant_admin.
     let target_user = body.user_id.unwrap_or(p.user);
-    if target_user != p.user && !p.has_role("tenant_admin") {
+    if target_user != p.user && !p.has_role("tenant_admin") && !delivery {
         return Err(rid(ApiError::new(
             StatusCode::FORBIDDEN,
             "ROLE_REQUIRED",

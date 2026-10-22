@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { client } from '../App.tsx';
+import type { AuthSession } from '../../../packages/sdk/src/index.ts';
 
 const PROVIDERS = ['anthropic', 'openai', 'gemini', 'ollama'] as const;
 
@@ -14,10 +15,13 @@ export default function SettingsView({ role }: { role: string }) {
   const [usage, setUsage] = useState<any[]>([]);
   const [teamUsage, setTeamUsage] = useState<any[]>([]);
   const [invite, setInvite] = useState({ email: '', password: '' });
+  const [sessions, setSessions] = useState<AuthSession[]>([]);
+  const [revoking, setRevoking] = useState<string | null>(null);
 
   function refresh() {
     client.keyStatus().then(setStatus).catch(e => setErr(e.message));
     client.myUsage().then(setUsage).catch(() => {});
+    client.sessions().then(setSessions).catch(e => setErr(e.message));
     if (role === 'admin') client.tenantUsage().then(setTeamUsage).catch(() => {});
   }
   useEffect(refresh, []);
@@ -47,6 +51,26 @@ export default function SettingsView({ role }: { role: string }) {
       <h1>Settings</h1>
       {msg && <div style={{ color: 'var(--ok)', margin: '8px 0' }}>{msg}</div>}
       {err && <div className="error" role="alert" style={{ margin: '8px 0' }}>{err}</div>}
+
+      <section className="card" aria-label="Signed-in sessions" style={{ maxWidth: 720, marginBottom: 18 }}>
+        <h2>Signed-in sessions</h2>
+        <p>Revoke a lost or unused session. Use Sign out for this session.</p>
+        {sessions.map(session => <div key={session.id} className="row" style={{ marginBottom: 12 }}>
+          <span>{session.current ? 'This session' : 'Other session'} · {new Date(session.created_at).toLocaleString()}
+            {session.revoked_at ? ' · Revoked' : ''}</span>
+          {!session.current && !session.revoked_at && <button className="btn ghost" disabled={revoking !== null}
+            aria-label={`Revoke session started ${new Date(session.created_at).toLocaleString()}`}
+            onClick={async () => {
+              setRevoking(session.id); setErr(''); setMsg('');
+              try {
+                const result = await client.revokeSession(session.id);
+                setMsg(result.kernel_revocation === 'confirmed' ? 'Session and pending approvals revoked.'
+                  : 'App session revoked. Kernel approval revocation is pending delivery.');
+                setSessions(await client.sessions());
+              } catch (e: any) { setErr(e.message); } finally { setRevoking(null); }
+            }}>Revoke</button>}
+        </div>)}
+      </section>
 
       <div className="card" style={{ maxWidth: 720 }}>
         <h3 style={{ marginTop: 0 }}>AI engines</h3>

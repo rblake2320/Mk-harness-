@@ -43,7 +43,12 @@ dbmod._SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commi
 
 
 @pytest.fixture
-def client():
+def client(monkeypatch):
+    # Shared StaticPool fixtures are intentionally single-threaded. Delivery
+    # worker lifecycle/restart/concurrency has its own file-backed tests.
+    async def idle_worker(stop):
+        await stop.wait()
+    monkeypatch.setattr("app.main.revocation_worker", idle_worker)
     with TestClient(app) as c:
         yield c
 

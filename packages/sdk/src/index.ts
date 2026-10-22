@@ -5,7 +5,12 @@
 export interface Tokens {
   access_token: string; refresh_token: string;
   role: string; display_name: string; tenant_id: string;
+  session_id?: string;
 }
+export interface AuthSession {
+  id: string; current: boolean; created_at: string; expires_at: string; revoked_at: string | null;
+}
+export interface RevocationResult { revoked: boolean; kernel_revocation: 'confirmed' | 'pending' }
 export interface SkinObservation { category: string; level: string; note: string }
 export interface SkinResult {
   observations: SkinObservation[]; care_focus: string[];
@@ -110,6 +115,9 @@ export class MKClient {
   baseUrl: string;
   tokens: Tokens | null = null;
   onAuthExpired: (() => void) | null = null;
+  onTokensChanged: ((tokens: Tokens | null) => void) | null = null;
+  private refreshing: Promise<boolean> | null = null;
+  private signingOut = false;
 
   constructor(baseUrl: string) { this.baseUrl = baseUrl.replace(/\/$/, ''); }
 
@@ -121,9 +129,13 @@ export class MKClient {
   }
 
   private async request<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
+    const sentAccess = this.tokens?.access_token;
+    const sentSession = this.tokens?.session_id;
     const r = await fetch(this.baseUrl + path, { ...init, headers: { ...this.headers(!(init.body instanceof FormData)), ...(init.headers ?? {}) } });
     if (r.status === 401 && retry && this.tokens?.refresh_token) {
-      const ok = await this.refresh();
+      if (sentSession !== this.tokens.session_id) throw new ApiError(401, 'Session changed; retry explicitly.');
+      // A delayed 401 may belong to a token another request already refreshed.
+      const ok = sentAccess !== this.tokens.access_token || await this.refresh();
       if (ok) return this.request<T>(path, init, false);
       this.onAuthExpired?.();
     }
@@ -148,17 +160,46 @@ export class MKClient {
       method: 'POST', body: JSON.stringify({ email, password }) });
     return this.tokens;
   }
-  async refresh(): Promise<boolean> {
+  refresh(): Promise<boolean> {
+    if (this.signingOut) return Promise.resolve(false);
+    if (this.refreshing) return this.refreshing;
+    this.refreshing = this.rotateRefresh().finally(() => { this.refreshing = null; });
+    return this.refreshing;
+  }
+  private async rotateRefresh(): Promise<boolean> {
+    const original = this.tokens;
+    if (!original) return false;
     try {
       const r = await fetch(this.baseUrl + '/api/auth/refresh', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refresh_token: this.tokens?.refresh_token }) });
+        body: JSON.stringify({ refresh_token: original.refresh_token }) });
       if (!r.ok) return false;
-      this.tokens = await r.json();
+      const rotated: Tokens = await r.json();
+      if (this.tokens !== original) return false; // never resurrect a signed-out/replaced session
+      this.tokens = rotated;
+      this.onTokensChanged?.(rotated);
       return true;
     } catch { return false; }
   }
   me() { return this.request<any>('/api/auth/me'); }
+  sessions() { return this.request<AuthSession[]>('/api/auth/sessions'); }
+  revokeSession(id: string) {
+    return this.request<RevocationResult>(`/api/auth/sessions/${encodeURIComponent(id)}/revoke`, { method: 'POST' });
+  }
+  async logout(): Promise<RevocationResult> {
+    if (this.refreshing) await this.refreshing;
+    const original = this.tokens;
+    this.signingOut = true;
+    try {
+      return await this.request<RevocationResult>('/api/auth/logout', { method: 'POST' }, false);
+    } finally {
+      this.signingOut = false;
+      if (this.tokens === original) {
+        this.tokens = null;
+        this.onTokensChanged?.(null);
+      }
+    }
+  }
   addMember(email: string, password: string, role = 'consultant') {
     return this.request('/api/auth/members', {
       method: 'POST', body: JSON.stringify({ email, password, role }) });

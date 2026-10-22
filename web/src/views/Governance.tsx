@@ -94,8 +94,8 @@ export default function GovernanceSettings({ role, userId }: { role: string; use
           <button className="btn ghost" onClick={() => client.exportAccount().then(d => download('my-data.json', JSON.stringify(d, null, 2))).catch(setErr)}>Export my data (JSON)</button>
           <button className="btn ghost" onClick={() => client.exportCustomersCsv().then(t => download('customers.csv', t, 'text/csv')).catch(setErr)}>Export customers (CSV)</button>
           {role === 'admin' && <button className="btn ghost" onClick={() => client.exportAudit().then(t => download('audit.jsonl', t, 'application/x-ndjson')).catch(setErr)}>Export audit log (admin)</button>}
-          <button className="btn ghost" onClick={() => run(() => client.revokeMySession('user requested'), 'Session revoked. Pending approvals you made were cancelled. Sign in again to continue.')}>Revoke my kernel session</button>
         </div>
+        <p className="small">Use Sign out to revoke this app session and its pending kernel approvals. Other sessions can be revoked above.</p>
         <details style={{ marginTop: 10 }}>
           <summary>Delete my account</summary>
           <label className="muted small" htmlFor="del-pw">Confirm with your password</label>

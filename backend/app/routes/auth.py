@@ -3,18 +3,24 @@ import hmac
 import secrets
 import threading
 import time
+import uuid
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, EmailStr, Field
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from ..cache import get_redis, log_redis_runtime_failure
 from ..db import get_db
-from ..models import AuditLog, Tenant, User
+from ..models import AuditLog, AuthRevocation, AuthSession, Tenant, User
+from ..auth_sessions import deliver_revocation, nonce_digest, revoke_local
+from ..config import get_settings
+from ..kernel import KernelClient, get_kernel_client
 from ..security import (
     decode_token, dummy_verify, get_current_user, hash_password, make_access_token,
-    make_refresh_token, password_fingerprint, require_admin, verify_password,
+    make_refresh_token, password_fingerprint, require_admin, session_for, verify_password,
 )
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -113,12 +119,19 @@ class TokenOut(BaseModel):
     role: str
     display_name: str
     tenant_id: str
+    session_id: str
 
 
-def _tokens(user: User) -> TokenOut:
-    return TokenOut(access_token=make_access_token(user),
-                    refresh_token=make_refresh_token(user),
-                    role=user.role, display_name=user.display_name, tenant_id=user.tenant_id)
+def _tokens(user: User, db: Session, session: AuthSession | None = None, nonce: str | None = None) -> TokenOut:
+    nonce = nonce or secrets.token_hex(32)
+    if session is None:
+        session = AuthSession(id=uuid.uuid4().hex, tenant_id=user.tenant_id, user_id=user.id,
+            refresh_digest=nonce_digest(nonce), expires_at=datetime.now(timezone.utc) + timedelta(days=get_settings().refresh_token_days))
+        db.add(session)
+    db.commit()
+    return TokenOut(access_token=make_access_token(user, session),
+                    refresh_token=make_refresh_token(user, session, nonce),
+                    role=user.role, display_name=user.display_name, tenant_id=user.tenant_id, session_id=session.id)
 
 
 @router.post("/signup", response_model=TokenOut, status_code=201)
@@ -143,7 +156,7 @@ def signup(body: SignupIn, db: Session = Depends(get_db)):
     db.add(AuditLog(tenant_id=tenant.id, user_id=user.id, action="tenant.signup",
                     detail=f"ref={body.ref}" if referred_by else ""))
     db.commit()
-    return _tokens(user)
+    return _tokens(user, db)
 
 
 @router.post("/login", response_model=TokenOut)
@@ -160,7 +173,7 @@ def login(body: LoginIn, db: Session = Depends(get_db)):
     if not user.is_active:
         raise HTTPException(403, "Account deactivated")
     _clear_failures(body.email.lower())
-    return _tokens(user)
+    return _tokens(user, db)
 
 
 class RefreshIn(BaseModel):
@@ -177,7 +190,44 @@ def refresh(body: RefreshIn, db: Session = Depends(get_db)):
     if not hmac.compare_digest(str(payload.get("pv") or ""),
                                password_fingerprint(user.password_hash)):
         raise HTTPException(401, "Session expired — please sign in again")
-    return _tokens(user)
+    session = session_for(db, payload, user)
+    nonce = secrets.token_hex(32)
+    changed = db.execute(update(AuthSession).where(AuthSession.id == session.id,
+        AuthSession.revoked_at.is_(None), AuthSession.refresh_digest == nonce_digest(payload["jti"]))
+        .values(refresh_digest=nonce_digest(nonce))).rowcount
+    if changed != 1:
+        revoke_local(db, session, by=user.id, reason="refresh_reuse")
+        db.commit()
+        raise HTTPException(401, "Refresh credential already used; session revoked")
+    return _tokens(user, db, session, nonce)
+
+
+@router.get("/sessions")
+def sessions(request: Request, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    current = request.state.auth_session.id
+    return [{"id": row.id, "current": row.id == current, "created_at": row.created_at,
+             "expires_at": row.expires_at, "revoked_at": row.revoked_at}
+            for row in db.scalars(select(AuthSession).where(AuthSession.tenant_id == user.tenant_id,
+                AuthSession.user_id == user.id).order_by(AuthSession.created_at.desc()).limit(100))]
+
+
+@router.post("/sessions/{sid}/revoke")
+async def revoke_session(sid: str, user: User = Depends(get_current_user), db: Session = Depends(get_db),
+                         client: KernelClient = Depends(get_kernel_client)):
+    session = db.get(AuthSession, sid)
+    if not session or session.user_id != user.id or session.tenant_id != user.tenant_id:
+        raise HTTPException(404, "Session not found")
+    revoke_local(db, session, by=user.id, reason="user_requested")
+    db.commit()
+    confirmed = await deliver_revocation(db, client, db.get(AuthRevocation, sid))
+    return JSONResponse(status_code=200 if confirmed else 202,
+        content={"revoked": True, "kernel_revocation": "confirmed" if confirmed else "pending"})
+
+
+@router.post("/logout")
+async def logout(request: Request, user: User = Depends(get_current_user), db: Session = Depends(get_db),
+                 client: KernelClient = Depends(get_kernel_client)):
+    return await revoke_session(request.state.auth_session.id, user, db, client)
 
 
 class InviteIn(BaseModel):
@@ -224,6 +274,9 @@ def change_password(body: ChangePasswordIn, user: User = Depends(get_current_use
     if not verify_password(body.current_password, user.password_hash):
         raise HTTPException(401, "Current password is incorrect")
     user.password_hash = hash_password(body.new_password)
+    for session in db.scalars(select(AuthSession).where(AuthSession.user_id == user.id,
+                                                       AuthSession.revoked_at.is_(None))):
+        revoke_local(db, session, by=user.id, reason="password_changed")
     db.add(AuditLog(tenant_id=user.tenant_id, user_id=user.id,
                     action="auth.change_password", detail=""))
     db.commit()

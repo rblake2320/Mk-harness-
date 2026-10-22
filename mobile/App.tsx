@@ -30,6 +30,7 @@ export default function App() {
   useEffect(() => {
     client.tokens = tokens;
     client.onAuthExpired = () => setTokens(null);
+    client.onTokensChanged = setTokens;
   }, [tokens]);
 
   if (!tokens) return <Auth onAuthed={setTokens} />;
@@ -38,7 +39,13 @@ export default function App() {
       <StatusBar style="light" />
       <View style={s.header}>
         <Text style={s.brand}>Consultant <Text style={{ color: C.rose }}>Studio</Text></Text>
-        <Pressable onPress={() => setTokens(null)}><Text style={s.muted}>Sign out</Text></Pressable>
+        <Pressable onPress={async () => {
+          try {
+            const result = await client.logout();
+            if (result.kernel_revocation === 'pending') Alert.alert('Signed out', 'App access revoked. Kernel approval revocation is pending delivery.');
+          } catch { Alert.alert('Local sign-out only', 'Server revocation was not confirmed. Revoke the old session after signing in again.'); }
+          finally { setTokens(null); }
+        }}><Text style={s.muted}>Sign out</Text></Pressable>
       </View>
       <View style={{ flex: 1 }}>
         {tab === 'chat' && <Chat />}
@@ -232,8 +239,9 @@ function Customers() {
   async function followUp(c: Customer) {
     setBusyId(c.id); setDrafts('');
     try {
-      const r = await client.followUp(c.id, 'warm check-in and gentle reorder');
-      setDrafts(`For ${c.name}:\n\n${r.drafts}`);
+      const r = await client.generateDraft({ customer_id: c.id });
+      setDrafts(r.draft ? `For ${c.name}:\n\n${r.draft.text}\n\nSaved draft — not sent. ${r.draft.note}`
+        : r.limitation ?? 'A supported draft could not be generated.');
     } catch (e: any) { Alert.alert('Draft failed', e.message); }
     finally { setBusyId(''); }
   }
@@ -249,6 +257,7 @@ function Customers() {
           <Text style={{ color: C.text, fontWeight: '600', fontSize: 16 }}>{c.name}</Text>
           {!!c.notes && <Text style={[s.muted, { marginTop: 4 }]}>{c.notes}</Text>}
           <Pressable style={[s.btnGhost, { marginTop: 10, alignSelf: 'flex-start' }]}
+                     disabled={busyId !== ''}
                      onPress={() => followUp(c)}>
             <Text style={{ color: C.rose }}>
               {busyId === c.id ? 'Writing…' : 'Draft follow-up'}
@@ -275,6 +284,7 @@ const s = StyleSheet.create({
   muted: { color: C.muted },
   input: { backgroundColor: C.bg, borderWidth: 1, borderColor: C.edgeHi, borderRadius: 10,
            color: C.text, padding: 12, marginBottom: 10 },
+  composer: { flexDirection: 'row', gap: 8, padding: 12, alignItems: 'center' },
   btn: { backgroundColor: C.rose, borderRadius: 10, padding: 12, alignItems: 'center',
          justifyContent: 'center' },
   btnText: { color: '#2a1620', fontWeight: '600' },

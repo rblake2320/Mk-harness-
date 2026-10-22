@@ -1614,6 +1614,189 @@ async fn approval_preview_binds_sender_schedule_and_current_self_policy() {
 }
 
 #[tokio::test]
+async fn session_outbox_authority_is_narrow_and_revokes_real_queued_approval() {
+    let Some(h) = harness().await else {
+        eprintln!("skipping");
+        return;
+    };
+    let mut r = provider_rig(&h, mk_adapters::twilio_sim::TwilioSimMode::Accept).await;
+    health_ok(&h, r.admin).await;
+    let (aid, _) = approved_action(
+        &h,
+        &mut r,
+        "Session test. Reply STOP to opt out.",
+        "+15555550100",
+    )
+    .await;
+    let service = UserId::new();
+    for (method, path) in [
+        ("GET", "/internal/v1/approval-credentials".to_string()),
+        (
+            "POST",
+            "/internal/v1/approval-credentials/register/begin".to_string(),
+        ),
+        ("POST", "/internal/v1/actions".to_string()),
+        (
+            "POST",
+            format!("/internal/v1/actions/{aid}/approval-challenge"),
+        ),
+        ("POST", "/internal/v1/kill-switch/tenant".to_string()),
+    ] {
+        let (s, v) = h
+            .call(
+                method,
+                &path,
+                Some(&h.token(service, &["session_revoker"])),
+                Some(json!({})),
+            )
+            .await;
+        assert_eq!(s, StatusCode::FORBIDDEN, "{path}: {v}");
+        assert_eq!(v["code"], "REVOCATION_ONLY");
+    }
+    let (s, v) = h
+        .call(
+            "POST",
+            "/internal/v1/revocations",
+            Some(&h.token(service, &["session_revoker", "tenant_admin"])),
+            Some(json!({"user_id": r.manager, "session_id": "sess"})),
+        )
+        .await;
+    assert_eq!(s, StatusCode::FORBIDDEN, "{v}");
+    let (s, v) = h
+        .call(
+            "POST",
+            "/internal/v1/revocations",
+            Some(&h.token(service, &["session_revoker"])),
+            Some(json!({"user_id": r.manager})),
+        )
+        .await;
+    assert_eq!(s, StatusCode::FORBIDDEN, "{v}");
+    for expected_count in [1, 0] {
+        // Lost-response retry still works after the target's own assertion is dead.
+        let (s, v) = h
+            .call(
+                "POST",
+                "/internal/v1/revocations",
+                Some(&h.token(service, &["session_revoker"])),
+                Some(json!({"user_id": r.manager, "session_id": "sess"})),
+            )
+            .await;
+        assert_eq!(s, StatusCode::CREATED, "{v}");
+        assert_eq!(v["approvals_revoked"], expected_count);
+    }
+    let (s, v) = h
+        .call(
+            "GET",
+            &format!("/internal/v1/actions/{aid}"),
+            Some(&h.token(r.admin, &["tenant_admin"])),
+            None,
+        )
+        .await;
+    assert_eq!(s, StatusCode::OK, "{v}");
+    assert_eq!(v["state"], "cancelled");
+    let out = run_dispatch(&r, h.tenant, &aid).await;
+    assert!(matches!(out, DispatchOutcome::Skipped { .. }), "{out:?}");
+    assert_eq!(r.sim.calls(), 0);
+    let (s, v) = h
+        .call(
+            "GET",
+            &format!("/internal/v1/actions/{aid}"),
+            Some(&h.token(r.manager, &["manager"])),
+            None,
+        )
+        .await;
+    assert_eq!(s, StatusCode::UNAUTHORIZED, "{v}");
+    let mut tx = h.state.store.begin(h.tenant).await.unwrap();
+    assert!(
+        mk_store::human_approval::approver_revoked_since(
+            &mut tx,
+            r.manager,
+            Some("jwt:legacy-hash"),
+            chrono::Utc::now()
+        )
+        .await
+        .unwrap()
+    );
+    tx.commit().await.unwrap();
+    assert!(
+        mk_store::human_approval::is_revoked(
+            h.state.store.pool(),
+            h.tenant,
+            UserId::new(),
+            "jwt:legacy-hash"
+        )
+        .await
+        .unwrap()
+    );
+}
+
+#[tokio::test]
+async fn session_revocation_before_approval_timestamp_still_blocks_dispatch() {
+    let Some(h) = harness().await else {
+        eprintln!("skipping");
+        return;
+    };
+    let mut r = provider_rig(&h, mk_adapters::twilio_sim::TwilioSimMode::Accept).await;
+    health_ok(&h, r.admin).await;
+    let (aid, _) = approved_action(
+        &h,
+        &mut r,
+        "Race test. Reply STOP to opt out.",
+        "+15555550100",
+    )
+    .await;
+    // Model a request authenticated before revocation but inserting its approval
+    // afterwards. No cascade is run: the dispatch consumption check is decisive.
+    let mut tx = h.state.store.begin(h.tenant).await.unwrap();
+    mk_store::human_approval::revoke(
+        &mut tx,
+        mk_store::human_approval::RevocationTarget::Session(r.manager, "sess"),
+        r.admin,
+        "synthetic authorization race",
+        chrono::Utc::now() - chrono::Duration::minutes(1),
+    )
+    .await
+    .unwrap();
+    tx.commit().await.unwrap();
+    let outcome = run_dispatch(&r, h.tenant, &aid).await;
+    assert!(
+        !matches!(outcome, DispatchOutcome::Dispatched { .. }),
+        "{outcome:?}"
+    );
+    assert_eq!(
+        r.sim.calls(),
+        0,
+        "an irrevocably dead session cannot authorize delivery"
+    );
+}
+
+#[tokio::test]
+async fn legacy_stateless_approval_is_retired_at_dispatch_on_session_rollout() {
+    let Some(h) = harness().await else {
+        eprintln!("skipping");
+        return;
+    };
+    let mut r = provider_rig(&h, mk_adapters::twilio_sim::TwilioSimMode::Accept).await;
+    health_ok(&h, r.admin).await;
+    let (aid, _) = approved_action(
+        &h,
+        &mut r,
+        "Legacy test. Reply STOP to opt out.",
+        "+15555550100",
+    )
+    .await;
+    // Restore the old binary's stored session shape, without a revocation row.
+    sqlx::query("UPDATE kernel.approvals SET session_id = 'jwt:old-token-hash' WHERE tenant_id = $1 AND action_id = $2")
+        .bind(h.tenant.0).bind(aid.parse::<Uuid>().unwrap()).execute(h.state.store.pool()).await.unwrap();
+    let outcome = run_dispatch(&r, h.tenant, &aid).await;
+    assert!(
+        matches!(outcome, DispatchOutcome::Blocked { .. }),
+        "{outcome:?}"
+    );
+    assert_eq!(r.sim.calls(), 0);
+}
+
+#[tokio::test]
 async fn editing_draft_fences_queued_and_future_proposals() {
     let mut h = harness().await.expect("real Postgres required");
     let mut r = provider_rig(&h, mk_adapters::twilio_sim::TwilioSimMode::Accept).await;
