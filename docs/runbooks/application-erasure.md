@@ -185,7 +185,52 @@ ledger and confirms the restored billing row cannot be reactivated. The drill
 uses a synthetic incoming-webhook secret, supplies no Stripe API key and makes
 no external billing call.
 
-Provider cancellation/customer cleanup, durable creation-race recovery and
-provider/legal-retention evidence remain separate work. Existing
-`billing_customer` and `billing_subscription` tasks stay pending; do not mark
-them confirmed based on these mirror/fence tests.
+## Billing creation and provider cleanup
+
+Migration `0005_billing_provisions.sql` adds an immutable customer-creation
+identity. The account lock serializes intent creation with erasure; the intent
+commits before HTTP. It retains tenant/user/intent IDs, creation time and a
+once-bound customer ID, not email, names or payment data. Both checkout and
+referral customer creation use it. Account deletion queues `billing_provision`
+even when the provider has accepted creation but its response was lost.
+
+Creation uses the same metadata-only request and idempotency key on retries.
+Checkout collects the billing email directly. After 23 hours the application
+never repeats a creation POST: it searches by intent, requires exactly one
+ownership match and verifies the exact customer with GET. A missing, ambiguous,
+deleted or mismatched result stays unresolved. This is intentionally not an
+absence certificate: Stripe search is eventually consistent, and idempotency
+keys may expire after 24 hours. See the primary [idempotency contract](https://docs.stripe.com/api/idempotent_requests),
+[customer search](https://docs.stripe.com/api/customers/search), and
+[Checkout customer/email behavior](https://docs.stripe.com/api/checkout/sessions/create).
+
+The privacy worker drains billing tasks separately from kernel work when billing
+is configured. A 120-second CAS lease protects each delivery; transactions end
+before network I/O. Cleanup binds the task to the account tombstone and immutable
+provision, verifies the provider's ownership metadata, persists the customer ID
+before DELETE, and requires an exact authenticated `deleted: true` readback.
+After a crash, the persisted ID permits a deleted-object readback without another
+DELETE. HTTP 404, redirects, wrong IDs, wrong ownership, malformed bodies and
+delete acceptance without readback never confirm a task. Provider response/error
+content is not stored in receipts or returned to callers.
+
+Stripe [customer deletion](https://docs.stripe.com/api/customers/delete) cancels
+active subscriptions. A separate `billing_subscription` task requires GET of its
+exact customer-bound subscription showing `canceled`; it does not introduce
+additional invoice, proration or refund operations. This confirms the API state,
+not a billing-correction decision or legal/provider-backup retention completion.
+
+Legacy customer references without a matching immutable creation binding are
+`blocked` with `BILLING_OWNERSHIP_BINDING_REQUIRED`; the worker makes no provider
+call for them. Do not invent metadata or reset an old creation timestamp/key to
+make cleanup proceed. Legacy binding migration requires operator/provider
+evidence before introducing any destructive automation.
+
+Tests cover in-flight erasure, lost creation/deletion responses, expired keys,
+crossed ownership, stale worker writes, ambiguous readbacks and exact subscription
+state. `test_app_billing_privacy.py` additionally kills an actual delivery process
+after the loopback provider deletes the customer, checks the durable pending
+lease in PostgreSQL, and restarts it: one DELETE, two GETs, no creates, one
+confirmed task. This simulator is isolated; no real customer was deleted or
+charged. Live qualification, legacy ownership evidence and provider/legal
+retention remain separate release requirements.

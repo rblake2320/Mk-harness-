@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 
 from .. import billing
 from ..config import get_settings
+from ..billing_provision import account_available, provision_customer
 from ..db import get_db
 from ..models import AuditLog, ErasureRequest, ReferralCredit, Subscription, User
 from ..security import get_current_user
@@ -105,7 +106,9 @@ async def checkout(body: CheckoutIn, user: User = Depends(get_current_user),
 
     sub = _get_or_create_sub(db, user)
     if not sub.stripe_customer_id:
-        sub.stripe_customer_id = await billing.create_customer(user.email, user.id)
+        sub.stripe_customer_id = await provision_customer(db, user)
+    if not account_available(db, user):
+        raise HTTPException(410, "Billing account is unavailable.")
     # Record the chosen plan now; the webhook confirms activation.
     sub.tier, sub.interval = body.tier, body.interval
     sub.updated_at = datetime.now(timezone.utc)
@@ -114,6 +117,8 @@ async def checkout(body: CheckoutIn, user: User = Depends(get_current_user),
     session = await billing.create_checkout_session(
         customer_id=sub.stripe_customer_id, price_id=price_id,
         trial_days=s.billing_trial_days, client_reference_id=user.id)
+    if not account_available(db, user):
+        raise HTTPException(410, "Billing account is unavailable.")
     return {"url": session.get("url"), "session_id": session.get("id")}
 
 
@@ -154,10 +159,12 @@ async def _maybe_award_referral(db: Session, referred: User) -> None:
     ref_sub = _get_or_create_sub(db, referrer)
     try:
         if not ref_sub.stripe_customer_id:
-            ref_sub.stripe_customer_id = await billing.create_customer(referrer.email, referrer.id)
+            ref_sub.stripe_customer_id = await provision_customer(db, referrer)
+        if not account_available(db, referrer):
+            return
         txn = await billing.apply_customer_credit(
             ref_sub.stripe_customer_id, s.referral_credit_cents,
-            f"Referral credit: {referred.email}")
+            "Referral credit")
         credit.status = "applied"
         credit.stripe_txn_id = txn
         credit.applied_at = datetime.now(timezone.utc)

@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from .auth_sessions import revoke_local
 from .config import get_settings
 from .models import (
-    ActionLink, AuditLog, AuthFactor, AuthRecoveryCode, AuthSession, BriefItem,
+    ActionLink, AuditLog, AuthFactor, AuthRecoveryCode, AuthSession, BillingProvision, BriefItem,
     Commitment, ConsentEvent, ConsentRecord, ConsultantProfile, ContactPreference,
     Conversation, Customer, CustomerDestination, DraftVersion, ErasureRequest,
     ErasureTask, ExceptionRecord, ImportJob, ImportRow, InboundApplication, Message,
@@ -126,6 +126,9 @@ def erase_account(db: Session, user: User) -> ErasureRequest:
     # A separate kernel account sweep covers direct agent-ops history that was
     # never linked to the application CRM, credentials and sender registrations.
     _task(db, request, "kernel_account", uid)
+    for provision in db.scalars(select(BillingProvision).where(BillingProvision.tenant_id == tid,
+            BillingProvision.user_id == uid)):
+        _task(db, request, "billing_provision", provision.id)
     for sender in db.scalars(select(SenderIdentity).where(SenderIdentity.tenant_id == tid, SenderIdentity.user_id == uid)):
         if sender.provider_resource_ref:
             _task(db, request, "provider_sender", sender.provider_resource_ref)

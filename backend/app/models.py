@@ -272,6 +272,20 @@ class ConsultantProfile(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
 
+class BillingProvision(Base):
+    """Immutable customer-creation identity, committed before contacting Stripe.
+
+    No email or other customer content is needed to replay the identical request.
+    A bound provider ID may be filled once, even after account erasure.
+    """
+    __tablename__ = "billing_provisions"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=uid)
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), unique=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    stripe_customer_id: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
+
+
 class Subscription(Base):
     """One subscription per consultant. Mirrors Stripe state, driven by webhooks.
 

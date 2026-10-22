@@ -101,16 +101,25 @@ async def drain_kernel_erasures(db, client, limit=25):
     return confirmed
 
 
-async def privacy_worker(stop, interval=5.0, session_factory=None, client=None):
+async def privacy_worker(stop, interval=5.0, session_factory=None, client=None, billing_client=None):
     from . import db as dbmod
     from .kernel import get_kernel_client
+    from .billing import billing_configured
+    from .billing_erasure import BillingErasureClient, drain_billing_erasures
     factory, kernel = session_factory or dbmod._SessionLocal, client or get_kernel_client()
+    stripe = billing_client or BillingErasureClient()
     while not stop.is_set():
         try:
             with factory() as db:
                 await drain_kernel_erasures(db, kernel)
         except Exception as exc:
             logging.getLogger(__name__).error("privacy delivery worker failure: %s", type(exc).__name__)
+        try:
+            if billing_configured():
+                with factory() as db:
+                    await drain_billing_erasures(db, stripe)
+        except Exception as exc:
+            logging.getLogger(__name__).error("billing erasure worker failure: %s", type(exc).__name__)
         try:
             await asyncio.wait_for(stop.wait(), timeout=interval)
         except asyncio.TimeoutError:

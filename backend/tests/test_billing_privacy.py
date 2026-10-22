@@ -3,16 +3,18 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 import json
 import uuid
+from urllib.parse import parse_qs
 
 import httpx
 import pytest
 import respx
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, inspect, select, text
 from sqlalchemy.orm import Session
 from starlette.requests import Request
 
 from app import billing
-from app.models import Base, ErasureRequest, ReferralCredit, Subscription, Tenant, User
+from app.models import Base, ErasureRequest, ErasureTask, ReferralCredit, Subscription, Tenant, User
+from app.privacy import erase_account
 from app.routes import billing as routes
 
 
@@ -77,3 +79,48 @@ def test_future_referral_payment_cannot_recreate_deleted_referrers_billing(erase
     assert not create.called and not credit.called
     assert not db.scalar(select(ReferralCredit.id).where(ReferralCredit.user_id == erased.id))
     assert subscription.stripe_customer_id is None
+
+
+@pytest.mark.parametrize("response_lost", [False, True])
+@respx.mock
+def test_account_erasure_tracks_customer_creation_accepted_before_response(tmp_path, response_lost):
+    engine = create_engine(f"sqlite:///{tmp_path / 'billing-creation.db'}")
+    Base.metadata.create_all(engine)
+    observed = {"customer_creates": 0, "checkout_creates": 0, "durable_before_provider": False}
+    with Session(engine, expire_on_commit=False) as db:
+        tenant = Tenant(name="Synthetic in-flight billing fixture"); db.add(tenant); db.flush()
+        user = User(tenant_id=tenant.id, email="synthetic-inflight@example.test", password_hash="synthetic")
+        db.add(user); db.commit()
+
+        def customer_accepts_then_account_is_erased(request):
+            observed["customer_creates"] += 1
+            if inspect(engine).has_table("billing_provisions"):
+                with Session(engine) as independent:
+                    observed["durable_before_provider"] = independent.execute(text(
+                        "SELECT count(*) FROM billing_provisions WHERE user_id=:uid AND tenant_id=:tid"),
+                        {"uid": user.id, "tid": tenant.id}).scalar_one() == 1
+            erase_account(db, user); db.commit()
+            if response_lost:
+                raise httpx.ReadTimeout("Synthetic accepted creation; response lost", request=request)
+            form = parse_qs(request.content.decode())
+            metadata = {key[len("metadata["):-1]: value[0] for key, value in form.items() if key.startswith("metadata[")}
+            return httpx.Response(200, json={"id": "cus_InFlightPrivacy", "object": "customer", "metadata": metadata})
+
+        def unexpected_checkout(_request):
+            observed["checkout_creates"] += 1
+            return httpx.Response(200, json={"id": "cs_MustNotCreate", "url": "https://checkout.stripe.com/synthetic"})
+
+        respx.post("https://api.stripe.com/v1/customers").mock(side_effect=customer_accepts_then_account_is_erased)
+        respx.post("https://api.stripe.com/v1/checkout/sessions").mock(side_effect=unexpected_checkout)
+        try:
+            asyncio.run(routes.checkout(routes.CheckoutIn(tier="solo", interval="year"), user, db))
+        except (httpx.RequestError, routes.HTTPException):
+            pass
+        request = db.scalar(select(ErasureRequest).where(ErasureRequest.subject_id == user.id,
+            ErasureRequest.subject_kind == "account"))
+        assert observed["customer_creates"] == 1 and request is not None
+        assert observed["durable_before_provider"]
+        assert observed["checkout_creates"] == 0
+        assert db.scalar(select(ErasureTask.id).where(ErasureTask.request_id == request.id,
+            ErasureTask.kind == "billing_provision")) is not None
+    engine.dispose()

@@ -572,8 +572,9 @@ def test_billing_enforced_allows_active_subscriber(client):
         cus_id = f"cus_{uuid.uuid4().hex[:14]}"
         sub_id = f"sub_{uuid.uuid4().hex[:14]}"
         # Mock Stripe calls needed for checkout + webhook path
+        from tests.test_e2e import stripe_customer_response
         respx.post("https://api.stripe.com/v1/customers").mock(
-            return_value=httpx.Response(200, json={"id": cus_id}))
+            side_effect=lambda request: stripe_customer_response(request, cus_id))
         respx.post("https://api.stripe.com/v1/checkout/sessions").mock(
             return_value=httpx.Response(200, json={"id": "cs_test", "url": "https://checkout.stripe.com/test"}))
         client.post("/api/billing/checkout", headers=auth_headers(t),
@@ -618,8 +619,9 @@ def test_billing_enforced_blocks_past_due_subscriber(client):
         user_id = me["id"]
         cus_id = f"cus_{uuid.uuid4().hex[:14]}"
         sub_id = f"sub_{uuid.uuid4().hex[:14]}"
+        from tests.test_e2e import stripe_customer_response
         respx.post("https://api.stripe.com/v1/customers").mock(
-            return_value=httpx.Response(200, json={"id": cus_id}))
+            side_effect=lambda request: stripe_customer_response(request, cus_id))
         respx.post("https://api.stripe.com/v1/checkout/sessions").mock(
             return_value=httpx.Response(200, json={"id": "cs_test", "url": "https://checkout.stripe.com/test"}))
         client.post("/api/billing/checkout", headers=auth_headers(t),
