@@ -35,7 +35,7 @@ from ..kernel.assertions import ROLE_PLATFORM_OPERATOR, roles_for
 from ..models import AuthRevocation, AuthSession, Customer, User
 from ..auth_sessions import revoke_local, valid_receipt
 from ..ratelimit import check_rate
-from ..security import get_current_user
+from ..security import get_current_user, enforce_step_up
 
 router = APIRouter(prefix="/agent-ops", tags=["agent-ops"])
 
@@ -589,8 +589,10 @@ class KillSwitchIn(BaseModel):
 
 
 @router.post("/kill-switch/tenant")
-async def tenant_kill_switch(body: KillSwitchIn, p: Principal = Depends(principal),
+async def tenant_kill_switch(body: KillSwitchIn, request: Request, p: Principal = Depends(principal),
                              client: KernelClient = Depends(get_kernel_client)):
+    if body.dispatch_enabled:
+        enforce_step_up(request.state.auth_session)
     return await forward(client, p, "POST", "/kill-switch/tenant", json=body.model_dump(exclude_none=True))
 
 

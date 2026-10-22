@@ -6,7 +6,10 @@ export interface Tokens {
   access_token: string; refresh_token: string;
   role: string; display_name: string; tenant_id: string;
   session_id?: string;
+  mfa_state?: 'enrollment_required' | 'verification_required' | 'verified';
 }
+export type SecondFactor = { code: string } | { recovery_code: string };
+export interface MfaCompletion { tokens: Tokens; recovery_codes?: string[] }
 export interface AuthSession {
   id: string; current: boolean; created_at: string; expires_at: string; revoked_at: string | null;
 }
@@ -116,7 +119,9 @@ export class MKClient {
   tokens: Tokens | null = null;
   onAuthExpired: (() => void) | null = null;
   onTokensChanged: ((tokens: Tokens | null) => void) | null = null;
+  onStepUpRequired: (() => Promise<boolean>) | null = null;
   private refreshing: Promise<boolean> | null = null;
+  private steppingUp: Promise<boolean> | null = null;
   private signingOut = false;
 
   constructor(baseUrl: string) { this.baseUrl = baseUrl.replace(/\/$/, ''); }
@@ -128,7 +133,7 @@ export class MKClient {
     return h;
   }
 
-  private async request<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
+  private async response(path: string, init: RequestInit = {}, retry = true, stepRetry = true): Promise<Response> {
     const sentAccess = this.tokens?.access_token;
     const sentSession = this.tokens?.session_id;
     const r = await fetch(this.baseUrl + path, { ...init, headers: { ...this.headers(!(init.body instanceof FormData)), ...(init.headers ?? {}) } });
@@ -136,15 +141,30 @@ export class MKClient {
       if (sentSession !== this.tokens.session_id) throw new ApiError(401, 'Session changed; retry explicitly.');
       // A delayed 401 may belong to a token another request already refreshed.
       const ok = sentAccess !== this.tokens.access_token || await this.refresh();
-      if (ok) return this.request<T>(path, init, false);
+      if (ok && sentSession === this.tokens?.session_id) return this.response(path, init, false, stepRetry);
       this.onAuthExpired?.();
     }
     if (!r.ok) {
       let detail: any = `HTTP ${r.status}`;
       try { detail = (await r.json()).detail ?? detail; } catch { /* keep status */ }
+      if (r.status === 403 && detail?.code === 'STEP_UP_REQUIRED' && stepRetry && this.onStepUpRequired) {
+        if (sentSession !== this.tokens?.session_id) throw new ApiError(401, 'Session changed; retry explicitly.');
+        if (!this.steppingUp) this.steppingUp = this.onStepUpRequired().finally(() => { this.steppingUp = null; });
+        const confirmed = await this.steppingUp;
+        if (confirmed && sentSession === this.tokens?.session_id && this.tokens) {
+          // Retry only a request explicitly refused BEFORE any sensitive action.
+          return this.response(path, init, retry, false);
+        }
+      }
+      if (r.status === 403 && detail?.code === 'MFA_REQUIRED' && retry && !this.tokens?.mfa_state) {
+        await this.refresh(); // migrate an older stored session to the MFA screen, without replaying the operation
+      }
       throw new ApiError(r.status, detail);
     }
-    return r.json() as Promise<T>;
+    return r;
+  }
+  private async request<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
+    return (await this.response(path, init, retry)).json() as Promise<T>;
   }
 
   // ---- auth ----
@@ -182,6 +202,14 @@ export class MKClient {
     } catch { return false; }
   }
   me() { return this.request<any>('/api/auth/me'); }
+  enrollMfa() { return this.request<{ secret: string; provisioning_uri: string }>('/api/auth/mfa/enroll', { method: 'POST' }); }
+  confirmMfa(code: string) { return this.request<MfaCompletion>('/api/auth/mfa/confirm', { method: 'POST', body: JSON.stringify({ code }) }, false); }
+  verifyMfa(factor: SecondFactor) { return this.request<MfaCompletion>('/api/auth/mfa/verify', { method: 'POST', body: JSON.stringify(factor) }, false); }
+  stepUp(password: string, factor: SecondFactor) {
+    return this.request<{ verified: boolean }>('/api/auth/step-up', { method: 'POST', body: JSON.stringify({ password, ...factor }) }, false);
+  }
+  mfaStatus() { return this.request<{ enrolled: boolean; recovery_codes_remaining: number }>('/api/auth/mfa/status'); }
+  rotateRecoveryCodes() { return this.request<{ recovery_codes: string[] }>('/api/auth/mfa/recovery-codes', { method: 'POST' }); }
   sessions() { return this.request<AuthSession[]>('/api/auth/sessions'); }
   revokeSession(id: string) {
     return this.request<RevocationResult>(`/api/auth/sessions/${encodeURIComponent(id)}/revoke`, { method: 'POST' });
@@ -452,7 +480,7 @@ export class MKClient {
 
   // ---- exports & deletion (account) ----
   exportAccount() { return this.request<any>('/api/account/export'); }
-  exportAudit() { return fetch(this.baseUrl + '/api/audit/export.jsonl', { headers: this.headers(false) }).then(r => r.text()); }
-  exportCustomersCsv() { return fetch(this.baseUrl + '/api/customers/export.csv', { headers: this.headers(false) }).then(r => r.text()); }
+  exportAudit() { return this.response('/api/audit/export.jsonl').then(r => r.text()); }
+  exportCustomersCsv() { return this.response('/api/customers/export.csv').then(r => r.text()); }
   deleteAccount(body: { password: string }) { return this.request<any>('/api/account', { method: 'DELETE', body: JSON.stringify(body) }); }
 }

@@ -14,6 +14,8 @@ import time
 import uuid
 import json
 import sqlite3
+import signal
+import socket
 from urllib.parse import urlsplit
 
 import httpx
@@ -28,6 +30,16 @@ def main():
     parser.add_argument('--kernel', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
     args = parser.parse_args()
+    # Refuse stale/unrelated listeners before readiness could mistake them for
+    # our child. SIGINT/SIGTERM both enter the finally cleanup path on WSL.
+    for port in (8019, 8099):
+        with socket.socket() as probe:
+            if probe.connect_ex(('127.0.0.1', port)) == 0:
+                raise RuntimeError(f'Loopback port {port} is occupied; no stack was created')
+    def stop(signum, frame):
+        raise KeyboardInterrupt
+    signal.signal(signal.SIGTERM, stop)
+    signal.signal(signal.SIGINT, stop)
     database = os.environ['MK_TEST_DATABASE_URL']
     parsed = urlsplit(database)
     if parsed.hostname != '127.0.0.1' or parsed.port != 5547 or parsed.path != '/mk_resolution_test':
@@ -48,6 +60,10 @@ def main():
         'MK_APPROVAL_RP_ID': '127.0.0.1', 'MK_APPROVAL_ORIGINS': 'http://127.0.0.1:4189',
         'RUST_ACTION_KERNEL_ENABLED': '1'}
     children = []
+    def record_owned():
+        (args.output / 'owned-processes.json').write_text(json.dumps({'database': owned_database,
+            'parent_pid': os.getpid(), 'children': [child.pid for child in children]}, indent=2), encoding='utf-8')
+    record_owned()
     with psycopg.connect(database, autocommit=True) as owner:
         owner.execute(sql.SQL('CREATE DATABASE {}').format(sql.Identifier(owned_database)))
     with tempfile.TemporaryDirectory(prefix='mk-s2-session-') as scratch:
@@ -72,6 +88,7 @@ def main():
                 with (args.output / f'{name}.log').open('w') as log:
                     child = subprocess.Popen(command, cwd=scratch, env=env, stdout=log, stderr=subprocess.STDOUT)
                 children.append(child)
+                record_owned()
                 for _ in range(100):
                     if child.poll() is not None:
                         raise RuntimeError(f'{name} exited; inspect its retained log')

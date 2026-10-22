@@ -11,7 +11,7 @@ from .db import init_engine
 from .auth_sessions import revocation_worker
 from .routes import (
     account, agent_ops, auth, billing, chat, commitments, consent, customers, drafting, foundation, inbound, outreach,
-    keys, profile, skin, skindata, usage,
+    keys, mfa, profile, skin, skindata, usage,
 )
 
 _PRIVACY_HTML = """<!DOCTYPE html>
@@ -138,6 +138,15 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="MK Consultant Harness", version="1.6.2", lifespan=lifespan)
 
+
+@app.middleware('http')
+async def private_auth_responses(request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith('/api/auth/'):
+        response.headers['Cache-Control'] = 'no-store'
+        response.headers['Pragma'] = 'no-cache'
+    return response
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=get_settings().cors_origin_list,
@@ -148,7 +157,7 @@ app.add_middleware(
 
 # foundation before customers: its /customers/import/* and /customers/export.csv paths
 # must win over customers' /customers/{cid}.
-for r in (auth.router, chat.router, skin.router, foundation.router, commitments.router, drafting.router, inbound.router, outreach.router, customers.router,
+for r in (auth.router, mfa.router, chat.router, skin.router, foundation.router, commitments.router, drafting.router, inbound.router, outreach.router, customers.router,
           keys.router, usage.router, profile.router, consent.router, skindata.router,
           billing.router, account.router, agent_ops.router):
     app.include_router(r, prefix="/api")

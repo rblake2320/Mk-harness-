@@ -100,11 +100,13 @@ for i in $(seq 1 30); do [ "$(curl -s -o /dev/null -w '%{http_code}' "$APP/docs"
 TOK=$(curl -fsS "$APP/api/auth/signup" -H 'content-type: application/json' \
   -d '{"org_name":"Smoke Org","email":"admin@smoke.example.com","password":"superSecret123!","key_policy":"both"}' \
   | python3 -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')
+TOK=$(printf '%s' "$TOK" | python3 "$ROOT/tools/verification/mfa_fixture.py" --api "$APP")
 H=(-H "authorization: Bearer $TOK" -H 'content-type: application/json')
 # Separate approver: outreach forbids self-approval by default, so a second
 # consultant in the same tenant approves what the admin's agent proposed.
 curl -fsS "$APP/api/auth/members" "${H[@]}" -d '{"email":"approver@smoke.example.com","password":"superSecret123!","role":"consultant"}' >/dev/null
 TOK2=$(curl -fsS "$APP/api/auth/login" -H 'content-type: application/json' -d '{"email":"approver@smoke.example.com","password":"superSecret123!"}' | python3 -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')
+TOK2=$(printf '%s' "$TOK2" | python3 "$ROOT/tools/verification/mfa_fixture.py" --api "$APP")
 H2=(-H "authorization: Bearer $TOK2" -H 'content-type: application/json')
 TENANT=$(python3 -c "import jwt,sys,uuid;print(uuid.UUID(jwt.decode('$TOK',options={'verify_signature':False})['tid']))")
 # The default tenant policy evaluates contact hours (08–21) in America/Chicago, which made
@@ -256,12 +258,15 @@ log "worker log clean under its restricted login (housekeeping under mk_kernel_w
 log "gate 9: session revocation blocks the approver's next request and any live approval"
 [ "$(propose "$CONTACT" "+15555550100" "smoke-revocation-1")" = 201 ] || die "propose revocation"
 A4=$(j 'd["result"]["action_id"]'); D4=$(j 'd["result"]["action_digest"]')
-[ "$(approve "$A4" "$D4")" = 200 ] || die "approve A4: $(cat "$WORK/out.json")"
-# kill the worker briefly so the approval is still live when the session is revoked
+# Freeze before approval so a fast worker cannot dispatch before the test's revoke.
 kill -STOP "${PIDS[2]}" 2>/dev/null || true
+[ "$(approve "$A4" "$D4")" = 200 ] || die "approve A4: $(cat "$WORK/out.json")"
 [ "$(ops2 -X POST "$APP/api/agent-ops/revocations" -d '{"reason":"smoke: lost phone"}')" = 201 ] || die "revocation: $(cat "$WORK/out.json")"
 kill -CONT "${PIDS[2]}" 2>/dev/null || true
-c=$(ops2 "$APP/api/agent-ops/approvals/pending"); [ "$c" = 401 ] && [ "$(j 'd["code"]')" = PRINCIPAL_REVOKED ] || die "revoked session still accepted ($c)"
+c=$(ops2 "$APP/api/agent-ops/approvals/pending")
+[ "$c" = 401 ] || die "revoked session still accepted ($c)"
+# Revoked sessions are rejected at the app boundary before minting an assertion.
+[ "$(j 'd.get("detail")')" = 'Session expired or revoked' ] || die "unexpected app revocation error"
 sleep 3; s=$(state "$A4"); case "$s" in cancelled) ;; *) die "approval by revoked session still dispatched: $s";; esac
 grep -q "$A4" "$WORK/agent.log" && die "revoked-approver action reached the device agent"
 log "  revoked session → 401 PRINCIPAL_REVOKED; its live approval → cancelled"
@@ -275,6 +280,7 @@ SENDER=$(j 'd["sender_identity_id"]')
 # Third approver (the earlier one's session is revoked): register a passkey.
 curl -fsS "$APP/api/auth/members" "${H[@]}" -d '{"email":"approver3@smoke.example.com","password":"superSecret123!","role":"consultant"}' >/dev/null
 TOK3=$(curl -fsS "$APP/api/auth/login" -H 'content-type: application/json' -d '{"email":"approver3@smoke.example.com","password":"superSecret123!"}' | python3 -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')
+TOK3=$(printf '%s' "$TOK3" | python3 "$ROOT/tools/verification/mfa_fixture.py" --api "$APP")
 H2=(-H "authorization: Bearer $TOK3" -H 'content-type: application/json')
 SA="$WORK/softauthn3.json"; "$BIN/mk-softauthn" new "$SA" es256 >/dev/null
 [ "$(ops2 -X POST "$APP/api/agent-ops/approval-credentials/register/begin")" = 200 ] || die "register/begin 3"

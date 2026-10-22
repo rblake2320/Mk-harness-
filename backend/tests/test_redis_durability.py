@@ -102,7 +102,14 @@ def _signup(client):
         "org_name": "DurabilityOrg", "email": email,
         "password": "superSecret123!", "key_policy": "both"})
     assert r.status_code == 201
-    return email, {"Authorization": f"Bearer {r.json()['access_token']}"}
+    import pyotp
+    headers = {"Authorization": f"Bearer {r.json()['access_token']}"}
+    setup = client.post('/api/auth/mfa/enroll', headers=headers)
+    assert setup.status_code == 200
+    completed = client.post('/api/auth/mfa/confirm', headers=headers,
+                            json={'code': pyotp.TOTP(setup.json()['secret']).now()})
+    assert completed.status_code == 200
+    return email, {"Authorization": f"Bearer {completed.json()['tokens']['access_token']}"}
 
 
 def test_api_survives_redis_death_and_recovers(live_redis_client):

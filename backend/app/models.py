@@ -83,6 +83,28 @@ class AuthRevocation(Base):
     lease_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
 
+class AuthFactor(Base):
+    __tablename__ = "auth_factors"
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), index=True)
+    secret_enc: Mapped[str | None] = mapped_column(Text, nullable=True)
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_counter: Mapped[int] = mapped_column(Integer, default=-1)
+    pending_secret_enc: Mapped[str | None] = mapped_column(Text, nullable=True)
+    pending_session_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    failed_attempts: Mapped[int] = mapped_column(Integer, default=0)
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class AuthRecoveryCode(Base):
+    __tablename__ = "auth_recovery_codes"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=uid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), index=True)
+    digest: Mapped[str] = mapped_column(String(64), unique=True)
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class ProviderKey(Base):
     """Encrypted API keys. scope='tenant' (central, admin-managed) or scope='user' (BYO)."""
     __tablename__ = "provider_keys"

@@ -11,6 +11,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 import httpx
+from mfa_fixture import complete
 from playwright.sync_api import expect, sync_playwright
 
 
@@ -25,11 +26,12 @@ def main():
     with httpx.Client(base_url=args.api, timeout=10) as api:
         tokens = []
         for index in range(2):
+            password = f"Test-only-{uuid.uuid4().hex}!"
             response = api.post("/api/auth/signup", json={"org_name": f"Search test {tag}-{index}",
-                                "email": f"search-{tag}-{index}@example.com", "password": f"Test-only-{uuid.uuid4().hex}!",
+                                "email": f"search-{tag}-{index}@example.com", "password": password,
                                 "key_policy": "byo"})
             response.raise_for_status()
-            tokens.append(response.json())
+            tokens.append(complete(api, response.json()['access_token'], password)['tokens'])
         headers = [{"Authorization": f"Bearer {token['access_token']}"} for token in tokens]
         for index in range(52):
             response = api.post("/api/customers", headers=headers[0], json={

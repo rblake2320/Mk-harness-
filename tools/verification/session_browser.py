@@ -10,6 +10,7 @@ import uuid
 from urllib.parse import urlsplit
 
 import httpx
+from mfa_fixture import complete
 from playwright.sync_api import expect, sync_playwright
 
 
@@ -25,10 +26,15 @@ def main():
     with httpx.Client(base_url=args.api, timeout=10) as api:
         first = api.post('/api/auth/signup', json={'org_name': 'Synthetic session acceptance', 'email': email, 'password': password})
         first.raise_for_status()
-        first_token = first.json()
+        enrolled = complete(api, first.json()['access_token'], password)
+        first_token = enrolled['tokens']
         second = api.post('/api/auth/login', json={'email': email, 'password': password})
         second.raise_for_status()
-        second_token = second.json()
+        limited = second.json()
+        verified = api.post('/api/auth/mfa/verify', headers={'Authorization': 'Bearer ' + limited['access_token']},
+                            json={'recovery_code': enrolled['recovery_codes'][1]})
+        verified.raise_for_status()
+        second_token = verified.json()['tokens']
         with sync_playwright() as pw:
             browser = pw.chromium.launch(headless=True)
             page = browser.new_page(viewport={'width': 1280, 'height': 900})
@@ -78,6 +84,10 @@ def main():
             page.get_by_placeholder('Email', exact=True).fill(email)
             page.get_by_placeholder('Password (10+ characters)').fill(password)
             page.get_by_role('button', name='Sign in', exact=True).click()
+            expect(page.get_by_role('heading', name='Verify your sign-in')).to_be_visible()
+            page.get_by_role('button', name='Use a recovery code', exact=True).click()
+            page.get_by_label('Recovery code', exact=True).fill(enrolled['recovery_codes'][2])
+            page.get_by_role('button', name='Verify code', exact=True).click()
             expect(page.get_by_role('navigation', name='Main')).to_be_visible()
             page.get_by_role('button', name='Sign out', exact=True).click()
             expect(page.get_by_role('status')).to_contain_text('This session is revoked')

@@ -14,7 +14,8 @@ from sqlalchemy.orm import Session
 
 from ..cache import get_redis, log_redis_runtime_failure
 from ..db import get_db
-from ..models import AuditLog, AuthRevocation, AuthSession, Tenant, User
+from ..models import AuditLog, AuthFactor, AuthRevocation, AuthSession, Tenant, User
+from .. import security
 from ..auth_sessions import deliver_revocation, nonce_digest, revoke_local
 from ..config import get_settings
 from ..kernel import KernelClient, get_kernel_client
@@ -120,18 +121,25 @@ class TokenOut(BaseModel):
     display_name: str
     tenant_id: str
     session_id: str
+    mfa_state: str
 
 
-def _tokens(user: User, db: Session, session: AuthSession | None = None, nonce: str | None = None) -> TokenOut:
+def _tokens(user: User, db: Session, session: AuthSession | None = None, nonce: str | None = None,
+            *, verified: bool = False) -> TokenOut:
     nonce = nonce or secrets.token_hex(32)
     if session is None:
+        verified = verified or not security.mfa_required()
+        now = datetime.now(timezone.utc)
         session = AuthSession(id=uuid.uuid4().hex, tenant_id=user.tenant_id, user_id=user.id,
-            refresh_digest=nonce_digest(nonce), expires_at=datetime.now(timezone.utc) + timedelta(days=get_settings().refresh_token_days))
+            refresh_digest=nonce_digest(nonce), mfa_verified_at=now if verified else None,
+            expires_at=now + (timedelta(days=get_settings().refresh_token_days) if verified else timedelta(minutes=10)))
         db.add(session)
     db.commit()
+    factor = db.get(AuthFactor, user.id)
+    mfa_state = 'verified' if session.mfa_verified_at else ('verification_required' if factor and factor.confirmed_at else 'enrollment_required')
     return TokenOut(access_token=make_access_token(user, session),
                     refresh_token=make_refresh_token(user, session, nonce),
-                    role=user.role, display_name=user.display_name, tenant_id=user.tenant_id, session_id=session.id)
+                    role=user.role, display_name=user.display_name, tenant_id=user.tenant_id, session_id=session.id, mfa_state=mfa_state)
 
 
 @router.post("/signup", response_model=TokenOut, status_code=201)
@@ -225,7 +233,7 @@ async def revoke_session(sid: str, user: User = Depends(get_current_user), db: S
 
 
 @router.post("/logout")
-async def logout(request: Request, user: User = Depends(get_current_user), db: Session = Depends(get_db),
+async def logout(request: Request, user: User = Depends(security.get_authenticated_user), db: Session = Depends(get_db),
                  client: KernelClient = Depends(get_kernel_client)):
     return await revoke_session(request.state.auth_session.id, user, db, client)
 

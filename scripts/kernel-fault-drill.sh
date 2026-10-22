@@ -71,9 +71,11 @@ export DATABASE_URL="sqlite:///$WORK/app.db" JWT_SECRET=dev-secret-dev-secret-de
 (cd "$ROOT/backend" && exec python3 -m uvicorn app.main:app --port 8000 >"$WORK/app.log" 2>&1) & PIDS+=($!)
 for i in $(seq 1 30); do [ "$(curl -s -o /dev/null -w '%{http_code}' "$APP/docs" || true)" != 000 ] && break; sleep 1; done
 TOK=$(curl -fsS "$APP/api/auth/signup" -H 'content-type: application/json' -d '{"org_name":"Drill Org","email":"admin@drill.example.com","password":"superSecret123!","key_policy":"both"}' | python3 -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')
+TOK=$(printf '%s' "$TOK" | python3 "$ROOT/tools/verification/mfa_fixture.py" --api "$APP")
 H=(-H "authorization: Bearer $TOK" -H 'content-type: application/json')
 curl -fsS "$APP/api/auth/members" "${H[@]}" -d '{"email":"approver@drill.example.com","password":"superSecret123!","role":"consultant"}' >/dev/null
 TOK2=$(curl -fsS "$APP/api/auth/login" -H 'content-type: application/json' -d '{"email":"approver@drill.example.com","password":"superSecret123!"}' | python3 -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')
+TOK2=$(printf '%s' "$TOK2" | python3 "$ROOT/tools/verification/mfa_fixture.py" --api "$APP")
 H2=(-H "authorization: Bearer $TOK2" -H 'content-type: application/json')
 ops() { curl -sS -o "$WORK/out.json" -w '%{http_code}' "${H[@]}" "$@"; }
 ops2() { curl -sS -o "$WORK/out.json" -w '%{http_code}' "${H2[@]}" "$@"; }

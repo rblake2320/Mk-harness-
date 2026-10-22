@@ -1,5 +1,12 @@
 # Local customer-search browser check
 
+All real-API verification now completes mandatory authenticator MFA. See
+`docs/mfa-operations.md`. With the owned session stack and built preview running,
+`python tools/verification/mfa_browser.py --output local-verification/mfa-browser`
+exercises browser signup, enrollment, recovery-code acknowledgement, sensitive
+export, keyboard cancellation, factor replacement and old-session refusal. It
+masks setup/recovery secrets in retained evidence and does not mock responses.
+
 This is author-run development verification, not release-row closure. It creates
 two synthetic tenants and 53 customers through a real FastAPI server, then uses
 the production web build. Only the API transport URL is redirected; responses

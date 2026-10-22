@@ -101,7 +101,7 @@ def session_for(db: Session, payload: dict, user: User) -> AuthSession:
     return session
 
 
-def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
+def get_authenticated_user(request: Request, db: Session = Depends(get_db)) -> User:
     auth = request.headers.get("Authorization", "")
     if not auth.startswith("Bearer "):
         raise HTTPException(401, "Missing bearer token")
@@ -115,6 +115,59 @@ def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
                                password_fingerprint(user.password_hash)):
         raise HTTPException(401, "Session expired — please sign in again")
     request.state.auth_session = session_for(db, payload, user)
+    return user
+
+
+def mfa_required() -> bool:
+    """Mandatory in every runtime; no environment flag can disable MFA.
+
+    Feature-unit tests replace this function explicitly. MFA acceptance tests
+    and actual app/CI entrypoints exercise the unchanged mandatory policy.
+    """
+    return True
+
+
+# Exact matched route templates, not substring checks on caller-controlled URLs.
+# Revoking one's own session, stopping sending and rejecting approvals remain
+# immediate safety controls. Enabling sending gets its handler-level step-up.
+SENSITIVE_ROUTES = frozenset({
+    ('POST', '/api/auth/members'), ('POST', '/api/auth/change-password'),
+    ('GET', '/api/account/export'), ('DELETE', '/api/account'),
+    ('GET', '/api/customers/export.csv'), ('GET', '/api/audit/export.jsonl'),
+    ('GET', '/api/me/skin-data/export'), ('DELETE', '/api/me/skin-data'),
+    ('POST', '/api/billing/checkout'), ('POST', '/api/billing/portal'),
+    ('PUT', '/api/keys/mine'), ('PUT', '/api/keys/tenant'), ('DELETE', '/api/keys/mine/{provider}'),
+    ('POST', '/api/customers/{cid}/consent'), ('POST', '/api/customers/{cid}/consent/{eid}/revoke'),
+    ('POST', '/api/consent/skin'), ('DELETE', '/api/consent/skin'),
+    ('POST', '/api/agent-ops/approval-credentials/register/begin'),
+    ('POST', '/api/agent-ops/approval-credentials/register/finish'),
+    ('POST', '/api/agent-ops/approval-credentials/{row_id}/revoke'),
+    ('POST', '/api/agent-ops/senders'), ('POST', '/api/agent-ops/senders/{sender_id}/registration'),
+    ('POST', '/api/agent-ops/contacts/{contact_id}/permissions'),
+    ('POST', '/api/agent-ops/contacts/{contact_id}/permissions/{permission_id}/revoke'),
+    ('DELETE', '/api/agent-ops/suppressions/{suppression_id}'),
+    ('POST', '/api/agent-ops/adapters'), ('POST', '/api/agent-ops/adapters/{adapter_id}/rotate'),
+    ('POST', '/api/agent-ops/adapters/{adapter_id}/revoke'), ('POST', '/api/agent-ops/inbound/resume'),
+})
+
+
+def enforce_step_up(session: AuthSession) -> None:
+    if not mfa_required():
+        return
+    stamp = session.step_up_at
+    now = datetime.now(timezone.utc)
+    if stamp is None or not timedelta(0) <= now - stamp.replace(tzinfo=timezone.utc) <= timedelta(minutes=5):
+        raise HTTPException(403, {'code': 'STEP_UP_REQUIRED', 'message': 'Confirm your password and a fresh second factor before this change.'})
+
+
+def get_current_user(request: Request, user: User = Depends(get_authenticated_user)) -> User:
+    if mfa_required():
+        session = request.state.auth_session
+        if session.mfa_verified_at is None:
+            raise HTTPException(403, {'code': 'MFA_REQUIRED', 'message': 'Complete second-factor verification before using the app.'})
+        route = request.scope.get('route')
+        if (request.method, getattr(route, 'path', '')) in SENSITIVE_ROUTES:
+            enforce_step_up(session)
     return user
 
 

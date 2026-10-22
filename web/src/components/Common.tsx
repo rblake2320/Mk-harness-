@@ -7,6 +7,10 @@ import { MESSAGE_STATE_DEFINITIONS } from '../../../packages/sdk/src/message-sta
  * to what happened and what the person can do next — never a raw code alone.
  */
 const EXPLANATIONS: Record<string, { what: string; next: string }> = {
+  MFA_REQUIRED: { what: 'Second-factor verification is required.', next: 'Complete the authenticator sign-in, or sign out and sign in again.' },
+  MFA_INVALID: { what: 'The password or second-factor code is invalid or already used.', next: 'Check the password and use the next authenticator code, or a different one-use recovery code.' },
+  MFA_LOCKED: { what: 'Second-factor verification is temporarily locked.', next: 'Wait 15 minutes, then sign in again. New sessions do not bypass this protection.' },
+  STEP_UP_REQUIRED: { what: 'This change needs a fresh identity check.', next: 'Confirm your password and a fresh authenticator or recovery code, then retry.' },
   WEBAUTHN_REQUIRED: { what: 'Approving needs your passkey.', next: 'Register a passkey in Settings, then approve again.' },
   NO_APPROVAL_CREDENTIAL: { what: 'You have no passkey registered for approvals.', next: 'Open Settings → Approval passkeys and add one.' },
   WEBAUTHN_CREDENTIAL_MISMATCH: { what: 'That passkey is not registered to your account.', next: 'Use a passkey you registered here, or add this one in Settings.' },

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { client } from '../App.tsx';
 import type { AuthSession } from '../../../packages/sdk/src/index.ts';
+import { MfaScreen } from '../components/Mfa.tsx';
 
 const PROVIDERS = ['anthropic', 'openai', 'gemini', 'ollama'] as const;
 
@@ -17,11 +18,15 @@ export default function SettingsView({ role }: { role: string }) {
   const [invite, setInvite] = useState({ email: '', password: '' });
   const [sessions, setSessions] = useState<AuthSession[]>([]);
   const [revoking, setRevoking] = useState<string | null>(null);
+  const [mfaStatus, setMfaStatus] = useState<{ enrolled: boolean; recovery_codes_remaining: number } | null>(null);
+  const [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
+  const [replacingFactor, setReplacingFactor] = useState(false);
 
   function refresh() {
     client.keyStatus().then(setStatus).catch(e => setErr(e.message));
     client.myUsage().then(setUsage).catch(() => {});
     client.sessions().then(setSessions).catch(e => setErr(e.message));
+    client.mfaStatus().then(setMfaStatus).catch(() => {});
     if (role === 'admin') client.tenantUsage().then(setTeamUsage).catch(() => {});
   }
   useEffect(refresh, []);
@@ -46,11 +51,31 @@ export default function SettingsView({ role }: { role: string }) {
     } catch (e: any) { setErr(e.message); }
   }
 
+  if (replacingFactor && client.tokens) return <MfaScreen client={client} tokens={{ ...client.tokens, mfa_state: 'enrollment_required' }}
+    onVerified={tokens => { client.tokens = tokens; client.onTokensChanged?.(tokens); setReplacingFactor(false); refresh(); }}
+    onSignOut={async () => { try { await client.logout(); } catch { client.tokens = null; client.onTokensChanged?.(null); } }} />;
+
   return (
     <div>
       <h1>Settings</h1>
       {msg && <div style={{ color: 'var(--ok)', margin: '8px 0' }}>{msg}</div>}
       {err && <div className="error" role="alert" style={{ margin: '8px 0' }}>{err}</div>}
+
+      <section className="card" aria-label="Second-factor security" style={{ maxWidth: 720, marginBottom: 18 }}>
+        <h2>Second-factor security</h2>
+        <p>{mfaStatus?.enrolled ? `Authenticator enrolled. ${mfaStatus.recovery_codes_remaining} recovery codes remain.` : 'Checking authenticator status…'}</p>
+        <p>Replacing the authenticator revokes all old sessions and recovery codes. Keep this session open until you save the replacements.</p>
+        <button className="btn ghost" onClick={() => setReplacingFactor(true)}>Replace authenticator</button>{' '}
+        <button className="btn ghost" disabled={recoveryCodes.length > 0} onClick={async () => {
+          try { setRecoveryCodes((await client.rotateRecoveryCodes()).recovery_codes); refresh(); }
+          catch (e: any) { setErr(e.message); }
+        }}>Replace recovery codes</button>
+        {recoveryCodes.length > 0 && <div role="region" aria-label="New recovery codes">
+          <p>Old recovery codes no longer work. Save these one-use codes now; they will not be shown again.</p>
+          <ul className="recovery-codes">{recoveryCodes.map(code => <li key={code}><code>{code}</code></li>)}</ul>
+          <button className="btn" onClick={() => setRecoveryCodes([])}>I saved the new codes</button>
+        </div>}
+      </section>
 
       <section className="card" aria-label="Signed-in sessions" style={{ maxWidth: 720, marginBottom: 18 }}>
         <h2>Signed-in sessions</h2>

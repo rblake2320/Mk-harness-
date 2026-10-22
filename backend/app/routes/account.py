@@ -20,12 +20,12 @@ import json
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..models import (
-    AuditLog, AuthSession, ConsentRecord, ConsultantProfile, Conversation, Customer,
+    AuditLog, AuthFactor, AuthRecoveryCode, AuthSession, ConsentRecord, ConsultantProfile, Conversation, Customer,
     Message, SkinAnalysis, Subscription, UsageRecord, User,
 )
 from ..security import get_current_user, verify_password
@@ -171,6 +171,11 @@ def delete_account(body: DeleteAccountIn, user: User = Depends(get_current_user)
 
     uid = user.id
     tid = user.tenant_id
+
+    # Authentication secrets have no audit-retention purpose. Erase both active
+    # and pending factors plus backup hashes in the account-delete transaction.
+    db.execute(delete(AuthRecoveryCode).where(AuthRecoveryCode.user_id == uid, AuthRecoveryCode.tenant_id == tid))
+    db.execute(delete(AuthFactor).where(AuthFactor.user_id == uid, AuthFactor.tenant_id == tid))
 
     # Delete customers (cascades skin_analyses linkage via nullable FK)
     customers = db.scalars(select(Customer).where(Customer.user_id == uid)).all()

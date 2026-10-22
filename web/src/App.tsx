@@ -12,6 +12,7 @@ import CustomerDetail from './views/CustomerDetail.tsx';
 import GovernanceSettings from './views/Governance.tsx';
 import type { Customer } from '../../packages/sdk/src/index.ts';
 import { AiNoticeModal } from './components/AiDisclosure.tsx';
+import { MfaScreen, StepUpDialog } from './components/Mfa.tsx';
 import './styles.css';
 
 export const client = new MKClient(import.meta.env.VITE_API_URL ?? '');
@@ -32,6 +33,7 @@ export default function App() {
   const [tokens, setTokens] = useState<Tokens | null>(loadTokens);
   const [authNotice, setAuthNotice] = useState('');
   const [signingOut, setSigningOut] = useState(false);
+  const [stepUp, setStepUp] = useState<{ finish: (ok: boolean) => void } | null>(null);
   const [view, setView] = useState<'brief' | 'approvals' | 'inbox' | 'customers' | 'chat' | 'skin' | 'billing' | 'settings'>('brief');
   const [openCustomer, setOpenCustomer] = useState<Customer | null>(null);
   const [me, setMe] = useState<{ id: string } | null>(null);
@@ -51,9 +53,24 @@ export default function App() {
       setTokens(updated);
     };
   }, [tokens]);
-  useEffect(() => { if (tokens) client.me().then(setMe).catch(() => {}); else setMe(null); }, [tokens]);
+  useEffect(() => {
+    client.onStepUpRequired = () => new Promise(resolve => setStepUp({ finish: resolve }));
+    return () => { client.onStepUpRequired = null; };
+  }, []);
+  useEffect(() => {
+    let active = true;
+    if (tokens && (!tokens.mfa_state || tokens.mfa_state === 'verified')) client.me().then(me => { if (active) setMe(me); }).catch(() => {});
+    else setMe(null);
+    return () => { active = false; };
+  }, [tokens]);
+  useEffect(() => {
+    if (!tokens || (tokens.mfa_state && tokens.mfa_state !== 'verified')) {
+      setView('brief'); setOpenCustomer(null); setMe(null);
+    }
+  }, [tokens?.session_id, tokens?.mfa_state, !!tokens]);
 
   async function signOut() {
+    stepUp?.finish(false); setStepUp(null);
     setSigningOut(true);
     try {
       const result = await client.logout();
@@ -65,11 +82,14 @@ export default function App() {
   }
 
   if (!tokens) return <AuthScreen notice={authNotice} onAuthed={t => { setAuthNotice(''); setTokens(t); }} />;
+  if (tokens.mfa_state && tokens.mfa_state !== 'verified') return <MfaScreen key={tokens.session_id}
+    client={client} tokens={tokens} onVerified={setTokens} onSignOut={signOut} />;
 
   return (
     <div className="shell">
       <a className="skip-link" href="#main">Skip to content</a>
       <AiNoticeModal />
+      {stepUp && <StepUpDialog client={client} onClose={ok => { stepUp.finish(ok); setStepUp(null); }} />}
       <nav className="rail" aria-label="Main">
         <div className="brand display">Consultant <em>Studio</em></div>
         {([['brief', "Today's brief"], ['approvals', 'Approvals'], ['inbox', 'Inbox & exceptions'],

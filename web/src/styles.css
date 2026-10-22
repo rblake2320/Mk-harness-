@@ -195,3 +195,11 @@ th { color: var(--muted); font-weight: 500; font-size: 12.5px; text-transform: u
 .commit-row { padding: 8px 0; border-bottom: 1px solid var(--edge); }
 .timeline li { padding: 4px 0; }
 button:disabled { cursor: not-allowed; }
+/* Authentication secrets wrap without horizontal scrolling at narrow widths. */
+.auth-form { display: grid; gap: 14px; }
+.auth-form label { display: grid; gap: 6px; }
+.mfa-secret, .recovery-codes code { overflow-wrap: anywhere; user-select: all; }
+.recovery-codes { padding-left: 1.2rem; line-height: 1.8; }
+.recovery-codes code { display: block; line-height: 1.5; }
+.step-up-dialog { color: var(--text); background: var(--surface); width: min(460px, calc(100% - 32px)); max-height: calc(100% - 32px); overflow: auto; }
+.step-up-dialog::backdrop { background: #000a; }
