@@ -201,27 +201,6 @@ pub async fn dispatch_one(
             state: t.state,
         });
     }
-    // C8: a stale or paused inbound path defers provider dispatch for this
-    // tenant. The action stays queued; it is re-delivered later.
-    let adapter_kind_early = ctx
-        .tools
-        .get(&action.request.tool_id)
-        .map_or("", |t| t.adapter_kind);
-    if adapter_kind_early == mk_adapters::twilio::ADAPTER_KIND
-        && let Some(reason) = messaging::inbound_dispatch_block(&mut tx, now).await?
-    {
-        outbox::enqueue(
-            &mut tx,
-            action_id,
-            "retry",
-            now + chrono::Duration::seconds(30),
-            json!({"deferred": reason}),
-        )
-        .await?;
-        outbox::release_lease(&mut tx, action_id, lease).await?;
-        tx.commit().await?;
-        return Ok(DispatchOutcome::Deferred { reason });
-    }
     let attempt = u32::try_from(action.attempt).unwrap_or(0);
     let recheck = RecheckInput {
         action_id,
@@ -268,6 +247,27 @@ pub async fn dispatch_one(
             code,
             state: a.state,
         });
+    }
+    // C8: policy expiry/revocation wins before a health deferral, so a paused
+    // inbound path cannot leave an expired action queued indefinitely.
+    let adapter_kind_early = ctx
+        .tools
+        .get(&action.request.tool_id)
+        .map_or("", |t| t.adapter_kind);
+    if adapter_kind_early == mk_adapters::twilio::ADAPTER_KIND
+        && let Some(reason) = messaging::inbound_dispatch_block(&mut tx, now).await?
+    {
+        outbox::enqueue(
+            &mut tx,
+            action_id,
+            "retry",
+            now + chrono::Duration::seconds(30),
+            json!({"deferred": reason}),
+        )
+        .await?;
+        outbox::release_lease(&mut tx, action_id, lease).await?;
+        tx.commit().await?;
+        return Ok(DispatchOutcome::Deferred { reason });
     }
     // C4: evaluate policy first so expired/revoked authorizations terminate,
     // then hold new sends while the destination has unresolved uncertainty.

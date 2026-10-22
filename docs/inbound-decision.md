@@ -67,7 +67,8 @@ p99 ≤ 2 s; inbound → inbox visible p95 ≤ 5 s (O3).
 | Suppress or hold | explicit → permanent suppression + queued outreach suppressed; possible → non-permanent hold a human must lift; both under the serialized control path |
 | Acknowledge | empty TwiML after commit |
 | Async meaning | `GET /internal/v1/inbound/pending` (body unsealed only for a human principal) → `POST /api/inbound/process` → `POST /internal/v1/inbound/{id}/processed` (single-shot) |
-| Health → pause | `kernel.inbound_health`; worker defers provider dispatch when stale (>60 s after a failure), paused, or unverified; resume requires a fresh ok and zero pending events |
+| Health → pause | Worker issues signed per-sender checks to the configured public inbound URL every 15 s. Success requires both HTTP 200 and readback of that exact generation's committed receipt. Every active sender needs evidence no older than 60 s; silence, failure and manual pause defer dispatch. Recovery waits for fresh receipts and zero pending inbound events. |
 
-Not yet: the public-URL probe job (WP09), delivery-uncertainty exceptions in the app view
-(WP08), and any real-provider run.
+The public-URL probe and operator uncertainty UI are implemented on PR #37 with
+author-run local tests. No real-provider staging qualification or release closure
+is claimed. See `inbound-health-probes.md` and `submission-resolution.md`.

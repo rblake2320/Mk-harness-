@@ -45,6 +45,8 @@ rand = { workspace = true }
 secrecy = { workspace = true }
 prometheus-client = { workspace = true }
 axum = { workspace = true }
+reqwest = { workspace = true }
+url = { workspace = true }
 
 [dev-dependencies]
 mk-testkit = { workspace = true }

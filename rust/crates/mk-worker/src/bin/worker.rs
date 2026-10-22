@@ -61,6 +61,22 @@ async fn main() -> anyhow::Result<()> {
             }),
         )?)
     };
+    let inbound_probe_task = if twilio.is_some() {
+        Some(
+            mk_worker::inbound_probe::InboundProbe::new(
+                store.clone(),
+                keyring.clone(),
+                EgressAllowlist::new(
+                    cfg.egress_authorities.iter().map(String::as_str),
+                    cfg.allow_loopback_http,
+                ),
+                &cfg.public_webhook_base,
+            )?
+            .spawn(),
+        )
+    } else {
+        None
+    };
     let ctx = Arc::new(WorkerContext {
         store: store.clone(),
         registry: AdapterRegistry {
@@ -207,5 +223,8 @@ async fn main() -> anyhow::Result<()> {
     }
     tracing::info!("worker stopped");
     reconciliation_task.abort();
+    if let Some(task) = inbound_probe_task {
+        task.abort();
+    }
     Ok(())
 }

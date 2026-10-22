@@ -844,10 +844,11 @@ pub struct InboundHealth {
     pub last_failure_reason: String,
     pub paused_since: Option<DateTime<Utc>>,
     pub resumed_at: Option<DateTime<Utc>>,
+    pub recovery_required: bool,
 }
 
 pub async fn inbound_health(tx: &mut TenantTx<'_>) -> Result<Option<InboundHealth>, StoreError> {
-    let r = sqlx::query("SELECT last_ok_at, last_failure_at, last_failure_reason, paused_since, resumed_at FROM kernel.inbound_health WHERE tenant_id = $1")
+    let r = sqlx::query("SELECT last_ok_at, last_failure_at, last_failure_reason, paused_since, resumed_at, recovery_required FROM kernel.inbound_health WHERE tenant_id = $1")
         .bind(tx.tenant().0)
         .fetch_optional(tx.conn())
         .await?;
@@ -858,13 +859,14 @@ pub async fn inbound_health(tx: &mut TenantTx<'_>) -> Result<Option<InboundHealt
             last_failure_reason: r.try_get("last_failure_reason")?,
             paused_since: r.try_get("paused_since")?,
             resumed_at: r.try_get("resumed_at")?,
+            recovery_required: r.try_get("recovery_required")?,
         })
     })
     .transpose()
 }
 
-/// Record a successful inbound-path check (an authenticated webhook arrived, or
-/// the probe succeeded). Clears a pause only through `resume_inbound`.
+/// Record a successful aggregate of committed public probe receipts.
+/// Customer webhooks and caller health assertions cannot establish health.
 pub async fn inbound_ok(tx: &mut TenantTx<'_>, now: DateTime<Utc>) -> Result<(), StoreError> {
     sqlx::query(
         "INSERT INTO kernel.inbound_health (tenant_id, last_ok_at, updated_at) VALUES ($1,$2,$2)
@@ -894,9 +896,8 @@ pub async fn inbound_failure(
     Ok(())
 }
 
-/// Dispatch gate (C8): paused explicitly, or no successful check within the
-/// stale window after at least one failure, or never checked at all when a
-/// sender identity exists. Returns the reason when dispatch must not proceed.
+/// Every active sender needs a fresh, committed public-webhook receipt. Silence
+/// is stale too; an outage cannot recover while inbound processing is pending.
 pub async fn inbound_dispatch_block(
     tx: &mut TenantTx<'_>,
     now: DateTime<Utc>,
@@ -915,14 +916,14 @@ pub async fn inbound_dispatch_block(
     {
         return Ok(Some("inbound_paused"));
     }
-    match (h.last_ok_at, h.last_failure_at) {
-        (Some(ok), Some(f)) if f > ok && (now - ok).num_seconds() > INBOUND_STALE_SECS => {
-            Ok(Some("inbound_stale"))
-        }
-        (None, Some(_)) => Ok(Some("inbound_stale")),
-        (None, None) => Ok(Some("inbound_unverified")),
-        _ => Ok(None),
+    if h.last_ok_at
+        .is_none_or(|ok| now < ok || now - ok > chrono::Duration::seconds(INBOUND_STALE_SECS))
+        || !crate::probes::all_fresh(tx, now).await?
+    {
+        crate::probes::latch_outage(tx, now).await?;
+        return Ok(Some("inbound_stale"));
     }
+    Ok(h.recovery_required.then_some("inbound_recovery_pending"))
 }
 
 pub async fn pause_inbound(tx: &mut TenantTx<'_>, now: DateTime<Utc>) -> Result<(), StoreError> {
@@ -945,12 +946,12 @@ pub async fn resume_inbound(tx: &mut TenantTx<'_>, now: DateTime<Utc>) -> Result
     };
     let fresh = h
         .last_ok_at
-        .is_some_and(|ok| (now - ok).num_seconds() <= INBOUND_STALE_SECS);
+        .is_some_and(|ok| now >= ok && now - ok <= chrono::Duration::seconds(INBOUND_STALE_SECS));
     let pending = pending_inbound_count(tx).await?;
-    if !fresh || pending > 0 {
+    if !fresh || pending > 0 || !crate::probes::all_fresh(tx, now).await? {
         return Ok(false);
     }
-    sqlx::query("UPDATE kernel.inbound_health SET resumed_at = $2, pending_events_at_resume = 0, updated_at = $2 WHERE tenant_id = $1")
+    sqlx::query("UPDATE kernel.inbound_health SET resumed_at = $2, pending_events_at_resume = 0, recovery_required = false, updated_at = $2 WHERE tenant_id = $1")
         .bind(tx.tenant().0)
         .bind(now)
         .execute(tx.conn())

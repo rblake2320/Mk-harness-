@@ -1496,16 +1496,403 @@ async fn run_dispatch(r: &ProviderRig, tenant: TenantId, aid: &str) -> DispatchO
     .unwrap_or_else(|e| panic!("{e:?}"))
 }
 
-async fn health_ok(h: &Harness, admin: UserId) {
+async fn health_ok(h: &Harness, _admin: UserId) {
+    // Fixture for tests of other boundaries, not C8 health evidence. The C8
+    // test below exercises the real network probe with restricted process roles.
+    let mut tx = h.state.store.begin(h.tenant).await.unwrap();
+    sqlx::query("INSERT INTO kernel.inbound_probes (tenant_id, sender_identity_id, last_ok_at)
+        SELECT tenant_id, sender_identity_id, now() FROM kernel.sender_identities WHERE tenant_id = $1
+        ON CONFLICT (tenant_id, sender_identity_id) DO UPDATE SET last_ok_at = now()")
+        .bind(h.tenant.0).execute(tx.raw_conn()).await.unwrap();
+    mk_store::messaging::inbound_ok(&mut tx, chrono::Utc::now())
+        .await
+        .unwrap();
+    tx.commit().await.unwrap();
+}
+
+#[tokio::test]
+async fn public_inbound_probes_require_committed_receipts_and_drain_before_recovery() {
+    use mk_worker::inbound_probe::InboundProbe;
+    use std::sync::atomic::{AtomicU8, Ordering};
+    let mut h = harness().await.expect("real Postgres required");
+    let mut r = provider_rig(&h, mk_adapters::twilio_sim::TwilioSimMode::Accept).await;
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let authority = listener.local_addr().unwrap().to_string();
+    let base = format!("http://{authority}");
+    let api_pool = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(1)
+        .after_connect(|conn, _| {
+            Box::pin(async move {
+                sqlx::query("SET ROLE mk_kernel_api").execute(conn).await?;
+                Ok(())
+            })
+        })
+        .connect(&mk_testkit::test_database_url().unwrap())
+        .await
+        .unwrap();
+    let worker_pool = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(1)
+        .after_connect(|conn, _| {
+            Box::pin(async move {
+                sqlx::query("SET ROLE mk_kernel_worker")
+                    .execute(conn)
+                    .await?;
+                Ok(())
+            })
+        })
+        .connect(&mk_testkit::test_database_url().unwrap())
+        .await
+        .unwrap();
+    let mut state = h.state.clone();
+    state.store = Store::from_pool(api_pool);
+    state.public_webhook_base = Some(base.clone());
+    h.app = router(state);
+    let mode = Arc::new(AtomicU8::new(1));
+    let switch = mode.clone();
+    let network = h.app.clone().layer(axum::middleware::from_fn(
+        move |mut request: axum::extract::Request, next: axum::middleware::Next| {
+            let switch = switch.clone();
+            async move {
+                use axum::response::IntoResponse as _;
+                match switch.load(Ordering::SeqCst) {
+                    1 => StatusCode::OK.into_response(), // transport acceptance only
+                    2 => {
+                        request
+                            .headers_mut()
+                            .insert("x-twilio-signature", "invalid".parse().unwrap());
+                        next.run(request).await
+                    }
+                    3 => (StatusCode::FOUND, [("location", "/health/ready")]).into_response(),
+                    _ => next.run(request).await,
+                }
+            }
+        },
+    ));
+    let server = tokio::spawn(async move {
+        axum::serve(listener, network).await.unwrap();
+    });
+    let worker_store = Store::from_pool(worker_pool);
+    let probe = InboundProbe::new(
+        worker_store.clone(),
+        h.state.keyring.clone(),
+        EgressAllowlist::new([authority.as_str()], true),
+        &base,
+    )
+    .unwrap();
+    assert!(
+        InboundProbe::new(
+            worker_store.clone(),
+            h.state.keyring.clone(),
+            EgressAllowlist::default(),
+            &base
+        )
+        .is_err()
+    );
     let (s, _) = h
         .call(
             "POST",
             "/internal/v1/inbound/health",
-            Some(&h.token(admin, &["tenant_admin"])),
-            Some(json!({"ok": true})),
+            Some(&h.token(r.admin, &["tenant_admin"])),
+            Some(json!({"ok":true})),
         )
         .await;
-    assert_eq!(s, StatusCode::NO_CONTENT);
+    assert_eq!(
+        s,
+        StatusCode::FORBIDDEN,
+        "caller assertion cannot forge health"
+    );
+    let (aid, _) = approved_action(
+        &h,
+        &mut r,
+        "Probe gate. Reply STOP to opt out.",
+        "+15555550100",
+    )
+    .await;
+    assert_eq!(
+        run_dispatch(&r, h.tenant, &aid).await,
+        DispatchOutcome::Deferred {
+            reason: "inbound_unverified"
+        }
+    );
+    for setting in [1, 2, 3, 0] {
+        // Fault injection advances only the claim watermark, not health proof.
+        sqlx::query("UPDATE kernel.inbound_probes SET issued_at = now() - interval '20 seconds' WHERE tenant_id = $1")
+            .bind(h.tenant.0).execute(h.state.store.pool()).await.unwrap();
+        mode.store(setting, Ordering::SeqCst);
+        let stats = probe.run_once(&[h.tenant]).await.unwrap();
+        assert_eq!(stats.checked, 1);
+        assert_eq!(stats.confirmed, usize::from(setting == 0));
+        assert_eq!(stats.failed, usize::from(setting != 0));
+    }
+    let (_, health) = h
+        .call(
+            "GET",
+            "/internal/v1/inbound/health",
+            Some(&h.token(r.admin, &["tenant_admin"])),
+            None,
+        )
+        .await;
+    assert!(health["dispatch_blocked"].is_null(), "{health}");
+    assert_eq!(
+        health["pending_events"], 0,
+        "probes never create customer work"
+    );
+    // A signed replay of the exact completed generation cannot refresh health.
+    let probe_id: Uuid = sqlx::query_scalar(
+        "SELECT probe_id FROM kernel.inbound_probes WHERE tenant_id=$1 AND sender_identity_id=$2",
+    )
+    .bind(h.tenant.0)
+    .bind(r.sender_id)
+    .fetch_one(h.state.store.pool())
+    .await
+    .unwrap();
+    let form = vec![
+        ("AccountSid".to_owned(), ACCOUNT_SID.to_owned()),
+        ("MkHealthProbe".to_owned(), probe_id.to_string()),
+        ("To".to_owned(), r.from_number.clone()),
+    ];
+    let path = format!("/webhooks/twilio/inbound/{}", r.sender_id);
+    let sig = mk_adapters::twilio::twilio_signature(
+        &AdapterSecret::new(TOKEN),
+        &format!("{base}{path}"),
+        &form,
+    );
+    let req = Request::builder()
+        .method("POST")
+        .uri(&path)
+        .header("x-twilio-signature", sig)
+        .body(Body::from(
+            url::form_urlencoded::Serializer::new(String::new())
+                .extend_pairs(&form)
+                .finish(),
+        ))
+        .unwrap();
+    assert_eq!(
+        h.app.clone().oneshot(req).await.unwrap().status(),
+        StatusCode::FORBIDDEN
+    );
+    // A second active sender must earn its own receipt; first sender cannot mask it.
+    let number2 = format!("+1600{:07}", rand::random::<u32>() % 10_000_000);
+    let (s, _) = h.call("POST", "/internal/v1/senders", Some(&h.token(r.admin, &["tenant_admin"])), Some(json!({
+        "owner_user_id":r.manager,"display_name":"Second route","account_sid":ACCOUNT_SID,"auth_token":TOKEN,"from_number":number2}))).await;
+    assert_eq!(s, StatusCode::CREATED);
+    let (_, health) = h
+        .call(
+            "GET",
+            "/internal/v1/inbound/health",
+            Some(&h.token(r.admin, &["tenant_admin"])),
+            None,
+        )
+        .await;
+    assert_eq!(health["dispatch_blocked"], "inbound_stale");
+    assert_eq!(probe.run_once(&[h.tenant]).await.unwrap().confirmed, 1);
+    // Real inbound event remains pending across a simulated monitor outage.
+    let form = vec![
+        ("AccountSid".to_owned(), ACCOUNT_SID.to_owned()),
+        (
+            "MessageSid".to_owned(),
+            format!("SM{}", Uuid::new_v4().simple()),
+        ),
+        ("From".to_owned(), "+15555550100".to_owned()),
+        ("To".to_owned(), r.from_number.clone()),
+        ("Body".to_owned(), "Can we talk tomorrow?".to_owned()),
+    ];
+    let sig = mk_adapters::twilio::twilio_signature(
+        &AdapterSecret::new(TOKEN),
+        &format!("{base}{path}"),
+        &form,
+    );
+    let req = Request::builder()
+        .method("POST")
+        .uri(&path)
+        .header("x-twilio-signature", sig)
+        .body(Body::from(
+            url::form_urlencoded::Serializer::new(String::new())
+                .extend_pairs(&form)
+                .finish(),
+        ))
+        .unwrap();
+    assert_eq!(
+        h.app.clone().oneshot(req).await.unwrap().status(),
+        StatusCode::OK
+    );
+    sqlx::query("UPDATE kernel.inbound_probes SET last_ok_at = now() - interval '61 seconds', issued_at = now() - interval '20 seconds' WHERE tenant_id=$1")
+        .bind(h.tenant.0).execute(h.state.store.pool()).await.unwrap();
+    // No failure report is present: monitor silence alone must pause.
+    sqlx::query("UPDATE kernel.inbound_health SET last_failure_at = NULL, last_ok_at = now() - interval '61 seconds' WHERE tenant_id=$1")
+        .bind(h.tenant.0).execute(h.state.store.pool()).await.unwrap();
+    let (_, health) = h
+        .call(
+            "GET",
+            "/internal/v1/inbound/health",
+            Some(&h.token(r.admin, &["tenant_admin"])),
+            None,
+        )
+        .await;
+    assert_eq!(health["dispatch_blocked"], "inbound_stale");
+    let stats = probe.run_once(&[h.tenant]).await.unwrap();
+    assert_eq!(stats.confirmed, 2);
+    assert_eq!(
+        run_dispatch(&r, h.tenant, &aid).await,
+        DispatchOutcome::Deferred {
+            reason: "inbound_recovery_pending"
+        }
+    );
+    let event: Uuid = sqlx::query_scalar(
+        "SELECT event_id FROM kernel.inbound_events WHERE tenant_id=$1 AND processed_at IS NULL",
+    )
+    .bind(h.tenant.0)
+    .fetch_one(h.state.store.pool())
+    .await
+    .unwrap();
+    for roles in [
+        vec!["agent"],
+        vec!["agent", "unknown"],
+        vec![],
+        vec!["viewer"],
+    ] {
+        let token = h.token(r.manager, &roles);
+        let denied = if roles.is_empty() {
+            StatusCode::UNAUTHORIZED
+        } else {
+            StatusCode::FORBIDDEN
+        };
+        assert_eq!(
+            h.call("GET", "/internal/v1/inbound/pending", Some(&token), None)
+                .await
+                .0,
+            denied,
+            "non-human role cannot read the inbound backlog: {roles:?}"
+        );
+        assert_eq!(
+            h.call(
+                "POST",
+                &format!("/internal/v1/inbound/{event}/processed"),
+                Some(&token),
+                Some(json!({}))
+            )
+            .await
+            .0,
+            denied,
+            "non-human role cannot clear the recovery backlog: {roles:?}"
+        );
+    }
+    assert_eq!(
+        h.call(
+            "POST",
+            &format!("/internal/v1/inbound/{event}/processed"),
+            Some(&h.token(r.manager, &["consultant"])),
+            Some(json!({}))
+        )
+        .await
+        .0,
+        StatusCode::NO_CONTENT
+    );
+    probe.run_once(&[h.tenant]).await.unwrap();
+    assert!(matches!(
+        run_dispatch(&r, h.tenant, &aid).await,
+        DispatchOutcome::Dispatched { .. }
+    ));
+    assert_eq!(
+        r.sim.calls(),
+        1,
+        "only the approved action contacts the provider"
+    );
+    let mut tx = h.state.store.begin(TenantId::new()).await.unwrap();
+    assert_eq!(
+        mk_store::messaging::inbound_dispatch_block(&mut tx, chrono::Utc::now())
+            .await
+            .unwrap(),
+        None
+    );
+    tx.commit().await.unwrap();
+    // Capacity subscenario: real HTTP receipts for 1,000 distinct businesses,
+    // restricted API/worker roles and one connection each. One broken tenant
+    // must not stop the rest of the fleet. This is not the production load soak.
+    let mut fleet = Vec::new();
+    for _ in 0..1_000 {
+        let tenant = TenantId::new();
+        let mut tx = h.state.store.begin(tenant).await.unwrap();
+        let owner = UserId::new();
+        let number = format!("+1800{:011}", Uuid::new_v4().as_u128() % 100_000_000_000);
+        mk_store::messaging::register_sender(
+            &mut tx,
+            &h.state.keyring,
+            owner,
+            "Probe fleet fixture",
+            ACCOUNT_SID,
+            &secrecy::SecretString::from(TOKEN.to_owned()),
+            Some(&number),
+            None,
+            owner,
+            chrono::Utc::now(),
+        )
+        .await
+        .unwrap();
+        tx.commit().await.unwrap();
+        fleet.push(tenant);
+    }
+    let broken_tenant = TenantId::new();
+    let mut tx = h.state.store.begin(broken_tenant).await.unwrap();
+    let wrong_keys = mk_crypto::Keyring::legacy(&MasterKey::generate());
+    let owner = UserId::new();
+    let number = format!("+1800{:011}", Uuid::new_v4().as_u128() % 100_000_000_000);
+    mk_store::messaging::register_sender(
+        &mut tx,
+        &wrong_keys,
+        owner,
+        "Broken key fixture",
+        ACCOUNT_SID,
+        &secrecy::SecretString::from(TOKEN.to_owned()),
+        Some(&number),
+        None,
+        owner,
+        chrono::Utc::now(),
+    )
+    .await
+    .unwrap();
+    tx.commit().await.unwrap();
+    fleet.insert(0, broken_tenant);
+    let started = std::time::Instant::now();
+    let stats = probe.run_once(&fleet).await.unwrap();
+    let elapsed = started.elapsed();
+    println!(
+        "C8 fleet: businesses=1000 broken_tenants=1 elapsed_ms={} checked={} confirmed={} failed={} tenant_failures={} api_pool=1 worker_pool=1 tenant_concurrency=16 network_limit=32",
+        elapsed.as_millis(),
+        stats.checked,
+        stats.confirmed,
+        stats.failed,
+        stats.tenant_failures
+    );
+    assert_eq!(stats.checked, 1_000);
+    assert_eq!(stats.confirmed, 1_000);
+    assert_eq!(stats.failed, 0);
+    assert_eq!(stats.tenant_failures, 1);
+    assert!(
+        elapsed < Duration::from_secs(45),
+        "cycle plus 15s scheduling delay must fit the 60s health window: {elapsed:?}"
+    );
+    let ids: Vec<Uuid> = fleet.iter().skip(1).map(|t| t.0).collect();
+    let fresh: i64 = sqlx::query_scalar("SELECT count(*) FROM kernel.inbound_probes WHERE tenant_id = ANY($1) AND last_ok_at >= now() - interval '60 seconds' AND confirmed_at IS NOT NULL")
+        .bind(&ids).fetch_one(h.state.store.pool()).await.unwrap();
+    assert_eq!(
+        fresh, 1_000,
+        "every business retains its own committed receipt"
+    );
+    // The API role cannot confirm a receipt or mint a generation itself.
+    let mut tx = worker_store.begin(h.tenant).await.unwrap();
+    sqlx::query("SET LOCAL ROLE mk_kernel_api")
+        .execute(tx.raw_conn())
+        .await
+        .unwrap();
+    assert!(
+        sqlx::query("UPDATE kernel.inbound_probes SET last_ok_at = now() WHERE tenant_id=$1")
+            .bind(h.tenant.0)
+            .execute(tx.raw_conn())
+            .await
+            .is_err()
+    );
+    server.abort();
 }
 
 #[tokio::test]

@@ -82,7 +82,7 @@ MK_DATABASE_URL="$(url_for mk_relay_login relay)" MK_RELAY_ID=relay-smoke \
   "$BIN/mk-outbox-relay" >"$WORK/relay.log" 2>&1 & PIDS+=($!)
 TWSIM=http://127.0.0.1:8790; TW_ACCOUNT=ACaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; TW_TOKEN=smoke-auth-token-$(python3 -c 'import secrets;print(secrets.token_hex(8))')
 MK_DATABASE_URL="$(url_for mk_worker_login worker)" MK_WORKER_ID=worker-smoke MK_LEASE_SECS=60 MK_ALLOW_LOOPBACK_HTTP=1 \
-  MK_MOBILE_INTAKE_URL="$AGENT/work-orders" MK_EGRESS_AUTHORITIES=127.0.0.1:8787,127.0.0.1:8790 \
+  MK_MOBILE_INTAKE_URL="$AGENT/work-orders" MK_EGRESS_AUTHORITIES=127.0.0.1:8787,127.0.0.1:8790,127.0.0.1:8090 \
   MK_TWILIO_API_BASE="$TWSIM" MK_PUBLIC_WEBHOOK_BASE="$WEBHOOK_BASE" \
   "$BIN/mk-action-worker" >"$WORK/worker.log" 2>&1 & WORKER_PID=$!; PIDS+=($WORKER_PID)
 MK_TWSIM_ACCOUNT_SID="$TW_ACCOUNT" MK_TWSIM_AUTH_TOKEN="$TW_TOKEN" MK_TWSIM_BIND=127.0.0.1:8790 MK_TWSIM_CALLBACK_BASE="$WEBHOOK_BASE" \
@@ -281,7 +281,12 @@ SA="$WORK/softauthn3.json"; "$BIN/mk-softauthn" new "$SA" es256 >/dev/null
 REG=$("$BIN/mk-softauthn" register "$SA" "$(j 'd["challenge"]')" "$RP_ID" "$ORIGIN")
 [ "$(ops2 -X POST "$APP/api/agent-ops/approval-credentials/register/finish" -d "$REG")" = 201 ] || die "register/finish 3"
 # C8: dispatch is deferred until the inbound path has a successful check.
-[ "$(ops -X POST "$APP/api/agent-ops/inbound/health" -d '{"ok":true}')" = 204 ] || die "inbound health"
+for i in $(seq 1 40); do
+  ops "$APP/api/agent-ops/inbound/health" >/dev/null
+  [ "$(j 'd.get("dispatch_blocked", "unverified") is None')" = True ] && break
+  sleep 0.5
+done
+[ "$(j 'd.get("dispatch_blocked", "unverified") is None')" = True ] || die "no committed public inbound probe"
 CONTACT3=$(python3 -c 'import uuid;print(uuid.uuid4())')
 # The application customer record (timezone known → F9 passes; contact tz travels to the kernel).
 CUST=$(curl -fsS "$APP/api/customers" "${H[@]}" -d '{"name":"Smoke Customer","phone":"+15555550123"}' | python3 -c 'import sys,json;print(json.load(sys.stdin)["id"])')
@@ -334,7 +339,7 @@ MK_DATABASE_URL="$(url_for mk_api_login api)" MK_BIND=127.0.0.1:8090 RUST_ACTION
   MK_APPROVAL_RP_ID="$RP_ID" MK_APPROVAL_ORIGINS="$ORIGIN" MK_PUBLIC_WEBHOOK_BASE="$WEBHOOK_BASE" \
   "$BIN/mk-action-api" >>"$WORK/api.log" 2>&1 & PIDS+=($!)
 MK_DATABASE_URL="$(url_for mk_worker_login worker)" MK_WORKER_ID=worker-smoke MK_LEASE_SECS=60 MK_ALLOW_LOOPBACK_HTTP=1 \
-  MK_MOBILE_INTAKE_URL="$AGENT/work-orders" MK_EGRESS_AUTHORITIES=127.0.0.1:8787,127.0.0.1:8790 \
+  MK_MOBILE_INTAKE_URL="$AGENT/work-orders" MK_EGRESS_AUTHORITIES=127.0.0.1:8787,127.0.0.1:8790,127.0.0.1:8090 \
   MK_TWILIO_API_BASE="$TWSIM" MK_PUBLIC_WEBHOOK_BASE="$WEBHOOK_BASE" \
   "$BIN/mk-action-worker" >>"$WORK/worker.log" 2>&1 & PIDS+=($!)
 for i in $(seq 1 30); do curl -fsS "$API/health/ready" >/dev/null 2>&1 && break; sleep 1; done

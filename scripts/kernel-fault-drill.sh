@@ -60,7 +60,7 @@ TW_ACCOUNT=ACaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; TW_TOKEN=drill-auth-token-$(pytho
 start_api() { MK_DATABASE_URL="$(url_for mk_api_login api)" MK_BIND=127.0.0.1:8090 RUST_ACTION_KERNEL_ENABLED=1 MK_APPROVAL_RP_ID="$RP_ID" MK_APPROVAL_ORIGINS="$ORIGIN" MK_PUBLIC_WEBHOOK_BASE="$WEBHOOK_BASE" "$BIN/mk-action-api" >>"$WORK/api.log" 2>&1 & PIDS+=($!); }
 start_relay() { MK_DATABASE_URL="$(url_for mk_relay_login relay)" MK_RELAY_ID=relay-drill "$BIN/mk-outbox-relay" >>"$WORK/relay.log" 2>&1 & PIDS+=($!); }
 start_worker() { MK_DATABASE_URL="$(url_for mk_worker_login worker)" MK_WORKER_ID=worker-drill MK_LEASE_SECS="${1:-8}" MK_ALLOW_LOOPBACK_HTTP=1 \
-  MK_EGRESS_AUTHORITIES=127.0.0.1:8790 MK_TWILIO_API_BASE="$TWSIM" MK_PUBLIC_WEBHOOK_BASE="$WEBHOOK_BASE" "$BIN/mk-action-worker" >>"$WORK/worker.log" 2>&1 & WORKER_PID=$!; }
+  MK_EGRESS_AUTHORITIES=127.0.0.1:8790,127.0.0.1:8090 MK_TWILIO_API_BASE="$TWSIM" MK_PUBLIC_WEBHOOK_BASE="$WEBHOOK_BASE" "$BIN/mk-action-worker" >>"$WORK/worker.log" 2>&1 & WORKER_PID=$!; }
 start_sim() { MK_TWSIM_ACCOUNT_SID="$TW_ACCOUNT" MK_TWSIM_AUTH_TOKEN="$TW_TOKEN" MK_TWSIM_BIND=127.0.0.1:8790 MK_TWSIM_MODE="${1:-accept}" MK_TWSIM_CALLBACK_BASE="$WEBHOOK_BASE" "$BIN/mk-twilio-sim" >>"$WORK/twsim.log" 2>&1 & SIM_PID=$!; PIDS+=($SIM_PID); }
 start_api; start_relay; start_sim accept
 for i in $(seq 1 30); do curl -fsS "$API/health/ready" >/dev/null 2>&1 && break; sleep 1; done
@@ -83,7 +83,18 @@ ME=$(python3 -c "import jwt,uuid;print(uuid.UUID(jwt.decode('$TOK',options={'ver
 SA="$WORK/sa.json"; "$BIN/mk-softauthn" new "$SA" >/dev/null
 ops2 -X POST "$APP/api/agent-ops/approval-credentials/register/begin" >/dev/null
 [ "$(ops2 -X POST "$APP/api/agent-ops/approval-credentials/register/finish" -d "$("$BIN/mk-softauthn" register "$SA" "$(j 'd["challenge"]')" "$RP_ID" "$ORIGIN")")" = 201 ] || die "passkey"
-[ "$(ops -X POST "$APP/api/agent-ops/inbound/health" -d '{"ok":true}')" = 204 ] || die "inbound health"
+# Start only to establish the public-route receipt; no actions exist yet. F1
+# deliberately starts with no worker, so stop this owned process afterwards.
+start_worker 60
+for i in $(seq 1 40); do
+  ops "$APP/api/agent-ops/inbound/health" >/dev/null
+  [ "$(j 'd.get("dispatch_blocked", "unverified") is None')" = True ] && break
+  sleep 0.5
+done
+[ "$(j 'd.get("dispatch_blocked", "unverified") is None')" = True ] || die "no committed public inbound probe"
+kill "$WORKER_PID" 2>/dev/null || true
+wait "$WORKER_PID" 2>/dev/null || true
+WORKER_PID=""
 NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ); LATER=$(date -u -d '+30 min' +%Y-%m-%dT%H:%M:%SZ)
 new_customer() { local c; c=$(curl -fsS "$APP/api/customers" "${H[@]}" -d "{\"name\":\"Drill $1\",\"phone\":\"$2\"}" | python3 -c 'import sys,json;print(json.load(sys.stdin)["id"])')
   curl -fsS "$APP/api/customers/$c/destinations" "${H[@]}" -d "{\"channel\":\"sms\",\"value\":\"$2\"}" >/dev/null

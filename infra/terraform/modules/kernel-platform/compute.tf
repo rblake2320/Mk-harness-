@@ -75,7 +75,7 @@ locals {
       env = concat(local.common_kernel_env, [
         { name = "MK_REDIS_URL", value = local.redis_url },
         { name = "MK_TWILIO_API_BASE", value = var.twilio_api_base },
-        { name = "MK_EGRESS_AUTHORITIES", value = "api.twilio.com" },
+        { name = "MK_EGRESS_AUTHORITIES", value = "api.twilio.com,${var.public_webhook_domain}" },
         { name = "MK_METRICS_BIND", value = "0.0.0.0:9100" },
         { name = "MK_DB_USER", value = "mk_worker_login" },
       ])

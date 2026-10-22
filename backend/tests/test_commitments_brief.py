@@ -27,6 +27,16 @@ from .conftest import auth_headers, signup
 from .test_foundation import CONSENT, _customer, _user, kernel_env, kernel_ok  # noqa: F401
 
 
+@pytest.fixture(autouse=True)
+def fixed_commitment_clock(monkeypatch):
+    """Golden dates and relative windows share an explicit business clock.
+
+    Do not freeze authentication/session time: only the commitment domain clock
+    is fixed, so the API still authenticates requests using the real wall clock.
+    """
+    monkeypatch.setattr("app.commitments.utcnow", lambda: datetime(2026, 10, 20, 17, tzinfo=timezone.utc))
+
+
 def _anthropic_json(obj) -> httpx.Response:
     return httpx.Response(200, json={"content": [{"type": "text", "text": json.dumps(obj)}],
                                      "usage": {"input_tokens": 10, "output_tokens": 10}, "model": "claude-x"})

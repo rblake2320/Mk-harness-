@@ -410,6 +410,39 @@ pub async fn twilio_inbound(
     let (sender, form) = authenticate(&st, &uri, &headers, sender_identity_id, &body)
         .await
         .map_err(rid)?;
+    if let Some(probe) = field(&form, "MkHealthProbe") {
+        // No customer row, permission, suppression or task is created. A
+        // successful status alone cannot mark health: the worker reads back
+        // this exact, pre-issued, signed body's committed generation.
+        let id: Uuid = probe
+            .parse()
+            .map_err(|_| rid(forbidden("PROBE_INVALID", "Invalid probe")))?;
+        if form.len() != 3 || sender.from_number.as_deref() != field(&form, "To") {
+            return Err(rid(forbidden("PROBE_BINDING", "Probe sender mismatch")));
+        }
+        let mut tx = st
+            .store
+            .begin(sender.tenant_id)
+            .await
+            .map_err(|e| rid(e.into()))?;
+        if !mk_store::probes::receive(
+            &mut tx,
+            sender_identity_id,
+            id,
+            &Digest::of(&body),
+            Utc::now(),
+        )
+        .await
+        .map_err(|e| rid(e.into()))?
+        {
+            return Err(rid(forbidden(
+                "PROBE_EXPIRED_OR_REPLAYED",
+                "Probe is not current",
+            )));
+        }
+        tx.commit().await.map_err(|e| rid(e.into()))?;
+        return Ok(twiml_ok());
+    }
     let message_sid = field(&form, "MessageSid")
         .or_else(|| field(&form, "SmsSid"))
         .unwrap_or_default()
@@ -497,9 +530,6 @@ async fn inbound_tx(
     let mut tx = st
         .store
         .begin(sender.tenant_id)
-        .await
-        .map_err(|e| ident(e.into()))?;
-    ms::inbound_ok(&mut tx, now)
         .await
         .map_err(|e| ident(e.into()))?;
     // C6: the same control path dispatch authorization takes.
@@ -848,7 +878,7 @@ pub async fn inbound_pending(
     Query(q): Query<PendingQuery>,
 ) -> Result<Json<Vec<ms::InboundView>>, ApiError> {
     let rid = |e: ApiError| e.with_request_id(&headers);
-    if p.has_role("agent") && p.roles.len() == 1 {
+    if !p.has_role("consultant") && !p.has_role("manager") && !p.has_role("tenant_admin") {
         return Err(rid(forbidden(
             "AGENT_CANNOT_READ_INBOUND",
             "customer messages are not available to agent principals",
@@ -869,6 +899,12 @@ pub async fn inbound_processed(
     Path(event_id): Path<Uuid>,
 ) -> Result<StatusCode, ApiError> {
     let rid = |e: ApiError| e.with_request_id(&headers);
+    if !p.has_role("consultant") && !p.has_role("manager") && !p.has_role("tenant_admin") {
+        return Err(rid(forbidden(
+            "HUMAN_ROLE_REQUIRED",
+            "only a consultant, manager or tenant administrator may process inbound events",
+        )));
+    }
     let now = Utc::now();
     let mut tx = st.store.begin(p.tenant).await.map_err(|e| rid(e.into()))?;
     let ok = ms::mark_inbound_processed(&mut tx, event_id, now)
@@ -904,6 +940,7 @@ pub async fn inbound_health(
     let pending = ms::pending_inbound_count(&mut tx)
         .await
         .map_err(|e| rid(e.into()))?;
+    tx.commit().await.map_err(|e| rid(e.into()))?;
     Ok(Json(
         json!({"health": h, "dispatch_blocked": block, "pending_events": pending, "stale_after_secs": ms::INBOUND_STALE_SECS}),
     ))
@@ -917,9 +954,8 @@ pub struct HealthBody {
     pub reason: String,
 }
 
-/// `POST /internal/v1/inbound/health` (tenant_admin) — record a probe result.
-/// Probes run outside the kernel (ops job that exercises the public webhook
-/// URL end to end); the kernel only records and enforces.
+/// Administrators may report failure (fail-safe), never assert success in lieu
+/// of the worker's committed public-webhook probe receipt.
 pub async fn inbound_health_report(
     State(st): State<AppState>,
     p: Principal,
@@ -928,17 +964,17 @@ pub async fn inbound_health_report(
 ) -> Result<StatusCode, ApiError> {
     let rid = |e: ApiError| e.with_request_id(&headers);
     p.require_role("tenant_admin").map_err(rid)?;
+    if b.ok {
+        return Err(rid(forbidden(
+            "HEALTH_RECEIPT_REQUIRED",
+            "A caller assertion cannot mark inbound healthy",
+        )));
+    }
     let now = Utc::now();
     let mut tx = st.store.begin(p.tenant).await.map_err(|e| rid(e.into()))?;
-    if b.ok {
-        ms::inbound_ok(&mut tx, now)
-            .await
-            .map_err(|e| rid(e.into()))?;
-    } else {
-        ms::inbound_failure(&mut tx, &b.reason, now)
-            .await
-            .map_err(|e| rid(e.into()))?;
-    }
+    ms::inbound_failure(&mut tx, &b.reason, now)
+        .await
+        .map_err(|e| rid(e.into()))?;
     tx.commit().await.map_err(|e| rid(e.into()))?;
     Ok(StatusCode::NO_CONTENT)
 }

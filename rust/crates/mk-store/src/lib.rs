@@ -25,6 +25,7 @@ pub mod keys;
 pub mod messaging;
 pub mod outbox;
 pub mod policy;
+pub mod probes;
 pub mod resolutions;
 pub mod tx;
 
@@ -160,6 +161,11 @@ pub fn migrator() -> sqlx::migrate::Migrator {
             12,
             "passkey submission resolutions",
             include_str!("../../../../migrations/kernel/0012_submission_resolutions.sql"),
+        ),
+        (
+            13,
+            "durable public inbound probes",
+            include_str!("../../../../migrations/kernel/0013_inbound_probes.sql"),
         ),
     ];
     let migrations: Vec<Migration> = FILES

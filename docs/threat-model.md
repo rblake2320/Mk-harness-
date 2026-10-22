@@ -117,8 +117,9 @@ Crash after provider submission before durable confirmation. Control: persist `s
 - Uncertainty hiding: owner-scoped read-only queue, no generic dismiss as delivered, and visible
   stale/error state when refresh fails. Operator resolution now requires a bound passkey;
   the kernel enforces the destination hold and post-resolution approval freshness.
-- False inbound health: outbound status callbacks no longer refresh inbound-reply health;
-  scheduled end-to-end inbound probing remains an open implementation item.
+- False inbound health: outbound status callbacks and administrator assertions cannot
+  refresh inbound-reply health. Scheduled signed public-URL probes require exact durable
+  receipts for every active sender; monitor silence and undrained recovery block dispatch.
 
 C4 branch implementation (author-run verification, not release sign-off): a tenant administrator signs a
 single-use operation challenge binding tenant, action, exact action digest, provider
@@ -134,6 +135,20 @@ before the resolution is rejected at dispatch, so resolving an exception cannot
 release a previously queued replacement; a fresh human approval is required.
 
 ## 3. Decisions taken by this model
+
+C8 branch implementation (author-run verification): the worker issues short-lived, unpredictable
+per-sender probes, signs their exact form for the configured public inbound URL,
+and releases its DB transaction before HTTP. The ordinary public webhook
+authenticates the signature/account/sender, matches the issued body digest, and
+commits a probe receipt without creating a customer message. HTTP 200 alone is
+insufficient: the worker reads back that exact committed generation. Redirects
+and unallowlisted destinations are refused. Every active sender needs a fresh
+confirmed receipt; a stopped monitor becomes stale even without a failure report.
+An outage latches recovery until fresh checks and processing of pending inbound
+events complete. A caller's `ok: true` assertion cannot mark the path healthy.
+Probe state is bounded to one current generation per sender, not an unbounded
+synthetic-message queue. Real-provider ingress and DNS/TLS configuration remain
+part of independently retained staging qualification.
 
 1. **Separate approval authority (H6).** Approval of consequential actions requires a WebAuthn/passkey assertion from the human's registered credential whose challenge is the action digest; the kernel verifies it. FastAPI's assertion key establishes *who is asking*; it can no longer establish *human approval*. Until implemented, the matrix carries H6 as Not demonstrated and the release is blocked.
 2. **Global kill switch** moves to the same step-up path for operator credentials registered in the kernel.
