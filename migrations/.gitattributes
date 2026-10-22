@@ -1,0 +1,2 @@
+# SQLx hashes migration bytes; Windows and Linux must embed identical SQL.
+*.sql text eol=lf

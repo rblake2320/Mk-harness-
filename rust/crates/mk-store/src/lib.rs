@@ -17,6 +17,7 @@ pub mod approvals;
 pub mod assertions;
 pub mod audit;
 pub mod consent;
+pub mod drafts;
 pub mod error;
 pub mod fingerprint;
 pub mod human_approval;
@@ -166,6 +167,21 @@ pub fn migrator() -> sqlx::migrate::Migrator {
             13,
             "durable public inbound probes",
             include_str!("../../../../migrations/kernel/0013_inbound_probes.sql"),
+        ),
+        (
+            14,
+            "draft version invalidation fences",
+            include_str!("../../../../migrations/kernel/0014_draft_invalidation.sql"),
+        ),
+        (
+            15,
+            "draft fence insert guard",
+            include_str!("../../../../migrations/kernel/0015_draft_fence_insert_guard.sql"),
+        ),
+        (
+            16,
+            "draft rollout backfill",
+            include_str!("../../../../migrations/kernel/0016_draft_rollout_backfill.sql"),
         ),
     ];
     let migrations: Vec<Migration> = FILES

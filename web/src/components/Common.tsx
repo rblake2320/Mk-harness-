@@ -31,6 +31,8 @@ const EXPLANATIONS: Record<string, { what: string; next: string }> = {
   KERNEL_NOT_CONFIGURED: { what: 'Governed actions are not enabled in this environment.', next: 'An operator must configure the kernel connection.' },
   UNAPPROVED_CLAIM_LANGUAGE: { what: 'Your edit contains a product claim that is not in the approved list.', next: 'Keep product statements to the approved wording, or ask your admin to add the claim.' },
   CONTEXT_LEAK: { what: 'Your edit references another customer or private notes.', next: 'Remove the reference and save again.' },
+  DRAFT_INVALIDATION_UNCONFIRMED: { what: 'Withdrawal of the old version was not confirmed. Your edit was not saved.', next: 'Check the earlier message in Approvals or its status view. It may still be queued or in flight; do not assume it was cancelled.' },
+  DRAFT_ALREADY_IN_FLIGHT: { what: 'An earlier message is in flight, submitted or awaiting reconciliation. Your edit was not saved.', next: 'Check its status and resolve any uncertain submission before creating a replacement.' },
   INBOUND_PAUSED: { what: 'Sending is paused because inbound messages cannot be received right now.', next: 'Messages stay queued and resume when the inbound path is healthy.' },
 };
 

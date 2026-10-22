@@ -58,6 +58,7 @@ Against the same built preview, run:
 
 ```text
 python tools/verification/approval_browser.py --output local-verification/h1-h8-browser
+python tools/verification/draft_edit_browser.py --output local-verification/h2-browser
 python tools/verification/submission_resolution_browser.py --output local-verification/c4-browser
 ```
 
@@ -66,4 +67,19 @@ authenticators and cryptographically verify their ES256 assertions. HTTP data
 is explicitly synthetic. The approval check covers selected sender/schedule,
 self-approval refusal, stale digest, UV downgrade, keyboard approval, persistent
 feedback and a 360px viewport. The kernel's real-Postgres tests separately enforce
-policy and passkey authority. Neither script sends to a real provider.
+policy and passkey authority. None of these scripts sends to a real provider.
+
+The draft-edit check keeps the editor open in one tab while approving in another,
+then changes one byte, confirms old-version withdrawal, proposes the new version
+and verifies its distinct passkey assertion. It also checks a refused late edit
+and that Close remains reachable at 360px. Its HTTP state is explicitly a fixture;
+the kernel suite tests actual transaction serialization, role isolation and sends.
+
+Deploy migrations `0014_draft_invalidation.sql` through `0016_draft_rollout_backfill.sql`
+with the new kernel before the application edit route. They backfill draft/action
+references from existing canonical requests and enforce fences at database insert
+even for an older intake binary during rollout. Do not drop these guards during
+rollback; use the kill switch and a roll-forward repair. A lost withdrawal response leaves the application
+version unchanged; repeating withdrawal is safe and never reopens a fence.
+The final backfill covers old-binary inserts that committed between migration 14
+and installation of the insert guard in migration 15.

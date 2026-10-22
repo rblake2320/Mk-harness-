@@ -110,15 +110,66 @@ def test_draft_to_proposal_to_approval_screen(client, kernel_env):
     assert r.json()["message_state_definitions"]["sent"] == "Provider reports outbound network submission."
     assert len(r.json()["message_state_definitions"]) == 15
 
-    # W5: editing produces a new version/digest; the pending approval's digest no longer matches.
+    # H2/W5: old version withdrawal must be confirmed before committing an edit.
+    withdrawal = respx.post(f"{KERNEL}/internal/v1/drafts/{d['id']}/invalidate").mock(
+        return_value=httpx.Response(200, json={"draft_id": str(uuid.UUID(d["id"])), "edit_permitted": True}))
     e = client.post(f"/api/drafts/{d['id']}/edit", json={"text": d["text"].replace("Hi Angela!", "Hi Angela —")}, headers=h).json()
     assert e["text_digest"] != d["text_digest"] and e["version"] == 2
+    assert withdrawal.call_count == 1
     assert item["action_digest"] != e["text_digest"]
 
     # Cross-tenant: another tenant cannot propose this draft or see this action.
     h2, _ = _user(client)
     assert client.post(f"/api/drafts/{d['id']}/propose", json={}, headers=h2).status_code == 404
     assert client.get(f"/api/drafts/{d['id']}/propose").status_code in (401, 405)
+
+
+@respx.mock
+def test_edit_requires_confirmed_kernel_withdrawal_even_without_local_action_link(client, kernel_env):
+    from sqlalchemy import func, select
+    from sqlalchemy.orm import Session
+    from app.models import DraftVersion, ActionLink
+    from .conftest import engine
+    h, me = _user(client)
+    cid, _, _ = _customer(client, h, phone="+15555558012")
+    respx.post("https://api.anthropic.com/v1/messages").mock(return_value=_model("Hi Angela! Reply STOP to opt out.", []))
+    draft = client.post("/api/drafts", json={"customer_id": cid, "provider": "anthropic"}, headers=h).json()["draft"]
+    path = f"/api/drafts/{draft['id']}/edit"
+    route = respx.post(f"{KERNEL}/internal/v1/drafts/{draft['id']}/invalidate")
+    text = "Hi Angela! How is your week? Reply STOP to opt out."
+    with Session(engine) as db:
+        assert db.scalar(select(func.count()).select_from(ActionLink).where(ActionLink.draft_version_id == draft["id"])) == 0
+    for response, expected in [
+        (httpx.Response(503, json={"code": "OVER_CAPACITY"}), 503),
+        (httpx.Response(403, json={"code": "FORBIDDEN"}), 403),
+        (httpx.Response(200, json={"draft_id": str(uuid.UUID(draft["id"])), "edit_permitted": False, "blocked_actions": ["in-flight"]}), 409),
+        (httpx.Response(200, json={"draft_id": str(uuid.uuid4()), "edit_permitted": True}), 502),
+        (httpx.Response(200, json={"draft_id": str(uuid.UUID(draft["id"])), "edit_permitted": "true"}), 502),
+        (httpx.Response(200, json={}), 502),
+    ]:
+        route.mock(return_value=response)
+        result = client.post(path, json={"text": text}, headers=h)
+        assert result.status_code == expected, result.text
+        with Session(engine) as db:
+            assert db.scalar(select(func.count()).select_from(DraftVersion).where(DraftVersion.customer_id == cid)) == 1
+        assert client.get(f"/api/drafts/{draft['id']}", headers=h).json()["text_digest"] == draft["text_digest"]
+    route.mock(side_effect=httpx.ReadTimeout("synthetic lost withdrawal response"))
+    assert client.post(path, json={"text": text}, headers=h).status_code == 503
+    assert route.call_count == 7, "writes are not retried after an ambiguous response"
+    other, _ = _user(client)
+    assert client.post(path, json={"text": text}, headers=other).status_code == 404
+    assert route.call_count == 7, "tenant ownership is checked before invalidation"
+    def acknowledge(request):
+        claims = verify_assertion(request)
+        assert claims["sub"].replace("-", "") == me
+        assert "tenant_admin" in claims["roles"]
+        return httpx.Response(200, json={"draft_id": str(uuid.UUID(draft["id"])), "edit_permitted": True})
+    route.mock(side_effect=acknowledge)
+    result = client.post(path, json={"text": text}, headers=h)
+    assert result.status_code == 201, result.text
+    assert result.json()["id"] != draft["id"] and result.json()["version"] == 2
+    with Session(engine) as db:
+        assert db.scalar(select(func.count()).select_from(DraftVersion).where(DraftVersion.customer_id == cid)) == 2
 
 
 def test_propose_requires_timezone_destination_and_sender(client, kernel_env):

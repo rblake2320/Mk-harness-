@@ -1613,6 +1613,453 @@ async fn approval_preview_binds_sender_schedule_and_current_self_policy() {
     );
 }
 
+#[tokio::test]
+async fn editing_draft_fences_queued_and_future_proposals() {
+    let mut h = harness().await.expect("real Postgres required");
+    let mut r = provider_rig(&h, mk_adapters::twilio_sim::TwilioSimMode::Accept).await;
+    let pool = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(1)
+        .after_connect(|conn, _| {
+            Box::pin(async move {
+                sqlx::query("SET ROLE mk_kernel_api").execute(conn).await?;
+                Ok(())
+            })
+        })
+        .connect(&mk_testkit::test_database_url().unwrap())
+        .await
+        .unwrap();
+    let mut state = h.state.clone();
+    state.store = Store::from_pool(pool);
+    h.app = router(state.clone());
+    let draft_id = Uuid::new_v4();
+    let text = "Draft version one. Reply STOP to opt out.";
+    let mut req = provider_proposal(r.contact, r.sender_id, text, "+15555550100");
+    req["evidence"] = json!([{"type":"document", "id":format!("draft:{}", draft_id.simple()), "digest":mk_crypto::Digest::of(text.as_bytes()).to_string()}]);
+    let (s, proposal) = h
+        .call(
+            "POST",
+            "/internal/v1/actions",
+            Some(&h.token(r.admin, &["agent"])),
+            Some(req.clone()),
+        )
+        .await;
+    assert_eq!(s, StatusCode::ACCEPTED);
+    let aid = proposal["result"]["action_id"].as_str().unwrap();
+    let wa = h
+        .sign_approval(r.manager, &["manager"], aid, &mut r.mgr_key)
+        .await;
+    let (s, approved) = h
+        .call(
+            "POST",
+            &format!("/internal/v1/actions/{aid}/approve"),
+            Some(&h.token(r.manager, &["manager"])),
+            Some(json!({"action_digest":proposal["result"]["action_digest"], "webauthn":wa})),
+        )
+        .await;
+    assert_eq!(s, StatusCode::OK);
+    let path = format!("/internal/v1/drafts/{draft_id}/invalidate");
+    for (user, roles, expected) in [
+        (r.admin, vec!["agent"], StatusCode::FORBIDDEN),
+        (r.admin, vec!["unknown"], StatusCode::FORBIDDEN),
+        (r.manager, vec!["manager"], StatusCode::NOT_FOUND),
+    ] {
+        assert_eq!(
+            h.call("POST", &path, Some(&h.token(user, &roles)), None)
+                .await
+                .0,
+            expected
+        );
+    }
+    let mut other = state.store.begin(TenantId::new()).await.unwrap();
+    let invisible: i64 = sqlx::query_scalar("SELECT count(*) FROM kernel.draft_action_refs")
+        .fetch_one(other.raw_conn())
+        .await
+        .unwrap();
+    assert_eq!(
+        invisible, 0,
+        "forced RLS hides other businesses' draft links"
+    );
+    other.commit().await.unwrap();
+    let (s, invalidated) = h
+        .call(
+            "POST",
+            &path,
+            Some(&h.token(r.admin, &["consultant"])),
+            Some(json!({})),
+        )
+        .await;
+    assert_eq!(s, StatusCode::OK, "{invalidated}");
+    assert_eq!(invalidated["edit_permitted"], true);
+    assert_eq!(invalidated["cancelled_actions"], 1);
+    let (_, action) = h
+        .call(
+            "GET",
+            &format!("/internal/v1/actions/{aid}"),
+            Some(&h.token(r.admin, &["consultant"])),
+            None,
+        )
+        .await;
+    assert_eq!(action["state"], "cancelled");
+    let revoked: bool = sqlx::query_scalar(
+        "SELECT revoked_at IS NOT NULL FROM kernel.approvals WHERE approval_id=$1",
+    )
+    .bind(
+        approved["approval"]["approval_id"]
+            .as_str()
+            .unwrap()
+            .parse::<Uuid>()
+            .unwrap(),
+    )
+    .fetch_one(h.state.store.pool())
+    .await
+    .unwrap();
+    assert!(revoked);
+    health_ok(&h, r.admin).await;
+    assert!(!matches!(
+        run_dispatch(&r, h.tenant, aid).await,
+        DispatchOutcome::Dispatched { .. }
+    ));
+    assert_eq!(r.sim.calls(), 0);
+    assert_eq!(
+        h.call(
+            "POST",
+            "/internal/v1/actions",
+            Some(&h.token(r.admin, &["agent"])),
+            Some(req.clone())
+        )
+        .await
+        .0,
+        StatusCode::CONFLICT,
+        "old idempotency replay is fenced too"
+    );
+    assert_eq!(
+        h.call(
+            "POST",
+            &format!("/internal/v1/actions/{aid}/replay"),
+            Some(&h.token(r.admin, &["tenant_admin"])),
+            None
+        )
+        .await
+        .0,
+        StatusCode::CONFLICT,
+        "operator replay cannot bypass the version fence"
+    );
+    req["idempotency_key"] = json!(format!("new-key-{}", Uuid::new_v4()));
+    let (s, _) = h
+        .call(
+            "POST",
+            "/internal/v1/actions",
+            Some(&h.token(r.admin, &["agent"])),
+            Some(req.clone()),
+        )
+        .await;
+    assert_eq!(
+        s,
+        StatusCode::CONFLICT,
+        "a new idempotency key cannot resurrect the edited version"
+    );
+    let (s, again) = h
+        .call(
+            "POST",
+            &path,
+            Some(&h.token(r.admin, &["consultant"])),
+            Some(json!({})),
+        )
+        .await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(again["edit_permitted"], true);
+    // Emulate an old binary's direct INSERT: it never calls the new Rust
+    // intake guard or registers refs. The database must enforce both halves.
+    for fenced in [true, false] {
+        let mut legacy_req = req.clone();
+        let legacy_draft = if fenced { draft_id } else { Uuid::new_v4() };
+        legacy_req["evidence"][0]["id"] = json!(format!("draft:{legacy_draft}"));
+        legacy_req["idempotency_key"] = json!(format!("legacy-{}", Uuid::new_v4()));
+        let legacy_id = mk_domain::ActionId::new();
+        let bound = mk_contracts::ActionRequest::from_value(&legacy_req)
+            .unwrap()
+            .bound_to(h.tenant, r.admin, legacy_id);
+        let canonical = bound.canonical_bytes().unwrap();
+        let mut tx = state.store.begin(h.tenant).await.unwrap();
+        let result = sqlx::query(
+            "INSERT INTO kernel.actions
+            SELECT (jsonb_populate_record(NULL::kernel.actions, to_jsonb(a) || jsonb_build_object(
+                'action_id',$2::uuid,'canonical_request',$3::bytea,'action_digest',$4::text,
+                'idempotency_key',$5::text,'state','draft','attempt',0,'error_code',NULL))).*
+            FROM kernel.actions a WHERE tenant_id=$1 AND action_id=$6",
+        )
+        .bind(h.tenant.0)
+        .bind(legacy_id.0)
+        .bind(&canonical)
+        .bind(mk_crypto::Digest::of(&canonical).to_string())
+        .bind(&bound.idempotency_key)
+        .bind(aid.parse::<Uuid>().unwrap())
+        .execute(tx.raw_conn())
+        .await;
+        if fenced {
+            assert!(
+                result
+                    .unwrap_err()
+                    .to_string()
+                    .contains("draft version was invalidated")
+            );
+            tx.rollback().await.unwrap();
+        } else {
+            assert_eq!(result.unwrap().rows_affected(), 1);
+            let refs: i64 = sqlx::query_scalar(
+                "SELECT count(*) FROM kernel.draft_action_refs WHERE action_id=$1",
+            )
+            .bind(legacy_id.0)
+            .fetch_one(tx.raw_conn())
+            .await
+            .unwrap();
+            assert_eq!(refs, 1, "legacy intake is indexed by the database trigger");
+            tx.commit().await.unwrap();
+            let (s, cancelled) = h
+                .call(
+                    "POST",
+                    &format!("/internal/v1/drafts/{legacy_draft}/invalidate"),
+                    Some(&h.token(r.admin, &["consultant"])),
+                    None,
+                )
+                .await;
+            assert_eq!(s, StatusCode::OK);
+            assert_eq!(cancelled["cancelled_actions"], 1);
+        }
+    }
+    let new_id = Uuid::new_v4();
+    req["arguments"]["rendered_text"] = json!("Draft version two. Reply STOP to opt out.");
+    req["evidence"][0]["id"] = json!(format!("draft:{new_id}"));
+    req["evidence"][0]["digest"] =
+        json!(mk_crypto::Digest::of(b"Draft version two. Reply STOP to opt out.").to_string());
+    let (s, fresh) = h
+        .call(
+            "POST",
+            "/internal/v1/actions",
+            Some(&h.token(r.admin, &["agent"])),
+            Some(req),
+        )
+        .await;
+    assert_eq!(s, StatusCode::ACCEPTED, "{fresh}");
+    assert_eq!(fresh["result"]["state"], "approval_required");
+    assert_ne!(
+        fresh["result"]["action_digest"],
+        proposal["result"]["action_digest"]
+    );
+    let fresh_aid = fresh["result"]["action_id"].as_str().unwrap();
+    assert!(!matches!(
+        run_dispatch(&r, h.tenant, fresh_aid).await,
+        DispatchOutcome::Dispatched { .. }
+    ));
+    assert_eq!(
+        r.sim.calls(),
+        0,
+        "old approval cannot authorize the replacement"
+    );
+    let wa = h
+        .sign_approval(r.manager, &["manager"], fresh_aid, &mut r.mgr_key)
+        .await;
+    let (s, _) = h
+        .call(
+            "POST",
+            &format!("/internal/v1/actions/{fresh_aid}/approve"),
+            Some(&h.token(r.manager, &["manager"])),
+            Some(json!({"action_digest":fresh["result"]["action_digest"],"webauthn":wa})),
+        )
+        .await;
+    assert_eq!(s, StatusCode::OK);
+    assert!(matches!(
+        run_dispatch(&r, h.tenant, fresh_aid).await,
+        DispatchOutcome::Dispatched { .. }
+    ));
+    assert_eq!(r.sim.calls(), 1);
+    let (_, late) = h
+        .call(
+            "POST",
+            &format!("/internal/v1/drafts/{new_id}/invalidate"),
+            Some(&h.token(r.admin, &["consultant"])),
+            None,
+        )
+        .await;
+    assert_eq!(
+        late["edit_permitted"], false,
+        "a submitted message cannot be claimed withdrawn"
+    );
+    assert_eq!(late["blocked_actions"], json!([fresh_aid]));
+    let (_, action) = h
+        .call(
+            "GET",
+            &format!("/internal/v1/actions/{fresh_aid}"),
+            Some(&h.token(r.admin, &["consultant"])),
+            None,
+        )
+        .await;
+    assert_eq!(
+        action["state"], "dispatching",
+        "provider acceptance awaits delivery callback"
+    );
+    let mut tx = state.store.begin(h.tenant).await.unwrap();
+    assert!(
+        sqlx::query("DELETE FROM kernel.invalidated_drafts WHERE tenant_id=$1")
+            .bind(h.tenant.0)
+            .execute(tx.raw_conn())
+            .await
+            .is_err()
+    );
+    tx.rollback().await.unwrap();
+}
+
+#[tokio::test]
+async fn editing_draft_serializes_with_concurrent_intake() {
+    let mut h = harness().await.expect("real Postgres required");
+    let r = provider_rig(&h, mk_adapters::twilio_sim::TwilioSimMode::Accept).await;
+    let pool = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(4)
+        .after_connect(|conn, _| {
+            Box::pin(async move {
+                sqlx::query("SET ROLE mk_kernel_api").execute(conn).await?;
+                Ok(())
+            })
+        })
+        .connect(&mk_testkit::test_database_url().unwrap())
+        .await
+        .unwrap();
+    let mut state = h.state.clone();
+    state.store = Store::from_pool(pool);
+    h.app = router(state);
+    for _ in 0..16 {
+        let draft = Uuid::new_v4();
+        let mut req = provider_proposal(
+            r.contact,
+            r.sender_id,
+            "Racing edit. Reply STOP to opt out.",
+            "+15555550100",
+        );
+        req["evidence"] = json!([{"type":"document","id":format!("draft:{}", draft.simple()),"digest":mk_crypto::Digest::of(b"Racing edit. Reply STOP to opt out.").to_string()}]);
+        let propose_token = h.token(r.admin, &["agent"]);
+        let edit_token = h.token(r.admin, &["consultant"]);
+        let path = format!("/internal/v1/drafts/{draft}/invalidate");
+        let ((ps, proposal), (es, edit)) = tokio::join!(
+            h.call(
+                "POST",
+                "/internal/v1/actions",
+                Some(&propose_token),
+                Some(req.clone())
+            ),
+            h.call("POST", &path, Some(&edit_token), None)
+        );
+        assert_eq!(es, StatusCode::OK, "{edit}");
+        assert_eq!(edit["edit_permitted"], true);
+        assert!(
+            matches!(ps, StatusCode::ACCEPTED | StatusCode::CONFLICT),
+            "{proposal}"
+        );
+        if ps == StatusCode::ACCEPTED {
+            let aid = proposal["result"]["action_id"].as_str().unwrap();
+            let (_, a) = h
+                .call(
+                    "GET",
+                    &format!("/internal/v1/actions/{aid}"),
+                    Some(&h.token(r.admin, &["consultant"])),
+                    None,
+                )
+                .await;
+            assert_eq!(a["state"], "cancelled");
+        }
+        assert_eq!(
+            h.call(
+                "POST",
+                "/internal/v1/actions",
+                Some(&h.token(r.admin, &["agent"])),
+                Some(req)
+            )
+            .await
+            .0,
+            StatusCode::CONFLICT
+        );
+    }
+    assert_eq!(r.sim.calls(), 0);
+}
+
+#[tokio::test]
+async fn editing_draft_serializes_with_human_approval() {
+    let mut h = harness().await.expect("real Postgres required");
+    let mut r = provider_rig(&h, mk_adapters::twilio_sim::TwilioSimMode::Accept).await;
+    let pool = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(4)
+        .after_connect(|conn, _| {
+            Box::pin(async move {
+                sqlx::query("SET ROLE mk_kernel_api").execute(conn).await?;
+                Ok(())
+            })
+        })
+        .connect(&mk_testkit::test_database_url().unwrap())
+        .await
+        .unwrap();
+    let mut state = h.state.clone();
+    state.store = Store::from_pool(pool);
+    h.app = router(state);
+    for _ in 0..8 {
+        let draft = Uuid::new_v4();
+        let mut req = provider_proposal(
+            r.contact,
+            r.sender_id,
+            "Approval race. Reply STOP to opt out.",
+            "+15555550100",
+        );
+        req["evidence"] = json!([{"type":"document","id":format!("draft:{draft}"),"digest":mk_crypto::Digest::of(b"Approval race. Reply STOP to opt out.").to_string()}]);
+        let (s, proposal) = h
+            .call(
+                "POST",
+                "/internal/v1/actions",
+                Some(&h.token(r.admin, &["agent"])),
+                Some(req),
+            )
+            .await;
+        assert_eq!(s, StatusCode::ACCEPTED);
+        let aid = proposal["result"]["action_id"].as_str().unwrap();
+        let wa = h
+            .sign_approval(r.manager, &["manager"], aid, &mut r.mgr_key)
+            .await;
+        let approval_token = h.token(r.manager, &["manager"]);
+        let edit_token = h.token(r.admin, &["consultant"]);
+        let approval_path = format!("/internal/v1/actions/{aid}/approve");
+        let edit_path = format!("/internal/v1/drafts/{draft}/invalidate");
+        let ((s, decision), (es, edit)) = tokio::join!(
+            h.call(
+                "POST",
+                &approval_path,
+                Some(&approval_token),
+                Some(json!({"action_digest":proposal["result"]["action_digest"],"webauthn":wa}))
+            ),
+            h.call("POST", &edit_path, Some(&edit_token), None)
+        );
+        assert_eq!(es, StatusCode::OK, "{edit}");
+        assert_eq!(edit["edit_permitted"], true);
+        assert!(
+            matches!(s, StatusCode::OK | StatusCode::CONFLICT),
+            "{decision}"
+        );
+        let (_, a) = h
+            .call(
+                "GET",
+                &format!("/internal/v1/actions/{aid}"),
+                Some(&h.token(r.admin, &["consultant"])),
+                None,
+            )
+            .await;
+        assert_eq!(a["state"], "cancelled");
+        let live: i64 = sqlx::query_scalar("SELECT count(*) FROM kernel.approvals WHERE action_id=$1 AND consumed_at IS NULL AND revoked_at IS NULL")
+            .bind(aid.parse::<Uuid>().unwrap()).fetch_one(h.state.store.pool()).await.unwrap();
+        assert_eq!(live, 0);
+        assert!(!matches!(
+            run_dispatch(&r, h.tenant, aid).await,
+            DispatchOutcome::Dispatched { .. }
+        ));
+    }
+    assert_eq!(r.sim.calls(), 0);
+}
+
 async fn health_ok(h: &Harness, _admin: UserId) {
     // Fixture for tests of other boundaries, not C8 health evidence. The C8
     // test below exercises the real network probe with restricted process roles.

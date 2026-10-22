@@ -87,6 +87,9 @@ pub async fn propose(
     let actor = actor_of(&p, &actor_id);
 
     let mut tx = st.store.begin(p.tenant).await.map_err(|e| rid(e.into()))?;
+    mk_store::drafts::check_intake(&mut tx, &req)
+        .await
+        .map_err(|e| rid(e.into()))?;
     // 3. Idempotency: identical resubmission returns the original.
     match idempotency::check_or_insert(
         &mut tx,

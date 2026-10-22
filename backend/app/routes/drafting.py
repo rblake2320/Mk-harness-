@@ -12,6 +12,7 @@ GET  /api/drafts/{id}
 from __future__ import annotations
 
 import json
+import uuid
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -23,11 +24,14 @@ from ..commitments import aware
 from ..db import get_db
 from ..drafting import assemble, consultant_edit, drafting_system_prompt, live_claims, refuse_draft, select_claims
 from ..foundation import audit, own_customer, unseal, utcnow
+from ..kernel import KernelClient, KernelUnavailable, get_kernel_client
+from ..kernel.assertions import roles_for
 from ..models import ApprovedClaim, BriefItem, ClaimFact, Commitment, DraftVersion, KnowledgeSource, User
 from ..providers.base import ChatMessage, ChatRequest, ProviderError
 from ..providers.router import complete_with_failover
 from ..ratelimit import check_rate
 from ..security import require_admin
+from .agent_ops import Principal, principal
 
 router = APIRouter(tags=["drafting"])
 OPT_OUT = "Reply STOP to opt out."
@@ -243,12 +247,35 @@ class EditIn(BaseModel):
 
 
 @router.post("/drafts/{did}/edit", status_code=201)
-def edit_draft(did: str, body: EditIn, user: User = Depends(check_rate), db: Session = Depends(get_db)):
+async def edit_draft(did: str, body: EditIn, user: User = Depends(check_rate), db: Session = Depends(get_db),
+                     p: Principal = Depends(principal), client: KernelClient = Depends(get_kernel_client)):
     prior = db.get(DraftVersion, did)
     if not prior or prior.tenant_id != user.tenant_id:
         raise HTTPException(404, "Draft not found")
     own_customer(db, user.tenant_id, user.id, prior.customer_id)
     out = consultant_edit(db, tenant_id=user.tenant_id, user_id=user.id, prior=prior, new_text=body.text)
+    # Validate content first, but commit no new version until the kernel has
+    # fenced ALL proposals of the old version, even ones without a local link.
+    try:
+        invalidated = await client.call("POST", f"/drafts/{did}/invalidate", user_id=p.user_id,
+            tenant_id=p.tenant_id, roles=roles_for(p.app_role), session_id=p.session_id)
+    except KernelUnavailable as e:
+        db.rollback()
+        raise HTTPException(503, {"code": "DRAFT_INVALIDATION_UNCONFIRMED", "kernel_code": e.code,
+            "detail": "Cannot confirm withdrawal of the old version. No edit was saved; check the earlier message's status."}) from e
+    body = invalidated.body
+    if invalidated.status_code != 200:
+        db.rollback()
+        raise HTTPException(invalidated.status_code if invalidated.status_code >= 400 else 502,
+            {"code": "DRAFT_INVALIDATION_UNCONFIRMED", "detail": "Withdrawal was refused or unavailable. No edit was saved; check the earlier message's status."})
+    if not isinstance(body, dict) or body.get("draft_id") != str(uuid.UUID(did)) or not isinstance(body.get("edit_permitted"), bool):
+        db.rollback()
+        raise HTTPException(502, {"code": "DRAFT_INVALIDATION_UNCONFIRMED", "detail": "Invalid withdrawal receipt. No edit was saved."})
+    if body["edit_permitted"] is not True:
+        db.rollback()
+        raise HTTPException(409, {"code": "DRAFT_ALREADY_IN_FLIGHT",
+            "detail": "An earlier message is in flight, submitted or awaiting reconciliation. Check its status before creating a replacement.",
+            "blocked_actions": body.get("blocked_actions", [])})
     if prior.brief_item_id:
         it = db.get(BriefItem, prior.brief_item_id)
         if it:

@@ -47,6 +47,7 @@ pub enum ActorType {
 #[serde(rename_all = "snake_case")]
 pub enum EventType {
     ActionProposed,
+    DraftInvalidated,
     PolicyDecision,
     ApprovalGranted,
     ApprovalRejected,

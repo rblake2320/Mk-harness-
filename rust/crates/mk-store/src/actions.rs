@@ -97,6 +97,7 @@ pub async fn insert_draft(
     now: DateTime<Utc>,
 ) -> Result<StoredAction, StoreError> {
     tx.assert_tenant(req.tenant_id)?;
+    crate::drafts::check_intake(tx, req).await?;
     let action_id = req
         .action_id
         .ok_or(StoreError::Corrupt("unbound action_id"))?;

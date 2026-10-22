@@ -310,7 +310,8 @@ def assemble(db: Session, *, tenant_id: str, user_id: str, customer: Customer, c
 def consultant_edit(db: Session, *, tenant_id: str, user_id: str, prior: DraftVersion, new_text: str) -> DraftOutcome:
     """A consultant may rewrite relationship language freely but may not introduce claim
     language that is not an exact approved claim. Produces a new version (W5: the old
-    digest is a different digest; approvals bound to it are invalid by construction)."""
+    digest is a different digest). The route must fence the old kernel version
+    before committing this new version; changing a digest alone cannot cancel it."""
     candidates, blocked = select_claims(db, tenant_id, None)
     if any(c.product_id in blocked and c.approved_text in new_text for c in reviewed_claims(db, tenant_id, None)):
         raise HTTPException(422, {"code": "CLAIM_CONFLICT",

@@ -17,6 +17,7 @@ export default function DraftEditor({ customerName, initial, limitation, neutral
   const [err, setErr] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
   const [proposed, setProposed] = useState<any>(null);
+  const [saved, setSaved] = useState(false);
   const first = useRef<HTMLTextAreaElement>(null);
   useEffect(() => { first.current?.focus(); }, []);
 
@@ -25,7 +26,7 @@ export default function DraftEditor({ customerName, initial, limitation, neutral
   async function saveEdit() {
     if (!draft) return;
     setBusy(true); setErr(null);
-    try { const d = await client.editDraft(draft.id, text); setDraft(d); setText(d.text); }
+    try { const d = await client.editDraft(draft.id, text); setDraft(d); setText(d.text); setProposed(null); setSaved(true); }
     catch (e) { setErr(e); } finally { setBusy(false); }
   }
 
@@ -49,7 +50,7 @@ export default function DraftEditor({ customerName, initial, limitation, neutral
         {draft && (
           <>
             <label htmlFor="draft-text" className="muted small">Exact text (version {draft.version}, digest {draft.text_digest.slice(7, 19)}…)</label>
-            <textarea id="draft-text" ref={first} rows={5} value={text} onChange={e => setText(e.target.value)} maxLength={480}
+            <textarea id="draft-text" ref={first} rows={5} value={text} disabled={busy} onChange={e => setText(e.target.value)} maxLength={480}
                       aria-describedby="draft-help" />
             <div id="draft-help" className="muted small">
               {draft.claims_used.length > 0
@@ -58,9 +59,10 @@ export default function DraftEditor({ customerName, initial, limitation, neutral
               {' '}{text.length}/480
             </div>
             <ErrorNote error={err} onDismiss={() => setErr(null)} />
-            {proposed ? (
+            {saved && !dirty && !proposed && <div className="ok-note" role="status">Old version withdrawn. This new version needs a new proposal and fresh passkey approval.</div>}
+            {proposed && !dirty ? (
               <div className="ok-note" role="status">
-                <strong>Proposed for approval.</strong> Kernel decision: {proposed.decision?.code ?? proposed.state}. Nothing has been sent.
+                <strong>Proposed for approval.</strong> Kernel decision: {proposed.decision?.code ?? proposed.state}. This proposal did not send a message. Check Approvals for its current status.
                 <HumanSteps steps={proposed.human_steps ?? []} />
               </div>
             ) : (
@@ -68,14 +70,14 @@ export default function DraftEditor({ customerName, initial, limitation, neutral
                 {dirty
                   ? <button className="btn" disabled={busy} onClick={saveEdit}>Save as new version</button>
                   : <button className="btn" disabled={busy} onClick={propose}>Propose for approval</button>}
-                <span className="muted small">{dirty ? 'Saving creates a new version; any earlier approval no longer applies.' : 'Proposing never sends. You (or a second approver) must approve the exact text with a passkey.'}</span>
+                <span className="muted small">{dirty ? 'Saving withdraws the old version and its queued approvals before creating a new version. If sending already started, saving is blocked.' : 'Proposing never sends. You (or a second approver) must approve the exact text with a passkey.'}</span>
               </div>
             )}
           </>
         )}
         {!draft && !limitation && <ErrorNote error={err} />}
         <div className="row" style={{ marginTop: 14, justifyContent: 'flex-end' }}>
-          <button className="btn ghost" onClick={onClose}>Close</button>
+          <button className="btn ghost" disabled={busy} onClick={onClose}>Close</button>
         </div>
       </div>
     </div>

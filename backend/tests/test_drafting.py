@@ -23,7 +23,7 @@ import respx
 
 from .conftest import auth_headers, signup
 from .test_commitments_brief import _anthropic_json, _commit, _user_with_key
-from .test_foundation import _customer
+from .test_foundation import _customer, kernel_env  # noqa: F401
 
 
 def _registry(client, h, claim_text="Our TimeWise 3D Day Cream is formulated with vitamin C.",
@@ -155,19 +155,23 @@ def test_injected_instructions_in_context_cannot_change_binding(client):
 
 
 @respx.mock
-def test_consultant_edit_creates_new_version_and_cannot_smuggle_claims(client):
+def test_consultant_edit_creates_new_version_and_cannot_smuggle_claims(client, kernel_env):
     h = _user_with_key(client)
     _registry(client, h)
     cid, _, _ = _customer(client, h, phone="+15555556006")
     respx.post("https://api.anthropic.com/v1/messages").mock(return_value=_model(
         "Hi Angela! {claim:daycream.vitc.v1} Reply STOP to opt out.", ["daycream.vitc.v1"]))
     d = client.post("/api/drafts", json={"customer_id": cid, "product_ids": ["daycream"], "provider": "anthropic"}, headers=h).json()["draft"]
+    from .test_agent_ops import KERNEL
+    withdrawal = respx.post(f"{KERNEL}/internal/v1/drafts/{d['id']}/invalidate").mock(
+        return_value=httpx.Response(200, json={"draft_id": str(uuid.UUID(d["id"])), "edit_permitted": True}))
     e = client.post(f"/api/drafts/{d['id']}/edit", json={"text": "Hi Angela — hope the week is good! Our TimeWise 3D Day Cream is formulated with vitamin C. Reply STOP to opt out."}, headers=h)
     assert e.status_code == 201
     assert e.json()["version"] == 2 and e.json()["text_digest"] != d["text_digest"] and e.json()["claims_used"] == ["daycream.vitc.v1"]
     bad = client.post(f"/api/drafts/{d['id']}/edit", json={"text": "Hi Angela! This cream is dermatologist recommended. Reply STOP to opt out."}, headers=h)
     assert bad.status_code == 422 and bad.json()["detail"]["code"] == "UNAPPROVED_CLAIM_LANGUAGE"
     assert client.post(f"/api/drafts/{d['id']}/edit", json={"text": "Earn income with me!"}, headers=h).status_code == 422
+    assert withdrawal.call_count == 1, "invalid content must not withdraw a usable old draft"
 
 
 def test_registry_is_admin_only_and_tenant_scoped(client):
