@@ -1,0 +1,9 @@
+Traceback (most recent call last):
+  File "D:\projects\mk-release-acceptance-20261021\tools\verification\kernel_privacy_image.py", line 327, in <module>
+    if __name__=="__main__": main()
+                             ~~~~^^
+  File "D:\projects\mk-release-acceptance-20261021\tools\verification\kernel_privacy_image.py", line 47, in main
+    dsn=os.environ["MK_KERNEL_TEST_ADMIN_DSN"]
+        ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<frozen os>", line 717, in __getitem__
+KeyError: 'MK_KERNEL_TEST_ADMIN_DSN'

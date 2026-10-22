@@ -1,0 +1,56 @@
+#0 building with "desktop-linux" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 1.50kB done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/python:3.13-alpine@sha256:c50ccfb66e5cc97a610dcd0b9597de6ef5b52c96280b51997b353a0fc87a8361
+#2 DONE 0.0s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 113B 0.0s done
+#3 DONE 0.0s
+
+#4 [internal] load build context
+#4 transferring context: 5.80kB done
+#4 DONE 0.0s
+
+#5 [dependencies 1/4] FROM docker.io/library/python:3.13-alpine@sha256:c50ccfb66e5cc97a610dcd0b9597de6ef5b52c96280b51997b353a0fc87a8361
+#5 resolve docker.io/library/python:3.13-alpine@sha256:c50ccfb66e5cc97a610dcd0b9597de6ef5b52c96280b51997b353a0fc87a8361 0.0s done
+#5 DONE 0.1s
+
+#6 [stage-1 4/6] COPY --from=dependencies /packages /packages
+#6 CACHED
+
+#7 [stage-1 3/6] WORKDIR /app
+#7 CACHED
+
+#8 [dependencies 2/4] RUN test -n "90a6f1a7978a1b1b096dca6c57511ca48d3b8cf052f8e704baf358f34ea2f21b"  && mkdir -p /etc/mk  && python -c "import urllib.request; urllib.request.urlretrieve('https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem', '/etc/mk/rds-global-bundle.pem')"  && echo "90a6f1a7978a1b1b096dca6c57511ca48d3b8cf052f8e704baf358f34ea2f21b  /etc/mk/rds-global-bundle.pem" | sha256sum -c -
+#8 CACHED
+
+#9 [dependencies 3/4] COPY requirements-runtime.lock .
+#9 CACHED
+
+#10 [stage-1 2/6] RUN python -m pip uninstall --yes pip
+#10 CACHED
+
+#11 [dependencies 4/4] RUN pip install --no-cache-dir --upgrade pip==26.2.2  && pip install --no-cache-dir --require-hashes --only-binary=:all: --target /packages -r requirements-runtime.lock
+#11 CACHED
+
+#12 [stage-1 5/6] COPY --from=dependencies /etc/mk/rds-global-bundle.pem /etc/mk/rds-global-bundle.pem
+#12 CACHED
+
+#13 [stage-1 6/6] COPY app ./app
+#13 DONE 0.1s
+
+#14 exporting to image
+#14 exporting layers
+#14 exporting layers 0.2s done
+#14 exporting manifest sha256:3c646c54aed7ceeeb5f01f43c22795865b5ba12b005e030c54955e2ba9eb2f8c 0.0s done
+#14 exporting config sha256:a9bce8fa81ea50f808e7a1e900f62313133aa74ad48c3ba2d3183e78b9214f2b 0.0s done
+#14 exporting attestation manifest sha256:3907463c6888be41cc36386ff4e0eb6aa33b10cd170e99db55af3f4098537833 0.0s done
+#14 exporting manifest list sha256:bffba25d20b35646e6a8e196f7d0a75eb749e80654b32395d7644de40e03818a
+#14 exporting manifest list sha256:bffba25d20b35646e6a8e196f7d0a75eb749e80654b32395d7644de40e03818a 0.0s done
+#14 naming to docker.io/library/mk-app-acceptance:billing-provision-v2 done
+#14 unpacking to docker.io/library/mk-app-acceptance:billing-provision-v2 0.0s done
+#14 DONE 0.4s

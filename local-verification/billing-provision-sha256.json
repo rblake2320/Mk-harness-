@@ -1,0 +1,312 @@
+{
+  "scope": "author-run controls, not independent release qualification",
+  "source_commit": "5fb0ec35511a11f53b63a45f5ff04d82d167c4bd",
+  "tokio_commit": "6f0e7e2d1a64bc53f98e89824e64908a443bce96",
+  "created_at": "2026-10-22T11:16:01.5727683Z",
+  "files": [
+    {
+      "path": "local-verification/billing-erasure-green-v1.log",
+      "sha256": "62931f39c97995e4720bb6d858f889ac4fd63ca28088db734fa29476fae3ae1d"
+    },
+    {
+      "path": "local-verification/billing-erasure-green-v1.xml",
+      "sha256": "bf371d309081c6bcc8b9e359f908899d5d7ce468bd4c13c9f94616624015f7e1"
+    },
+    {
+      "path": "local-verification/billing-privacy-app-ci-v1.json",
+      "sha256": "09c8301feb1ffc6462e9112905bb3e1d187b0925c5767114c401508f10c95cd1"
+    },
+    {
+      "path": "local-verification/billing-privacy-kernel-ci-v1.json",
+      "sha256": "d99f992ea7abd2005eb8cd080cb5e6e2671065e6e93ac73b59879d85beb638e4"
+    },
+    {
+      "path": "local-verification/billing-provision-batch.md",
+      "sha256": "a542b5739bb3cd74f6e6718efb0e1e13cd3f12ef685bf732075c793aded11423"
+    },
+    {
+      "path": "local-verification/billing-provision-full-green-v2.log",
+      "sha256": "55c059d4474c98105a545c7b45b04b6775d986ddcd7e55ea929de92a53aaba03"
+    },
+    {
+      "path": "local-verification/billing-provision-full-green-v2.xml",
+      "sha256": "ae7e8eccee7085f2e6f475b777cafa1573001aeeaf4147f9ec29d2242ed66454"
+    },
+    {
+      "path": "local-verification/billing-provision-full-green.log",
+      "sha256": "f1209653510fb3c509c23c814c57f6d137eb910127116fb27bc8464ce9bc6608"
+    },
+    {
+      "path": "local-verification/billing-provision-full-green.xml",
+      "sha256": "006cc90a12026ad5086f91b47ffefa72698c99414ffbd5e29fef467a329a5a92"
+    },
+    {
+      "path": "local-verification/billing-provision-gates-green.log",
+      "sha256": "d15af68fd314a9dbc53400602869742e6c52ae9918b02711aeb9de883991d2eb"
+    },
+    {
+      "path": "local-verification/billing-provision-gates-green.xml",
+      "sha256": "6546cc4e92fda2697f4e20bc95c98ca7d50ac46830736606ab081d3e963f9724"
+    },
+    {
+      "path": "local-verification/billing-provision-green-v1.log",
+      "sha256": "a3ff13f2b2f62aac9bf5055a7f6039e81d6cb42bf7c83ab4b2818c005d762248"
+    },
+    {
+      "path": "local-verification/billing-provision-green-v1.xml",
+      "sha256": "9c4d36e1efc6fbcd6ae3e124f8bfb277a78c695fe371a3219ef99e923675fe95"
+    },
+    {
+      "path": "local-verification/billing-provision-image-build-v2.log",
+      "sha256": "a40d3484a0905de7d313b2191e588ba3d8646a845c9739d649bb09e3ffd617ae"
+    },
+    {
+      "path": "local-verification/billing-provision-image-build-v3.log",
+      "sha256": "4fb3561dbe6736577e195b3e6b470df4442a2e6122e31f8f54dbf658b0529420"
+    },
+    {
+      "path": "local-verification/billing-provision-image-build.log",
+      "sha256": "6ed75601802fad61f684c6cdeb7527d1770defaddd5d3ca05091ba1e4c0bdc68"
+    },
+    {
+      "path": "local-verification/billing-provision-image-green/container.log",
+      "sha256": "0fd85b965795952eba5171158d16e89ae55a1ed4a0c4c3bd0a11ab61ab6c0a03"
+    },
+    {
+      "path": "local-verification/billing-provision-image-green/report.json",
+      "sha256": "3141dccf3105bccd0e200ee6f8ff9317eecdf6b4d659a801f92b74ae367e4b40"
+    },
+    {
+      "path": "local-verification/billing-provision-image-run.log",
+      "sha256": "3141dccf3105bccd0e200ee6f8ff9317eecdf6b4d659a801f92b74ae367e4b40"
+    },
+    {
+      "path": "local-verification/billing-provision-image-security-run-v2.log",
+      "sha256": "0ed761e9a9790604bce52ab65fc45c5a0d7b0a791089f6597e0341c458cfc6de"
+    },
+    {
+      "path": "local-verification/billing-provision-image-security-run-v3.log",
+      "sha256": "3fe5f69306d6c193e8fe0d760aa0c7545d4886297db1c3241f574f77703a417e"
+    },
+    {
+      "path": "local-verification/billing-provision-image-security-run.log",
+      "sha256": "d6a307af9f470e1bf5ec8d794c719fbbc3184012d4c305fd9ae109147ff6c8d3"
+    },
+    {
+      "path": "local-verification/billing-provision-image-security-v2/sbom.cdx.json",
+      "sha256": "6092b471fae1a85ff08ec9dd5e4e467e6f03e3596d05e28a9974c2dac18417ec"
+    },
+    {
+      "path": "local-verification/billing-provision-image-security-v2/scanner-cyclonedx.log",
+      "sha256": "48ab7afdbc93572c656eaa63025bdff0765e74a6f7a4c2a7bb9ef3833ee256ad"
+    },
+    {
+      "path": "local-verification/billing-provision-image-security-v2/scanner-json.log",
+      "sha256": "aa7dddd7b5af43cd9a5e47dc75e5f635c13150442ba4d087bd23be08697f564c"
+    },
+    {
+      "path": "local-verification/billing-provision-image-security-v2/summary.json",
+      "sha256": "e58ff489adb31197474433e44caf491fcb170ac48808e01a4b5479b8ccb0b50d"
+    },
+    {
+      "path": "local-verification/billing-provision-image-security-v2/vulnerabilities.json",
+      "sha256": "40f7f4f67c838ef94ffc83a516b3c77b62c312588a7b199a009ebb641d08bc0a"
+    },
+    {
+      "path": "local-verification/billing-provision-image-security-v3/sbom.cdx.json",
+      "sha256": "633a2dabb29a6027a419c49794ee22a0d7a6d7e0224ed62993bb9ab655b72299"
+    },
+    {
+      "path": "local-verification/billing-provision-image-security-v3/scanner-cyclonedx.log",
+      "sha256": "64f5b811e1b52fa68376f30568d4be99b3dd0525a64ed214d7a595c3ac2ae717"
+    },
+    {
+      "path": "local-verification/billing-provision-image-security-v3/scanner-json.log",
+      "sha256": "4e16081cc661c01b0097adbefc96dae89977790cd4be2130fc4bba9024b0e99e"
+    },
+    {
+      "path": "local-verification/billing-provision-image-security-v3/summary.json",
+      "sha256": "8f54dbd3270f05e6015e6d40b2f9b6a824b1db8f283a60461c655f0f6595c5d1"
+    },
+    {
+      "path": "local-verification/billing-provision-image-security-v3/vulnerabilities.json",
+      "sha256": "b41e704fd7dcae0b65368892da2b9590620bac746a43399b953aa888064c9815"
+    },
+    {
+      "path": "local-verification/billing-provision-image-security/sbom.cdx.json",
+      "sha256": "4b2bdf85c113e09091209f3abe97d4f20909e616528e67f04e9eb33122fbf975"
+    },
+    {
+      "path": "local-verification/billing-provision-image-security/scanner-cyclonedx.log",
+      "sha256": "a36294d17692bd4308b593ce2521d731f550c97dbee317c4525801fcd08d136d"
+    },
+    {
+      "path": "local-verification/billing-provision-image-security/scanner-json.log",
+      "sha256": "b3d89e3ec9eabc6a1f4018a1ad011d13c65e93d6cbe174bbb3215ce2e4445f15"
+    },
+    {
+      "path": "local-verification/billing-provision-image-security/summary.json",
+      "sha256": "30802096c3cd4df0a83f74f11034440dad9e9e1f77eaa411bef23adc8e8fa6e6"
+    },
+    {
+      "path": "local-verification/billing-provision-image-security/vulnerabilities.json",
+      "sha256": "14d6e8b07562f15c54439e197daac662927de79677d1f675792651faa4989e2c"
+    },
+    {
+      "path": "local-verification/billing-provision-pg-full-green-v2.log",
+      "sha256": "0ea50d050d04c34e3cc19a71ab5db415bd196ee5b3cc421b89bdc2e15fbb6573"
+    },
+    {
+      "path": "local-verification/billing-provision-pg-full-green-v2.xml",
+      "sha256": "31ab84af9de9d56f9c025fd76b07938233b09ad55d69ad72a607e1cce25dc794"
+    },
+    {
+      "path": "local-verification/billing-provision-pg-full-green.log",
+      "sha256": "a483775c3963ff2b7590be98426c8b95d8bc56a946f76c447530c6d4e618b240"
+    },
+    {
+      "path": "local-verification/billing-provision-pg-full-green.xml",
+      "sha256": "1a5436f7e7dcae8f8b2d8b301e6fd47ca266895500a1ae5b73e317ccad8b6682"
+    },
+    {
+      "path": "local-verification/billing-provision-pg-green-v1.log",
+      "sha256": "b10ab69b7c8238732262ec0b37621684158a6898b87eba805236c0ae8f60f8bc"
+    },
+    {
+      "path": "local-verification/billing-provision-pg-green-v1.xml",
+      "sha256": "c0635b3f34e75f0f2cea6c978eda1871266a614fdb1fcf513e2f1d216e2008d4"
+    },
+    {
+      "path": "local-verification/billing-provision-pg-green-v2.log",
+      "sha256": "4ef6acb11c24adb0ac73a6cb989b75736fc08a91e4698a97b76db26f2179d843"
+    },
+    {
+      "path": "local-verification/billing-provision-pg-green-v2.xml",
+      "sha256": "59670a33bb917c9817b63edf78475598ee90049c3a7b0a440a40b7b59510f79a"
+    },
+    {
+      "path": "local-verification/billing-provision-pg-process-green.log",
+      "sha256": "ec51efdd817426f3c1163a7028fd86898fae4d1cb61cb9703050e8213e9b56fc"
+    },
+    {
+      "path": "local-verification/billing-provision-pg-process-green.xml",
+      "sha256": "08d7d080b54e12cc30838850772ce633761e99c50f4cbe768a355ef3131b6153"
+    },
+    {
+      "path": "local-verification/billing-provision-readiness.json",
+      "sha256": "71a77e7a73b9bf3e59ed49a1ef12f16f07210a5e12a6a52c0890b303d8fd2427"
+    },
+    {
+      "path": "local-verification/billing-provision-red.log",
+      "sha256": "7ab781e9625dda64e235c40dbd6ad0dfbb387916c0241fbdbafe86e7df0761e4"
+    },
+    {
+      "path": "local-verification/billing-provision-red.xml",
+      "sha256": "cfcabfa4c001399a0b6b690e1a30c760b659586601fb8dcfc7b23ada1d88cd35"
+    },
+    {
+      "path": "local-verification/billing-provision-secret-scan.json",
+      "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+    },
+    {
+      "path": "local-verification/billing-provision-secret-scan.log",
+      "sha256": "966a526c90735ece92fa0560640a9a48a73a85d148390a283d75b1db230a4f0e"
+    },
+    {
+      "path": "local-verification/billing-provision-targeted-green-v2.log",
+      "sha256": "597a9d6a97994b2dd3b2c79a7490bd2c9c9c04dd31aa3fdd2c1ad1d44f942a48"
+    },
+    {
+      "path": "local-verification/billing-provision-targeted-green-v2.xml",
+      "sha256": "8d8f889e0e8b8baf8ec3a74155adc8dc557ae89c9811cb4d93c99f88bfc41f4d"
+    },
+    {
+      "path": "local-verification/tokio-advisory-green.log",
+      "sha256": "52fc67bd2ca7f421818b08fb7eeb03a966240723433e256736a5f02422b7e783"
+    },
+    {
+      "path": "local-verification/tokio-advisory-red.log",
+      "sha256": "67796b3e2bb817efb214cb46e6bb424dea5a9a5f7053054a8649f2ebe949560f"
+    },
+    {
+      "path": "local-verification/tokio-app-ci-v1.json",
+      "sha256": "98e90a8f2b672b4f83aaa611ae769207affb64634dc8ebd7b8472038d74da43e"
+    },
+    {
+      "path": "local-verification/tokio-app-ci-v2.json",
+      "sha256": "98e90a8f2b672b4f83aaa611ae769207affb64634dc8ebd7b8472038d74da43e"
+    },
+    {
+      "path": "local-verification/tokio-image-build.log",
+      "sha256": "96bfd8b3306c5f6aa56c380c2430107ddd63821daa860c3fbf85027717899e29"
+    },
+    {
+      "path": "local-verification/tokio-image-security-run.log",
+      "sha256": "56a4ceae1bd6b795909f11512327c170b9f58d084bad7e6a59e7729e0569dd62"
+    },
+    {
+      "path": "local-verification/tokio-image-security/sbom.cdx.json",
+      "sha256": "929c8de00eabf516f7d3bbda3b32834bcfe040d7693372a9618d78e30ac154f1"
+    },
+    {
+      "path": "local-verification/tokio-image-security/scanner-cyclonedx.log",
+      "sha256": "a55f4ce428bddb504db70ead5e2f673f0cc023bd27a0faba53a82d7ef5da3ed7"
+    },
+    {
+      "path": "local-verification/tokio-image-security/scanner-json.log",
+      "sha256": "5a5dc343c10eccb5d62060949202bcf63260b532bb728c79f73a9d7ad1b0e8ff"
+    },
+    {
+      "path": "local-verification/tokio-image-security/summary.json",
+      "sha256": "5bcd710bd10213503878bf59cd0c7f0d267e4279e1b88091887ecdf9f035bb90"
+    },
+    {
+      "path": "local-verification/tokio-image-security/vulnerabilities.json",
+      "sha256": "4a7b099b4506d22bcc61f1d38c50fd418fb1f0ec097ac3645e7a6b3073909d6b"
+    },
+    {
+      "path": "local-verification/tokio-kernel-ci-v1.json",
+      "sha256": "6cff08e7522380cee968efd1e17be63c2db7d5fcbc766a7359f933600d478221"
+    },
+    {
+      "path": "local-verification/tokio-kernel-ci-v2.json",
+      "sha256": "eb595fdb18cdc01f348c526549651fd926f4cf31cf73b5a728cd488cc3c2fe24"
+    },
+    {
+      "path": "local-verification/tokio-kernel-image-green-v2/api.log",
+      "sha256": "60eac250ee3580b7cf914f5c2f390048e0b52f7bf921d2de182b6db68f6fca95"
+    },
+    {
+      "path": "local-verification/tokio-kernel-image-green-v2/metrics.txt",
+      "sha256": "c67e45f60dd43e22d5ab38ff34b284ca5813e36f46b5f30f1d3c1ecd057b1095"
+    },
+    {
+      "path": "local-verification/tokio-kernel-image-green-v2/recovery-commands.json",
+      "sha256": "4b79c7380d753184266a4c5f2b35e8108bd3e9eec052545cad65cb5f9d9fe392"
+    },
+    {
+      "path": "local-verification/tokio-kernel-image-green-v2/report.json",
+      "sha256": "a936513fb2a3c048503cbe53ec1ba3e88f2dc5fc0173acdf042d8e7f68ca4b32"
+    },
+    {
+      "path": "local-verification/tokio-kernel-image-run-v2.log",
+      "sha256": "3d98109e61c281ec348f01cdaab2554b518053fd5132920fc25c7cc9932b07dd"
+    },
+    {
+      "path": "local-verification/tokio-kernel-image-run.log",
+      "sha256": "40c1ebf4dab74b14dd537b30add39799a05df65c2e48467ea3308967ce624c91"
+    },
+    {
+      "path": "local-verification/tokio-regression-green-v2.log",
+      "sha256": "af08728b310f242791c43f12ebaf8bafeba14371a5faa5990e636a53c3e20ac4"
+    },
+    {
+      "path": "local-verification/tokio-regression-green-v3.log",
+      "sha256": "8a068ebbf87318f98512fb95112ca2ae6c70f8f045973d3365311c22f1f741e1"
+    },
+    {
+      "path": "local-verification/tokio-regression-green.log",
+      "sha256": "c7dc7371ca649f9d318380de617d158c7df1aff7aff9cab95129ce4487076e5a"
+    }
+  ]
+}

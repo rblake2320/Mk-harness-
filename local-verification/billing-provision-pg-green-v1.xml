@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="5" failures="1" skipped="0" tests="6" time="6.654" timestamp="2026-10-22T06:00:25.276717-05:00" hostname="DESKTOP-CM6G60N"><testcase classname="tools.verification.test_app_billing_privacy" name="test_late_runtime_sql_cannot_revive_or_rebind_erased_billing" time="0.881"><error message="failed on setup with &quot;RuntimeError: Application unique constraint drift in billing_provisions&quot;">/tmp/mk-security-python-20261022/lib/python3.12/site-packages/pytest_asyncio/plugin.py:924: in pytest_fixture_setup
+    return (yield)
+            ^^^^^
+tools/verification/test_app_database.py:38: in initialized
+    assert migrate(migration) == VERSIONS
+           ^^^^^^^^^^^^^^^^^^
+backend/app/migrate.py:87: in migrate
+    validate_schema(conn)
+backend/app/database_policy.py:53: in validate_schema
+    raise RuntimeError(f"Application unique constraint drift in {name}")
+E   RuntimeError: Application unique constraint drift in billing_provisions</error></testcase><testcase classname="tools.verification.test_app_billing_privacy" name="test_erased_billing_only_allows_terminal_cleanup_not_new_business_fields" time="0.865"><error message="failed on setup with &quot;RuntimeError: Application unique constraint drift in billing_provisions&quot;">/tmp/mk-security-python-20261022/lib/python3.12/site-packages/pytest_asyncio/plugin.py:924: in pytest_fixture_setup
+    return (yield)
+            ^^^^^
+tools/verification/test_app_database.py:38: in initialized
+    assert migrate(migration) == VERSIONS
+           ^^^^^^^^^^^^^^^^^^
+backend/app/migrate.py:87: in migrate
+    validate_schema(conn)
+backend/app/database_policy.py:53: in validate_schema
+    raise RuntimeError(f"Application unique constraint drift in {name}")
+E   RuntimeError: Application unique constraint drift in billing_provisions</error></testcase><testcase classname="tools.verification.test_app_billing_privacy" name="test_waiting_billing_writer_sees_committed_erasure_fence" time="0.857"><error message="failed on setup with &quot;RuntimeError: Application unique constraint drift in billing_provisions&quot;">/tmp/mk-security-python-20261022/lib/python3.12/site-packages/pytest_asyncio/plugin.py:924: in pytest_fixture_setup
+    return (yield)
+            ^^^^^
+tools/verification/test_app_database.py:38: in initialized
+    assert migrate(migration) == VERSIONS
+           ^^^^^^^^^^^^^^^^^^
+backend/app/migrate.py:87: in migrate
+    validate_schema(conn)
+backend/app/database_policy.py:53: in validate_schema
+    raise RuntimeError(f"Application unique constraint drift in {name}")
+E   RuntimeError: Application unique constraint drift in billing_provisions</error></testcase><testcase classname="tools.verification.test_app_billing_privacy" name="test_additive_upgrade_protects_existing_erasure_without_rewriting_old_migrations" time="1.062"><failure message="sqlalchemy.exc.IntegrityError: (psycopg.errors.CheckViolation) PRIVACY_SUBJECT_ERASED&#10;CONTEXT:  PL/pgSQL function guard_erased_identity() line 8 at RAISE&#10;[SQL: UPDATE users SET is_active=%(is_active)s WHERE users.id = %(users_id)s::VARCHAR]&#10;[SQL parameters hidden due to hide_parameters=True]&#10;(Background on this error at: https://sqlalche.me/e/20/gkpj)">/tmp/mk-security-python-20261022/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1963: in _exec_single_context
+    self.dialect.do_execute(
+/tmp/mk-security-python-20261022/lib/python3.12/site-packages/sqlalchemy/engine/default.py:943: in do_execute
+    cursor.execute(statement, parameters)
+/tmp/mk-security-python-20261022/lib/python3.12/site-packages/psycopg/cursor.py:97: in execute
+    raise ex.with_traceback(None)
+E   psycopg.errors.CheckViolation: PRIVACY_SUBJECT_ERASED
+E   CONTEXT:  PL/pgSQL function guard_erased_identity() line 8 at RAISE
+
+The above exception was the direct cause of the following exception:
+tools/verification/test_app_billing_privacy.py:131: in test_additive_upgrade_protects_existing_erasure_without_rewriting_old_migrations
+    session.commit()
+/tmp/mk-security-python-20261022/lib/python3.12/site-packages/sqlalchemy/orm/session.py:2032: in commit
+    trans.commit(_to_root=True)
+&lt;string&gt;:2: in commit
+    ???
+/tmp/mk-security-python-20261022/lib/python3.12/site-packages/sqlalchemy/orm/state_changes.py:139: in _go
+    ret_value = fn(self, *arg, **kw)
+                ^^^^^^^^^^^^^^^^^^^^
+/tmp/mk-security-python-20261022/lib/python3.12/site-packages/sqlalchemy/orm/session.py:1313: in commit
+    self._prepare_impl()
+&lt;string&gt;:2: in _prepare_impl
+    ???
+/tmp/mk-security-python-20261022/lib/python3.12/site-packages/sqlalchemy/orm/state_changes.py:139: in _go
+    ret_value = fn(self, *arg, **kw)
+                ^^^^^^^^^^^^^^^^^^^^
+/tmp/mk-security-python-20261022/lib/python3.12/site-packages/sqlalchemy/orm/session.py:1288: in _prepare_impl
+    self.session.flush()
+/tmp/mk-security-python-20261022/lib/python3.12/site-packages/sqlalchemy/orm/session.py:4345: in flush
+    self._flush(objects)
+/tmp/mk-security-python-20261022/lib/python3.12/site-packages/sqlalchemy/orm/session.py:4480: in _flush
+    with util.safe_reraise():
+/tmp/mk-security-python-20261022/lib/python3.12/site-packages/sqlalchemy/util/langhelpers.py:224: in __exit__
+    raise exc_value.with_traceback(exc_tb)
+/tmp/mk-security-python-20261022/lib/python3.12/site-packages/sqlalchemy/orm/session.py:4441: in _flush
+    flush_context.execute()
+/tmp/mk-security-python-20261022/lib/python3.12/site-packages/sqlalchemy/orm/unitofwork.py:466: in execute
+    rec.execute(self)
+/tmp/mk-security-python-20261022/lib/python3.12/site-packages/sqlalchemy/orm/unitofwork.py:642: in execute
+    util.preloaded.orm_persistence.save_obj(
+/tmp/mk-security-python-20261022/lib/python3.12/site-packages/sqlalchemy/orm/persistence.py:85: in save_obj
+    _emit_update_statements(
+/tmp/mk-security-python-20261022/lib/python3.12/site-packages/sqlalchemy/orm/persistence.py:912: in _emit_update_statements
+    c = connection.execute(
+/tmp/mk-security-python-20261022/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1415: in execute
+    return meth(
+/tmp/mk-security-python-20261022/lib/python3.12/site-packages/sqlalchemy/sql/elements.py:523: in _execute_on_connection
+    return connection._execute_clauseelement(
+/tmp/mk-security-python-20261022/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1637: in _execute_clauseelement
+    ret = self._execute_context(
+/tmp/mk-security-python-20261022/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1842: in _execute_context
+    return self._exec_single_context(
+/tmp/mk-security-python-20261022/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1982: in _exec_single_context
+    self._handle_dbapi_exception(
+/tmp/mk-security-python-20261022/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2351: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+/tmp/mk-security-python-20261022/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1963: in _exec_single_context
+    self.dialect.do_execute(
+/tmp/mk-security-python-20261022/lib/python3.12/site-packages/sqlalchemy/engine/default.py:943: in do_execute
+    cursor.execute(statement, parameters)
+/tmp/mk-security-python-20261022/lib/python3.12/site-packages/psycopg/cursor.py:97: in execute
+    raise ex.with_traceback(None)
+E   sqlalchemy.exc.IntegrityError: (psycopg.errors.CheckViolation) PRIVACY_SUBJECT_ERASED
+E   CONTEXT:  PL/pgSQL function guard_erased_identity() line 8 at RAISE
+E   [SQL: UPDATE users SET is_active=%(is_active)s WHERE users.id = %(users_id)s::VARCHAR]
+E   [SQL parameters hidden due to hide_parameters=True]
+E   (Background on this error at: https://sqlalche.me/e/20/gkpj)</failure></testcase><testcase classname="tools.verification.test_app_billing_privacy" name="test_provision_identity_and_bound_customer_are_immutable_after_erasure" time="0.870"><error message="failed on setup with &quot;RuntimeError: Application unique constraint drift in billing_provisions&quot;">/tmp/mk-security-python-20261022/lib/python3.12/site-packages/pytest_asyncio/plugin.py:924: in pytest_fixture_setup
+    return (yield)
+            ^^^^^
+tools/verification/test_app_database.py:38: in initialized
+    assert migrate(migration) == VERSIONS
+           ^^^^^^^^^^^^^^^^^^
+backend/app/migrate.py:87: in migrate
+    validate_schema(conn)
+backend/app/database_policy.py:53: in validate_schema
+    raise RuntimeError(f"Application unique constraint drift in {name}")
+E   RuntimeError: Application unique constraint drift in billing_provisions</error></testcase><testcase classname="tools.verification.test_app_billing_privacy" name="test_provision_insert_waits_for_erasure_and_refuses_commit" time="0.880"><error message="failed on setup with &quot;RuntimeError: Application unique constraint drift in billing_provisions&quot;">/tmp/mk-security-python-20261022/lib/python3.12/site-packages/pytest_asyncio/plugin.py:924: in pytest_fixture_setup
+    return (yield)
+            ^^^^^
+tools/verification/test_app_database.py:38: in initialized
+    assert migrate(migration) == VERSIONS
+           ^^^^^^^^^^^^^^^^^^
+backend/app/migrate.py:87: in migrate
+    validate_schema(conn)
+backend/app/database_policy.py:53: in validate_schema
+    raise RuntimeError(f"Application unique constraint drift in {name}")
+E   RuntimeError: Application unique constraint drift in billing_provisions</error></testcase></testsuite></testsuites>

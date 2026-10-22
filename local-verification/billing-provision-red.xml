@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="2" time="1.389" timestamp="2026-10-22T05:50:11.671251-05:00" hostname="DESKTOP-CM6G60N"><testcase classname="tests.test_billing_privacy" name="test_account_erasure_tracks_customer_creation_accepted_before_response[False]" time="0.447"><failure message="assert False">backend/tests/test_billing_privacy.py:121: in test_account_erasure_tracks_customer_creation_accepted_before_response
+    assert observed["durable_before_provider"]
+E   assert False</failure></testcase><testcase classname="tests.test_billing_privacy" name="test_account_erasure_tracks_customer_creation_accepted_before_response[True]" time="0.401"><failure message="assert False">backend/tests/test_billing_privacy.py:121: in test_account_erasure_tracks_customer_creation_accepted_before_response
+    assert observed["durable_before_provider"]
+E   assert False</failure></testcase></testsuite></testsuites>
