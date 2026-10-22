@@ -29,6 +29,7 @@ pub mod policy;
 pub mod privacy;
 pub mod privacy_ledger;
 pub mod probes;
+mod recovery_authority;
 mod recovery_restrictions;
 pub mod resolutions;
 pub mod tx;
@@ -205,6 +206,11 @@ pub fn migrator() -> sqlx::migrate::Migrator {
             20,
             "recovered_session_revocations",
             include_str!("../../../../migrations/kernel/0020_recovered_session_revocations.sql"),
+        ),
+        (
+            21,
+            "recovered authority fences",
+            include_str!("../../../../migrations/kernel/0021_recovery_authority_fences.sql"),
         ),
     ];
     let migrations: Vec<Migration> = FILES

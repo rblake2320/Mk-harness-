@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 use crate::{Store, StoreError, TenantTx, privacy::SubjectKind};
 
-const FORMAT: &str = "mk-kernel-erasure-ledger-v2";
+const FORMAT: &str = "mk-kernel-erasure-ledger-v3";
 pub const MAX_LEDGER_BYTES: usize = 64 * 1024 * 1024;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -202,6 +202,7 @@ pub struct ReplayReport {
     pub fences: usize,
     pub suppressions: usize,
     pub revocations: usize,
+    pub authority_withdrawals: usize,
     pub pending_content: usize,
     pub pending_restrictions: usize,
     pub enforced: bool,
@@ -381,6 +382,7 @@ pub async fn replay(
         fences: ledger.fences.len(),
         suppressions: ledger.restrictions.counts().0,
         revocations: ledger.restrictions.counts().1,
+        authority_withdrawals: ledger.restrictions.counts().2,
         pending_content,
         pending_restrictions,
         enforced: pending_content == 0 && pending_restrictions == 0,
@@ -403,7 +405,7 @@ mod tests {
         json!({"format":FORMAT,"exported_at":"2026-10-22T00:00:00Z",
             "requests":[{"tenant_id":Uuid::new_v4(),"request_id":Uuid::new_v4(),
             "subject_kind":"contact","subject_id":Uuid::new_v4(),"requested_at":"2026-10-21T00:00:00Z"}],"fences":[],
-            "restrictions":{"suppressions":[],"revocations":[]}})
+            "restrictions":{"suppressions":[],"revocations":[],"authorities":[]}})
     }
 
     fn checked(value: &Value) -> Result<Ledger, StoreError> {
@@ -526,6 +528,8 @@ mod tests {
         }
         let mut value = good.clone();
         value["format"] = json!("mk-kernel-erasure-ledger-v1");
+        assert!(checked(&value).is_err());
+        value["format"] = json!("mk-kernel-erasure-ledger-v2");
         assert!(checked(&value).is_err());
         value = good;
         value.as_object_mut().unwrap().remove("restrictions");

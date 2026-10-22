@@ -115,10 +115,23 @@ def main():
         proposed=call("POST","/actions",["agent"],proposal)
         assert proposed.status_code in {202,403},proposed.body
         aid=proposed.body["result"]["action_id"]
+        permission_contact=str(uuid.uuid4())
+        permission=call("POST",f"/contacts/{permission_contact}/permissions",["tenant_admin"],{
+            "channel":"sms","destination":"+15555550105","scope":["customer_follow_up"],
+            "source":"synthetic image recovery","proof_digest":"sha256:"+"e"*64,
+            "granted_at":now.isoformat(),"expires_at":(now+timedelta(days=1)).isoformat()})
+        assert permission.status_code==201,permission.body
+        adapter=call("POST","/adapters",["tenant_admin"],{"agent_id":"recovery-"+uuid.uuid4().hex,
+            "name":"synthetic image recovery","platform":"android","version":"1","capabilities":[],
+            "allowed_actions":["send_sms"],"callback_authority":"127.0.0.1:8787"})
+        assert adapter.status_code==201
+        adapter_id=adapter.body["adapter"]["adapter_id"]
         # Actual pre-erasure backup. Raw bytes remain in memory, never artifacts.
         dump=subprocess.run(["docker","exec",container,"pg_dump","-U",conninfo["user"],
             "-d",database,"--format=custom","--no-owner"],check=True,capture_output=True,timeout=60).stdout
         assert dump.startswith(b"PGDMP")
+        assert call("POST",f"/contacts/{permission_contact}/permissions/{permission.body['id']}/revoke",["tenant_admin"]).status_code==200
+        assert call("POST",f"/adapters/{adapter_id}/revoke",["tenant_admin"]).status_code==204
         restriction_user=str(uuid.uuid4())
         assert call("POST","/suppressions",["tenant_admin"],{"channel":"sms",
             "destination":"+15555550104","reason":"synthetic post-backup opt-out",
@@ -195,10 +208,15 @@ def main():
             assert conn.execute("SELECT count(*) FROM kernel.privacy_destination_fences").fetchone()==(1,)
             assert conn.execute("SELECT count(*) FROM kernel.suppressions WHERE permanent AND lifted_at IS NULL").fetchone()==(1,)
             assert conn.execute("SELECT count(*) FROM kernel.revocations WHERE user_id=%s AND kind='session' AND session_id IS NULL AND session_digest LIKE 'sha256:%%'",(restriction_user,)).fetchone()==(1,)
+            assert conn.execute("SELECT status,revoked_at IS NOT NULL FROM kernel.contact_permissions WHERE permission_id=%s",(permission.body['id'],)).fetchone()==('revoked',True)
+            assert conn.execute("SELECT revoked_at IS NOT NULL FROM kernel.adapter_registrations WHERE adapter_id=%s",(adapter_id,)).fetchone()==(True,)
+            assert conn.execute("SELECT not_after<=clock_timestamp() FROM kernel.adapter_credentials WHERE adapter_id=%s",(adapter_id,)).fetchone()==(True,)
+            assert conn.execute("SELECT count(*) FROM kernel.recovery_authority_fences").fetchone()==(3,)
             assert conn.execute("SELECT dispatch_enabled FROM kernel.kill_switches WHERE scope='global'").fetchone()==(False,)
         report["privacy_restore"]={"actual_pg_dump_restore":True,"without_external_ledger_refused":True,
             "preview_refused_unreplayed_content":True,"apply_scrubbed_content":True,"restored_fences":1,
             "post_backup_suppressions":1,"post_backup_session_revocations":1,"raw_session_not_restored":True,
+            "withdrawn_authority_fences":3,"contact_permission_revoked":True,"adapter_revoked":True,"old_adapter_key_expired":True,
             "dispatch_enabled":False,"repeat_report_passed":True,"runtime_user":state["Config"]["User"],
             "ledger_sha256":export_receipt["sha256"],"gate":gate_report}
         if args.provider_fixture_image:

@@ -172,6 +172,169 @@ def test_recovered_session_shape_and_runtime_immutability(recovery):
             with pytest.raises(psycopg.errors.InsufficientPrivilege): conn.execute(statement)
 
 
+@pytest.mark.parametrize("new_objects", [False, True])
+@pytest.mark.parametrize("authority", ["permission", "approval_credential", "adapter", "adapter_rotation"])
+def test_post_backup_authority_withdrawal_survives_recovery(recovery, authority, new_objects):
+    tid, uid, cid, entity = (str(uuid.uuid4()) for _ in range(4))
+    dump = recovery.backup() if new_objects else None
+    with recovery.client() as client:
+        assert recovery.propose(client,tid,uid,cid).status_code == 403
+        if authority == "permission":
+            now = datetime.now(timezone.utc)
+            created = recovery.call(client,tid,uid,f"/contacts/{cid}/permissions",{
+                "channel":"sms","destination":"+15555550100","scope":["customer_follow_up"],
+                "source":"synthetic recovery fixture","proof_digest":"sha256:"+"a"*64,
+                "granted_at":now.isoformat(),"expires_at":(now+timedelta(days=1)).isoformat()},("tenant_admin",))
+            assert created.status_code == 201, created.body
+            entity = created.body["id"]
+            route, body, status = f"/contacts/{cid}/permissions/{entity}/revoke", None, 200
+            query = "SELECT status='revoked' AND revoked_at IS NOT NULL FROM kernel.contact_permissions WHERE permission_id=%s"
+        elif authority == "approval_credential":
+            # Owned fixture seeds a pre-existing registry row; this test covers
+            # recovery and live credential eligibility, not passkey enrollment.
+            with psycopg.connect(raw(recovery.database)) as conn:
+                conn.execute("""INSERT INTO kernel.approval_credentials(tenant_id,credential_row_id,user_id,credential_id,alg,public_key,aaguid,attestation_fmt)
+                    VALUES(%s,%s,%s,%s,'EdDSA',%s,%s,'none')""",(tid,entity,uid,os.urandom(32),os.urandom(32),bytes(16)))
+            route, body, status = f"/approval-credentials/{entity}/revoke", None, 200
+            query = "SELECT revoked_at IS NOT NULL FROM kernel.approval_credentials WHERE credential_row_id=%s"
+        else:
+            created = recovery.call(client,tid,uid,"/adapters",{"agent_id":"recovery-"+uuid.uuid4().hex,
+                "name":"synthetic recovery fixture","platform":"android","version":"1","capabilities":[],
+                "allowed_actions":["send_sms"],"callback_authority":"127.0.0.1:8787"},("tenant_admin",))
+            assert created.status_code == 201, created.body
+            entity = created.body["adapter"]["adapter_id"]
+            if authority == "adapter":
+                route, body, status = f"/adapters/{entity}/revoke", None, 204
+                query = "SELECT revoked_at IS NOT NULL FROM kernel.adapter_registrations WHERE adapter_id=%s"
+            else:
+                route, body, status = f"/adapters/{entity}/rotate", {"overlap_secs":0}, 200
+                with psycopg.connect(raw(recovery.database)) as conn:
+                    entity = str(conn.execute("SELECT credential_id FROM kernel.adapter_credentials WHERE adapter_id=%s",(entity,)).fetchone()[0])
+                query = "SELECT not_after IS NOT NULL AND not_after<=clock_timestamp() FROM kernel.adapter_credentials WHERE credential_id=%s"
+        table, primary, reopen = {
+            "permission":("contact_permissions","permission_id","status='granted',revoked_at=NULL"),
+            "approval_credential":("approval_credentials","credential_row_id","revoked_at=NULL"),
+            "adapter":("adapter_registrations","adapter_id","revoked_at=NULL"),
+            "adapter_rotation":("adapter_credentials","credential_id","not_after=NULL,revoked_at=NULL"),
+        }[authority]
+        with psycopg.connect(raw(recovery.database)) as conn:
+            original = conn.execute(sql.SQL("SELECT to_jsonb(r) FROM kernel.{} r WHERE {}=%s").format(sql.Identifier(table),sql.Identifier(primary)),(entity,)).fetchone()[0]
+        if dump is None: dump = recovery.backup()
+        changed = recovery.call(client,tid,uid,route,body,("tenant_admin",))
+        assert changed.status_code == status, changed.body
+        with psycopg.connect(raw(recovery.database)) as conn:
+            assert conn.execute(query,(entity,)).fetchone() == (True,)
+        if authority == "approval_credential":
+            assert recovery.call(client,tid,uid,"/kill-switch/global/challenge",None,("platform_operator",)).status_code == 412
+    pin = recovery.export()
+    authority_value = json.loads(Path(pin[1]).read_bytes())
+    for mutation in ("omitted", "conflicting"):
+        altered = json.loads(json.dumps(authority_value))
+        if mutation == "omitted": altered["restrictions"]["authorities"] = []
+        else: altered["restrictions"]["authorities"][0]["identity_digest"] = "sha256:"+"0"*64
+        altered_path = recovery.tmp/(mutation+"-authority.json")
+        altered_path.write_text(json.dumps(altered))
+        bad_pin = [*pin]; bad_pin[1] = str(altered_path); bad_pin[3] = "sha256:"+hashlib.sha256(altered_path.read_bytes()).hexdigest()
+        assert recovery.gate(pin=bad_pin,apply=True).returncode != 0
+        with psycopg.connect(raw(recovery.database)) as conn:
+            assert conn.execute("SELECT count(*) FROM kernel.recovery_authority_fences").fetchone() == (0,)
+    with recovery.restored(dump) as target:
+        if authority == "permission" and not new_objects:
+            with psycopg.connect(raw(target),autocommit=True) as conn:
+                conn.execute(sql.SQL("ALTER DATABASE {} SET timezone='Pacific/Honolulu'").format(sql.Identifier(target.database)))
+        result = recovery.gate(target,pin=pin,apply=True)
+        assert result.returncode == 0, (result.stdout,result.stderr)
+        assert recovery.gate(target,pin=pin,apply=True).returncode == 0
+        exported = recovery.export("authority-reexport.json", target)
+        assert json.loads(Path(exported[1]).read_bytes())["restrictions"]["authorities"] == json.loads(Path(pin[1]).read_bytes())["restrictions"]["authorities"]
+        if authority == "approval_credential":
+            with recovery.client(target) as client:
+                challenge = recovery.call(client,tid,uid,"/kill-switch/global/challenge",None,("platform_operator",))
+                assert challenge.status_code == 412, "restored revoked credential can request operator step-up"
+        with psycopg.connect(raw(target)) as conn:
+            assert conn.execute(query,(entity,)).fetchone() == (None if new_objects else (True,)), "restore gate passed but withdrawn authority was restored"
+            assert conn.execute("SELECT count(*) FROM kernel.recovery_authority_fences WHERE entity_id=%s",(entity,)).fetchone() == (1,)
+        with psycopg.connect(raw(target),autocommit=True) as conn:
+            if new_objects:
+                with pytest.raises(psycopg.errors.RaiseException,match="withdrawn recovery identity"):
+                    conn.execute(sql.SQL("INSERT INTO kernel.{} SELECT * FROM jsonb_populate_record(NULL::kernel.{},%s::jsonb)").format(sql.Identifier(table),sql.Identifier(table)),(json.dumps(original),))
+            else:
+                with pytest.raises(psycopg.errors.RaiseException,match="cannot be reopened"):
+                    conn.execute(sql.SQL("UPDATE kernel.{} SET ").format(sql.Identifier(table))+sql.SQL(reopen)+sql.SQL(" WHERE {}=%s").format(sql.Identifier(primary)),(entity,))
+
+
+def test_post_backup_draft_withdrawal_cancels_restored_queue(recovery):
+    tid,uid,cid,draft = (str(uuid.uuid4()) for _ in range(4))
+    evidence = [{"type":"document","id":"draft:"+draft,"digest":"sha256:"+"d"*64}]
+    with recovery.client() as client:
+        proposal = recovery.propose(client,tid,uid,cid,evidence=evidence)
+        assert proposal.status_code == 403
+        action = proposal.body["result"]["action_id"]
+        # Owned crash-point fixture models an action waiting in the outbound queue.
+        with psycopg.connect(raw(recovery.database)) as conn:
+            conn.execute("UPDATE kernel.actions SET state='queued' WHERE action_id=%s",(action,))
+        dump = recovery.backup()
+        withdrawn = recovery.call(client,tid,uid,f"/drafts/{draft}/invalidate",None,("tenant_admin",))
+        assert withdrawn.status_code == 200 and withdrawn.body["cancelled_actions"] == 1
+        assert recovery.propose(client,tid,uid,cid,evidence=evidence).status_code == 409
+    pin = recovery.export()
+    with recovery.restored(dump) as target:
+        result = recovery.gate(target,pin=pin,apply=True)
+        assert result.returncode == 0,(result.stdout,result.stderr)
+        with psycopg.connect(raw(target)) as conn:
+            assert conn.execute("SELECT state FROM kernel.actions WHERE action_id=%s",(action,)).fetchone() == ("cancelled",)
+        with recovery.client(target) as client:
+            assert recovery.propose(client,tid,uid,cid,evidence=evidence).status_code == 409
+
+
+def test_authority_replay_is_atomic_and_fences_are_tenant_scoped_immutable(recovery):
+    tid,uid = (str(uuid.uuid4()) for _ in range(2))
+    permissions=[]
+    with recovery.client() as client:
+        now=datetime.now(timezone.utc)
+        for _ in range(2):
+            contact=str(uuid.uuid4())
+            granted=recovery.call(client,tid,uid,f"/contacts/{contact}/permissions",{
+                "channel":"sms","destination":"+15555550100","scope":["customer_follow_up"],
+                "source":"atomic fixture","proof_digest":"sha256:"+"c"*64,
+                "granted_at":now.isoformat(),"expires_at":(now+timedelta(days=1)).isoformat()},("tenant_admin",))
+            assert granted.status_code==201
+            permissions.append((contact,granted.body["id"]))
+        dump=recovery.backup()
+        for contact,permission in permissions:
+            assert recovery.call(client,tid,uid,f"/contacts/{contact}/permissions/{permission}/revoke",None,("tenant_admin",)).status_code==200
+    pin=recovery.export()
+    fault_id=json.loads(Path(pin[1]).read_bytes())["restrictions"]["authorities"][-1]["entity_id"]
+    with recovery.restored(dump) as target:
+        with psycopg.connect(raw(target)) as conn:
+            baseline=conn.execute("SELECT count(*) FROM kernel.audit_events").fetchone()
+            conn.execute(sql.SQL("""CREATE FUNCTION kernel.authority_replay_test_fault() RETURNS trigger LANGUAGE plpgsql AS $$
+                BEGIN IF NEW.permission_id={}::uuid AND NEW.revoked_at IS NOT NULL THEN RAISE EXCEPTION 'synthetic authority fault';
+                END IF; RETURN NEW; END $$""").format(sql.Literal(fault_id)))
+            conn.execute("CREATE TRIGGER authority_replay_test_fault BEFORE UPDATE ON kernel.contact_permissions FOR EACH ROW EXECUTE FUNCTION kernel.authority_replay_test_fault()")
+        assert recovery.gate(target,pin=pin,apply=True).returncode != 0
+        with psycopg.connect(raw(target)) as conn:
+            assert conn.execute("SELECT count(*) FROM kernel.contact_permissions WHERE status='granted' AND revoked_at IS NULL").fetchone()==(2,)
+            assert conn.execute("SELECT count(*) FROM kernel.recovery_authority_fences").fetchone()==(0,)
+            assert conn.execute("SELECT count(*) FROM kernel.audit_events").fetchone()==baseline
+            conn.execute("DROP TRIGGER authority_replay_test_fault ON kernel.contact_permissions")
+        applied=recovery.gate(target,pin=pin,apply=True)
+        assert applied.returncode==0,(applied.stdout,applied.stderr)
+        with psycopg.connect(raw(target),autocommit=True) as conn:
+            for mutation in ("DELETE FROM kernel.recovery_authority_fences","TRUNCATE kernel.recovery_authority_fences",
+                    "UPDATE kernel.recovery_authority_fences SET not_after=not_after+interval '1 second'",
+                    "UPDATE kernel.recovery_authority_fences SET identity_digest='sha256:'||repeat('0',64)"):
+                with pytest.raises(psycopg.errors.RaiseException): conn.execute(mutation)
+        with psycopg.connect(raw(target.set(username=recovery.login,password=recovery.password)),autocommit=True) as conn:
+            assert conn.execute("SELECT count(*) FROM kernel.recovery_authority_fences").fetchone()==(0,)
+            conn.execute("SELECT set_config('kernel.tenant_id',%s,false)",(tid,))
+            assert conn.execute("SELECT count(*) FROM kernel.recovery_authority_fences").fetchone()==(2,)
+            conn.execute("SELECT set_config('kernel.tenant_id',%s,false)",(str(uuid.uuid4()),))
+            assert conn.execute("SELECT count(*) FROM kernel.recovery_authority_fences").fetchone()==(0,)
+            for mutation in ("DELETE FROM kernel.recovery_authority_fences", "UPDATE kernel.recovery_authority_fences SET not_after=now()"):
+                with pytest.raises(psycopg.errors.InsufficientPrivilege): conn.execute(mutation)
+
+
 def test_standalone_replay_and_strict_cli_options(recovery):
     pin = recovery.export()
     binary = recovery.api.with_name("mk-privacy-ledger")

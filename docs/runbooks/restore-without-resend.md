@@ -39,7 +39,7 @@ end-to-end on purpose; the gate binary refuses to enable anything.
 | 2 | Confirm dispatch is disabled on the restored data | `SELECT dispatch_enabled FROM kernel.kill_switches WHERE scope='global'` | exactly one `false` row. Disable it using the controlled owner recovery login and record the action before starting any worker |
 | 3 | Run migrations forward only | `MK_MIGRATE_ONLY=1 mk-action-api`, with the controlled migration identity and required configuration | exit 0; migrations/checksums verified |
 | 4 | Load the independently retained deletion ledger and its independent digest/freshness pin | commands below | authenticated input accepted; report lists missing content/fences without enabling traffic |
-| 5 | Review separately retained restriction records | operator evidence review plus pinned kernel ledger v2 | v2 replays active destination/channel/tenant opt-outs and user/session revocations. Reconcile other authority changes (permission, credential, adapter and application session state) separately before authorization; do not infer their recovery from an inventory count |
+| 5 | Review separately retained restriction records | operator evidence review plus pinned kernel ledger v3 | v3 replays opt-outs, user/session revocations, withdrawn contact permissions, approval credentials, adapter registrations/key cutoffs and draft versions. Reconcile application sessions, sender and policy state separately before authorization; do not infer their recovery from an inventory count |
 | 6 | Gate, apply mode | command below with `--apply` | exit 0, `gate:PASS`; all checks `ok:true`; any unresolved privacy content keeps the gate failed |
 | 7 | Reconcile every `reconciliation_required` action against exact provider identity using the passkey-protected exception workflow | human, per action | accepted resolution receipt with bound provider evidence. Destination/time-window searches and provider absence alone are not negative-send proof; ambiguous actions stay quarantined. Never re-propose automatically |
 | 8 | Confirm sender bindings | gate `credentials_unseal` detail + provider console webhook URL = `MK_PUBLIC_WEBHOOK_BASE` | `unreadable: 0`; webhook URL matches |
@@ -58,14 +58,15 @@ end-to-end on purpose; the gate binary refuses to enable anything.
 ## Kernel deletion ledger commands
 
 Export from the quiesced authoritative source with a read-capable operator
-identity. Kernel format `mk-kernel-erasure-ledger-v2` contains request/restriction
+identity. Kernel format `mk-kernel-erasure-ledger-v3` contains request/restriction
 UUIDs and times, opt-out scope/permanence, destination fingerprints and
-tenant/user-bound session digests, not raw session IDs, reasons, addresses,
+tenant/user-bound session digests, authority-identity digests and cutoff times,
+not raw session IDs, reasons, addresses,
 bodies, signing keys or provider credentials. It is
 still sensitive pseudonymous data: retain with restricted access and immutable
 external custody. The command creates a new file (0600 on Unix) and refuses to
 overwrite an existing path. Quiesce all restriction writers as well as intake
-before the final export. Version 1 is refused: export a fresh v2 ledger from the
+before the final export. Versions 1 and 2 are refused: export a fresh v3 ledger from the
 authoritative source; do not relabel an older file or synthesize restrictions
 from the restored backup.
 
@@ -98,6 +99,15 @@ scoped to the original tenant/user/session, checked both at authentication and
 dispatch. Re-export retains the same restriction identities. Retained active
 restrictions missing or conflicting in the input cause refusal; a later opt-out
 lift requires explicit reconciliation, never an automatic grant of permission.
+Withdrawn contact permissions, approval credentials, adapters and adapter keys
+are bound to their original immutable identity and restored cutoff. Recovery-only
+fences retain withdrawals even when the original object or entire tenant is
+absent from the backup; replay never recreates credentials. SQL guards prevent
+reusing those object IDs or reopening their authority, including through older
+runtime code. Fences cannot be reassigned, removed or relaxed. Adapter rotations
+retain their original cutoff (including a still-pending, at-most-one-hour overlap).
+Draft-version recovery cancels cancellable restored actions using the same
+transition path as a human withdrawal; uncertain sends remain quarantined.
 Any SQL failure rolls back the entire replay. Repeating replay preserves fences
 and identity. In-flight/unresolved sends remain quarantined, keep their necessary
 resolution data, and yield a failing privacy check until safely resolved and erased.

@@ -15,6 +15,7 @@ use crate::{StoreError, TenantTx, human_approval::session_revocation_digest};
 pub(crate) struct Restrictions {
     suppressions: Vec<Suppression>,
     revocations: Vec<Revocation>,
+    authorities: crate::recovery_authority::AuthorityLedger,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -116,6 +117,7 @@ fn compatible(left: &Suppression, right: &Suppression) -> bool {
 
 impl Restrictions {
     pub(crate) fn validate(&self, exported_at: DateTime<Utc>) -> Result<(), StoreError> {
+        self.authorities.validate(exported_at)?;
         let mut ids = BTreeSet::new();
         for row in &self.suppressions {
             let channel = row.channel.as_ref().is_none_or(|c| {
@@ -179,10 +181,15 @@ impl Restrictions {
             .iter()
             .map(|r| r.tenant_id)
             .chain(self.revocations.iter().map(|r| r.tenant_id))
+            .chain(self.authorities.tenants())
     }
 
-    pub(crate) fn counts(&self) -> (usize, usize) {
-        (self.suppressions.len(), self.revocations.len())
+    pub(crate) fn counts(&self) -> (usize, usize, usize) {
+        (
+            self.suppressions.len(),
+            self.revocations.len(),
+            self.authorities.len(),
+        )
     }
 
     pub(crate) async fn export_tenant(
@@ -190,6 +197,7 @@ impl Restrictions {
         conn: &mut PgConnection,
         tenant: Uuid,
     ) -> Result<(), StoreError> {
+        self.authorities.export_tenant(conn, tenant).await?;
         for row in sqlx::query("SELECT * FROM kernel.suppressions WHERE tenant_id=$1 AND lifted_at IS NULL ORDER BY suppression_id")
             .bind(tenant).fetch_all(&mut *conn).await? {
             self.suppressions.push(suppression(&row)?);
@@ -207,6 +215,7 @@ impl Restrictions {
     }
 
     pub(crate) async fn validate_retained(&self, tx: &mut TenantTx<'_>) -> Result<(), StoreError> {
+        self.authorities.validate_retained(tx).await?;
         for row in sqlx::query("SELECT * FROM kernel.suppressions WHERE tenant_id=$1")
             .bind(tx.tenant().0)
             .fetch_all(tx.conn())
@@ -256,6 +265,7 @@ impl Restrictions {
         now: DateTime<Utc>,
     ) -> Result<(), StoreError> {
         let tenant = tx.tenant().0;
+        self.authorities.apply(tx, digest, now).await?;
         for row in self.suppressions.iter().filter(|r| r.tenant_id == tenant) {
             sqlx::query("INSERT INTO kernel.suppressions(tenant_id,suppression_id,channel,normalized_destination_hash,destination_fingerprints,scope,permanent,created_at,reason,source)
                 VALUES($1,$2,$3,$4,$5,$6,$7,$8,'recovery','recovery') ON CONFLICT(tenant_id,suppression_id) DO UPDATE
@@ -283,7 +293,7 @@ impl Restrictions {
     }
 
     pub(crate) async fn pending(&self, tx: &mut TenantTx<'_>) -> Result<usize, StoreError> {
-        let mut pending = 0;
+        let mut pending = self.authorities.pending(tx).await?;
         let tenant = tx.tenant().0;
         for expected in self.suppressions.iter().filter(|r| r.tenant_id == tenant) {
             let actual = sqlx::query("SELECT * FROM kernel.suppressions WHERE tenant_id=$1 AND suppression_id=$2 AND lifted_at IS NULL")
