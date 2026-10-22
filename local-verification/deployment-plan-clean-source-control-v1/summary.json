@@ -1,0 +1,84 @@
+{
+  "scope": "author-run local builtin Terraform resource only; not cloud deployment or human approval",
+  "outcome": "Worked",
+  "checks": [
+    {
+      "check": "disposable_builtin_fixture_initialized",
+      "outcome": "Worked",
+      "exit": 0
+    },
+    {
+      "check": "actual_local_plan_created",
+      "outcome": "Worked",
+      "exit": 0
+    },
+    {
+      "check": "only_owned_builtin_resource_can_be_applied",
+      "outcome": "Worked"
+    },
+    {
+      "check": "real_cli_seals_actual_binary",
+      "outcome": "Worked",
+      "exit": 0,
+      "error_type": null
+    },
+    {
+      "check": "public_artifact_excludes_private_canary",
+      "outcome": "Worked"
+    },
+    {
+      "check": "different_run_refused_without_plan_file",
+      "outcome": "Worked",
+      "exit": 1
+    },
+    {
+      "check": "different_attempt_refused_without_plan_file",
+      "outcome": "Worked",
+      "exit": 1
+    },
+    {
+      "check": "different_image_refused_without_plan_file",
+      "outcome": "Worked",
+      "exit": 1
+    },
+    {
+      "check": "different_lock_refused_without_plan_file",
+      "outcome": "Worked",
+      "exit": 1
+    },
+    {
+      "check": "wrong_key_refused_without_plan_file",
+      "outcome": "Worked",
+      "exit": 1
+    },
+    {
+      "check": "different_artifact_refused_without_plan_file",
+      "outcome": "Worked",
+      "exit": 1
+    },
+    {
+      "check": "exact_same_run_plan_opened",
+      "outcome": "Worked",
+      "exit": 0
+    },
+    {
+      "check": "apply_consumes_exact_reviewed_bytes",
+      "outcome": "Worked",
+      "plan_sha256": "cbfd000b6f46ed3024f5cd760584aa553cf2641c2783e29a99d2252f732d33d9"
+    },
+    {
+      "check": "actual_local_saved_plan_apply",
+      "outcome": "Worked",
+      "exit": 0
+    },
+    {
+      "check": "actual_state_matches_private_fixture",
+      "outcome": "Worked"
+    },
+    {
+      "check": "stale_saved_plan_cannot_be_reapplied",
+      "outcome": "Worked",
+      "exit": 1
+    }
+  ]
+}

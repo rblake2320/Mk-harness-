@@ -1,0 +1,487 @@
+﻿2026-10-22T10:30:22.1692954Z Current runner version: '2.338.0'
+2026-10-22T10:30:22.1714604Z ##[group]Runner Image Provisioner
+2026-10-22T10:30:22.1715293Z Hosted Compute Agent
+2026-10-22T10:30:22.1715860Z Version: 20261012.601
+2026-10-22T10:30:22.1716440Z Commit: f3dc54e1fb89da6852db922499a0233137369e1d
+2026-10-22T10:30:22.1717126Z Build Date: 2026-10-12T17:48:21Z
+2026-10-22T10:30:22.1717682Z Worker ID: {0b76a47c-3628-47ce-a710-fb4e7e4ba6ed}
+2026-10-22T10:30:22.1718239Z Region: eastus
+2026-10-22T10:30:22.1718772Z Cloud: Azure
+2026-10-22T10:30:22.1719228Z ##[endgroup]
+2026-10-22T10:30:22.1720365Z ##[group]Operating System
+2026-10-22T10:30:22.1720888Z Ubuntu
+2026-10-22T10:30:22.1721318Z 24.04.5
+2026-10-22T10:30:22.1721783Z LTS
+2026-10-22T10:30:22.1722243Z ##[endgroup]
+2026-10-22T10:30:22.1722685Z ##[group]Runner Image
+2026-10-22T10:30:22.1723543Z Image: ubuntu-24.04
+2026-10-22T10:30:22.1724017Z Version: 20261012.334.1
+2026-10-22T10:30:22.1725164Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20261012.334/images/ubuntu/Ubuntu2404-Readme.md
+2026-10-22T10:30:22.1726431Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20261012.334
+2026-10-22T10:30:22.1727223Z ##[endgroup]
+2026-10-22T10:30:22.1728150Z ##[group]GITHUB_TOKEN Permissions
+2026-10-22T10:30:22.1730055Z Contents: read
+2026-10-22T10:30:22.1730551Z Metadata: read
+2026-10-22T10:30:22.1731093Z Packages: read
+2026-10-22T10:30:22.1731567Z ##[endgroup]
+2026-10-22T10:30:22.1733616Z Secret source: Actions
+2026-10-22T10:30:22.1734655Z Cache mode: write
+2026-10-22T10:30:22.1735414Z Prepare workflow directory
+2026-10-22T10:30:22.2054497Z Prepare all required actions
+2026-10-22T10:30:22.2095342Z Getting action download info
+2026-10-22T10:30:22.4097581Z Download action repository 'actions/checkout@v4' (SHA:11d5960a326750d5838078e36cf38b85af677262)
+2026-10-22T10:30:22.5648411Z Download action repository 'actions/setup-python@v5' (SHA:a26af69be951a213d495a4c3e4e4022e16d87065)
+2026-10-22T10:30:22.6713475Z Download action repository 'opentofu/setup-opentofu@592200bd4b9bbf4772ace78f887668b1aee8f716' (SHA:592200bd4b9bbf4772ace78f887668b1aee8f716)
+2026-10-22T10:30:22.7944454Z Download action repository 'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02' (SHA:ea165f8d65b6e75b540449e92b4886f43607fa02)
+2026-10-22T10:30:23.0834697Z Complete job name: backend-tests (3.12)
+2026-10-22T10:30:23.1597269Z ##[group]Run actions/checkout@v4
+2026-10-22T10:30:23.1598387Z with:
+2026-10-22T10:30:23.1599121Z   repository: rblake2320/Mk-harness-
+2026-10-22T10:30:23.1605165Z   token: ***
+2026-10-22T10:30:23.1605881Z   ssh-strict: true
+2026-10-22T10:30:23.1606607Z   ssh-user: git
+2026-10-22T10:30:23.1607340Z   persist-credentials: true
+2026-10-22T10:30:23.1608118Z   clean: true
+2026-10-22T10:30:23.1608856Z   sparse-checkout-cone-mode: true
+2026-10-22T10:30:23.1609674Z   fetch-depth: 1
+2026-10-22T10:30:23.1610386Z   fetch-tags: false
+2026-10-22T10:30:23.1611115Z   show-progress: true
+2026-10-22T10:30:23.1611845Z   lfs: false
+2026-10-22T10:30:23.1612540Z   submodules: false
+2026-10-22T10:30:23.1613495Z   set-safe-directory: true
+2026-10-22T10:30:23.1614317Z   allow-unsafe-pr-checkout: false
+2026-10-22T10:30:23.1615377Z ##[endgroup]
+2026-10-22T10:30:23.2543767Z Syncing repository: rblake2320/Mk-harness-
+2026-10-22T10:30:23.2546107Z ##[group]Getting Git version info
+2026-10-22T10:30:23.2547317Z Working directory is '/home/runner/work/Mk-harness-/Mk-harness-'
+2026-10-22T10:30:23.2548870Z [command]/usr/bin/git version
+2026-10-22T10:30:23.3567374Z git version 2.55.0
+2026-10-22T10:30:23.3583602Z ##[endgroup]
+2026-10-22T10:30:23.3595557Z Temporarily overriding HOME='/home/runner/work/_temp/6b00a875-30f1-454b-8988-94708f11a98b' before making global git config changes
+2026-10-22T10:30:23.3597413Z Adding repository directory to the temporary git global config as a safe directory
+2026-10-22T10:30:23.3600205Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/Mk-harness-/Mk-harness-
+2026-10-22T10:30:23.3647995Z Deleting the contents of '/home/runner/work/Mk-harness-/Mk-harness-'
+2026-10-22T10:30:23.3651729Z ##[group]Initializing the repository
+2026-10-22T10:30:23.3654970Z [command]/usr/bin/git init /home/runner/work/Mk-harness-/Mk-harness-
+2026-10-22T10:30:23.3804836Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-10-22T10:30:23.3806491Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-10-22T10:30:23.3872700Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-10-22T10:30:23.3874776Z hint: call:
+2026-10-22T10:30:23.3875885Z hint:
+2026-10-22T10:30:23.3876760Z hint: 	git config --global init.defaultBranch <name>
+2026-10-22T10:30:23.3877680Z hint:
+2026-10-22T10:30:23.3878554Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-10-22T10:30:23.3879873Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-10-22T10:30:23.3880943Z hint:
+2026-10-22T10:30:23.3881595Z hint: 	git branch -m <name>
+2026-10-22T10:30:23.3882370Z hint:
+2026-10-22T10:30:23.3883540Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-10-22T10:30:23.3885086Z Initialized empty Git repository in /home/runner/work/Mk-harness-/Mk-harness-/.git/
+2026-10-22T10:30:23.3887746Z [command]/usr/bin/git remote add origin https://github.com/rblake2320/Mk-harness-
+2026-10-22T10:30:23.3897563Z ##[endgroup]
+2026-10-22T10:30:23.3899147Z ##[group]Disabling automatic garbage collection
+2026-10-22T10:30:23.3900476Z [command]/usr/bin/git config --local gc.auto 0
+2026-10-22T10:30:23.3928622Z ##[endgroup]
+2026-10-22T10:30:23.3929762Z ##[group]Setting up auth
+2026-10-22T10:30:23.3933947Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-10-22T10:30:23.3959594Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-10-22T10:30:23.4264135Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-10-22T10:30:23.4291748Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-10-22T10:30:23.4481948Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-10-22T10:30:23.4512219Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-10-22T10:30:23.4704912Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-10-22T10:30:23.4738973Z ##[endgroup]
+2026-10-22T10:30:23.4740833Z ##[group]Fetching the repository
+2026-10-22T10:30:23.4748162Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +d42b94cd8c497ea099cf121e4d8637fab0dec5bc:refs/remotes/pull/37/merge
+2026-10-22T10:30:24.5966073Z From https://github.com/rblake2320/Mk-harness-
+2026-10-22T10:30:24.5967510Z  * [new ref]         d42b94cd8c497ea099cf121e4d8637fab0dec5bc -> pull/37/merge
+2026-10-22T10:30:24.5969397Z ##[endgroup]
+2026-10-22T10:30:24.5969945Z ##[group]Determining the checkout info
+2026-10-22T10:30:24.5971623Z ##[endgroup]
+2026-10-22T10:30:24.5976598Z [command]/usr/bin/git sparse-checkout disable
+2026-10-22T10:30:24.6444284Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-10-22T10:30:24.6478622Z ##[group]Checking out the ref
+2026-10-22T10:30:24.6481946Z [command]/usr/bin/git checkout --progress --force refs/remotes/pull/37/merge
+2026-10-22T10:30:24.7503240Z Note: switching to 'refs/remotes/pull/37/merge'.
+2026-10-22T10:30:24.7503679Z 
+2026-10-22T10:30:24.7503958Z You are in 'detached HEAD' state. You can look around, make experimental
+2026-10-22T10:30:24.7504611Z changes and commit them, and you can discard any commits you make in this
+2026-10-22T10:30:24.7505722Z state without impacting any branches by switching back to a branch.
+2026-10-22T10:30:24.7506043Z 
+2026-10-22T10:30:24.7506257Z If you want to create a new branch to retain commits you create, you may
+2026-10-22T10:30:24.7506659Z do so (now or later) by using -c with the switch command. Example:
+2026-10-22T10:30:24.7506877Z 
+2026-10-22T10:30:24.7507010Z   git switch -c <new-branch-name>
+2026-10-22T10:30:24.7507164Z 
+2026-10-22T10:30:24.7507284Z Or undo this operation with:
+2026-10-22T10:30:24.7507437Z 
+2026-10-22T10:30:24.7507528Z   git switch -
+2026-10-22T10:30:24.7507702Z 
+2026-10-22T10:30:24.7507943Z Turn off this advice by setting config variable advice.detachedHead to false
+2026-10-22T10:30:24.7508246Z 
+2026-10-22T10:30:24.7508560Z HEAD is now at d42b94c Merge 228e97b02bd98360b5a609566b78e3888b536967 into 80e08d0ab9e9f149e0c365d29b60a6311f26f7df
+2026-10-22T10:30:24.7515804Z ##[endgroup]
+2026-10-22T10:30:24.7555515Z [command]/usr/bin/git log -1 --format=%H
+2026-10-22T10:30:24.7577010Z d42b94cd8c497ea099cf121e4d8637fab0dec5bc
+2026-10-22T10:30:24.7809735Z ##[group]Run actions/setup-python@v5
+2026-10-22T10:30:24.7810025Z with:
+2026-10-22T10:30:24.7810242Z   python-version: 3.12
+2026-10-22T10:30:24.7810457Z   cache: pip
+2026-10-22T10:30:24.7810697Z   cache-dependency-path: backend/requirements.txt
+2026-10-22T10:30:24.7810982Z   check-latest: false
+2026-10-22T10:30:24.7813175Z   token: ***
+2026-10-22T10:30:24.7813434Z   update-environment: true
+2026-10-22T10:30:24.7813672Z   allow-prereleases: false
+2026-10-22T10:30:24.7813897Z   freethreaded: false
+2026-10-22T10:30:24.7814114Z ##[endgroup]
+2026-10-22T10:30:24.8840076Z ##[group]Installed versions
+2026-10-22T10:30:24.8914681Z (node:2094) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-10-22T10:30:24.8915366Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-10-22T10:30:24.8915923Z Successfully set up CPython (3.12.15)
+2026-10-22T10:30:24.8916527Z ##[endgroup]
+2026-10-22T10:30:24.9142068Z [command]/opt/hostedtoolcache/Python/3.12.15/x64/bin/pip cache dir
+2026-10-22T10:30:25.3434174Z /home/runner/.cache/pip
+2026-10-22T10:30:25.4225431Z Cache hit for: setup-python-Linux-x64-24.04-Ubuntu-python-3.12.15-pip-0ec2644ae1a891483b1dcd37c0d01656ae1f07002fa69a2bdffe05d03feb8fc6
+2026-10-22T10:30:25.4307827Z (node:2094) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+2026-10-22T10:30:25.6944200Z Received 50412466 of 50412466 (100.0%), 202.9 MBs/sec
+2026-10-22T10:30:25.6944682Z Cache Size: ~48 MB (50412466 B)
+2026-10-22T10:30:25.6966450Z [command]/usr/bin/tar -xf /home/runner/work/_temp/ed67e2c8-b445-413a-b728-260a29d655d2/cache.tzst -P -C /home/runner/work/Mk-harness-/Mk-harness- --use-compress-program unzstd
+2026-10-22T10:30:25.8810061Z Cache restored successfully
+2026-10-22T10:30:25.8834797Z Cache restored from key: setup-python-Linux-x64-24.04-Ubuntu-python-3.12.15-pip-0ec2644ae1a891483b1dcd37c0d01656ae1f07002fa69a2bdffe05d03feb8fc6
+2026-10-22T10:30:25.9032670Z ##[group]Run sudo apt-get update -q && sudo apt-get install -y -q redis-server
+2026-10-22T10:30:25.9033454Z [36;1msudo apt-get update -q && sudo apt-get install -y -q redis-server[0m
+2026-10-22T10:30:25.9253667Z shell: /usr/bin/bash -e {0}
+2026-10-22T10:30:25.9253951Z env:
+2026-10-22T10:30:25.9254208Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-10-22T10:30:25.9254603Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.15/x64/lib/pkgconfig
+2026-10-22T10:30:25.9254972Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-10-22T10:30:25.9255291Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-10-22T10:30:25.9255600Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-10-22T10:30:25.9255915Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.15/x64/lib
+2026-10-22T10:30:25.9256185Z ##[endgroup]
+2026-10-22T10:30:26.1443740Z Get:1 https://packages.microsoft.com/ubuntu/24.04/prod noble InRelease [3600 B]
+2026-10-22T10:30:26.1518979Z Get:2 file:/etc/apt/apt-mirrors.txt Mirrorlist [144 B]
+2026-10-22T10:30:26.1833176Z Hit:3 http://azure.archive.ubuntu.com/ubuntu noble InRelease
+2026-10-22T10:30:26.1844996Z Get:4 http://azure.archive.ubuntu.com/ubuntu noble-updates InRelease [126 kB]
+2026-10-22T10:30:26.1876557Z Get:5 http://azure.archive.ubuntu.com/ubuntu noble-backports InRelease [126 kB]
+2026-10-22T10:30:26.1893560Z Get:6 http://azure.archive.ubuntu.com/ubuntu noble-security InRelease [126 kB]
+2026-10-22T10:30:26.2126681Z Get:7 https://packages.microsoft.com/ubuntu/24.04/prod noble/main amd64 Packages [630 kB]
+2026-10-22T10:30:26.2296692Z Get:8 https://packages.microsoft.com/ubuntu/24.04/prod noble/main arm64 Packages [567 kB]
+2026-10-22T10:30:26.2342387Z Get:9 https://packages.microsoft.com/ubuntu/24.04/prod noble/main armhf Packages [12.4 kB]
+2026-10-22T10:30:26.3016206Z Get:10 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 Packages [1400 kB]
+2026-10-22T10:30:26.3093984Z Get:11 http://azure.archive.ubuntu.com/ubuntu noble-updates/main Translation-en [310 kB]
+2026-10-22T10:30:26.3109936Z Get:12 http://azure.archive.ubuntu.com/ubuntu noble-updates/universe amd64 Packages [1706 kB]
+2026-10-22T10:30:26.3183577Z Get:13 http://azure.archive.ubuntu.com/ubuntu noble-updates/universe Translation-en [342 kB]
+2026-10-22T10:30:26.3213646Z Get:14 http://azure.archive.ubuntu.com/ubuntu noble-updates/restricted amd64 Packages [1805 kB]
+2026-10-22T10:30:26.3301612Z Get:15 http://azure.archive.ubuntu.com/ubuntu noble-updates/restricted Translation-en [411 kB]
+2026-10-22T10:30:26.3955679Z Get:16 http://azure.archive.ubuntu.com/ubuntu noble-security/main amd64 Packages [1146 kB]
+2026-10-22T10:30:26.4019737Z Get:17 http://azure.archive.ubuntu.com/ubuntu noble-security/main Translation-en [231 kB]
+2026-10-22T10:30:26.4037468Z Get:18 http://azure.archive.ubuntu.com/ubuntu noble-security/universe amd64 Packages [1222 kB]
+2026-10-22T10:30:26.4097429Z Get:19 http://azure.archive.ubuntu.com/ubuntu noble-security/universe Translation-en [246 kB]
+2026-10-22T10:30:26.4549492Z Get:20 http://azure.archive.ubuntu.com/ubuntu noble-security/restricted amd64 Packages [1713 kB]
+2026-10-22T10:30:26.4619862Z Get:21 http://azure.archive.ubuntu.com/ubuntu noble-security/restricted Translation-en [392 kB]
+2026-10-22T10:30:33.7997769Z Fetched 12.5 MB in 1s (11.5 MB/s)
+2026-10-22T10:30:34.5948267Z Reading package lists...
+2026-10-22T10:30:34.6209921Z Reading package lists...
+2026-10-22T10:30:34.8610643Z Building dependency tree...
+2026-10-22T10:30:34.8616696Z Reading state information...
+2026-10-22T10:30:35.0342036Z The following additional packages will be installed:
+2026-10-22T10:30:35.0345789Z   libjemalloc2 liblzf1 redis-tools
+2026-10-22T10:30:35.0350962Z Suggested packages:
+2026-10-22T10:30:35.0351315Z   ruby-redis
+2026-10-22T10:30:35.0537767Z The following NEW packages will be installed:
+2026-10-22T10:30:35.0543162Z   libjemalloc2 liblzf1 redis-server redis-tools
+2026-10-22T10:30:35.0705918Z 0 upgraded, 4 newly installed, 0 to remove and 97 not upgraded.
+2026-10-22T10:30:35.0706777Z Need to get 1482 kB of archives.
+2026-10-22T10:30:35.0707364Z After this operation, 7568 kB of additional disk space will be used.
+2026-10-22T10:30:35.0707790Z Get:1 file:/etc/apt/apt-mirrors.txt Mirrorlist [144 B]
+2026-10-22T10:30:35.1779199Z Get:2 http://azure.archive.ubuntu.com/ubuntu noble/universe amd64 libjemalloc2 amd64 5.3.0-2build1 [256 kB]
+2026-10-22T10:30:35.2588159Z Get:3 http://azure.archive.ubuntu.com/ubuntu noble/universe amd64 liblzf1 amd64 3.6-4 [7624 B]
+2026-10-22T10:30:35.3357921Z Get:4 http://azure.archive.ubuntu.com/ubuntu noble-updates/universe amd64 redis-tools amd64 5:7.0.15-1ubuntu0.24.04.5 [1167 kB]
+2026-10-22T10:30:35.4293824Z Get:5 http://azure.archive.ubuntu.com/ubuntu noble-updates/universe amd64 redis-server amd64 5:7.0.15-1ubuntu0.24.04.5 [51.7 kB]
+2026-10-22T10:30:35.7171874Z Fetched 1482 kB in 0s (4027 kB/s)
+2026-10-22T10:30:35.7684017Z Selecting previously unselected package libjemalloc2:amd64.
+2026-10-22T10:30:35.7958285Z (Reading database ... 
+2026-10-22T10:30:35.7958824Z (Reading database ... 5%
+2026-10-22T10:30:35.7959075Z (Reading database ... 10%
+2026-10-22T10:30:35.7959270Z (Reading database ... 15%
+2026-10-22T10:30:35.7959471Z (Reading database ... 20%
+2026-10-22T10:30:35.7959658Z (Reading database ... 25%
+2026-10-22T10:30:35.7959859Z (Reading database ... 30%
+2026-10-22T10:30:35.7960046Z (Reading database ... 35%
+2026-10-22T10:30:35.7960239Z (Reading database ... 40%
+2026-10-22T10:30:35.7960423Z (Reading database ... 45%
+2026-10-22T10:30:35.7960678Z (Reading database ... 50%
+2026-10-22T10:30:35.8009443Z (Reading database ... 55%
+2026-10-22T10:30:35.9059146Z (Reading database ... 60%
+2026-10-22T10:30:36.1288170Z (Reading database ... 65%
+2026-10-22T10:30:36.3632137Z (Reading database ... 70%
+2026-10-22T10:30:36.5608367Z (Reading database ... 75%
+2026-10-22T10:30:36.7498899Z (Reading database ... 80%
+2026-10-22T10:30:36.9558193Z (Reading database ... 85%
+2026-10-22T10:30:37.1511749Z (Reading database ... 90%
+2026-10-22T10:30:37.3494800Z (Reading database ... 95%
+2026-10-22T10:30:37.3495175Z (Reading database ... 100%
+2026-10-22T10:30:37.3495576Z (Reading database ... 203540 files and directories currently installed.)
+2026-10-22T10:30:37.3539179Z Preparing to unpack .../libjemalloc2_5.3.0-2build1_amd64.deb ...
+2026-10-22T10:30:37.3632442Z Unpacking libjemalloc2:amd64 (5.3.0-2build1) ...
+2026-10-22T10:30:37.4607252Z Selecting previously unselected package liblzf1:amd64.
+2026-10-22T10:30:37.4729524Z Preparing to unpack .../liblzf1_3.6-4_amd64.deb ...
+2026-10-22T10:30:37.4737429Z Unpacking liblzf1:amd64 (3.6-4) ...
+2026-10-22T10:30:37.4917320Z Selecting previously unselected package redis-tools.
+2026-10-22T10:30:37.5040053Z Preparing to unpack .../redis-tools_5%3a7.0.15-1ubuntu0.24.04.5_amd64.deb ...
+2026-10-22T10:30:37.5048403Z Unpacking redis-tools (5:7.0.15-1ubuntu0.24.04.5) ...
+2026-10-22T10:30:37.5922412Z Selecting previously unselected package redis-server.
+2026-10-22T10:30:37.6036713Z Preparing to unpack .../redis-server_5%3a7.0.15-1ubuntu0.24.04.5_amd64.deb ...
+2026-10-22T10:30:37.6186931Z Unpacking redis-server (5:7.0.15-1ubuntu0.24.04.5) ...
+2026-10-22T10:30:37.6563382Z Setting up libjemalloc2:amd64 (5.3.0-2build1) ...
+2026-10-22T10:30:37.7008044Z Setting up liblzf1:amd64 (3.6-4) ...
+2026-10-22T10:30:37.7042462Z Setting up redis-tools (5:7.0.15-1ubuntu0.24.04.5) ...
+2026-10-22T10:30:38.0840914Z Setting up redis-server (5:7.0.15-1ubuntu0.24.04.5) ...
+2026-10-22T10:30:38.6207926Z Created symlink /etc/systemd/system/redis.service → /usr/lib/systemd/system/redis-server.service.
+2026-10-22T10:30:38.6208382Z 
+2026-10-22T10:30:38.6208965Z Created symlink /etc/systemd/system/multi-user.target.wants/redis-server.service → /usr/lib/systemd/system/redis-server.service.
+2026-10-22T10:30:38.6209573Z 
+2026-10-22T10:30:38.9505930Z Processing triggers for man-db (2.12.0-4build2) ...
+2026-10-22T10:30:38.9529330Z Not building database; man-db/auto-update is not 'true'.
+2026-10-22T10:30:38.9546639Z Processing triggers for libc-bin (2.39-0ubuntu8.9) ...
+2026-10-22T10:30:40.6419037Z 
+2026-10-22T10:30:40.6419592Z Running kernel seems to be up-to-date.
+2026-10-22T10:30:40.6419892Z 
+2026-10-22T10:30:40.6420010Z No services need to be restarted.
+2026-10-22T10:30:40.6420223Z 
+2026-10-22T10:30:40.6420355Z No containers need to be restarted.
+2026-10-22T10:30:40.6420562Z 
+2026-10-22T10:30:40.6420710Z No user sessions are running outdated binaries.
+2026-10-22T10:30:40.6420949Z 
+2026-10-22T10:30:40.6421169Z No VM guests are running outdated hypervisor (qemu) binaries on this host.
+2026-10-22T10:30:41.8419546Z ##[group]Run pip install --require-hashes -r requirements.txt
+2026-10-22T10:30:41.8419921Z [36;1mpip install --require-hashes -r requirements.txt[0m
+2026-10-22T10:30:41.8474762Z shell: /usr/bin/bash -e {0}
+2026-10-22T10:30:41.8474975Z env:
+2026-10-22T10:30:41.8475202Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-10-22T10:30:41.8475711Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.15/x64/lib/pkgconfig
+2026-10-22T10:30:41.8476056Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-10-22T10:30:41.8476355Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-10-22T10:30:41.8476656Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-10-22T10:30:41.8476958Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.15/x64/lib
+2026-10-22T10:30:41.8477216Z ##[endgroup]
+2026-10-22T10:30:42.4684646Z Collecting annotated-doc==0.0.5 (from -r requirements.txt (line 3))
+2026-10-22T10:30:42.4696993Z   Using cached annotated_doc-0.0.5-py3-none-any.whl (5.3 kB)
+2026-10-22T10:30:42.4826734Z Collecting annotated-types==0.8.0 (from -r requirements.txt (line 9))
+2026-10-22T10:30:42.4837243Z   Using cached annotated_types-0.8.0-py3-none-any.whl (13 kB)
+2026-10-22T10:30:42.4947080Z Collecting anyio==4.15.1 (from -r requirements.txt (line 15))
+2026-10-22T10:30:42.4957822Z   Using cached anyio-4.15.1-py3-none-any.whl (132 kB)
+2026-10-22T10:30:42.5093527Z Collecting argon2-cffi==23.1.0 (from -r requirements.txt (line 23))
+2026-10-22T10:30:42.5104089Z   Using cached argon2_cffi-23.1.0-py3-none-any.whl (15 kB)
+2026-10-22T10:30:42.5207649Z Collecting argon2-cffi-bindings==26.1.0 (from -r requirements.txt (line 29))
+2026-10-22T10:30:42.5218607Z   Using cached argon2_cffi_bindings-26.1.0-cp310-abi3-manylinux_2_26_x86_64.manylinux_2_28_x86_64.whl (26 kB)
+2026-10-22T10:30:42.5338623Z Collecting arrow==1.4.0 (from -r requirements.txt (line 74))
+2026-10-22T10:30:42.5353844Z   Using cached arrow-1.4.0-py3-none-any.whl (68 kB)
+2026-10-22T10:30:42.5503033Z Collecting attrs==26.1.0 (from -r requirements.txt (line 78))
+2026-10-22T10:30:42.5514423Z   Using cached attrs-26.1.0-py3-none-any.whl (67 kB)
+2026-10-22T10:30:42.5637457Z Collecting certifi==2026.10.19 (from -r requirements.txt (line 84))
+2026-10-22T10:30:42.5648300Z   Using cached certifi-2026.10.19-py3-none-any.whl (136 kB)
+2026-10-22T10:30:42.6528489Z Collecting cffi==2.1.1 (from -r requirements.txt (line 91))
+2026-10-22T10:30:42.6539975Z   Using cached cffi-2.1.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (221 kB)
+2026-10-22T10:30:42.6640614Z Collecting click==8.5.0 (from -r requirements.txt (line 196))
+2026-10-22T10:30:42.6650014Z   Using cached click-8.5.0-py3-none-any.whl (125 kB)
+2026-10-22T10:30:42.6750516Z Collecting colorama==0.4.6 (from -r requirements.txt (line 202))
+2026-10-22T10:30:42.6759846Z   Using cached colorama-0.4.6-py2.py3-none-any.whl (25 kB)
+2026-10-22T10:30:42.8033606Z Collecting cryptography==50.0.2 (from -r requirements.txt (line 209))
+2026-10-22T10:30:42.8045204Z   Using cached cryptography-50.0.2-cp311-abi3-manylinux_2_34_x86_64.whl (4.8 MB)
+2026-10-22T10:30:42.8184342Z Collecting dnspython==2.9.0 (from -r requirements.txt (line 272))
+2026-10-22T10:30:42.8193643Z   Using cached dnspython-2.9.0-py3-none-any.whl (354 kB)
+2026-10-22T10:30:42.8297339Z Collecting email-validator==2.2.0 (from -r requirements.txt (line 278))
+2026-10-22T10:30:42.8306695Z   Using cached email_validator-2.2.0-py3-none-any.whl (33 kB)
+2026-10-22T10:30:42.8580667Z Collecting fastapi==0.159.1 (from -r requirements.txt (line 284))
+2026-10-22T10:30:42.8591745Z   Using cached fastapi-0.159.1-py3-none-any.whl (149 kB)
+2026-10-22T10:30:42.8706746Z Collecting fqdn==1.6.0 (from -r requirements.txt (line 290))
+2026-10-22T10:30:42.8716362Z   Using cached fqdn-1.6.0-py3-none-any.whl (12 kB)
+2026-10-22T10:30:42.9728914Z Collecting greenlet==3.5.6 (from -r requirements.txt (line 294))
+2026-10-22T10:30:42.9740009Z   Using cached greenlet-3.5.6-cp312-cp312-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl (621 kB)
+2026-10-22T10:30:42.9825044Z Collecting h11==0.16.0 (from -r requirements.txt (line 377))
+2026-10-22T10:30:42.9834027Z   Using cached h11-0.16.0-py3-none-any.whl (37 kB)
+2026-10-22T10:30:42.9932089Z Collecting httpcore==1.0.9 (from -r requirements.txt (line 384))
+2026-10-22T10:30:42.9943301Z   Using cached httpcore-1.0.9-py3-none-any.whl (78 kB)
+2026-10-22T10:30:43.0197116Z Collecting httptools==0.9.0 (from -r requirements.txt (line 390))
+2026-10-22T10:30:43.0208859Z   Using cached httptools-0.9.0-cp312-cp312-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl (552 kB)
+2026-10-22T10:30:43.0319548Z Collecting httpx==0.28.1 (from -r requirements.txt (line 512))
+2026-10-22T10:30:43.0329518Z   Using cached httpx-0.28.1-py3-none-any.whl (73 kB)
+2026-10-22T10:30:43.0420510Z Collecting idna==3.20 (from -r requirements.txt (line 519))
+2026-10-22T10:30:43.0429552Z   Using cached idna-3.20-py3-none-any.whl (69 kB)
+2026-10-22T10:30:43.0500658Z Collecting iniconfig==2.3.1 (from -r requirements.txt (line 528))
+2026-10-22T10:30:43.0509573Z   Using cached iniconfig-2.3.1-py3-none-any.whl (7.6 kB)
+2026-10-22T10:30:43.0567031Z Collecting isoduration==20.11.0 (from -r requirements.txt (line 532))
+2026-10-22T10:30:43.0575912Z   Using cached isoduration-20.11.0-py3-none-any.whl (11 kB)
+2026-10-22T10:30:43.0771080Z Collecting jsonpointer==3.4 (from -r requirements.txt (line 536))
+2026-10-22T10:30:43.0780565Z   Using cached jsonpointer-3.4-py3-none-any.whl (9.0 kB)
+2026-10-22T10:30:43.0902520Z Collecting jsonschema==4.23.0 (from -r requirements.txt (line 540))
+2026-10-22T10:30:43.0912208Z   Using cached jsonschema-4.23.0-py3-none-any.whl (88 kB)
+2026-10-22T10:30:43.0999716Z Collecting jsonschema-specifications==2025.9.1 (from -r requirements.txt (line 544))
+2026-10-22T10:30:43.1008841Z   Using cached jsonschema_specifications-2025.9.1-py3-none-any.whl (18 kB)
+2026-10-22T10:30:43.1126628Z Collecting opentelemetry-api==1.45.1 (from -r requirements.txt (line 548))
+2026-10-22T10:30:43.1137199Z   Using cached opentelemetry_api-1.45.1-py3-none-any.whl (60 kB)
+2026-10-22T10:30:43.1239374Z Collecting packaging==26.3 (from -r requirements.txt (line 554))
+2026-10-22T10:30:43.1249607Z   Using cached packaging-26.3-py3-none-any.whl (129 kB)
+2026-10-22T10:30:43.2812071Z Collecting pillow==13.0.0 (from -r requirements.txt (line 558))
+2026-10-22T10:30:43.2823227Z   Using cached pillow-13.0.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (7.1 MB)
+2026-10-22T10:30:43.2999394Z Collecting pluggy==1.7.0 (from -r requirements.txt (line 645))
+2026-10-22T10:30:43.3008342Z   Using cached pluggy-1.7.0-py3-none-any.whl (27 kB)
+2026-10-22T10:30:43.3108544Z Collecting psycopg==3.2.9 (from -r requirements.txt (line 649))
+2026-10-22T10:30:43.3118020Z   Using cached psycopg-3.2.9-py3-none-any.whl (202 kB)
+2026-10-22T10:30:43.4212298Z Collecting psycopg-binary==3.2.9 (from -r requirements.txt (line 655))
+2026-10-22T10:30:43.4241736Z   Using cached psycopg_binary-3.2.9-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (4.4 MB)
+2026-10-22T10:30:43.4350320Z Collecting pycparser==3.11 (from -r requirements.txt (line 724))
+2026-10-22T10:30:43.4359943Z   Using cached pycparser-3.11-py3-none-any.whl (51 kB)
+2026-10-22T10:30:43.5066604Z Collecting pydantic==2.14.1 (from -r requirements.txt (line 730))
+2026-10-22T10:30:43.5078174Z   Using cached pydantic-2.14.1-py3-none-any.whl (488 kB)
+2026-10-22T10:30:44.0177106Z Collecting pydantic-core==2.50.1 (from -r requirements.txt (line 737))
+2026-10-22T10:30:44.0189511Z   Using cached pydantic_core-2.50.1-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (2.2 MB)
+2026-10-22T10:30:44.0316435Z Collecting pydantic-settings==2.9.1 (from -r requirements.txt (line 878))
+2026-10-22T10:30:44.0326673Z   Using cached pydantic_settings-2.9.1-py3-none-any.whl (44 kB)
+2026-10-22T10:30:44.0449687Z Collecting pygments==2.21.0 (from -r requirements.txt (line 884))
+2026-10-22T10:30:44.0460431Z   Using cached pygments-2.21.0-py3-none-any.whl (1.3 MB)
+2026-10-22T10:30:44.0592384Z Collecting pyjwt==2.15.1 (from -r requirements.txt (line 888))
+2026-10-22T10:30:44.0602698Z   Using cached pyjwt-2.15.1-py3-none-any.whl (33 kB)
+2026-10-22T10:30:44.0686889Z Collecting pyotp==2.10.0 (from -r requirements.txt (line 894))
+2026-10-22T10:30:44.0696995Z   Using cached pyotp-2.10.0-py3-none-any.whl (13 kB)
+2026-10-22T10:30:44.0862391Z Collecting pytest==9.1.1 (from -r requirements.txt (line 900))
+2026-10-22T10:30:44.0875241Z   Using cached pytest-9.1.1-py3-none-any.whl (386 kB)
+2026-10-22T10:30:44.1001914Z Collecting pytest-asyncio==1.4.0 (from -r requirements.txt (line 906))
+2026-10-22T10:30:44.1013925Z   Using cached pytest_asyncio-1.4.0-py3-none-any.whl (16 kB)
+2026-10-22T10:30:44.1101746Z Collecting python-dateutil==3.0.0 (from -r requirements.txt (line 910))
+2026-10-22T10:30:44.1113435Z   Using cached python_dateutil-3.0.0-py2.py3-none-any.whl (94 kB)
+2026-10-22T10:30:44.1211079Z Collecting python-dotenv==1.2.4 (from -r requirements.txt (line 914))
+2026-10-22T10:30:44.1221136Z   Using cached python_dotenv-1.2.4-py3-none-any.whl (23 kB)
+2026-10-22T10:30:44.1312909Z Collecting python-multipart==0.0.32 (from -r requirements.txt (line 921))
+2026-10-22T10:30:44.1322657Z   Using cached python_multipart-0.0.32-py3-none-any.whl (30 kB)
+2026-10-22T10:30:44.1562530Z Collecting pyyaml==6.0.3 (from -r requirements.txt (line 927))
+2026-10-22T10:30:44.1574292Z   Using cached pyyaml-6.0.3-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (807 kB)
+2026-10-22T10:30:44.1726485Z Collecting redis==5.2.1 (from -r requirements.txt (line 1004))
+2026-10-22T10:30:44.1736681Z   Using cached redis-5.2.1-py3-none-any.whl (261 kB)
+2026-10-22T10:30:44.1871756Z Collecting referencing==0.37.0 (from -r requirements.txt (line 1010))
+2026-10-22T10:30:44.1881623Z   Using cached referencing-0.37.0-py3-none-any.whl (26 kB)
+2026-10-22T10:30:44.1973759Z Collecting respx==0.22.0 (from -r requirements.txt (line 1016))
+2026-10-22T10:30:44.1982719Z   Using cached respx-0.22.0-py2.py3-none-any.whl (25 kB)
+2026-10-22T10:30:44.2045765Z Collecting rfc3339-validator==0.1.4 (from -r requirements.txt (line 1020))
+2026-10-22T10:30:44.2055746Z   Using cached rfc3339_validator-0.1.4-py2.py3-none-any.whl (3.5 kB)
+2026-10-22T10:30:44.2118343Z Collecting rfc3987==1.3.8 (from -r requirements.txt (line 1024))
+2026-10-22T10:30:44.2129731Z   Using cached rfc3987-1.3.8-py2.py3-none-any.whl (13 kB)
+2026-10-22T10:30:44.4399862Z Collecting rpds-py==2026.9.1 (from -r requirements.txt (line 1028))
+2026-10-22T10:30:44.4412011Z   Using cached rpds_py-2026.9.1-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (371 kB)
+2026-10-22T10:30:44.4524505Z Collecting six==1.17.0 (from -r requirements.txt (line 1160))
+2026-10-22T10:30:44.4535298Z   Using cached six-1.17.0-py2.py3-none-any.whl (11 kB)
+2026-10-22T10:30:44.6633716Z Collecting sqlalchemy==2.0.41 (from -r requirements.txt (line 1166))
+2026-10-22T10:30:44.6645228Z   Using cached sqlalchemy-2.0.41-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (3.3 MB)
+2026-10-22T10:30:44.6924643Z Collecting starlette==1.9.0 (from -r requirements.txt (line 1227))
+2026-10-22T10:30:44.6936132Z   Using cached starlette-1.9.0-py3-none-any.whl (80 kB)
+2026-10-22T10:30:44.7041181Z Collecting typing-extensions==4.16.0 (from -r requirements.txt (line 1234))
+2026-10-22T10:30:44.7050728Z   Using cached typing_extensions-4.16.0-py3-none-any.whl (45 kB)
+2026-10-22T10:30:44.7123042Z Collecting typing-inspection==0.4.4 (from -r requirements.txt (line 1250))
+2026-10-22T10:30:44.7132358Z   Using cached typing_inspection-0.4.4-py3-none-any.whl (14 kB)
+2026-10-22T10:30:44.7222402Z Collecting tzdata==2026.5 (from -r requirements.txt (line 1258))
+2026-10-22T10:30:44.7231981Z   Using cached tzdata-2026.5-py2.py3-none-any.whl (347 kB)
+2026-10-22T10:30:44.7318941Z Collecting uri-template==1.3.0 (from -r requirements.txt (line 1266))
+2026-10-22T10:30:44.7328017Z   Using cached uri_template-1.3.0-py3-none-any.whl (11 kB)
+2026-10-22T10:30:44.7475162Z Collecting uvicorn==0.34.2 (from -r requirements.txt (line 1270))
+2026-10-22T10:30:44.7486019Z   Using cached uvicorn-0.34.2-py3-none-any.whl (62 kB)
+2026-10-22T10:30:44.8012448Z Collecting watchfiles==1.3.0 (from -r requirements.txt (line 1276))
+2026-10-22T10:30:44.8023803Z   Using cached watchfiles-1.3.0-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (458 kB)
+2026-10-22T10:30:44.8102599Z Collecting webcolors==25.10.0 (from -r requirements.txt (line 1313))
+2026-10-22T10:30:44.8111817Z   Using cached webcolors-25.10.0-py3-none-any.whl (14 kB)
+2026-10-22T10:30:44.8963335Z Collecting websockets==17.3 (from -r requirements.txt (line 1317))
+2026-10-22T10:30:44.8975263Z   Using cached websockets-17.3-cp312-cp312-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl (225 kB)
+2026-10-22T10:30:45.3906610Z Installing collected packages: rfc3987, websockets, webcolors, uri-template, tzdata, typing-extensions, six, rpds-py, redis, pyyaml, python-multipart, python-dotenv, pyotp, pyjwt, pygments, pycparser, psycopg-binary, pluggy, pillow, packaging, jsonpointer, iniconfig, idna, httptools, h11, greenlet, fqdn, dnspython, colorama, click, certifi, attrs, annotated-types, annotated-doc, uvicorn, typing-inspection, sqlalchemy, rfc3339-validator, referencing, python-dateutil, pytest, pydantic-core, psycopg, opentelemetry-api, httpcore, email-validator, cffi, anyio, watchfiles, starlette, pytest-asyncio, pydantic, jsonschema-specifications, httpx, cryptography, arrow, argon2-cffi-bindings, respx, pydantic-settings, jsonschema, isoduration, fastapi, argon2-cffi
+2026-10-22T10:30:50.6797590Z 
+2026-10-22T10:30:50.6837799Z Successfully installed annotated-doc-0.0.5 annotated-types-0.8.0 anyio-4.15.1 argon2-cffi-23.1.0 argon2-cffi-bindings-26.1.0 arrow-1.4.0 attrs-26.1.0 certifi-2026.10.19 cffi-2.1.1 click-8.5.0 colorama-0.4.6 cryptography-50.0.2 dnspython-2.9.0 email-validator-2.2.0 fastapi-0.159.1 fqdn-1.6.0 greenlet-3.5.6 h11-0.16.0 httpcore-1.0.9 httptools-0.9.0 httpx-0.28.1 idna-3.20 iniconfig-2.3.1 isoduration-20.11.0 jsonpointer-3.4 jsonschema-4.23.0 jsonschema-specifications-2025.9.1 opentelemetry-api-1.45.1 packaging-26.3 pillow-13.0.0 pluggy-1.7.0 psycopg-3.2.9 psycopg-binary-3.2.9 pycparser-3.11 pydantic-2.14.1 pydantic-core-2.50.1 pydantic-settings-2.9.1 pygments-2.21.0 pyjwt-2.15.1 pyotp-2.10.0 pytest-9.1.1 pytest-asyncio-1.4.0 python-dateutil-3.0.0 python-dotenv-1.2.4 python-multipart-0.0.32 pyyaml-6.0.3 redis-5.2.1 referencing-0.37.0 respx-0.22.0 rfc3339-validator-0.1.4 rfc3987-1.3.8 rpds-py-2026.9.1 six-1.17.0 sqlalchemy-2.0.41 starlette-1.9.0 typing-extensions-4.16.0 typing-inspection-0.4.4 tzdata-2026.5 uri-template-1.3.0 uvicorn-0.34.2 watchfiles-1.3.0 webcolors-25.10.0 websockets-17.3
+2026-10-22T10:30:50.6845706Z 
+2026-10-22T10:30:50.6846005Z [notice] A new release of pip is available: 26.2.1 -> 26.2.2
+2026-10-22T10:30:50.6846474Z [notice] To update, run: pip install --upgrade pip
+2026-10-22T10:30:50.9651811Z ##[group]Run python -m pytest tools/verification/test_image_security.py tools/release/test_deployment_source.py tools/release/test_deployment_workflow.py tools/release/test_image_provenance.py tools/release/test_production_plan.py -q
+2026-10-22T10:30:50.9653340Z [36;1mpython -m pytest tools/verification/test_image_security.py tools/release/test_deployment_source.py tools/release/test_deployment_workflow.py tools/release/test_image_provenance.py tools/release/test_production_plan.py -q[0m
+2026-10-22T10:30:50.9709272Z shell: /usr/bin/bash -e {0}
+2026-10-22T10:30:50.9709506Z env:
+2026-10-22T10:30:50.9709741Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-10-22T10:30:50.9710098Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.15/x64/lib/pkgconfig
+2026-10-22T10:30:50.9710448Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-10-22T10:30:50.9710751Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-10-22T10:30:50.9711096Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-10-22T10:30:50.9711396Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.15/x64/lib
+2026-10-22T10:30:50.9711658Z ##[endgroup]
+2026-10-22T10:30:51.7897027Z ........................................................................ [ 52%]
+2026-10-22T10:30:52.0968488Z ..................................................................       [100%]
+2026-10-22T10:30:52.0968953Z 138 passed in 0.44s
+2026-10-22T10:30:52.1620625Z ##[group]Run opentofu/setup-opentofu@592200bd4b9bbf4772ace78f887668b1aee8f716
+2026-10-22T10:30:52.1620938Z with:
+2026-10-22T10:30:52.1621249Z   tofu_version: 1.10.6
+2026-10-22T10:30:52.1621429Z   tofu_wrapper: false
+2026-10-22T10:30:52.1621646Z   cli_config_credentials_hostname: app.terraform.io
+2026-10-22T10:30:52.1621879Z env:
+2026-10-22T10:30:52.1622089Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-10-22T10:30:52.1622424Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.15/x64/lib/pkgconfig
+2026-10-22T10:30:52.1622761Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-10-22T10:30:52.1623258Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-10-22T10:30:52.1623564Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-10-22T10:30:52.1623863Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.15/x64/lib
+2026-10-22T10:30:52.1624126Z ##[endgroup]
+2026-10-22T10:30:52.5969027Z [command]/usr/bin/unzip -o -q /home/runner/work/_temp/58e32fab-6402-467f-8db6-019385149d1f
+2026-10-22T10:30:53.0973123Z ##[group]Run python tools/verification/production_plan_control.py --tofu "$(command -v tofu)" --output deployment-plan-control
+2026-10-22T10:30:53.0973848Z [36;1mpython tools/verification/production_plan_control.py --tofu "$(command -v tofu)" --output deployment-plan-control[0m
+2026-10-22T10:30:53.1030017Z shell: /usr/bin/bash -e {0}
+2026-10-22T10:30:53.1030238Z env:
+2026-10-22T10:30:53.1030469Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-10-22T10:30:53.1030823Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.15/x64/lib/pkgconfig
+2026-10-22T10:30:53.1031187Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-10-22T10:30:53.1031492Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-10-22T10:30:53.1031798Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-10-22T10:30:53.1032097Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.15/x64/lib
+2026-10-22T10:30:53.1032359Z ##[endgroup]
+2026-10-22T10:30:53.2603232Z {"scope": "author-run local builtin Terraform resource only; not cloud deployment or human approval", "outcome": "Failed", "checks": [{"check": "disposable_builtin_fixture_initialized", "outcome": "Worked", "exit": 0}, {"check": "actual_local_plan_created", "outcome": "Worked", "exit": 0}, {"check": "only_owned_builtin_resource_can_be_applied", "outcome": "Worked"}, {"check": "real_cli_seals_actual_binary", "outcome": "Failed", "exit": 1}, {"check": "control_completed", "outcome": "Failed", "error_type": "RuntimeError"}]}
+2026-10-22T10:30:53.2693323Z ##[error]Process completed with exit code 1.
+2026-10-22T10:30:53.2751014Z ##[group]Run actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+2026-10-22T10:30:53.2751340Z with:
+2026-10-22T10:30:53.2751518Z   name: deployment-plan-control
+2026-10-22T10:30:53.2751740Z   path: deployment-plan-control
+2026-10-22T10:30:53.2751943Z   if-no-files-found: error
+2026-10-22T10:30:53.2752138Z   compression-level: 6
+2026-10-22T10:30:53.2752315Z   overwrite: false
+2026-10-22T10:30:53.2752497Z   include-hidden-files: false
+2026-10-22T10:30:53.2752687Z env:
+2026-10-22T10:30:53.2753090Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-10-22T10:30:53.2753456Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.15/x64/lib/pkgconfig
+2026-10-22T10:30:53.2753793Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-10-22T10:30:53.2754118Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-10-22T10:30:53.2754412Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-10-22T10:30:53.2754748Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.15/x64/lib
+2026-10-22T10:30:53.2755009Z ##[endgroup]
+2026-10-22T10:30:53.4035639Z (node:2883) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-10-22T10:30:53.4036206Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-10-22T10:30:53.4075532Z With the provided path, there will be 1 file uploaded
+2026-10-22T10:30:53.4079023Z Artifact name is valid!
+2026-10-22T10:30:53.4079641Z Root directory input is valid!
+2026-10-22T10:30:53.6123578Z Beginning upload of artifact content to blob storage
+2026-10-22T10:30:53.6265060Z (node:2883) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+2026-10-22T10:30:53.6700624Z Uploaded bytes 414
+2026-10-22T10:30:53.6870401Z Finished uploading artifact content to blob storage!
+2026-10-22T10:30:53.6871196Z SHA256 digest of uploaded artifact zip is df86b006865831b570b4f7c0fbe1db470d9a8ad527abcf3fc6368cce68640961
+2026-10-22T10:30:53.6872218Z Finalizing artifact upload
+2026-10-22T10:30:54.1699650Z Artifact deployment-plan-control.zip successfully finalized. Artifact ID 12418572953
+2026-10-22T10:30:54.1700538Z Artifact deployment-plan-control has been successfully uploaded! Final size is 414 bytes. Artifact ID is 12418572953
+2026-10-22T10:30:54.1705396Z Artifact download URL: https://github.com/rblake2320/Mk-harness-/actions/runs/39763590472/artifacts/12418572953
+2026-10-22T10:30:54.1886027Z Post job cleanup.
+2026-10-22T10:30:54.2559286Z [command]/usr/bin/git version
+2026-10-22T10:30:54.2589681Z git version 2.55.0
+2026-10-22T10:30:54.2617969Z Temporarily overriding HOME='/home/runner/work/_temp/2a191df1-b498-46c3-87ae-d9cb6c3aaa7d' before making global git config changes
+2026-10-22T10:30:54.2619234Z Adding repository directory to the temporary git global config as a safe directory
+2026-10-22T10:30:54.2623106Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/Mk-harness-/Mk-harness-
+2026-10-22T10:30:54.2653828Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-10-22T10:30:54.2682274Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-10-22T10:30:54.2882323Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-10-22T10:30:54.2905522Z http.https://github.com/.extraheader
+2026-10-22T10:30:54.2913966Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-10-22T10:30:54.2942162Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-10-22T10:30:54.3132389Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-10-22T10:30:54.3159431Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-10-22T10:30:54.3478246Z Cleaning up orphan processes
+2026-10-22T10:30:54.3748228Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/setup-python@v5, actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02, opentofu/setup-opentofu@592200bd4b9bbf4772ace78f887668b1aee8f716. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/

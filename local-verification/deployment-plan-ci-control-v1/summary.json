@@ -1,0 +1,30 @@
+{
+  "scope": "author-run local builtin Terraform resource only; not cloud deployment or human approval",
+  "outcome": "Failed",
+  "checks": [
+    {
+      "check": "disposable_builtin_fixture_initialized",
+      "outcome": "Worked",
+      "exit": 0
+    },
+    {
+      "check": "actual_local_plan_created",
+      "outcome": "Worked",
+      "exit": 0
+    },
+    {
+      "check": "only_owned_builtin_resource_can_be_applied",
+      "outcome": "Worked"
+    },
+    {
+      "check": "real_cli_seals_actual_binary",
+      "outcome": "Failed",
+      "exit": 1
+    },
+    {
+      "check": "control_completed",
+      "outcome": "Failed",
+      "error_type": "RuntimeError"
+    }
+  ]
+}

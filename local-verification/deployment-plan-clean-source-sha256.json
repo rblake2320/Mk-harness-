@@ -1,0 +1,70 @@
+{
+  "source": "da65913c1e7d19dfc508e5d870c8469924861b7a",
+  "files": [
+    {
+      "path": "local-verification/deployment-plan-app-ci-v1.json",
+      "bytes": 11015,
+      "sha256": "a6f7543c228561261e11c0c92c0921deda2f0cfb8a7fa483250bdefacb45085d"
+    },
+    {
+      "path": "local-verification/deployment-plan-ci-control-v1/summary.json",
+      "bytes": 674,
+      "sha256": "bd70a1b9615a1f8a7b3aac1fc6bc9942efb3df3bec726c948e94cf51e1264832"
+    },
+    {
+      "path": "local-verification/deployment-plan-ci-first-failure.log",
+      "bytes": 44744,
+      "sha256": "b6f2333edda0484345f8e36860eeeb4b6837e85090c9f6b3c5787bca3662a72a"
+    },
+    {
+      "path": "local-verification/deployment-plan-clean-source-batch.md",
+      "bytes": 1906,
+      "sha256": "e043eb60568627891d4a5794bd12f13adfa3d834d98a0707782f2aadbc9508ff"
+    },
+    {
+      "path": "local-verification/deployment-plan-clean-source-control-v1/encrypted-package/plan.enc.json",
+      "bytes": 3443,
+      "sha256": "584d88a0223d2b2cfaf5bab01a552e2a8c01d34e3c00de14b88ebfc395a43cc6"
+    },
+    {
+      "path": "local-verification/deployment-plan-clean-source-control-v1/encrypted-package/review.json",
+      "bytes": 139,
+      "sha256": "4b159b70d087580975c154604016991d3e05eb0b63c6e19ef785e069ba39bad7"
+    },
+    {
+      "path": "local-verification/deployment-plan-clean-source-control-v1/seal-report.json",
+      "bytes": 1399,
+      "sha256": "55b547e619e28697ca6a44e928d330260f0974679e19da815a6f4c9ff9134c90"
+    },
+    {
+      "path": "local-verification/deployment-plan-clean-source-control-v1/summary.json",
+      "bytes": 2054,
+      "sha256": "3a8bd495e95f187392bc566e489f764f1ca21a5cadfad3020d514e3cda5787b3"
+    },
+    {
+      "path": "local-verification/deployment-plan-clean-source-secret-scan.json",
+      "bytes": 3,
+      "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+    },
+    {
+      "path": "local-verification/deployment-plan-green-v5.log",
+      "bytes": 1507,
+      "sha256": "43b9ca49d973df3f0ac73903f9cefa817edc61378205b2ce956d16a21058d0dc"
+    },
+    {
+      "path": "local-verification/deployment-plan-green-v5.xml",
+      "bytes": 22649,
+      "sha256": "829a3baa9f1a7d2dd34f66c5894c30ca31db4a68e7d9a5c2bfb4e1cc1d75e3d5"
+    },
+    {
+      "path": "local-verification/deployment-plan-green-v6.log",
+      "bytes": 955,
+      "sha256": "0ac055eca684cfbace377e7fbb1098270daebf49b99b95ca5e8b2de4984de21f"
+    },
+    {
+      "path": "local-verification/deployment-plan-green-v6.xml",
+      "bytes": 21694,
+      "sha256": "441885228a3f549b4fa4e4fbcc81f218bd5ecfc8db743bf1847147017d1e6d25"
+    }
+  ]
+}
