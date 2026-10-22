@@ -1,0 +1,179 @@
+{
+  "scope": "author-run controls, not independent release qualification",
+  "source_commit": "1294e98b9f1fbdbaf9e73d9ea7323794c9265349",
+  "created_at": "2026-10-22T11:26:38.5248316Z",
+  "files": [
+    {
+      "path": "local-verification/billing-provision-app-ci-v1.json",
+      "sha256": "dfc1f66843eb2aed2ed835b94406ce904389b34f06ec4f553c783e55267c3dc0"
+    },
+    {
+      "path": "local-verification/billing-provision-evidence-scan.log",
+      "sha256": "336333df78908b6e9c3459fb7ded0eb0bc30fc03b71a03bf0a02f509fd73f05a"
+    },
+    {
+      "path": "local-verification/billing-provision-kernel-ci-v1.json",
+      "sha256": "414d731b43a3e5809c655950775ea0ab3e38cfcf5e053f2180be444b0fd26233"
+    },
+    {
+      "path": "local-verification/billing-restore-batch.md",
+      "sha256": "376ac01e2a21d6411d7d3459cffda69034d09669f77976cac4fc3e0942fa20f2"
+    },
+    {
+      "path": "local-verification/billing-restore-full-green.log",
+      "sha256": "305a261c698b2aaf60b095c475f23cf5beb61464dd377e76a3894bfa86436ca5"
+    },
+    {
+      "path": "local-verification/billing-restore-full-green.xml",
+      "sha256": "5fd7757700472900266766f229a17096081e601d33d99c21c92c0377646b95ce"
+    },
+    {
+      "path": "local-verification/billing-restore-gates-green.log",
+      "sha256": "0bfd558624c309155c89e227a80d8c1981b5faf3bcf49ec61619d35ca2722d23"
+    },
+    {
+      "path": "local-verification/billing-restore-gates-green.xml",
+      "sha256": "822cb86a79147f9382c625bd24a3b84eb8ecc38bf13babfdab65247e3c080418"
+    },
+    {
+      "path": "local-verification/billing-restore-green-v1.log",
+      "sha256": "5067c6eb107c68e771dc4239d175e0a657beafc24f8065df44e024d190cd908c"
+    },
+    {
+      "path": "local-verification/billing-restore-green-v1.xml",
+      "sha256": "85a16d48a501a4b875d128490f9b84f5d967fdeab07b41fc66c039dd0830de9b"
+    },
+    {
+      "path": "local-verification/billing-restore-green-v2.log",
+      "sha256": "4f654cb1d3382d610a1564dd06c9755d0db85412041f9c14b48159dd2c57384a"
+    },
+    {
+      "path": "local-verification/billing-restore-green-v2.xml",
+      "sha256": "380216e84da3d6bbb8d3afa38899223040ce7892f7716596df5d27cad4fc6251"
+    },
+    {
+      "path": "local-verification/billing-restore-image-build-v2.log",
+      "sha256": "6207930f60423641e84ea8bb45d24bab5a16f2b21d40591b355301b58aa2c61f"
+    },
+    {
+      "path": "local-verification/billing-restore-image-build.log",
+      "sha256": "a787a9797170ac0cbe29e5e009899940eb83caeddd03424d0928b98e2efef3e6"
+    },
+    {
+      "path": "local-verification/billing-restore-image-green-v2/container.log",
+      "sha256": "66570f41fc48b0b23f7742ddcfd84f3fb1cf14defae3ee5eda0fe06398e57803"
+    },
+    {
+      "path": "local-verification/billing-restore-image-green-v2/report.json",
+      "sha256": "77c168700132ec709c16927da30f680c67132ecb0005bf5a4127bd503ce336ed"
+    },
+    {
+      "path": "local-verification/billing-restore-image-green/container.log",
+      "sha256": "f3d6d6beec031d63eb30c2bdca1594f5f110d7c564dfc645857908958c4d41fa"
+    },
+    {
+      "path": "local-verification/billing-restore-image-green/report.json",
+      "sha256": "68b9edcd163df6fc8e7a22bb2c481136c973df2d7e0c9fb311fee292844a3983"
+    },
+    {
+      "path": "local-verification/billing-restore-image-run-v2.log",
+      "sha256": "77c168700132ec709c16927da30f680c67132ecb0005bf5a4127bd503ce336ed"
+    },
+    {
+      "path": "local-verification/billing-restore-image-run.log",
+      "sha256": "68b9edcd163df6fc8e7a22bb2c481136c973df2d7e0c9fb311fee292844a3983"
+    },
+    {
+      "path": "local-verification/billing-restore-image-security-run-v2.log",
+      "sha256": "bbd42e8f3d397ea9acaa111ad4988390ad55111d3c00e18675634530c2790669"
+    },
+    {
+      "path": "local-verification/billing-restore-image-security-run.log",
+      "sha256": "4a0ac77ca6522eb0d586cf9f325aad056f543951dd36832eefbaa03f7645cd4e"
+    },
+    {
+      "path": "local-verification/billing-restore-image-security-v2/sbom.cdx.json",
+      "sha256": "9610b351d2e49649ea96c52636803e4b1c0d36391bbe81e94f8502470696c3e9"
+    },
+    {
+      "path": "local-verification/billing-restore-image-security-v2/scanner-cyclonedx.log",
+      "sha256": "12b0b43a480f65ba6f75c0e2754b1eba13160d8d3bdead1c34260ab9e8404822"
+    },
+    {
+      "path": "local-verification/billing-restore-image-security-v2/scanner-json.log",
+      "sha256": "a4b1c8d39d426a09379738083e9f7002e99a023fc17d80fb036af57055308e96"
+    },
+    {
+      "path": "local-verification/billing-restore-image-security-v2/summary.json",
+      "sha256": "1c80c3b018e513275711364e696c774f725881a5403206d0513cde2a47fea1b7"
+    },
+    {
+      "path": "local-verification/billing-restore-image-security-v2/vulnerabilities.json",
+      "sha256": "16bbbab47910680bec6bf1b0b38b674cfa0fb512a3ad00a7a79eeb89bf3491be"
+    },
+    {
+      "path": "local-verification/billing-restore-image-security/sbom.cdx.json",
+      "sha256": "3c845e85d9ee845d479d95282f728ff7cf57e40cc3d3fd456a560ba7da24a691"
+    },
+    {
+      "path": "local-verification/billing-restore-image-security/scanner-cyclonedx.log",
+      "sha256": "0d7cc01fa79fbf1ccf2b41b3dbe6f31a9e0fcf36a86f8d4def4366d4e8c24762"
+    },
+    {
+      "path": "local-verification/billing-restore-image-security/scanner-json.log",
+      "sha256": "5a33edc33c66904fab1ab534fc2b494da3ef85e93d0a34119951381e58b5a8d6"
+    },
+    {
+      "path": "local-verification/billing-restore-image-security/summary.json",
+      "sha256": "bfd3b0fc101ab4fe5a758ec59e8904a4210792cccbae1d6608eae7e70132386b"
+    },
+    {
+      "path": "local-verification/billing-restore-image-security/vulnerabilities.json",
+      "sha256": "f715de597329fc5e4c4b88f957808e3261848e2fdcc2442364ff0bfcb57ba730"
+    },
+    {
+      "path": "local-verification/billing-restore-pg-full-green.log",
+      "sha256": "a2f7ec59980bb96ee75e9d5f38b5c8ad69e9816be7dcb1ec72a8f5b958ba3d45"
+    },
+    {
+      "path": "local-verification/billing-restore-pg-full-green.xml",
+      "sha256": "31d9ac8ad4ad6b326caf9a03c9ab211955d0df7f94a028f1003c7b63329e7f9b"
+    },
+    {
+      "path": "local-verification/billing-restore-pg-green-v1.log",
+      "sha256": "f7a6490591db8d71473fe78ebd85e3f063db9136628aa331b38f72fa53ea8062"
+    },
+    {
+      "path": "local-verification/billing-restore-pg-green-v1.xml",
+      "sha256": "e366a24d10b7f80287d8584416d9b0bd77a50d38ffbe42d4d665a1a09afb4a89"
+    },
+    {
+      "path": "local-verification/billing-restore-pg-green-v2.log",
+      "sha256": "9e3a878356327a57a8cb75e9609f7f7029bf6c02ac3dd73cb4013f5917bcdeea"
+    },
+    {
+      "path": "local-verification/billing-restore-pg-green-v2.xml",
+      "sha256": "e267c61dec7dac59db13a10155d7c5cf65ce4eed408c72a012274b5d6a39067e"
+    },
+    {
+      "path": "local-verification/billing-restore-readiness.json",
+      "sha256": "71a77e7a73b9bf3e59ed49a1ef12f16f07210a5e12a6a52c0890b303d8fd2427"
+    },
+    {
+      "path": "local-verification/billing-restore-red.log",
+      "sha256": "26c00cb71a7a47c062972680ef2fe5cd5c7b5cc445336d62f3ddf19ebffb6b0f"
+    },
+    {
+      "path": "local-verification/billing-restore-red.xml",
+      "sha256": "f508ef47510158c693ba67b029021975cde5ecac4e8c94817b6ef7366e46b579"
+    },
+    {
+      "path": "local-verification/billing-restore-secret-scan.json",
+      "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+    },
+    {
+      "path": "local-verification/billing-restore-secret-scan.log",
+      "sha256": "3d8367bd102140a6af4c7526da44faed265341d7760ff5e33aebd1e0056382a7"
+    }
+  ]
+}
