@@ -1,0 +1,21 @@
+   Compiling mk-adapters v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-adapters)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.71s
+     Running tests/twilio_simulator.rs (/tmp/mk-release-acceptance-target/debug/deps/twilio_simulator-5ad6f7ffbe34e35a)
+
+running 13 tests
+test egress_outside_allowlist_is_refused_at_construction ... ok
+test wrong_tenant_or_unknown_sender_is_refused_before_any_network_call ... ok
+test rate_limit_is_classified_with_backoff ... ok
+test accept_returns_provider_message_id_and_pending_callback ... ok
+test privacy_delete_binds_tenant_sender_resource_and_rejects_path_injection ... ok
+test provider_opt_out_and_invalid_destination_are_permanent_and_distinct ... ok
+test privacy_delete_binds_inbound_to_the_receiving_sender ... ok
+test server_error_and_lost_response_are_ambiguous_never_retried_blindly ... ok
+test privacy_delete_retries_after_provider_deleted_but_response_was_lost ... ok
+test observation_requires_recorded_id_and_matching_tenant_sender_destination ... ok
+test privacy_delete_requires_absent_readback_and_is_idempotent ... ok
+test ambiguous_submission_search_returns_candidates_not_identity_proof ... ok
+test privacy_delete_refuses_false_success_proxy_errors_auth_and_rate_limits ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+

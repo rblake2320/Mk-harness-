@@ -1,0 +1,47 @@
+#0 building with "desktop-linux" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 794B done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/python:3.12-slim
+#2 DONE 0.0s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 113B done
+#3 DONE 0.0s
+
+#4 [1/6] FROM docker.io/library/python:3.12-slim@sha256:a6e34c598f2467ed0e9a8d349809fcd8b5c603269512df273a0bb1784edc11b1
+#4 resolve docker.io/library/python:3.12-slim@sha256:a6e34c598f2467ed0e9a8d349809fcd8b5c603269512df273a0bb1784edc11b1 0.0s done
+#4 DONE 0.0s
+
+#5 [internal] load build context
+#5 transferring context: 8.79kB done
+#5 DONE 0.0s
+
+#6 [2/6] RUN test -n "90a6f1a7978a1b1b096dca6c57511ca48d3b8cf052f8e704baf358f34ea2f21b"  && mkdir -p /etc/mk  && python -c "import urllib.request; urllib.request.urlretrieve('https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem', '/etc/mk/rds-global-bundle.pem')"  && echo "90a6f1a7978a1b1b096dca6c57511ca48d3b8cf052f8e704baf358f34ea2f21b  /etc/mk/rds-global-bundle.pem" | sha256sum -c -
+#6 CACHED
+
+#7 [3/6] WORKDIR /app
+#7 CACHED
+
+#8 [4/6] COPY requirements.txt .
+#8 CACHED
+
+#9 [5/6] RUN pip install --no-cache-dir -r requirements.txt
+#9 CACHED
+
+#10 [6/6] COPY app ./app
+#10 DONE 0.1s
+
+#11 exporting to image
+#11 exporting layers
+#11 exporting layers 0.3s done
+#11 exporting manifest sha256:d396dd290748fe36bbe964622487d8581c65b08f3a9a6bdf32e175fa3e88ede6
+#11 exporting manifest sha256:d396dd290748fe36bbe964622487d8581c65b08f3a9a6bdf32e175fa3e88ede6 0.1s done
+#11 exporting config sha256:dd2240228ecbf023424877197181717aa5a4156559d25ec7d1e69119639f18ae 0.0s done
+#11 exporting attestation manifest sha256:97e51a4ae6c387cc8573145eaed390e78af5ac7b51aa1fc5272c96217aceac3d 0.1s done
+#11 exporting manifest list sha256:9fb550e6ded6e454c05bc4f8dded30211eac906d24cd273c49ddc4541fea3f2d 0.1s done
+#11 naming to docker.io/library/mk-app-acceptance:privacy-provider-e08a51d done
+#11 unpacking to docker.io/library/mk-app-acceptance:privacy-provider-e08a51d 0.1s done
+#11 DONE 0.9s

@@ -1,0 +1,19 @@
+   Compiling mk-worker v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-worker)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.37s
+     Running tests/privacy_e2e.rs (/tmp/mk-release-acceptance-target/debug/deps/privacy_e2e-8e7b1383c49e3591)
+
+running 1 test
+
+thread 'intake_role_cannot_insert_a_forged_completed_provider_receipt' (1403928) panicked at crates/mk-worker/tests/privacy_e2e.rs:352:5:
+intake must never certify provider cleanup at INSERT time
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test intake_role_cannot_insert_a_forged_completed_provider_receipt ... FAILED
+
+failures:
+
+failures:
+    intake_role_cannot_insert_a_forged_completed_provider_receipt
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.08s
+
+error: test failed, to rerun pass `-p mk-worker --test privacy_e2e`

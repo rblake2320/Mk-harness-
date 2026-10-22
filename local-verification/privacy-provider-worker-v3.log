@@ -1,0 +1,16 @@
+   Compiling mk-store v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-store)
+   Compiling mk-queue v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-queue)
+   Compiling mk-adapters v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-adapters)
+   Compiling mk-worker v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-worker)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.16s
+     Running tests/privacy_e2e.rs (/tmp/mk-release-acceptance-target/debug/deps/privacy_e2e-8e7b1383c49e3591)
+
+running 5 tests
+test intake_role_cannot_insert_a_forged_completed_provider_receipt ... ok
+test provider_worker_disabled_sender_cleanup_preserves_backup_obligation_and_audit ... ok
+test provider_worker_false_success_stays_pending_then_recovers ... ok
+test provider_worker_lease_crash_expiry_cas_and_concurrent_replicas ... ok
+test provider_worker_lost_response_and_restart_retries_without_resend ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.55s
+

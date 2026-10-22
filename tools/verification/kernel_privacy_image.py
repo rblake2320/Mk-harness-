@@ -29,14 +29,17 @@ def main():
     parser=argparse.ArgumentParser()
     parser.add_argument("--image",required=True)
     parser.add_argument("--output",required=True,type=Path)
+    parser.add_argument("--provider-fixture-image",help="Existing Python application image for isolated provider test equipment")
     args=parser.parse_args()
     output=args.output.resolve();output.mkdir(parents=True,exist_ok=False)
-    report={"scope":"author-run built kernel image; synthetic fixtures; no provider calls"}
+    report={"scope":"author-run built kernel image; synthetic fixtures; no external provider calls"}
     owned="mk-kernel-privacy-"+uuid.uuid4().hex
     database="mk_kernel_image_"+uuid.uuid4().hex
     login="mk_privacy_"+uuid.uuid4().hex
     container="mk-acceptance-pg-20261021"
     network_created=attached=database_created=login_created=api_created=False
+    provider_created=worker_created=worker_login_created=False
+    worker_name,provider_name,worker_login=owned+"-worker",owned+"-provider",login+"_worker"
     dsn=os.environ["MK_KERNEL_TEST_ADMIN_DSN"]
     conninfo=psycopg.conninfo.conninfo_to_dict(dsn)
     assert conninfo["host"] in {"localhost","127.0.0.1"} and conninfo["dbname"]=="postgres"
@@ -100,7 +103,8 @@ def main():
             "purpose":"customer_requested_follow_up","risk":"high","requested_at":now.isoformat(),
             "expires_at":(now+timedelta(minutes=10)).isoformat(),"idempotency_key":uuid.uuid4().hex,"evidence":[]}
         def call(method,path,roles,payload=None):
-            return asyncio.run(client.call(method,path,user_id=user,tenant_id=tenant,roles=roles,
+            actor=str(uuid.uuid5(uuid.NAMESPACE_URL,f"mk:privacy-erasure:{tenant}")) if roles==["privacy_eraser"] else user
+            return asyncio.run(client.call(method,path,user_id=actor,tenant_id=tenant,roles=roles,
                 session_id="privacy-image-fixture",json=payload))
         proposed=call("POST","/actions",["agent"],proposal)
         assert proposed.status_code in {202,403},proposed.body
@@ -117,7 +121,89 @@ def main():
             report["migration_count"]=conn.execute("SELECT count(*) FROM _sqlx_migrations WHERE success").fetchone()[0]
         report.update(user=state["Config"]["User"],read_only_root=True,dropped_capabilities=state["HostConfig"]["CapDrop"],
             active_content_erased=True,erased_read_status=410,reintake_status=410,service_cross_route_status=403)
+        if args.provider_fixture_image:
+            # Provider and worker share one isolated network namespace, so the
+            # production HTTP egress rule remains strictly loopback-only.
+            account,token,message="AC"+uuid.uuid4().hex,secrets.token_hex(24),"SM"+uuid.uuid4().hex
+            number="+15555550101"
+            sender=call("POST","/senders",["tenant_admin"],{"owner_user_id":user,"display_name":"Synthetic image sender",
+                "account_sid":account,"auth_token":token,"from_number":number})
+            assert sender.status_code==201
+            sender_id=sender.body["sender_identity_id"]
+            account_request=str(uuid.uuid4())
+            body={"request_id":account_request,"subject_kind":"account","subject_id":user}
+            assert call("POST","/privacy/erase",["privacy_eraser"],body).status_code==201
+            worker_password=secrets.token_hex(24)
+            with psycopg.connect(psycopg.conninfo.make_conninfo(dsn,dbname=database),autocommit=True) as conn:
+                conn.execute(sql.SQL("CREATE ROLE {} LOGIN PASSWORD {}").format(sql.Identifier(worker_login),sql.Literal(worker_password)))
+                worker_login_created=True
+                conn.execute(sql.SQL("GRANT mk_kernel_worker TO {}").format(sql.Identifier(worker_login)))
+                conn.execute("INSERT INTO kernel.privacy_provider_deletions(tenant_id,request_id,sender_identity_id,provider,provider_message_id) VALUES(%s,%s,%s,'twilio',%s)",
+                    (tenant,account_request,sender_id,message))
+            fixture={"FIXTURE_ACCOUNT":account,"FIXTURE_TOKEN":token,"FIXTURE_MESSAGE":message,"FIXTURE_NUMBER":number}
+            mount=f"type=bind,src={Path(__file__).with_name('provider_erasure_server.py').resolve()},dst=/fixture.py,readonly"
+            options=["run","-d","--name",provider_name,"--network",owned,"--read-only","--cap-drop=ALL",
+                "--security-opt=no-new-privileges","--label","codex.task=mk-87-rows","--publish","127.0.0.1::8790",
+                "--mount",mount,"--entrypoint","python"]
+            for name in fixture: options.extend(["--env",name])
+            docker(*options,args.provider_fixture_image,"/fixture.py",env=fixture);provider_created=True
+            provider=json.loads(docker("inspect",provider_name))[0]
+            fixture_port=provider["NetworkSettings"]["Ports"]["8790/tcp"][0]["HostPort"]
+            fixture_url=f"http://127.0.0.1:{fixture_port}"
+            for _ in range(100):
+                try:
+                    if httpx.get(fixture_url+"/fixture-state",auth=(account,token),timeout=1).status_code==200: break
+                except httpx.TransportError: pass
+                time.sleep(.1)
+            else: raise RuntimeError("provider fixture readiness timeout")
+            worker_env={**env,"MK_DATABASE_URL":f"postgres://{worker_login}:{worker_password}@db:5432/{database}",
+                "MK_REDIS_URL":"redis://127.0.0.1:1","MK_METRICS_BIND":"","MK_ALLOW_LOOPBACK_HTTP":"1",
+                "MK_TWILIO_API_BASE":"http://127.0.0.1:8790","MK_PUBLIC_WEBHOOK_BASE":"http://127.0.0.1:8790",
+                "MK_EGRESS_AUTHORITIES":"127.0.0.1:8790"}
+            options=["run","-d","--name",worker_name,"--network",f"container:{provider_name}","--read-only","--cap-drop=ALL",
+                "--security-opt=no-new-privileges","--label","codex.task=mk-87-rows","--memory","256m","--cpus","1",
+                "--pids-limit","64","--entrypoint","/usr/local/bin/mk-action-worker"]
+            for name in worker_env: options.extend(["--env",name])
+            docker(*options,image,env=worker_env);worker_created=True
+            for _ in range(100):
+                fixture_state=httpx.get(fixture_url+"/fixture-state",auth=(account,token),timeout=1).json()
+                if not fixture_state["present"]: break
+                assert json.loads(docker("inspect",worker_name))[0]["State"]["Running"],"image worker exited"
+                time.sleep(.1)
+            else: raise RuntimeError("image worker did not delete with Redis unavailable")
+            docker("kill","--signal","KILL",worker_name)
+            assert json.loads(docker("inspect",worker_name))[0]["State"]["ExitCode"]==137
+            httpx.post(fixture_url+"/fixture-release",auth=(account,token),timeout=1).raise_for_status()
+            with psycopg.connect(psycopg.conninfo.make_conninfo(dsn,dbname=database)) as conn:
+                assert conn.execute("SELECT attempts,confirmed_at IS NULL,lease_id IS NOT NULL FROM kernel.privacy_provider_deletions WHERE tenant_id=%s",(tenant,)).fetchone()==(1,True,True)
+                conn.execute("UPDATE kernel.privacy_provider_deletions SET next_attempt_at=now()-interval '1 second' WHERE tenant_id=%s",(tenant,))
+            docker("start",worker_name)
+            for _ in range(100):
+                with psycopg.connect(psycopg.conninfo.make_conninfo(dsn,dbname=database)) as conn:
+                    confirmed=conn.execute("SELECT confirmed_at IS NOT NULL FROM kernel.privacy_provider_deletions WHERE tenant_id=%s",(tenant,)).fetchone()[0]
+                if confirmed: break
+                time.sleep(.1)
+            else: raise RuntimeError("image worker did not recover the abandoned deletion lease")
+            final=call("POST","/privacy/erase",["privacy_eraser"],body)
+            assert final.status_code==201 and final.body["pending_provider_deletions"]==0 and final.body["pending_provider_retention"]==1
+            fixture_state=httpx.get(fixture_url+"/fixture-state",auth=(account,token),timeout=1).json()
+            assert fixture_state=={"deletes":2,"sends":0,"auth_failures":0,"present":False}
+            with psycopg.connect(psycopg.conninfo.make_conninfo(dsn,dbname=database)) as conn:
+                receipts=conn.execute("SELECT count(*) FROM kernel.audit_events WHERE tenant_id=%s AND event_type='provider_content_erased'",(tenant,)).fetchone()[0]
+                assert receipts==1
+            worker_state=json.loads(docker("inspect",worker_name))[0]
+            assert worker_state["Config"]["User"]=="65532:65532" and worker_state["HostConfig"]["ReadonlyRootfs"]
+            assert "ALL" in worker_state["HostConfig"]["CapDrop"]
+            report["provider_cleanup"]={**fixture_state,"redis_unavailable":True,"sigkill_after_external_effect":True,
+                "restart_recovered_lease":True,"active_receipts":receipts,"backup_pending":True,"restricted_worker_role":True,
+                "worker_user":worker_state["Config"]["User"],"worker_read_only":True,"killed_exit_code":137}
+        report["outcome"]="Worked"
+    except Exception as exc:
+        report.update(outcome="Failed",error_type=type(exc).__name__)
+        raise
     finally:
+        if worker_created: docker("rm","-f",worker_name)
+        if provider_created: docker("rm","-f",provider_name)
         if api_created: docker("rm","-f",owned)
         if attached: docker("network","disconnect",owned,container)
         if network_created: docker("network","rm",owned)
@@ -125,6 +211,7 @@ def main():
             assert database.startswith("mk_kernel_image_") and login.startswith("mk_privacy_")
             if database_created: conn.execute(sql.SQL("DROP DATABASE {} WITH (FORCE)").format(sql.Identifier(database)))
             if login_created: conn.execute(sql.SQL("DROP ROLE {}").format(sql.Identifier(login)))
+            if worker_login_created: conn.execute(sql.SQL("DROP ROLE {}").format(sql.Identifier(worker_login)))
         report["owned_targets_removed"]=True
         (output/"report.json").write_text(json.dumps(report,indent=2)+"\n",encoding="utf-8")
     print(json.dumps(report))
