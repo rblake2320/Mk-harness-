@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="0.621" timestamp="2026-10-22T03:16:13.363005-05:00" hostname="DESKTOP-CM6G60N"><testcase classname="tools.verification.test_kernel_privacy_restore" name="test_restore_gate_requires_independently_retained_erasure_ledger" time="0.086"><failure message="subprocess.CalledProcessError: Command '['/tmp/mk-release-acceptance-target/debug/mk-action-api']' returned non-zero exit status 1.">tools/verification/test_kernel_privacy_restore.py:19: in test_restore_gate_requires_independently_retained_erasure_ledger
+    subprocess.run([str(api)],env={**env,"MK_MIGRATE_ONLY":"1"},check=True,capture_output=True,timeout=30)
+/usr/lib/python3.12/subprocess.py:571: in run
+    raise CalledProcessError(retcode, process.args,
+E   subprocess.CalledProcessError: Command '['/tmp/mk-release-acceptance-target/debug/mk-action-api']' returned non-zero exit status 1.</failure></testcase></testsuite></testsuites>

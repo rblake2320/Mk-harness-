@@ -1,0 +1,113 @@
+#0 building with "desktop-linux" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 2.21kB done
+#1 DONE 0.0s
+
+#2 resolve image config for docker-image://docker.io/docker/dockerfile:1.7
+#2 ...
+
+#3 [auth] docker/dockerfile:pull token for registry-1.docker.io
+#3 DONE 0.0s
+
+#2 resolve image config for docker-image://docker.io/docker/dockerfile:1.7
+#2 DONE 0.6s
+
+#4 docker-image://docker.io/docker/dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
+#4 resolve docker.io/docker/dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e 0.0s done
+#4 CACHED
+
+#5 [internal] load metadata for gcr.io/distroless/cc-debian12:nonroot
+#5 ...
+
+#6 [auth] library/rust:pull token for registry-1.docker.io
+#6 DONE 0.0s
+
+#7 [auth] library/debian:pull token for registry-1.docker.io
+#7 DONE 0.0s
+
+#8 [internal] load metadata for docker.io/library/rust:1.97.0-bookworm
+#8 DONE 0.3s
+
+#9 [internal] load metadata for docker.io/library/debian:bookworm-slim
+#9 DONE 0.3s
+
+#5 [internal] load metadata for gcr.io/distroless/cc-debian12:nonroot
+#5 DONE 0.3s
+
+#10 [internal] load .dockerignore
+#10 transferring context: 2B done
+#10 DONE 0.0s
+
+#11 [internal] load build context
+#11 DONE 0.0s
+
+#12 [stage-2 1/3] FROM gcr.io/distroless/cc-debian12:nonroot@sha256:9dac0a79194e45a7da0158a9c6da57b217585af0786db3845d1f0ec1a0dd182f
+#12 resolve gcr.io/distroless/cc-debian12:nonroot@sha256:9dac0a79194e45a7da0158a9c6da57b217585af0786db3845d1f0ec1a0dd182f
+#12 resolve gcr.io/distroless/cc-debian12:nonroot@sha256:9dac0a79194e45a7da0158a9c6da57b217585af0786db3845d1f0ec1a0dd182f 0.1s done
+#12 DONE 0.1s
+
+#13 [builder 1/7] FROM docker.io/library/rust:1.97.0-bookworm@sha256:8fa55b2f3ddf97471ab6a767bfa3f37e6bad0986ba823e75fea57e2a2a5c3073
+#13 resolve docker.io/library/rust:1.97.0-bookworm@sha256:8fa55b2f3ddf97471ab6a767bfa3f37e6bad0986ba823e75fea57e2a2a5c3073 0.1s done
+#13 DONE 0.1s
+
+#14 [cabundle 1/2] FROM docker.io/library/debian:bookworm-slim@sha256:7ff6ba31527b9e336162fa061746c366c4b2032f4d2cff2078bea43f78efe3f8
+#14 resolve docker.io/library/debian:bookworm-slim@sha256:7ff6ba31527b9e336162fa061746c366c4b2032f4d2cff2078bea43f78efe3f8 0.1s done
+#14 DONE 0.1s
+
+#11 [internal] load build context
+#11 transferring context: 79.59kB 0.0s done
+#11 DONE 0.0s
+
+#15 [builder 2/7] WORKDIR /src
+#15 CACHED
+
+#16 [builder 3/7] COPY rust/ rust/
+#16 DONE 0.1s
+
+#17 [builder 4/7] COPY contracts/ contracts/
+#17 DONE 0.1s
+
+#18 [builder 5/7] COPY migrations/ migrations/
+#18 DONE 0.1s
+
+#19 [builder 6/7] WORKDIR /src/rust
+#19 DONE 0.1s
+
+#20 [builder 7/7] RUN --mount=type=cache,target=/usr/local/cargo/registry     --mount=type=cache,target=/src/rust/target     cargo build --release --locked --bins  && mkdir -p /out  && cp target/release/mk-action-api target/release/mk-outbox-relay target/release/mk-action-worker target/release/mk-audit-verifier target/release/mk-mcp-server target/release/mk-keyctl target/release/mk-restore-gate target/release/mk-healthcheck target/release/mk-privacy-ledger /out/
+#20 0.290 info: syncing channel updates for 1.97.0-x86_64-unknown-linux-gnu
+#20 0.920 info: latest update on 2026-07-09 for version 1.97.0 (2d8144b78 2026-07-07)
+#20 0.927 info: downloading component clippy
+#20 2.013    Compiling mk-audit v0.1.0 (/src/rust/crates/mk-audit)
+#20 2.179    Compiling mk-store v0.1.0 (/src/rust/crates/mk-store)
+#20 3.776    Compiling mk-queue v0.1.0 (/src/rust/crates/mk-queue)
+#20 6.496    Compiling mk-adapters v0.1.0 (/src/rust/crates/mk-adapters)
+#20 7.576    Compiling mk-worker v0.1.0 (/src/rust/crates/mk-worker)
+#20 7.576    Compiling mk-api v0.1.0 (/src/rust/crates/mk-api)
+#20 25.55     Finished `release` profile [optimized] target(s) in 21.63s
+#20 DONE 25.8s
+
+#12 [stage-2 1/3] FROM gcr.io/distroless/cc-debian12:nonroot@sha256:9dac0a79194e45a7da0158a9c6da57b217585af0786db3845d1f0ec1a0dd182f
+#12 CACHED
+
+#21 [cabundle 2/2] RUN apt-get update -q && apt-get install -y -q --no-install-recommends ca-certificates curl >/dev/null  && test -n "90a6f1a7978a1b1b096dca6c57511ca48d3b8cf052f8e704baf358f34ea2f21b"  && curl -fsSL -o /rds-global-bundle.pem "https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem"  && echo "90a6f1a7978a1b1b096dca6c57511ca48d3b8cf052f8e704baf358f34ea2f21b  /rds-global-bundle.pem" | sha256sum -c -
+#21 CACHED
+
+#22 [stage-2 2/3] COPY --from=builder /out/ /usr/local/bin/
+#22 DONE 0.1s
+
+#23 [stage-2 3/3] COPY --from=cabundle /rds-global-bundle.pem /etc/mk/rds-global-bundle.pem
+#23 DONE 0.1s
+
+#24 exporting to image
+#24 exporting layers
+#24 exporting layers 1.9s done
+#24 exporting manifest sha256:13307a87ab169722f7d6e595b37f2e94eebbdb24a1040838158dc3c60c7594ab 0.0s done
+#24 exporting config sha256:829aad6b08803c895f30a5a141b7ab1fb6bb3d2235bb67d4eb7b929354a420e7 0.0s done
+#24 exporting attestation manifest sha256:179e94bff5d36e5bd67c5d4a2f190c6d48ddc27b812c9e0631a69252f10474eb 0.0s done
+#24 exporting manifest list sha256:15f2ceee933c2c20e925b79396b1694958599c29b9e8336d81a42fbc1c39ddf4
+#24 exporting manifest list sha256:15f2ceee933c2c20e925b79396b1694958599c29b9e8336d81a42fbc1c39ddf4 0.0s done
+#24 naming to docker.io/library/mk-kernel-acceptance:privacy-restore done
+#24 unpacking to docker.io/library/mk-kernel-acceptance:privacy-restore
+#24 unpacking to docker.io/library/mk-kernel-acceptance:privacy-restore 0.5s done
+#24 DONE 2.5s

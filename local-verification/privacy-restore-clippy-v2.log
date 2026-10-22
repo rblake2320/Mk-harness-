@@ -1,0 +1,58 @@
+    Checking mk-store v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-store)
+error: used `unwrap()` on a `Result` value
+   --> crates/mk-store/src/privacy_ledger.rs:386:19
+    |
+386 | ... = serde...rap();
+    |       ^^^^^...^^^^^
+    |
+    = note: if this value is an `Err`, it will panic
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#unwrap_used
+    = note: requested on the command line with `-D clippy::unwrap-used`
+
+error: used `unwrap()` on a `Result` value
+   --> crates/mk-store/src/privacy_ledger.rs:390:13
+    |
+390 | ...   "2026...rap(),
+    |       ^^^^^...^^^^^
+    |
+    = note: if this value is an `Err`, it will panic
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#unwrap_used
+
+error: used `unwrap()` on a `Result` value
+   --> crates/mk-store/src/privacy_ledger.rs:391:13
+    |
+391 | ...   "2026...rap(),
+    |       ^^^^^...^^^^^
+    |
+    = note: if this value is an `Err`, it will panic
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#unwrap_used
+
+error: used `unwrap()` on a `Result` value
+   --> crates/mk-store/src/privacy_ledger.rs:452:19
+    |
+452 | ... = serde...rap();
+    |       ^^^^^...^^^^^
+    |
+    = note: if this value is an `Err`, it will panic
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#unwrap_used
+
+error: used `unwrap()` on a `Result` value
+   --> crates/mk-store/src/privacy_ledger.rs:453:33
+    |
+453 | ... = serde...rap();
+    |       ^^^^^...^^^^^
+    |
+    = note: if this value is an `Err`, it will panic
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#unwrap_used
+
+error: used `unwrap()` on a `Result` value
+   --> crates/mk-store/src/privacy_ledger.rs:455:17
+    |
+455 | ...t!(check...rap().au...
+    |       ^^^^^...^^^^^
+    |
+    = note: if this value is an `Err`, it will panic
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#unwrap_used
+
+error: could not compile `mk-store` (lib test) due to 6 previous errors
+warning: build failed, waiting for other jobs to finish...
