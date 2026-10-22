@@ -1,0 +1,16 @@
+3.13-alpine: Pulling from library/python
+b2179827cc78: Pulling fs layer
+13668694a415: Pulling fs layer
+931f52852fef: Pulling fs layer
+36f20945eefd: Download complete
+b52911e12883: Download complete
+b2179827cc78: Download complete
+13668694a415: Download complete
+13668694a415: Pull complete
+931f52852fef: Download complete
+b2179827cc78: Pull complete
+b2179827cc78: Pull complete
+931f52852fef: Pull complete
+Digest: sha256:c50ccfb66e5cc97a610dcd0b9597de6ef5b52c96280b51997b353a0fc87a8361
+Status: Downloaded newer image for python:3.13-alpine
+docker.io/library/python:3.13-alpine

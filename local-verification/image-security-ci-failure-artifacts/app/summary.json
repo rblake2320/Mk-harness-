@@ -1,0 +1,10 @@
+{
+  "scope": "author/CI-run local image scan; not independent release qualification",
+  "scanner": "aquasec/trivy:0.76.0@sha256:2416d1f74045b57274df1a340eee6b510cacd73c66a6ccb8da092b117eb7d222",
+  "image_id": "sha256:f2b6db099512018efd592ff54690a84fbfb9762d845fa1e4805f29159fca21f0",
+  "architecture": "amd64",
+  "os": "linux",
+  "archive_sha256": "f015d091b5b97b642157fd85fdec860a6c9d189e99e272c74c0ee32961a4d1cb",
+  "outcome": "Failed",
+  "error": "docker operation failed with exit 1; see retained log"
+}

@@ -1,0 +1,22 @@
+[
+  {
+    "binary": "mk-privacy-ledger",
+    "exit_code": 0,
+    "diagnostic": "{\"sha256\":\"sha256:74460cf8fcba9115a60a8d9fc12a6d7935c7bb0425f0515c756e9c1177a3e0d3\",\"bytes\":644,\"traffic_enabled\":false}\n"
+  },
+  {
+    "binary": "mk-restore-gate",
+    "exit_code": 1,
+    "diagnostic": "{\"check\":\"global_dispatch_disabled\",\"ok\":true,\"detail\":{\"dispatch_enabled\":false}}\n{\"check\":\"privacy_restore_ledger\",\"ok\":false,\"detail\":{\"status\":\"missing_invalid_or_conflicting_external_ledger\",\"traffic_enabled\":false}}\n{\"gate\":\"FAIL\",\"apply\":false,\"next\":\"do not enable dispatch; supply and verify the independently retained erasure ledger\"}\n"
+  },
+  {
+    "binary": "mk-restore-gate",
+    "exit_code": 1,
+    "diagnostic": "{\"check\":\"global_dispatch_disabled\",\"ok\":true,\"detail\":{\"dispatch_enabled\":false}}\n{\"check\":\"privacy_restore_ledger\",\"ok\":false,\"detail\":{\"status\":\"missing_invalid_or_conflicting_external_ledger\",\"traffic_enabled\":false}}\n{\"gate\":\"FAIL\",\"apply\":false,\"next\":\"do not enable dispatch; supply and verify the independently retained erasure ledger\"}\n"
+  },
+  {
+    "binary": "mk-restore-gate",
+    "exit_code": 1,
+    "diagnostic": "{\"check\":\"global_dispatch_disabled\",\"ok\":true,\"detail\":{\"dispatch_enabled\":false}}\n{\"check\":\"privacy_restore_ledger\",\"ok\":false,\"detail\":{\"status\":\"missing_invalid_or_conflicting_external_ledger\",\"traffic_enabled\":false}}\n{\"gate\":\"FAIL\",\"apply\":true,\"next\":\"do not enable dispatch; supply and verify the independently retained erasure ledger\"}\n"
+  }
+]

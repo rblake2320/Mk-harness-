@@ -1,0 +1,7 @@
+[
+  {
+    "binary": "mk-privacy-ledger",
+    "exit_code": 0,
+    "diagnostic": "{\"sha256\":\"sha256:4f4f3fc3bc721fe10110f94b53c0b73a747916b6d6049fa585a40d818d44a9c1\",\"bytes\":644,\"traffic_enabled\":false}\n"
+  }
+]

@@ -1,0 +1,190 @@
+# HELP mk_requests Requests by route and status.
+# TYPE mk_requests counter
+mk_requests_total{route="unmatched",status="404"} 1
+mk_requests_total{route="/health/ready",status="200"} 1
+mk_requests_total{route="/internal/v1/senders",status="201"} 2
+mk_requests_total{route="/internal/v1/actions",status="403"} 2
+mk_requests_total{route="/internal/v1/privacy/erase",status="201"} 3
+mk_requests_total{route="/internal/v1/actions",status="410"} 1
+mk_requests_total{route="/internal/v1/suppressions",status="201"} 1
+mk_requests_total{route="/internal/v1/actions/{action_id}",status="410"} 1
+mk_requests_total{route="/webhooks/twilio/status/{sender_identity_id}",status="200"} 1
+mk_requests_total{route="/internal/v1/senders",status="403"} 1
+mk_requests_total{route="/internal/v1/adapters",status="201"} 1
+# HELP mk_request_duration_seconds Request latency by matched route template.
+# TYPE mk_request_duration_seconds histogram
+mk_request_duration_seconds_sum{route="/internal/v1/privacy/erase"} 0.047725214
+mk_request_duration_seconds_count{route="/internal/v1/privacy/erase"} 3
+mk_request_duration_seconds_bucket{le="0.002",route="/internal/v1/privacy/erase"} 0
+mk_request_duration_seconds_bucket{le="0.004",route="/internal/v1/privacy/erase"} 0
+mk_request_duration_seconds_bucket{le="0.008",route="/internal/v1/privacy/erase"} 0
+mk_request_duration_seconds_bucket{le="0.016",route="/internal/v1/privacy/erase"} 2
+mk_request_duration_seconds_bucket{le="0.032",route="/internal/v1/privacy/erase"} 3
+mk_request_duration_seconds_bucket{le="0.064",route="/internal/v1/privacy/erase"} 3
+mk_request_duration_seconds_bucket{le="0.128",route="/internal/v1/privacy/erase"} 3
+mk_request_duration_seconds_bucket{le="0.256",route="/internal/v1/privacy/erase"} 3
+mk_request_duration_seconds_bucket{le="0.512",route="/internal/v1/privacy/erase"} 3
+mk_request_duration_seconds_bucket{le="1.024",route="/internal/v1/privacy/erase"} 3
+mk_request_duration_seconds_bucket{le="2.048",route="/internal/v1/privacy/erase"} 3
+mk_request_duration_seconds_bucket{le="4.096",route="/internal/v1/privacy/erase"} 3
+mk_request_duration_seconds_bucket{le="8.192",route="/internal/v1/privacy/erase"} 3
+mk_request_duration_seconds_bucket{le="16.384",route="/internal/v1/privacy/erase"} 3
+mk_request_duration_seconds_bucket{le="+Inf",route="/internal/v1/privacy/erase"} 3
+mk_request_duration_seconds_sum{route="/internal/v1/actions"} 0.066541456
+mk_request_duration_seconds_count{route="/internal/v1/actions"} 3
+mk_request_duration_seconds_bucket{le="0.002",route="/internal/v1/actions"} 0
+mk_request_duration_seconds_bucket{le="0.004",route="/internal/v1/actions"} 0
+mk_request_duration_seconds_bucket{le="0.008",route="/internal/v1/actions"} 1
+mk_request_duration_seconds_bucket{le="0.016",route="/internal/v1/actions"} 2
+mk_request_duration_seconds_bucket{le="0.032",route="/internal/v1/actions"} 2
+mk_request_duration_seconds_bucket{le="0.064",route="/internal/v1/actions"} 3
+mk_request_duration_seconds_bucket{le="0.128",route="/internal/v1/actions"} 3
+mk_request_duration_seconds_bucket{le="0.256",route="/internal/v1/actions"} 3
+mk_request_duration_seconds_bucket{le="0.512",route="/internal/v1/actions"} 3
+mk_request_duration_seconds_bucket{le="1.024",route="/internal/v1/actions"} 3
+mk_request_duration_seconds_bucket{le="2.048",route="/internal/v1/actions"} 3
+mk_request_duration_seconds_bucket{le="4.096",route="/internal/v1/actions"} 3
+mk_request_duration_seconds_bucket{le="8.192",route="/internal/v1/actions"} 3
+mk_request_duration_seconds_bucket{le="16.384",route="/internal/v1/actions"} 3
+mk_request_duration_seconds_bucket{le="+Inf",route="/internal/v1/actions"} 3
+mk_request_duration_seconds_sum{route="/health/ready"} 0.005312111
+mk_request_duration_seconds_count{route="/health/ready"} 1
+mk_request_duration_seconds_bucket{le="0.002",route="/health/ready"} 0
+mk_request_duration_seconds_bucket{le="0.004",route="/health/ready"} 0
+mk_request_duration_seconds_bucket{le="0.008",route="/health/ready"} 1
+mk_request_duration_seconds_bucket{le="0.016",route="/health/ready"} 1
+mk_request_duration_seconds_bucket{le="0.032",route="/health/ready"} 1
+mk_request_duration_seconds_bucket{le="0.064",route="/health/ready"} 1
+mk_request_duration_seconds_bucket{le="0.128",route="/health/ready"} 1
+mk_request_duration_seconds_bucket{le="0.256",route="/health/ready"} 1
+mk_request_duration_seconds_bucket{le="0.512",route="/health/ready"} 1
+mk_request_duration_seconds_bucket{le="1.024",route="/health/ready"} 1
+mk_request_duration_seconds_bucket{le="2.048",route="/health/ready"} 1
+mk_request_duration_seconds_bucket{le="4.096",route="/health/ready"} 1
+mk_request_duration_seconds_bucket{le="8.192",route="/health/ready"} 1
+mk_request_duration_seconds_bucket{le="16.384",route="/health/ready"} 1
+mk_request_duration_seconds_bucket{le="+Inf",route="/health/ready"} 1
+mk_request_duration_seconds_sum{route="/internal/v1/suppressions"} 0.007784269
+mk_request_duration_seconds_count{route="/internal/v1/suppressions"} 1
+mk_request_duration_seconds_bucket{le="0.002",route="/internal/v1/suppressions"} 0
+mk_request_duration_seconds_bucket{le="0.004",route="/internal/v1/suppressions"} 0
+mk_request_duration_seconds_bucket{le="0.008",route="/internal/v1/suppressions"} 1
+mk_request_duration_seconds_bucket{le="0.016",route="/internal/v1/suppressions"} 1
+mk_request_duration_seconds_bucket{le="0.032",route="/internal/v1/suppressions"} 1
+mk_request_duration_seconds_bucket{le="0.064",route="/internal/v1/suppressions"} 1
+mk_request_duration_seconds_bucket{le="0.128",route="/internal/v1/suppressions"} 1
+mk_request_duration_seconds_bucket{le="0.256",route="/internal/v1/suppressions"} 1
+mk_request_duration_seconds_bucket{le="0.512",route="/internal/v1/suppressions"} 1
+mk_request_duration_seconds_bucket{le="1.024",route="/internal/v1/suppressions"} 1
+mk_request_duration_seconds_bucket{le="2.048",route="/internal/v1/suppressions"} 1
+mk_request_duration_seconds_bucket{le="4.096",route="/internal/v1/suppressions"} 1
+mk_request_duration_seconds_bucket{le="8.192",route="/internal/v1/suppressions"} 1
+mk_request_duration_seconds_bucket{le="16.384",route="/internal/v1/suppressions"} 1
+mk_request_duration_seconds_bucket{le="+Inf",route="/internal/v1/suppressions"} 1
+mk_request_duration_seconds_sum{route="/webhooks/twilio/status/{sender_identity_id}"} 0.004928808
+mk_request_duration_seconds_count{route="/webhooks/twilio/status/{sender_identity_id}"} 1
+mk_request_duration_seconds_bucket{le="0.002",route="/webhooks/twilio/status/{sender_identity_id}"} 0
+mk_request_duration_seconds_bucket{le="0.004",route="/webhooks/twilio/status/{sender_identity_id}"} 0
+mk_request_duration_seconds_bucket{le="0.008",route="/webhooks/twilio/status/{sender_identity_id}"} 1
+mk_request_duration_seconds_bucket{le="0.016",route="/webhooks/twilio/status/{sender_identity_id}"} 1
+mk_request_duration_seconds_bucket{le="0.032",route="/webhooks/twilio/status/{sender_identity_id}"} 1
+mk_request_duration_seconds_bucket{le="0.064",route="/webhooks/twilio/status/{sender_identity_id}"} 1
+mk_request_duration_seconds_bucket{le="0.128",route="/webhooks/twilio/status/{sender_identity_id}"} 1
+mk_request_duration_seconds_bucket{le="0.256",route="/webhooks/twilio/status/{sender_identity_id}"} 1
+mk_request_duration_seconds_bucket{le="0.512",route="/webhooks/twilio/status/{sender_identity_id}"} 1
+mk_request_duration_seconds_bucket{le="1.024",route="/webhooks/twilio/status/{sender_identity_id}"} 1
+mk_request_duration_seconds_bucket{le="2.048",route="/webhooks/twilio/status/{sender_identity_id}"} 1
+mk_request_duration_seconds_bucket{le="4.096",route="/webhooks/twilio/status/{sender_identity_id}"} 1
+mk_request_duration_seconds_bucket{le="8.192",route="/webhooks/twilio/status/{sender_identity_id}"} 1
+mk_request_duration_seconds_bucket{le="16.384",route="/webhooks/twilio/status/{sender_identity_id}"} 1
+mk_request_duration_seconds_bucket{le="+Inf",route="/webhooks/twilio/status/{sender_identity_id}"} 1
+mk_request_duration_seconds_sum{route="/internal/v1/adapters"} 0.008655097
+mk_request_duration_seconds_count{route="/internal/v1/adapters"} 1
+mk_request_duration_seconds_bucket{le="0.002",route="/internal/v1/adapters"} 0
+mk_request_duration_seconds_bucket{le="0.004",route="/internal/v1/adapters"} 0
+mk_request_duration_seconds_bucket{le="0.008",route="/internal/v1/adapters"} 0
+mk_request_duration_seconds_bucket{le="0.016",route="/internal/v1/adapters"} 1
+mk_request_duration_seconds_bucket{le="0.032",route="/internal/v1/adapters"} 1
+mk_request_duration_seconds_bucket{le="0.064",route="/internal/v1/adapters"} 1
+mk_request_duration_seconds_bucket{le="0.128",route="/internal/v1/adapters"} 1
+mk_request_duration_seconds_bucket{le="0.256",route="/internal/v1/adapters"} 1
+mk_request_duration_seconds_bucket{le="0.512",route="/internal/v1/adapters"} 1
+mk_request_duration_seconds_bucket{le="1.024",route="/internal/v1/adapters"} 1
+mk_request_duration_seconds_bucket{le="2.048",route="/internal/v1/adapters"} 1
+mk_request_duration_seconds_bucket{le="4.096",route="/internal/v1/adapters"} 1
+mk_request_duration_seconds_bucket{le="8.192",route="/internal/v1/adapters"} 1
+mk_request_duration_seconds_bucket{le="16.384",route="/internal/v1/adapters"} 1
+mk_request_duration_seconds_bucket{le="+Inf",route="/internal/v1/adapters"} 1
+mk_request_duration_seconds_sum{route="/internal/v1/senders"} 0.014384820999999999
+mk_request_duration_seconds_count{route="/internal/v1/senders"} 3
+mk_request_duration_seconds_bucket{le="0.002",route="/internal/v1/senders"} 1
+mk_request_duration_seconds_bucket{le="0.004",route="/internal/v1/senders"} 1
+mk_request_duration_seconds_bucket{le="0.008",route="/internal/v1/senders"} 3
+mk_request_duration_seconds_bucket{le="0.016",route="/internal/v1/senders"} 3
+mk_request_duration_seconds_bucket{le="0.032",route="/internal/v1/senders"} 3
+mk_request_duration_seconds_bucket{le="0.064",route="/internal/v1/senders"} 3
+mk_request_duration_seconds_bucket{le="0.128",route="/internal/v1/senders"} 3
+mk_request_duration_seconds_bucket{le="0.256",route="/internal/v1/senders"} 3
+mk_request_duration_seconds_bucket{le="0.512",route="/internal/v1/senders"} 3
+mk_request_duration_seconds_bucket{le="1.024",route="/internal/v1/senders"} 3
+mk_request_duration_seconds_bucket{le="2.048",route="/internal/v1/senders"} 3
+mk_request_duration_seconds_bucket{le="4.096",route="/internal/v1/senders"} 3
+mk_request_duration_seconds_bucket{le="8.192",route="/internal/v1/senders"} 3
+mk_request_duration_seconds_bucket{le="16.384",route="/internal/v1/senders"} 3
+mk_request_duration_seconds_bucket{le="+Inf",route="/internal/v1/senders"} 3
+mk_request_duration_seconds_sum{route="/internal/v1/actions/{action_id}"} 0.001707632
+mk_request_duration_seconds_count{route="/internal/v1/actions/{action_id}"} 1
+mk_request_duration_seconds_bucket{le="0.002",route="/internal/v1/actions/{action_id}"} 1
+mk_request_duration_seconds_bucket{le="0.004",route="/internal/v1/actions/{action_id}"} 1
+mk_request_duration_seconds_bucket{le="0.008",route="/internal/v1/actions/{action_id}"} 1
+mk_request_duration_seconds_bucket{le="0.016",route="/internal/v1/actions/{action_id}"} 1
+mk_request_duration_seconds_bucket{le="0.032",route="/internal/v1/actions/{action_id}"} 1
+mk_request_duration_seconds_bucket{le="0.064",route="/internal/v1/actions/{action_id}"} 1
+mk_request_duration_seconds_bucket{le="0.128",route="/internal/v1/actions/{action_id}"} 1
+mk_request_duration_seconds_bucket{le="0.256",route="/internal/v1/actions/{action_id}"} 1
+mk_request_duration_seconds_bucket{le="0.512",route="/internal/v1/actions/{action_id}"} 1
+mk_request_duration_seconds_bucket{le="1.024",route="/internal/v1/actions/{action_id}"} 1
+mk_request_duration_seconds_bucket{le="2.048",route="/internal/v1/actions/{action_id}"} 1
+mk_request_duration_seconds_bucket{le="4.096",route="/internal/v1/actions/{action_id}"} 1
+mk_request_duration_seconds_bucket{le="8.192",route="/internal/v1/actions/{action_id}"} 1
+mk_request_duration_seconds_bucket{le="16.384",route="/internal/v1/actions/{action_id}"} 1
+mk_request_duration_seconds_bucket{le="+Inf",route="/internal/v1/actions/{action_id}"} 1
+mk_request_duration_seconds_sum{route="unmatched"} 0.000008419
+mk_request_duration_seconds_count{route="unmatched"} 1
+mk_request_duration_seconds_bucket{le="0.002",route="unmatched"} 1
+mk_request_duration_seconds_bucket{le="0.004",route="unmatched"} 1
+mk_request_duration_seconds_bucket{le="0.008",route="unmatched"} 1
+mk_request_duration_seconds_bucket{le="0.016",route="unmatched"} 1
+mk_request_duration_seconds_bucket{le="0.032",route="unmatched"} 1
+mk_request_duration_seconds_bucket{le="0.064",route="unmatched"} 1
+mk_request_duration_seconds_bucket{le="0.128",route="unmatched"} 1
+mk_request_duration_seconds_bucket{le="0.256",route="unmatched"} 1
+mk_request_duration_seconds_bucket{le="0.512",route="unmatched"} 1
+mk_request_duration_seconds_bucket{le="1.024",route="unmatched"} 1
+mk_request_duration_seconds_bucket{le="2.048",route="unmatched"} 1
+mk_request_duration_seconds_bucket{le="4.096",route="unmatched"} 1
+mk_request_duration_seconds_bucket{le="8.192",route="unmatched"} 1
+mk_request_duration_seconds_bucket{le="16.384",route="unmatched"} 1
+mk_request_duration_seconds_bucket{le="+Inf",route="unmatched"} 1
+# HELP mk_inbound_events Authenticated inbound customer messages recorded, by disposition (suppressed/held/queued_for_meaning/duplicate).
+# TYPE mk_inbound_events counter
+# HELP mk_policy_decisions Policy decisions by kind and code.
+# TYPE mk_policy_decisions counter
+mk_policy_decisions_total{decision="Deny",code="contact_permission_missing"} 1
+mk_policy_decisions_total{decision="Deny",code="tool_not_allowlisted"} 1
+# HELP mk_assertion_failures Actor assertion verification failures.
+# TYPE mk_assertion_failures counter
+# HELP mk_hmac_failures Adapter signature failures incl. replay.
+# TYPE mk_hmac_failures counter
+# HELP mk_approvals_pending Pending approvals (last observed).
+# TYPE mk_approvals_pending gauge
+mk_approvals_pending 0
+# HELP mk_callbacks_applied Adapter callbacks that changed state.
+# TYPE mk_callbacks_applied counter
+mk_callbacks_applied_total 0
+# HELP mk_callbacks_duplicate Idempotent duplicate callbacks.
+# TYPE mk_callbacks_duplicate counter
+mk_callbacks_duplicate_total 0
+# HELP mk_requests_rejected Requests refused by per-tenant limits or replica capacity (label code = reason).
+# TYPE mk_requests_rejected counter
+# EOF

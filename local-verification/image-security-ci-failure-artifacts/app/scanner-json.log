@@ -1,0 +1,21 @@
+Unable to find image 'aquasec/trivy:0.76.0@sha256:2416d1f74045b57274df1a340eee6b510cacd73c66a6ccb8da092b117eb7d222' locally
+docker.io/aquasec/trivy@sha256:2416d1f74045b57274df1a340eee6b510cacd73c66a6ccb8da092b117eb7d222: Pulling from aquasec/trivy
+e2de96513ba9: Already exists
+404cb589430b: Pulling fs layer
+2f5cf6d3a5d1: Pulling fs layer
+28e25cc2c5e5: Pulling fs layer
+28e25cc2c5e5: Verifying Checksum
+28e25cc2c5e5: Download complete
+404cb589430b: Verifying Checksum
+404cb589430b: Download complete
+2f5cf6d3a5d1: Verifying Checksum
+2f5cf6d3a5d1: Download complete
+404cb589430b: Pull complete
+2f5cf6d3a5d1: Pull complete
+28e25cc2c5e5: Pull complete
+Digest: sha256:2416d1f74045b57274df1a340eee6b510cacd73c66a6ccb8da092b117eb7d222
+Status: Downloaded newer image for aquasec/trivy@sha256:2416d1f74045b57274df1a340eee6b510cacd73c66a6ccb8da092b117eb7d222
+2026-10-22T09:52:31Z	INFO	[vulndb] Need to update DB
+2026-10-22T09:52:31Z	INFO	[vulndb] Downloading vulnerability DB...
+2026-10-22T09:52:31Z	INFO	[vulndb] Downloading artifact...	repo="mirror.gcr.io/aquasec/trivy-db:2"
+2026-10-22T09:52:34Z	FATAL	Fatal error	run error: init error: DB error: failed to download vulnerability DB: OCI artifact error: failed to download vulnerability DB: failed to download artifact from mirror.gcr.io/aquasec/trivy-db:2: oci download error: download error: failed to download /tmp/trivy-3316769558/oci-download-3323571701/db.tar.gz: mkdir /root/.cache/trivy/db: permission denied

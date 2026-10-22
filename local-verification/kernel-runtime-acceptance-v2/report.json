@@ -1,0 +1,17 @@
+{
+  "scope": "author-run built kernel image; synthetic fixtures; no external provider calls",
+  "image_id": "sha256:67ce89f6dbd9a4de9b6b994bc4f656b736d4356ad0687880128b772042eadb08",
+  "migration_count": 19,
+  "user": "65532:65532",
+  "read_only_root": true,
+  "dropped_capabilities": [
+    "ALL"
+  ],
+  "active_content_erased": true,
+  "erased_read_status": 410,
+  "reintake_status": 410,
+  "service_cross_route_status": 403,
+  "outcome": "Failed",
+  "error_type": "AssertionError",
+  "owned_targets_removed": true
+}

@@ -1,0 +1,159 @@
+#0 building with "desktop-linux" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 1.59kB 0.0s done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for gcr.io/distroless/python3-debian13:nonroot@sha256:727eccc5d83f11273c954652667b5b5a1c66120bd4cfb884e879ab77dcdf966a
+#2 DONE 0.1s
+
+#3 [internal] load metadata for docker.io/library/python:3.13-slim@sha256:27b7c9d4f13ca20bb1170148f02095d50a5dfce1f7f2dabf5ca273727e43b7ea
+#3 DONE 0.1s
+
+#4 [internal] load .dockerignore
+#4 transferring context: 113B done
+#4 DONE 0.0s
+
+#5 [internal] load build context
+#5 transferring context: 2.94kB done
+#5 DONE 0.0s
+
+#6 [dependencies 1/4] FROM docker.io/library/python:3.13-slim@sha256:27b7c9d4f13ca20bb1170148f02095d50a5dfce1f7f2dabf5ca273727e43b7ea
+#6 resolve docker.io/library/python:3.13-slim@sha256:27b7c9d4f13ca20bb1170148f02095d50a5dfce1f7f2dabf5ca273727e43b7ea 0.0s done
+#6 DONE 0.1s
+
+#7 [stage-1 1/6] FROM gcr.io/distroless/python3-debian13:nonroot@sha256:727eccc5d83f11273c954652667b5b5a1c66120bd4cfb884e879ab77dcdf966a
+#7 resolve gcr.io/distroless/python3-debian13:nonroot@sha256:727eccc5d83f11273c954652667b5b5a1c66120bd4cfb884e879ab77dcdf966a 0.0s done
+#7 DONE 0.1s
+
+#8 [stage-1 2/6] WORKDIR /app
+#8 CACHED
+
+#9 [dependencies 2/4] RUN test -n "90a6f1a7978a1b1b096dca6c57511ca48d3b8cf052f8e704baf358f34ea2f21b"  && mkdir -p /etc/mk  && python -c "import urllib.request; urllib.request.urlretrieve('https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem', '/etc/mk/rds-global-bundle.pem')"  && echo "90a6f1a7978a1b1b096dca6c57511ca48d3b8cf052f8e704baf358f34ea2f21b  /etc/mk/rds-global-bundle.pem" | sha256sum -c -
+#9 CACHED
+
+#10 [dependencies 3/4] COPY requirements-runtime.lock .
+#10 CACHED
+
+#11 [dependencies 4/4] RUN pip install --no-cache-dir --upgrade pip==26.2.2  && pip install --no-cache-dir --require-hashes --only-binary=:all: --target /packages -r requirements-runtime.lock  && mkdir /compat  && ln -s /usr/bin/python3 /compat/python
+#11 0.976 Requirement already satisfied: pip==26.2.2 in ./usr/local/lib/python3.13/site-packages (26.2.2)
+#11 1.135 WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
+#11 1.563 Collecting annotated-doc==0.0.5 (from -r requirements-runtime.lock (line 3))
+#11 1.693   Downloading annotated_doc-0.0.5-py3-none-any.whl (5.3 kB)
+#11 1.722 Collecting annotated-types==0.8.0 (from -r requirements-runtime.lock (line 7))
+#11 1.758   Downloading annotated_types-0.8.0-py3-none-any.whl (13 kB)
+#11 1.790 Collecting anyio==4.15.1 (from -r requirements-runtime.lock (line 11))
+#11 1.828   Downloading anyio-4.15.1-py3-none-any.whl (132 kB)
+#11 1.925 Collecting argon2-cffi==23.1.0 (from -r requirements-runtime.lock (line 18))
+#11 1.959   Downloading argon2_cffi-23.1.0-py3-none-any.whl (15 kB)
+#11 1.990 Collecting argon2-cffi-bindings==26.1.0 (from -r requirements-runtime.lock (line 22))
+#11 2.025   Downloading argon2_cffi_bindings-26.1.0-cp310-abi3-manylinux_2_26_x86_64.manylinux_2_28_x86_64.whl (26 kB)
+#11 2.060 Collecting certifi==2026.10.19 (from -r requirements-runtime.lock (line 65))
+#11 2.094   Downloading certifi-2026.10.19-py3-none-any.whl (136 kB)
+#11 2.224 Collecting cffi==2.1.1 (from -r requirements-runtime.lock (line 71))
+#11 2.254   Downloading cffi-2.1.1-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (221 kB)
+#11 2.327 Collecting click==8.5.0 (from -r requirements-runtime.lock (line 175))
+#11 2.360   Downloading click-8.5.0-py3-none-any.whl (125 kB)
+#11 2.415 Collecting colorama==0.4.6 (from -r requirements-runtime.lock (line 179))
+#11 2.439   Downloading colorama-0.4.6-py2.py3-none-any.whl (25 kB)
+#11 2.594 Collecting cryptography==50.0.2 (from -r requirements-runtime.lock (line 183))
+#11 2.626   Downloading cryptography-50.0.2-cp311-abi3-manylinux_2_34_x86_64.whl (4.8 MB)
+#11 3.201      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 4.8/4.8 MB 8.5 MB/s  0:00:00
+#11 3.234 Collecting dnspython==2.9.0 (from -r requirements-runtime.lock (line 244))
+#11 3.258   Downloading dnspython-2.9.0-py3-none-any.whl (354 kB)
+#11 3.328 Collecting email-validator==2.2.0 (from -r requirements-runtime.lock (line 248))
+#11 3.361   Downloading email_validator-2.2.0-py3-none-any.whl (33 kB)
+#11 3.411 Collecting fastapi==0.159.1 (from -r requirements-runtime.lock (line 252))
+#11 3.446   Downloading fastapi-0.159.1-py3-none-any.whl (149 kB)
+#11 3.549 Collecting greenlet==3.5.6 (from -r requirements-runtime.lock (line 256))
+#11 3.582   Downloading greenlet-3.5.6-cp313-cp313-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl (623 kB)
+#11 3.629      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 623.8/623.8 kB 14.6 MB/s  0:00:00
+#11 3.659 Collecting h11==0.16.0 (from -r requirements-runtime.lock (line 337))
+#11 3.684   Downloading h11-0.16.0-py3-none-any.whl (37 kB)
+#11 3.712 Collecting httpcore==1.0.9 (from -r requirements-runtime.lock (line 343))
+#11 3.750   Downloading httpcore-1.0.9-py3-none-any.whl (78 kB)
+#11 3.793 Collecting httptools==0.9.0 (from -r requirements-runtime.lock (line 347))
+#11 3.819   Downloading httptools-0.9.0-cp313-cp313-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl (520 kB)
+#11 3.883 Collecting httpx==0.28.1 (from -r requirements-runtime.lock (line 467))
+#11 3.907   Downloading httpx-0.28.1-py3-none-any.whl (73 kB)
+#11 3.936 Collecting idna==3.20 (from -r requirements-runtime.lock (line 471))
+#11 3.968   Downloading idna-3.20-py3-none-any.whl (69 kB)
+#11 4.003 Collecting opentelemetry-api==1.45.1 (from -r requirements-runtime.lock (line 478))
+#11 4.028   Downloading opentelemetry_api-1.45.1-py3-none-any.whl (60 kB)
+#11 4.134 Collecting pillow==13.0.0 (from -r requirements-runtime.lock (line 482))
+#11 4.165   Downloading pillow-13.0.0-cp313-cp313-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (7.1 MB)
+#11 4.627      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 7.1/7.1 MB 15.3 MB/s  0:00:00
+#11 4.667 Collecting psycopg==3.2.9 (from -r requirements-runtime.lock (line 567))
+#11 4.710   Downloading psycopg-3.2.9-py3-none-any.whl (202 kB)
+#11 4.809 Collecting psycopg-binary==3.2.9 (from -r requirements-runtime.lock (line 571))
+#11 4.847   Downloading psycopg_binary-3.2.9-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (4.4 MB)
+#11 5.131      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 4.4/4.4 MB 15.9 MB/s  0:00:00
+#11 5.158 Collecting pycparser==3.11 (from -r requirements-runtime.lock (line 638))
+#11 5.182   Downloading pycparser-3.11-py3-none-any.whl (51 kB)
+#11 5.264 Collecting pydantic==2.14.1 (from -r requirements-runtime.lock (line 642))
+#11 5.289   Downloading pydantic-2.14.1-py3-none-any.whl (488 kB)
+#11 5.704 Collecting pydantic-core==2.50.1 (from -r requirements-runtime.lock (line 648))
+#11 5.742   Downloading pydantic_core-2.50.1-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (2.2 MB)
+#11 5.887      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 2.2/2.2 MB 14.9 MB/s  0:00:00
+#11 5.911 Collecting pydantic-settings==2.9.1 (from -r requirements-runtime.lock (line 787))
+#11 5.936   Downloading pydantic_settings-2.9.1-py3-none-any.whl (44 kB)
+#11 5.967 Collecting pyjwt==2.15.1 (from -r requirements-runtime.lock (line 791))
+#11 5.996   Downloading pyjwt-2.15.1-py3-none-any.whl (33 kB)
+#11 6.037 Collecting pyotp==2.10.0 (from -r requirements-runtime.lock (line 795))
+#11 6.062   Downloading pyotp-2.10.0-py3-none-any.whl (13 kB)
+#11 6.087 Collecting python-dotenv==1.2.4 (from -r requirements-runtime.lock (line 799))
+#11 6.118   Downloading python_dotenv-1.2.4-py3-none-any.whl (23 kB)
+#11 6.145 Collecting python-multipart==0.0.32 (from -r requirements-runtime.lock (line 805))
+#11 6.172   Downloading python_multipart-0.0.32-py3-none-any.whl (30 kB)
+#11 6.208 Collecting pyyaml==6.0.3 (from -r requirements-runtime.lock (line 809))
+#11 6.234   Downloading pyyaml-6.0.3-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (801 kB)
+#11 6.290      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 801.6/801.6 kB 15.7 MB/s  0:00:00
+#11 6.318 Collecting redis==5.2.1 (from -r requirements-runtime.lock (line 884))
+#11 6.347   Downloading redis-5.2.1-py3-none-any.whl (261 kB)
+#11 6.547 Collecting sqlalchemy==2.0.41 (from -r requirements-runtime.lock (line 888))
+#11 6.584   Downloading sqlalchemy-2.0.41-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (3.2 MB)
+#11 6.776      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 3.2/3.2 MB 16.2 MB/s  0:00:00
+#11 6.822 Collecting starlette==1.9.0 (from -r requirements-runtime.lock (line 947))
+#11 6.856   Downloading starlette-1.9.0-py3-none-any.whl (80 kB)
+#11 6.888 Collecting typing-extensions==4.16.0 (from -r requirements-runtime.lock (line 953))
+#11 6.913   Downloading typing_extensions-4.16.0-py3-none-any.whl (45 kB)
+#11 6.937 Collecting typing-inspection==0.4.4 (from -r requirements-runtime.lock (line 966))
+#11 6.965   Downloading typing_inspection-0.4.4-py3-none-any.whl (14 kB)
+#11 6.992 Collecting tzdata==2026.5 (from -r requirements-runtime.lock (line 973))
+#11 7.020   Downloading tzdata-2026.5-py2.py3-none-any.whl (347 kB)
+#11 7.077 Collecting uvicorn==0.34.2 (from -r requirements-runtime.lock (line 977))
+#11 7.104   Downloading uvicorn-0.34.2-py3-none-any.whl (62 kB)
+#11 7.164 Collecting watchfiles==1.3.0 (from -r requirements-runtime.lock (line 981))
+#11 7.198   Downloading watchfiles-1.3.0-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (458 kB)
+#11 7.303 Collecting websockets==17.3 (from -r requirements-runtime.lock (line 1016))
+#11 7.332   Downloading websockets-17.3-cp313-cp313-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl (225 kB)
+#11 7.400 Installing collected packages: websockets, tzdata, typing-extensions, redis, pyyaml, python-multipart, python-dotenv, pyotp, pyjwt, pycparser, psycopg-binary, psycopg, pillow, idna, httptools, h11, greenlet, dnspython, colorama, click, certifi, annotated-types, annotated-doc, uvicorn, typing-inspection, sqlalchemy, pydantic-core, opentelemetry-api, httpcore, email-validator, cffi, anyio, watchfiles, starlette, pydantic, httpx, cryptography, argon2-cffi-bindings, pydantic-settings, fastapi, argon2-cffi
+#11 9.782 
+#11 9.785 Successfully installed annotated-doc-0.0.5 annotated-types-0.8.0 anyio-4.15.1 argon2-cffi-23.1.0 argon2-cffi-bindings-26.1.0 certifi-2026.10.19 cffi-2.1.1 click-8.5.0 colorama-0.4.6 cryptography-50.0.2 dnspython-2.9.0 email-validator-2.2.0 fastapi-0.159.1 greenlet-3.5.6 h11-0.16.0 httpcore-1.0.9 httptools-0.9.0 httpx-0.28.1 idna-3.20 opentelemetry-api-1.45.1 pillow-13.0.0 psycopg-3.2.9 psycopg-binary-3.2.9 pycparser-3.11 pydantic-2.14.1 pydantic-core-2.50.1 pydantic-settings-2.9.1 pyjwt-2.15.1 pyotp-2.10.0 python-dotenv-1.2.4 python-multipart-0.0.32 pyyaml-6.0.3 redis-5.2.1 sqlalchemy-2.0.41 starlette-1.9.0 typing-extensions-4.16.0 typing-inspection-0.4.4 tzdata-2026.5 uvicorn-0.34.2 watchfiles-1.3.0 websockets-17.3
+#11 9.788 WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
+#11 DONE 10.0s
+
+#12 [stage-1 3/6] COPY --from=dependencies /packages /packages
+#12 DONE 0.4s
+
+#13 [stage-1 4/6] COPY --from=dependencies /compat/ /usr/local/bin/
+#13 DONE 0.1s
+
+#14 [stage-1 5/6] COPY --from=dependencies /etc/mk/rds-global-bundle.pem /etc/mk/rds-global-bundle.pem
+#14 DONE 0.1s
+
+#15 [stage-1 6/6] COPY app ./app
+#15 DONE 0.1s
+
+#16 exporting to image
+#16 exporting layers
+#16 exporting layers 2.4s done
+#16 exporting manifest sha256:835ef7ec442d1aec52323e348996880d52c9e8a7173a69a8460b9048834fa175 0.0s done
+#16 exporting config sha256:8ea5863a56725e62d15f1f1b7171e85d05d538d13f8f6ad54e5dac856fe862b7 0.0s done
+#16 exporting attestation manifest sha256:8b5582e31efd99f8b6165578a5e1215c1153fdd878a21b1f0ee9bd6c46a20acf 0.0s done
+#16 exporting manifest list sha256:5b3855b5961e6ece0dc58c027f11e6c8f96961020a926ca3c2076952adcfdcb7
+#16 exporting manifest list sha256:5b3855b5961e6ece0dc58c027f11e6c8f96961020a926ca3c2076952adcfdcb7 0.0s done
+#16 naming to docker.io/library/mk-app-acceptance:scanned-runtime-v3 done
+#16 unpacking to docker.io/library/mk-app-acceptance:scanned-runtime-v3
+#16 unpacking to docker.io/library/mk-app-acceptance:scanned-runtime-v3 0.8s done
+#16 DONE 3.4s

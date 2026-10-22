@@ -1,0 +1,4 @@
+2026-10-22T09:52:34Z	INFO	[vulndb] Need to update DB
+2026-10-22T09:52:34Z	INFO	[vulndb] Downloading vulnerability DB...
+2026-10-22T09:52:34Z	INFO	[vulndb] Downloading artifact...	repo="mirror.gcr.io/aquasec/trivy-db:2"
+2026-10-22T09:52:36Z	FATAL	Fatal error	run error: init error: DB error: failed to download vulnerability DB: OCI artifact error: failed to download vulnerability DB: failed to download artifact from mirror.gcr.io/aquasec/trivy-db:2: oci download error: download error: failed to download /tmp/trivy-1439502882/oci-download-3346770694/db.tar.gz: mkdir /root/.cache/trivy/db: permission denied

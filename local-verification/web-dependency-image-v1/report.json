@@ -1,0 +1,15 @@
+{
+  "scope": "synthetic HTTP against built web image; deliberately unavailable loopback upstream",
+  "image_id": "sha256:7ce489744e396ee4e72401e59fdd2321d779eed18c94cc464cb769dc1dd02255",
+  "statuses": {
+    "spa": 200,
+    "failed_upstream": 502,
+    "custom_method": 400
+  },
+  "canary_absent": true,
+  "safe_request_count": 4,
+  "unavailable_upstream_visible": true,
+  "custom_method_normalized": true,
+  "outcome": "Worked",
+  "owned_container_removed": true
+}

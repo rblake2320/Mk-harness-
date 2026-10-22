@@ -1,0 +1,2 @@
+3.13.17 (main, Oct 21 2026, 23:00:10) [GCC 15.2.0]
+{'pip': False, 'pytest': False, 'respx': False, 'sqlalchemy': True, 'PIL': True, 'psycopg': True, 'cryptography': True}

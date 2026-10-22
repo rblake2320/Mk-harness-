@@ -1,0 +1,677 @@
+[
+  {
+    "path": "local-verification/app-alpine-base-pull.log",
+    "sha256": "e70122958aa920861a11c60491611b2ab4b901f7bcd20a79fb76db05f3b2e78c",
+    "bytes": 593
+  },
+  {
+    "path": "local-verification/app-base-pull.log",
+    "sha256": "b0a520f671e59e9cbb30b37e43ee994f96106fd7a717f76d6379d90f7f52c259",
+    "bytes": 681
+  },
+  {
+    "path": "local-verification/app-image-vulnerabilities-after-v1.json",
+    "sha256": "53ba81aa94bd7afbcb4cdec6997f55ed9704e9310d4fb54cac5ecd21eee72ee0",
+    "bytes": 916273
+  },
+  {
+    "path": "local-verification/app-image-vulnerabilities-before.json",
+    "sha256": "60bd1e8ca163e161aebd44278deea4a5292c2dfc7137fb0f1021f0d42576f3fb",
+    "bytes": 1256186
+  },
+  {
+    "path": "local-verification/app-minimal-base-pull.log",
+    "sha256": "989477940c69b8d2db79c50d0673d6fdca7ed28f204633e8cc82c079f0de00dc",
+    "bytes": 2848
+  },
+  {
+    "path": "local-verification/app-python313-base-pull.log",
+    "sha256": "9e3fc396d2fc83c6e99f32ae18ef013360c4822fa4c828428c811b0c01b5b364",
+    "bytes": 558
+  },
+  {
+    "path": "local-verification/app-runtime-acceptance-v3/container.log",
+    "sha256": "c1efdf69e2ead47eebf851895d911df63f61d7ab29b2fab291e5a0292e118e71",
+    "bytes": 2975
+  },
+  {
+    "path": "local-verification/app-runtime-acceptance-v3/report.json",
+    "sha256": "7b650778ee5d8e57ae31163d30849a3cf84d4ba63104494b79cc51cb1fb33e2e",
+    "bytes": 2398
+  },
+  {
+    "path": "local-verification/app-runtime-acceptance-v4/container.log",
+    "sha256": "b663a69d31802e83efa0edab6ca81f9334c8777913c9f5d666340741ff49811f",
+    "bytes": 2972
+  },
+  {
+    "path": "local-verification/app-runtime-acceptance-v4/report.json",
+    "sha256": "afff5b3aa82fd6b1f95f746735c43e5d84a60407e7e3d5b0958848f9607522b9",
+    "bytes": 2398
+  },
+  {
+    "path": "local-verification/app-runtime-build-v2.log",
+    "sha256": "2d0f5514a730f9216565f77e7131a5d22d6a6f9cd93e772be78e46bbc5f5f37d",
+    "bytes": 13694
+  },
+  {
+    "path": "local-verification/app-runtime-build-v3.log",
+    "sha256": "ed388034f3816233985ce53af6bd153d0aa6e280f313bcae12c2ffe9da4bb241",
+    "bytes": 13450
+  },
+  {
+    "path": "local-verification/app-runtime-build-v4.log",
+    "sha256": "f4bc182d8c2705eb909f632d4ce2ef693ffa636df41ea6b1e1ecea6828fddc24",
+    "bytes": 13644
+  },
+  {
+    "path": "local-verification/app-runtime-build.log",
+    "sha256": "28a08788bd1957e51c62ffadd5134ed0b595f9f366f64dc688ea35373ef70732",
+    "bytes": 13149
+  },
+  {
+    "path": "local-verification/app-runtime-package-boundary.log",
+    "sha256": "ebf860321a47b085b218ea5eaf36021bb36da90916c03f4e52e80dfa91305ae4",
+    "bytes": 173
+  },
+  {
+    "path": "local-verification/app-runtime-security-v3/sbom.cdx.json",
+    "sha256": "49f41a8a3a22cfa38f293774ab8991008e44dbffddd3e8724f5f4939d760ec08",
+    "bytes": 360457
+  },
+  {
+    "path": "local-verification/app-runtime-security-v3/scanner-cyclonedx.log",
+    "sha256": "50f7fb54d7c3e84ad43dc7537f7f45d6c1d9d3d8f710dd4f0b5fc90b083edd2a",
+    "bytes": 737
+  },
+  {
+    "path": "local-verification/app-runtime-security-v3/scanner-json.log",
+    "sha256": "0b6886fd8dc0e774dbcfbb9ce495c374036d7537f5bef352a06d3f004b3a9be3",
+    "bytes": 908
+  },
+  {
+    "path": "local-verification/app-runtime-security-v3/summary.json",
+    "sha256": "e2cd40b60a646b2889385a789ace8a611d9fe678d95d021381a0dc64e4ac5adc",
+    "bytes": 5146
+  },
+  {
+    "path": "local-verification/app-runtime-security-v3/vulnerabilities.json",
+    "sha256": "4b8c6d45ccf082612c6d0473de8e5221af8169423b2d2d0ae4b741e42572070e",
+    "bytes": 783100
+  },
+  {
+    "path": "local-verification/app-runtime-security-v4/sbom.cdx.json",
+    "sha256": "3950093b4c47d902db54c8ab4ab833ef8ac1f082ad2a89fd24200fd1c350524a",
+    "bytes": 92040
+  },
+  {
+    "path": "local-verification/app-runtime-security-v4/scanner-cyclonedx.log",
+    "sha256": "4c332e671e29340c29fb5a9b3a35de6077d54462846d6e121c97441f6282cf45",
+    "bytes": 576
+  },
+  {
+    "path": "local-verification/app-runtime-security-v4/scanner-json.log",
+    "sha256": "350c95d48ebc12ce483c07051d42c99ba70bc519990f17975e8f744a70b35572",
+    "bytes": 905
+  },
+  {
+    "path": "local-verification/app-runtime-security-v4/summary.json",
+    "sha256": "26340e7b6fe28b7a78da6335baf3706775e067debaa3f545d1133487dec9165f",
+    "bytes": 1623
+  },
+  {
+    "path": "local-verification/app-runtime-security-v4/vulnerabilities.json",
+    "sha256": "461128c213c5d786ed22d0e0d59aa713a3dcea04755168e970e67b2f525b1d4e",
+    "bytes": 114568
+  },
+  {
+    "path": "local-verification/image-scanner-pull.log",
+    "sha256": "5aa0d4ffae0ff98a3b7191f67e1616b2cbb73a0fd27b3189e8145fbb91e7537b",
+    "bytes": 584
+  },
+  {
+    "path": "local-verification/image-security-actionlint.json",
+    "sha256": "086e7553efb823e4a214c1441c7503c8606308d2c604909d642c774b344dfbba",
+    "bytes": 116
+  },
+  {
+    "path": "local-verification/image-security-app-ci-v1.json",
+    "sha256": "5a29609019884c4e368ecd832aa622266102eda628a5e88da0ed2f4e5510b66e",
+    "bytes": 11735
+  },
+  {
+    "path": "local-verification/image-security-batch.md",
+    "sha256": "47f16c15c8f806113c18b987f9c535fb4a89e6ba0435c83707c8a2ec2b13aa76",
+    "bytes": 6932
+  },
+  {
+    "path": "local-verification/image-security-ci-failure-artifacts/app/scanner-json.log",
+    "sha256": "05c235ab02d60ab200dba39aba64eaf8b2b5860d4b91611e80d4b535a990c9fa",
+    "bytes": 1461
+  },
+  {
+    "path": "local-verification/image-security-ci-failure-artifacts/app/summary.json",
+    "sha256": "4a156f3fc16471bd00dee0f5fc3d6bd741001b8227c9c02ef234475bbf07c51e",
+    "bytes": 508
+  },
+  {
+    "path": "local-verification/image-security-ci-failure-artifacts/web/scanner-json.log",
+    "sha256": "50da76a83ef11673f237a468c32c88c59ae1aaaeca4629ae852623f0955069c1",
+    "bytes": 611
+  },
+  {
+    "path": "local-verification/image-security-ci-failure-artifacts/web/summary.json",
+    "sha256": "49149d4912cbee961a769dc751eead44300d41cc7faade116975823f6e4dc023",
+    "bytes": 508
+  },
+  {
+    "path": "local-verification/image-security-ci-failure.log",
+    "sha256": "7089d0964da1e3168b1522b6d670716f447bdbb864db3a601a56799af221c1a6",
+    "bytes": 2850
+  },
+  {
+    "path": "local-verification/image-security-kernel-ci-v1.json",
+    "sha256": "4665933bb1a29c3762ecdfc4a4ddf6224058871a540d5d148be512b603247571",
+    "bytes": 13863
+  },
+  {
+    "path": "local-verification/image-security-readiness.json",
+    "sha256": "3e9d8f09bb69aba6dd74783edd343d9470799f45f15a49acd7743011927c3138",
+    "bytes": 31231
+  },
+  {
+    "path": "local-verification/image-security-scanner-fix-secrets.json",
+    "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+    "bytes": 3
+  },
+  {
+    "path": "local-verification/image-security-scanner-fix-secrets.log",
+    "sha256": "229a7fdf32f36d82c1371fad53d7ae52a115a0289d4296fa2e5b6b9fbc720123",
+    "bytes": 181
+  },
+  {
+    "path": "local-verification/image-security-secret-negative-control.json",
+    "sha256": "b4b7ada4613cb67a4addf1ea8419030cfd2a3d6a95b87ee02f18e815ed2c434b",
+    "bytes": 486
+  },
+  {
+    "path": "local-verification/image-security-secret-negative-control.log",
+    "sha256": "350e26fe131fec8b4b92e15a90d9ea5c3385ce50f26c03b2d5fc6c2e78d84632",
+    "bytes": 152
+  },
+  {
+    "path": "local-verification/image-security-source-secrets-v2.log",
+    "sha256": "cc63864388c242a531b41deaecea8939deceec78954ed3af852375a2c36e2daf",
+    "bytes": 185
+  },
+  {
+    "path": "local-verification/image-security-source-secrets.json",
+    "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+    "bytes": 3
+  },
+  {
+    "path": "local-verification/image-security-source-secrets.log",
+    "sha256": "792d98554ffb9e633f2f30408bfa3e15f1a2d06ce6f53cf624999677a5c68610",
+    "bytes": 185
+  },
+  {
+    "path": "local-verification/image-security-tests-v2.xml",
+    "sha256": "6be7cd1d381f19893388c0496aedfb1f08704944314513d804322ea626519b66",
+    "bytes": 1532
+  },
+  {
+    "path": "local-verification/image-security-tests.xml",
+    "sha256": "32c10c3cb5a65690f186771b6fc5ab89de44c0b72a624830bfcc30493109e394",
+    "bytes": 1657
+  },
+  {
+    "path": "local-verification/kernel-base-pull.log",
+    "sha256": "04fedafdc76525c602d898573a6fbb105b9d71d8a9eed28fa8d31462a39d6e4b",
+    "bytes": 240
+  },
+  {
+    "path": "local-verification/kernel-image-vulnerabilities-after.json",
+    "sha256": "dcdc066976b2aa799bf1196e90a80f1e2d8336116d995a71fbbba05b055c9d3b",
+    "bytes": 205319
+  },
+  {
+    "path": "local-verification/kernel-image-vulnerabilities-before.json",
+    "sha256": "d375ac464804f167df0ec80b6c2f7fdb1753a878051a4fdb6eb65bbb5aecda5b",
+    "bytes": 282582
+  },
+  {
+    "path": "local-verification/kernel-runtime-acceptance-v10/api.log",
+    "sha256": "f7d628f21a506a0689f82fb4632a0b8fb0cf32365b6a704a4019c2c6f93069f1",
+    "bytes": 595
+  },
+  {
+    "path": "local-verification/kernel-runtime-acceptance-v10/metrics.txt",
+    "sha256": "36fc051686e344f01d7bbdbf49270e25764a1c8cb852b65b549fb73d1b842848",
+    "bytes": 14585
+  },
+  {
+    "path": "local-verification/kernel-runtime-acceptance-v10/recovery-commands.json",
+    "sha256": "f74120dfb2e7cadb36c629de30b9fc260a6de9001724ede836fd0fa7db40397c",
+    "bytes": 5234
+  },
+  {
+    "path": "local-verification/kernel-runtime-acceptance-v10/report.json",
+    "sha256": "bb1245f00557612f01f6e5aa41fd74c0efc39234ce5ae9f528fdc2cdb0654f38",
+    "bytes": 4003
+  },
+  {
+    "path": "local-verification/kernel-runtime-acceptance-v2/report.json",
+    "sha256": "3cb316f43f40a50432ea5f333f7ca8d0f83b732924ade2a3c15d20432705ef32",
+    "bytes": 535
+  },
+  {
+    "path": "local-verification/kernel-runtime-acceptance-v3/recovery-commands.json",
+    "sha256": "445ac49bf2902fbf40d0676e78669ea5bd415c061c49657e55babfaf600bc111",
+    "bytes": 1634
+  },
+  {
+    "path": "local-verification/kernel-runtime-acceptance-v3/report.json",
+    "sha256": "3cb316f43f40a50432ea5f333f7ca8d0f83b732924ade2a3c15d20432705ef32",
+    "bytes": 535
+  },
+  {
+    "path": "local-verification/kernel-runtime-acceptance-v4/recovery-commands.json",
+    "sha256": "442ea123a4cf1c1cd3320628249f6ed1bb7e81024153753d50429a647afe2bb4",
+    "bytes": 225
+  },
+  {
+    "path": "local-verification/kernel-runtime-acceptance-v4/report.json",
+    "sha256": "1bcccb7ac6a94b50e2ef84f998581ea4666d2bcd5e2a405d4c730ded20c136d4",
+    "bytes": 539
+  },
+  {
+    "path": "local-verification/kernel-runtime-acceptance-v5/recovery-commands.json",
+    "sha256": "393f1feafd3d975db58cf639cef4a25b86a32781909add42014c52ca6b166798",
+    "bytes": 374
+  },
+  {
+    "path": "local-verification/kernel-runtime-acceptance-v5/report.json",
+    "sha256": "3cb316f43f40a50432ea5f333f7ca8d0f83b732924ade2a3c15d20432705ef32",
+    "bytes": 535
+  },
+  {
+    "path": "local-verification/kernel-runtime-acceptance-v6/api.log",
+    "sha256": "6412fcad835e9f3d4119828ee9522e32853eaa4c709e9da0be7f68e5332ae943",
+    "bytes": 595
+  },
+  {
+    "path": "local-verification/kernel-runtime-acceptance-v6/metrics.txt",
+    "sha256": "c567323da9ddfd07e3975c5a75ec42707ec10af1588791edab53875069d54cbc",
+    "bytes": 14566
+  },
+  {
+    "path": "local-verification/kernel-runtime-acceptance-v6/recovery-commands.json",
+    "sha256": "fcc02ee5bfa0bcde1d6d7bdd9a7c10f56663456b6a4ac6ce943e97d970c54659",
+    "bytes": 5270
+  },
+  {
+    "path": "local-verification/kernel-runtime-acceptance-v6/report.json",
+    "sha256": "0312019c2ec4a66285832143c01f0d6fc1dbf3b2aa881956f7676b95c54e9f02",
+    "bytes": 3764
+  },
+  {
+    "path": "local-verification/kernel-runtime-acceptance-v7/api.log",
+    "sha256": "9ef284bfb7c164eac41ae5aaaf9781e3eb550db8da77f6c82eea90e98c64b989",
+    "bytes": 595
+  },
+  {
+    "path": "local-verification/kernel-runtime-acceptance-v7/metrics.txt",
+    "sha256": "ead9a89b950226ab1439c63174b0bb16c1eb383f5a6b1c337da94411f4b68114",
+    "bytes": 14566
+  },
+  {
+    "path": "local-verification/kernel-runtime-acceptance-v7/recovery-commands.json",
+    "sha256": "6f032b2e06c7c7b54edef8f6476f70379bcf24a34355cabe27ec7a51fe198f94",
+    "bytes": 5090
+  },
+  {
+    "path": "local-verification/kernel-runtime-acceptance-v7/report.json",
+    "sha256": "4781ef20771a9ac4bfd0afa1da558c7ee50cbada62bf9d7e40819c3e6a2f6767",
+    "bytes": 3764
+  },
+  {
+    "path": "local-verification/kernel-runtime-acceptance-v8/api.log",
+    "sha256": "461692dcdf2e072d0fd461f7c9a187e3ea2ef49955fa5b15d84064bd6b22e03a",
+    "bytes": 595
+  },
+  {
+    "path": "local-verification/kernel-runtime-acceptance-v8/metrics.txt",
+    "sha256": "e0486b820a5faaf93842a887400f062672fd39f668d0a71d11bc2e09417a01a8",
+    "bytes": 14575
+  },
+  {
+    "path": "local-verification/kernel-runtime-acceptance-v8/recovery-commands.json",
+    "sha256": "49151cb7715e5ab3bb8983d06ef2d9fc5d4e622cb056fe1075ac41716ecdbaff",
+    "bytes": 5090
+  },
+  {
+    "path": "local-verification/kernel-runtime-acceptance-v8/report.json",
+    "sha256": "2513b12ff7872253196114651efdb0fcdbee054237887213076375b55747fcd4",
+    "bytes": 3764
+  },
+  {
+    "path": "local-verification/kernel-runtime-acceptance-v9/api.log",
+    "sha256": "08047998320df14542ed8f0c576c238d4c34c509bd2c648528f2d02e3b4df768",
+    "bytes": 595
+  },
+  {
+    "path": "local-verification/kernel-runtime-acceptance-v9/metrics.txt",
+    "sha256": "cc4402c04065504c64fd2be4268838f1cc55b27b4084d9fdfa687f2a2ad21fe6",
+    "bytes": 14576
+  },
+  {
+    "path": "local-verification/kernel-runtime-acceptance-v9/recovery-commands.json",
+    "sha256": "338d05d953c813dbee6b4f3caaf12767dc5d566b6bc1d7d4de3cd6430a2dc29e",
+    "bytes": 5090
+  },
+  {
+    "path": "local-verification/kernel-runtime-acceptance-v9/report.json",
+    "sha256": "604cf1a0585ed2283f3350be4a847d2d71edf5741ba239f383aa7dbe6c51b022",
+    "bytes": 3967
+  },
+  {
+    "path": "local-verification/kernel-runtime-build-v2.log",
+    "sha256": "1ea98a36758da5aa03fc4aef1e68a3831a43286228b8204346b82e7e3246db1e",
+    "bytes": 5485
+  },
+  {
+    "path": "local-verification/kernel-runtime-build.log",
+    "sha256": "c560f371beb6363c85859cbfe64a54ff8d06c315e73881c3747eb0aec45d5bba",
+    "bytes": 4354
+  },
+  {
+    "path": "local-verification/kernel-runtime-clock-check-v2.json",
+    "sha256": "dd842e50b8a12d2044f57ff207ddb111d1454fb6c0cde6037b275f0029ad9bd0",
+    "bytes": 669
+  },
+  {
+    "path": "local-verification/kernel-runtime-clock-check.json",
+    "sha256": "08445d10a73e5a1349d48cbdbc88f9f73eac5cc4f3abbf67b81f90c4e77abf04",
+    "bytes": 692
+  },
+  {
+    "path": "local-verification/kernel-runtime-security-v2/sbom.cdx.json",
+    "sha256": "250e549ba8cbadd5bbaa03d3552964b8a69786455ec5f339ab649ae2f7840561",
+    "bytes": 110758
+  },
+  {
+    "path": "local-verification/kernel-runtime-security-v2/scanner-cyclonedx.log",
+    "sha256": "eb1c1f8c65c4561b93e18ab1dbf2710585081fa6614295cc1b91f7ded73b49be",
+    "bytes": 668
+  },
+  {
+    "path": "local-verification/kernel-runtime-security-v2/scanner-json.log",
+    "sha256": "5460fd20fedb684919cabfdd5611636804771ff245600fd4ab00bf14152879ed",
+    "bytes": 668
+  },
+  {
+    "path": "local-verification/kernel-runtime-security-v2/summary.json",
+    "sha256": "3234a21e116d01cc140c38981dc49f5b6c5b518641f6ec0bd12da74593d2a726",
+    "bytes": 2744
+  },
+  {
+    "path": "local-verification/kernel-runtime-security-v2/vulnerabilities.json",
+    "sha256": "912ee67ce1975836564982fea6dd81b6c7af881e2424bb25e159686169d05785",
+    "bytes": 205172
+  },
+  {
+    "path": "local-verification/kernel-supported-base-pull.log",
+    "sha256": "291e8d48161e2cf2bc593da03d7c3498e08901125a1fe8e33528d7fc64d39427",
+    "bytes": 1007
+  },
+  {
+    "path": "local-verification/python-dependency-auth-v2.log",
+    "sha256": "50667fdd59bb8ac1d944a024c09b0f0640c80bc9c8d52012497df3575ef154be",
+    "bytes": 632
+  },
+  {
+    "path": "local-verification/python-dependency-auth-v2.xml",
+    "sha256": "029ade5f6f52d84f65ce07d80512927a2ce39ecda3005b686648a3f90a3798ed",
+    "bytes": 2725
+  },
+  {
+    "path": "local-verification/python-dependency-install.log",
+    "sha256": "59476e8e43032c409ffe41dce480223ddfea88bbb6e82ff012f82c623e409345",
+    "bytes": 11628
+  },
+  {
+    "path": "local-verification/python-dependency-postgres-v1.log",
+    "sha256": "cbfc66bdde8e550c15530f54e3933c1dfcafefd174a350d239694b04ecaa9b62",
+    "bytes": 3030
+  },
+  {
+    "path": "local-verification/python-dependency-postgres-v1.xml",
+    "sha256": "862f3174aabf711c870eda5c8f17d01f3319832f1ca10f55debbd7bd4c8d9f20",
+    "bytes": 10493
+  },
+  {
+    "path": "local-verification/python-dependency-postgres-v2.log",
+    "sha256": "5731024cdef7c49ea219076b52f304ce0a4585f41b4cbf97a6fa093a3e2f6b31",
+    "bytes": 652
+  },
+  {
+    "path": "local-verification/python-dependency-postgres-v2.xml",
+    "sha256": "e683eb56b13e5fbbb3a066b48025d697a8309f584da4fc9cca4f9c7d122de14b",
+    "bytes": 9366
+  },
+  {
+    "path": "local-verification/python-dependency-tests-v1.log",
+    "sha256": "aff1c8e1410d79627ef0d2a3cd46d343f76b543d552d39ae03bd1d87a12f71a6",
+    "bytes": 3818
+  },
+  {
+    "path": "local-verification/python-dependency-tests-v1.xml",
+    "sha256": "21cd30b433ed21f42974487fc05c21696d2a4b9fb51cf93291dfc8d944184471",
+    "bytes": 50198
+  },
+  {
+    "path": "local-verification/python-dependency-tests-v2.log",
+    "sha256": "b445ca16dcc564f9d32a8c1c081ec532e2e30c65158bcaa07c87c2ce015b56eb",
+    "bytes": 1034
+  },
+  {
+    "path": "local-verification/python-dependency-tests-v2.xml",
+    "sha256": "4e5f350cc86e1732f2cd450d7585f3f442c3502a82524cd917f7c12b238aa7f3",
+    "bytes": 46958
+  },
+  {
+    "path": "local-verification/python-dependency-tests-v3.log",
+    "sha256": "d896962abb4020ee0bb9e3ed18acf6f42e119a0430fbb94ab15a2ae594030fe9",
+    "bytes": 1034
+  },
+  {
+    "path": "local-verification/python-dependency-tests-v3.xml",
+    "sha256": "c9fd7b231b22d11f3d87a3afdf5a826b315732c740b9164bd0eb5eae44d7f992",
+    "bytes": 48363
+  },
+  {
+    "path": "local-verification/python-dev-lock.log",
+    "sha256": "8aa5542fd6afd61c43bffebe07ec5e20ab73afbd00153b1b9102a7c900e2f365",
+    "bytes": 111674
+  },
+  {
+    "path": "local-verification/python-route-policy.xml",
+    "sha256": "38132a9ede5a0fc0b6e07403175e65d1ceeebf3a15e8b2261d0b610bcbd5c11d",
+    "bytes": 824
+  },
+  {
+    "path": "local-verification/python-runtime-lock.log",
+    "sha256": "9fe29dddcdff671163acfc227df8e52fac01678c6f80e6b9fcd2c977ae0debd7",
+    "bytes": 93624
+  },
+  {
+    "path": "local-verification/web-base-pull.log",
+    "sha256": "9e44230875ba15ebea5af7c666370ebbb84d1ba38a1189a6a6224801f6dd332e",
+    "bytes": 1016
+  },
+  {
+    "path": "local-verification/web-dependency-app-ci.json",
+    "sha256": "8c5b83429df3c5f782a04f233e159c1dee882638d9ba59b2c136583df9809728",
+    "bytes": 8941
+  },
+  {
+    "path": "local-verification/web-dependency-audit-after.json",
+    "sha256": "defeffc2d1955bd46ffcfbf8a4471d0215ff4623d761974465d092a6e9ca958b",
+    "bytes": 385
+  },
+  {
+    "path": "local-verification/web-dependency-audit-before.json",
+    "sha256": "110ac3455126d63e14f28662760b815adc81d9b68685fb7dfe51be0fee5532e0",
+    "bytes": 10458
+  },
+  {
+    "path": "local-verification/web-dependency-batch.md",
+    "sha256": "e371fc0040b13369ab7e021392e9f613e15ae39d937d9303121a7b67f42a797d",
+    "bytes": 2235
+  },
+  {
+    "path": "local-verification/web-dependency-browser.json",
+    "sha256": "adb9aa657a1d8e0f65074cc642ad4d5e60483e45f04f422318b14d91436889b8",
+    "bytes": 34205
+  },
+  {
+    "path": "local-verification/web-dependency-browser.log",
+    "sha256": "3542dda28a922308c42b62e75c0888e7d20b01249d3ff7f8f1f8a4e4c1986b33",
+    "bytes": 5025
+  },
+  {
+    "path": "local-verification/web-dependency-build-v2.log",
+    "sha256": "64ab9b7711a45f6b5a8604711f5e2bf8f51416ab5e3aef1d07b1d76aec606844",
+    "bytes": 395
+  },
+  {
+    "path": "local-verification/web-dependency-build.log",
+    "sha256": "cc7dedfed6fb549a13817ef65d88e221304bf0a540c313bb0befc9c1f12bd53f",
+    "bytes": 152
+  },
+  {
+    "path": "local-verification/web-dependency-fix.json",
+    "sha256": "61d67c62f1074a809adb2132bb3833b159ace43903df1c3c04abed38b73d2502",
+    "bytes": 573
+  },
+  {
+    "path": "local-verification/web-dependency-image-build.log",
+    "sha256": "626ac56afdee9fe5060521b790c20de6f4d504368346a5c71a00dd2e7a7e73c3",
+    "bytes": 3395
+  },
+  {
+    "path": "local-verification/web-dependency-image-v1/container.log",
+    "sha256": "c70054a95fa180065d0451495a42fca89142eee2e18f4ff926d396f3a92cac39",
+    "bytes": 2288
+  },
+  {
+    "path": "local-verification/web-dependency-image-v1/report.json",
+    "sha256": "100bd8a0a8190ffc0e71ea24b5f1b304abf32ea3b8d8bbef8492f954e13d6cd1",
+    "bytes": 480
+  },
+  {
+    "path": "local-verification/web-dependency-install-v2.log",
+    "sha256": "6989e43731aea42f8f8563577e2ac946f789263f864b579f55a8ce74df51c3b9",
+    "bytes": 147
+  },
+  {
+    "path": "local-verification/web-dependency-install.log",
+    "sha256": "1f6d1818185b68a031744b7195fdfa302d22e6f0637b402a8f6f20fc84c3813a",
+    "bytes": 1035
+  },
+  {
+    "path": "local-verification/web-dependency-kernel-ci.json",
+    "sha256": "82f8ffe22f35cfabf7bc1098f64da3f1eab4fc2c6499a52cc20237b9f8f9977c",
+    "bytes": 13942
+  },
+  {
+    "path": "local-verification/web-dependency-sha256.json",
+    "sha256": "ec86dadaea4dc37639089659d5b2d4f7bd7f73aa975059c1445b9b80fd3d2f7d",
+    "bytes": 2846
+  },
+  {
+    "path": "local-verification/web-dependency-source-secret-scan.json",
+    "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+    "bytes": 3
+  },
+  {
+    "path": "local-verification/web-image-scan-before.log",
+    "sha256": "b62c9cdd2bf7d73b1e6447545bc4dd45f718e91fddfe5e431bc87ee5d0857167",
+    "bytes": 25090
+  },
+  {
+    "path": "local-verification/web-image-vulnerabilities-after.json",
+    "sha256": "e75a86d05d99ac309da7387ca4adb5006374a9fb18d7f296e44d9f78768f4081",
+    "bytes": 70961
+  },
+  {
+    "path": "local-verification/web-image-vulnerabilities-before.json",
+    "sha256": "0c5b4bf4150045199d3da8f1c488d19e2ba28a7eb66d3dac770908492870b863",
+    "bytes": 1102063
+  },
+  {
+    "path": "local-verification/web-runtime-build.log",
+    "sha256": "bb2d634b0ea5097d10ccfa8db1f92f2b104e9011321ca22419cca3fa182511ec",
+    "bytes": 3629
+  },
+  {
+    "path": "local-verification/web-runtime-image/container.log",
+    "sha256": "cd6d30fa8ef23c4fa48c559e972307319ef0283291efdc6aae35863ee60b2ed9",
+    "bytes": 2288
+  },
+  {
+    "path": "local-verification/web-runtime-image/report.json",
+    "sha256": "4bc8b63520d08a949d272a8b1ab25ac725e0205791539d7e34a546fb36105ff7",
+    "bytes": 480
+  },
+  {
+    "path": "local-verification/web-runtime-security-v2/sbom.cdx.json",
+    "sha256": "e173006c53ef247739b219a922f88d02ff8693bca67199be4dee9b104e957f75",
+    "bytes": 37976
+  },
+  {
+    "path": "local-verification/web-runtime-security-v2/scanner-cyclonedx.log",
+    "sha256": "50c41ddfbb95d4aa0cf86156452b2e0e30a8d2e6b45f41005829ddcb12157132",
+    "bytes": 507
+  },
+  {
+    "path": "local-verification/web-runtime-security-v2/scanner-json.log",
+    "sha256": "6896c8a83809bc70328bee0cd6ba7fe3497902b44a983d0025d1f4f7467c4b3c",
+    "bytes": 507
+  },
+  {
+    "path": "local-verification/web-runtime-security-v2/summary.json",
+    "sha256": "6b549929b61ef8ccbfa9a4bc04eabbd19350381810e0ee262cf6a3d0b0739205",
+    "bytes": 1623
+  },
+  {
+    "path": "local-verification/web-runtime-security-v2/vulnerabilities.json",
+    "sha256": "d481469baa7a323fcff86e31a77cb215c201987eb8d463a1bbc95ed7acfa6b5b",
+    "bytes": 70832
+  },
+  {
+    "path": "local-verification/web-runtime-security/sbom.cdx.json",
+    "sha256": "360ae38e8c48d3267636364f8c54ca01c57cff1aabfc7041ca9e75b504057591",
+    "bytes": 37976
+  },
+  {
+    "path": "local-verification/web-runtime-security/scanner-cyclonedx.log",
+    "sha256": "af689578105755eb37af636df65272773083cf9ae782c99c4607a78f756bd1a9",
+    "bytes": 507
+  },
+  {
+    "path": "local-verification/web-runtime-security/scanner-json.log",
+    "sha256": "71728a25ff5517dc970185f86e5056200ff93ddc96c1466b0690fb335364087a",
+    "bytes": 507
+  },
+  {
+    "path": "local-verification/web-runtime-security/summary.json",
+    "sha256": "493f46e86669a4c9f159148dbd21981556dcb9684005dfe43bbf8ae1d5046ec7",
+    "bytes": 1623
+  },
+  {
+    "path": "local-verification/web-runtime-security/vulnerabilities.json",
+    "sha256": "48ba3b7b0b166fa92d8407eba77850cfea1a8c6779fdd65299cac2c959b24d27",
+    "bytes": 70832
+  }
+]

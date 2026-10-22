@@ -1,0 +1,32 @@
+{
+  "add": [],
+  "added": 0,
+  "audited": 77,
+  "change": [],
+  "changed": 0,
+  "funding": 9,
+  "remove": [],
+  "removed": 0,
+  "audit": {
+    "auditReportVersion": 2,
+    "vulnerabilities": {},
+    "metadata": {
+      "vulnerabilities": {
+        "info": 0,
+        "low": 0,
+        "moderate": 0,
+        "high": 0,
+        "critical": 0,
+        "total": 0
+      },
+      "dependencies": {
+        "prod": 6,
+        "dev": 71,
+        "optional": 3,
+        "peer": 0,
+        "peerOptional": 0,
+        "total": 76
+      }
+    }
+  }
+}

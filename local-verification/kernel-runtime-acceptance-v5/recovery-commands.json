@@ -1,0 +1,12 @@
+[
+  {
+    "binary": "mk-privacy-ledger",
+    "exit_code": 0,
+    "diagnostic": "{\"sha256\":\"sha256:1dfc83e23dfd5ef0ba95f2ed1a26b1f0d58db6492ff3d6e392048fb261846898\",\"bytes\":644,\"traffic_enabled\":false}\n"
+  },
+  {
+    "binary": "mk-privacy-ledger",
+    "exit_code": 1,
+    "diagnostic": "Error: conflict: disable dispatch before privacy recovery\n"
+  }
+]
