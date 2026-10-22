@@ -1,0 +1,9 @@
+{
+  "database": "mk_authority_rust_20261022a",
+  "cluster": "mk-acceptance-pg-20261021",
+  "created_for": "authority Rust regression",
+  "tests": 239,
+  "remaining": 0,
+  "outcome": "Worked",
+  "synthetic_fixture_only": true
+}

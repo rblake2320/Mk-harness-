@@ -1,0 +1,156 @@
+{
+  "scope": "author-run built kernel image; synthetic fixtures; no external provider calls",
+  "image_id": "sha256:64880679a9028b13db0be71e96b29797c363d7d1cfcf91dda9c3165b85432542",
+  "migration_count": 21,
+  "user": "65532:65532",
+  "read_only_root": true,
+  "dropped_capabilities": [
+    "ALL"
+  ],
+  "active_content_erased": true,
+  "erased_read_status": 410,
+  "reintake_status": 410,
+  "service_cross_route_status": 403,
+  "privacy_freshness": {
+    "source": "live_original_database_before_export",
+    "not_before": "2026-10-22T12:01:26.574585+00:00",
+    "host_utc_observed": "2026-10-22T12:01:26.744183+00:00",
+    "future_cutoff_refused": true
+  },
+  "privacy_restore": {
+    "actual_pg_dump_restore": true,
+    "without_external_ledger_refused": true,
+    "preview_refused_unreplayed_content": true,
+    "apply_scrubbed_content": true,
+    "restored_fences": 1,
+    "post_backup_suppressions": 1,
+    "post_backup_session_revocations": 1,
+    "raw_session_not_restored": true,
+    "withdrawn_authority_fences": 3,
+    "contact_permission_revoked": true,
+    "adapter_revoked": true,
+    "old_adapter_key_expired": true,
+    "dispatch_enabled": false,
+    "repeat_report_passed": true,
+    "runtime_user": "65532:65532",
+    "ledger_sha256": "sha256:a3bfbf539167e3ae94fd02154f2a40f70458cae9bfe4bc7366fae2f6171b1499",
+    "gate": [
+      {
+        "check": "global_dispatch_disabled",
+        "ok": true,
+        "detail": {
+          "dispatch_enabled": false
+        }
+      },
+      {
+        "check": "privacy_restore_ledger",
+        "ok": true,
+        "detail": {
+          "applied": true,
+          "requests": 1,
+          "fences": 1,
+          "suppressions": 1,
+          "revocations": 1,
+          "authority_withdrawals": 3,
+          "pending_content": 0,
+          "pending_restrictions": 0,
+          "enforced": true
+        }
+      },
+      {
+        "check": "keyring_loads",
+        "ok": true,
+        "detail": {
+          "current": 0,
+          "versions": [
+            0
+          ]
+        }
+      },
+      {
+        "check": "audit_chain_verified",
+        "ok": true,
+        "detail": {
+          "tenants": 1,
+          "failures": []
+        }
+      },
+      {
+        "check": "suppression_ledger_loaded",
+        "ok": true,
+        "detail": {
+          "live_suppressions": 1,
+          "revocations": 1,
+          "inventory_only": true
+        }
+      },
+      {
+        "check": "credentials_unseal",
+        "ok": true,
+        "detail": {
+          "checked": 0,
+          "unreadable": 0
+        }
+      },
+      {
+        "check": "in_flight_marked_unknown",
+        "ok": true,
+        "detail": {
+          "found_in_flight": 0,
+          "marked": 0,
+          "remaining_dispatching": 0,
+          "remaining_submission_started": 0,
+          "apply": true
+        }
+      },
+      {
+        "check": "pre_restore_approvals_invalidated",
+        "ok": true,
+        "detail": {
+          "found": 0,
+          "revoked": 0,
+          "remaining": 0,
+          "restored_at": "2026-10-22T12:01:29.284994Z",
+          "apply": true
+        }
+      },
+      {
+        "check": "reconciliation_backlog",
+        "ok": true,
+        "detail": {
+          "actions_requiring_human_reconciliation": 0,
+          "note": "resolve each against provider records before any replacement message; dispatch stays disabled until the release owner authorises"
+        }
+      },
+      {
+        "gate": "PASS",
+        "apply": true,
+        "next": "operator may enable dispatch via /kill-switch/global with passkey step-up after reviewing the reconciliation backlog"
+      }
+    ]
+  },
+  "provider_cleanup": {
+    "deletes": 2,
+    "sends": 0,
+    "auth_failures": 0,
+    "present": false,
+    "redis_unavailable": true,
+    "sigkill_after_external_effect": true,
+    "restart_recovered_lease": true,
+    "active_receipts": 1,
+    "backup_pending": true,
+    "restricted_worker_role": true,
+    "worker_user": "65532:65532",
+    "worker_read_only": true,
+    "killed_exit_code": 137
+  },
+  "audit_privacy": {
+    "events_scanned": 8,
+    "audit_canary_absent": true,
+    "metric_canary_absent": true,
+    "log_canary_absent": true,
+    "signed_provider_callback_status": 200
+  },
+  "outcome": "Worked",
+  "owned_targets_removed": true
+}

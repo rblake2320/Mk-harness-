@@ -1,0 +1,32 @@
+    Checking mk-store v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-store)
+error: used `unwrap()` on a `Result` value
+   --> crates/mk-store/src/recovery_authority.rs:361:34
+    |
+361 | ... = "2026...rap();
+    |       ^^^^^...^^^^^
+    |
+    = note: if this value is an `Err`, it will panic
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#unwrap_used
+    = note: requested on the command line with `-D clippy::unwrap-used`
+
+error: used `unwrap()` on a `Result` value
+   --> crates/mk-store/src/recovery_authority.rs:378:21
+    |
+378 | ... = serde...rap();
+    |       ^^^^^...^^^^^
+    |
+    = note: if this value is an `Err`, it will panic
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#unwrap_used
+
+error: used `unwrap()` on a `Result` value
+   --> crates/mk-store/src/recovery_authority.rs:388:17
+    |
+388 | / ...   serde_json::from...
+389 | | ...       .unwrap()
+    | |___________________^
+    |
+    = note: if this value is an `Err`, it will panic
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#unwrap_used
+
+error: could not compile `mk-store` (lib test) due to 3 previous errors
+warning: build failed, waiting for other jobs to finish...

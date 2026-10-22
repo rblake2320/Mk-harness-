@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="4" skipped="0" tests="4" time="14.250" timestamp="2026-10-22T06:51:13.308159-05:00" hostname="DESKTOP-CM6G60N"><testcase classname="tools.verification.test_kernel_privacy_restore" name="test_post_backup_authority_withdrawal_survives_recovery[permission]" time="3.206"><failure message="AssertionError: restore gate passed but withdrawn authority was restored&#10;assert (False,) == (True,)&#10;  &#10;  At index 0 diff: False != True&#10;  Use -v to get more diff">tools/verification/test_kernel_privacy_restore.py:228: in test_post_backup_authority_withdrawal_survives_recovery
+    assert conn.execute(query,(entity,)).fetchone() == (True,), "restore gate passed but withdrawn authority was restored"
+E   AssertionError: restore gate passed but withdrawn authority was restored
+E   assert (False,) == (True,)
+E     
+E     At index 0 diff: False != True
+E     Use -v to get more diff</failure></testcase><testcase classname="tools.verification.test_kernel_privacy_restore" name="test_post_backup_authority_withdrawal_survives_recovery[approval_credential]" time="3.779"><failure message="AssertionError: restored revoked credential can request operator step-up&#10;assert 200 == 412&#10; +  where 200 = KernelResponse(status_code=200, body={'challenge': 'gXnrMvQhV_dIXz6CYe9HpphkpUwKPdRQnqsEW-85-LM', 'rp_id': 'localhost'...-switch:enable', 'user_verification': 'required'}, request_id='b01f8c6b-c723-4324-8193-773d98878a6b', retry_after=None).status_code">tools/verification/test_kernel_privacy_restore.py:226: in test_post_backup_authority_withdrawal_survives_recovery
+    assert challenge.status_code == 412, "restored revoked credential can request operator step-up"
+E   AssertionError: restored revoked credential can request operator step-up
+E   assert 200 == 412
+E    +  where 200 = KernelResponse(status_code=200, body={'challenge': 'gXnrMvQhV_dIXz6CYe9HpphkpUwKPdRQnqsEW-85-LM', 'rp_id': 'localhost'...-switch:enable', 'user_verification': 'required'}, request_id='b01f8c6b-c723-4324-8193-773d98878a6b', retry_after=None).status_code</failure></testcase><testcase classname="tools.verification.test_kernel_privacy_restore" name="test_post_backup_authority_withdrawal_survives_recovery[adapter]" time="3.268"><failure message="AssertionError: restore gate passed but withdrawn authority was restored&#10;assert (False,) == (True,)&#10;  &#10;  At index 0 diff: False != True&#10;  Use -v to get more diff">tools/verification/test_kernel_privacy_restore.py:228: in test_post_backup_authority_withdrawal_survives_recovery
+    assert conn.execute(query,(entity,)).fetchone() == (True,), "restore gate passed but withdrawn authority was restored"
+E   AssertionError: restore gate passed but withdrawn authority was restored
+E   assert (False,) == (True,)
+E     
+E     At index 0 diff: False != True
+E     Use -v to get more diff</failure></testcase><testcase classname="tools.verification.test_kernel_privacy_restore" name="test_post_backup_authority_withdrawal_survives_recovery[adapter_rotation]" time="3.213"><failure message="AssertionError: restore gate passed but withdrawn authority was restored&#10;assert (False,) == (True,)&#10;  &#10;  At index 0 diff: False != True&#10;  Use -v to get more diff">tools/verification/test_kernel_privacy_restore.py:228: in test_post_backup_authority_withdrawal_survives_recovery
+    assert conn.execute(query,(entity,)).fetchone() == (True,), "restore gate passed but withdrawn authority was restored"
+E   AssertionError: restore gate passed but withdrawn authority was restored
+E   assert (False,) == (True,)
+E     
+E     At index 0 diff: False != True
+E     Use -v to get more diff</failure></testcase></testsuite></testsuites>

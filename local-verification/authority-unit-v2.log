@@ -1,0 +1,23 @@
+   Compiling mk-store v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-store)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.41s
+     Running unittests src/lib.rs (/tmp/mk-release-acceptance-target/debug/deps/mk_store-ac465907e29a530c)
+
+running 15 tests
+test database_url_tests::empty_url_falls_through_and_missing_parts_is_an_error ... ok
+test database_url_tests::composed_url_percent_encodes_the_password_and_requires_tls ... ok
+test database_url_tests::explicit_root_cert_switches_to_verify_full ... ok
+test database_url_tests::verbatim_url_wins ... ok
+test fingerprint::tests::debug_never_prints_key_material ... ok
+test fingerprint::tests::lock_keys_are_sorted_and_deduped ... ok
+test fingerprint::tests::default_key_reproduces_the_python_vector ... ok
+test fingerprint::tests::parse_rejects_bad_specs ... ok
+test fingerprint::tests::rotated_set_keeps_the_old_tag_and_switches_primary ... ok
+test privacy_ledger::tests::deserialized_ledger_has_no_external_authentication ... ok
+test recovery_authority::tests::withdrawals_require_closed_non_nil_unique_identities_and_bounded_times ... ok
+test privacy_ledger::tests::rejects_malformed_duplicate_unbound_or_account_fences ... ok
+test privacy_ledger::tests::fence_vocabulary_matches_every_domain_channel ... ok
+test privacy_ledger::tests::restriction_shapes_are_closed_and_version_one_is_refused ... ok
+test tests::migrations_are_registered ... ok
+
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
