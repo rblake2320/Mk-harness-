@@ -3,7 +3,7 @@ WORKDIR /repo
 COPY packages ./packages
 COPY web ./web
 WORKDIR /repo/web
-RUN npm install && npm run build
+RUN npm ci && npm run build
 
 FROM nginx:1.27-alpine
 COPY --from=build /repo/web/dist /usr/share/nginx/html
