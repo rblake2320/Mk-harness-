@@ -1,0 +1,26 @@
+   Compiling mk-api v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-api)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 4.37s
+     Running tests/http_e2e.rs (/tmp/mk-release-acceptance-target/debug/deps/http_e2e-05ff1a20f14da3a3)
+
+running 6 tests
+test privacy_account_erasure_revokes_sessions_approvals_and_reports_sender_cleanup ... ok
+test privacy_erasure_authority_rls_and_legacy_writes_fail_closed ... ok
+test privacy_erasure_blocks_uncertain_submission_until_authenticated_resolution ... ok
+test privacy_erasure_clears_inbound_and_late_webhooks_without_false_provider_receipts ... ok
+test privacy_erasure_completed_delivery_accepts_late_receipts ... 
+thread 'privacy_erasure_completed_delivery_accepts_late_receipts' (1271697) panicked at crates/mk-api/tests/http_e2e.rs:2054:5:
+assertion `left == right` failed
+  left: 410
+ right: 200
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED
+test privacy_erasure_removes_queued_content_and_blocks_dispatch_and_reintake ... ok
+
+failures:
+
+failures:
+    privacy_erasure_completed_delivery_accepts_late_receipts
+
+test result: FAILED. 5 passed; 1 failed; 0 ignored; 0 measured; 18 filtered out; finished in 1.94s
+
+error: test failed, to rerun pass `-p mk-api --test http_e2e`

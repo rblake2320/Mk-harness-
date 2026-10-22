@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="pytest" errors="1" failures="0" skipped="0" tests="1" time="0.179" timestamp="2026-10-22T02:36:08.869840-05:00" hostname="DESKTOP-CM6G60N"><testcase classname="" name="tests.test_privacy_delivery" time="0.000"><error message="collection failure">ImportError while importing test module 'D:\projects\mk-release-acceptance-20261021\backend\tests\test_privacy_delivery.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+C:\Users\techai\AppData\Roaming\uv\python\cpython-3.13.5-windows-x86_64-none\Lib\importlib\__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+backend\tests\test_privacy_delivery.py:10: in &lt;module&gt;
+    from app.kernel import KernelResponse, KernelUnavailable
+E   ImportError: cannot import name 'KernelResponse' from 'app.kernel' (D:\projects\mk-release-acceptance-20261021\backend\app\kernel\__init__.py)</error></testcase></testsuite></testsuites>
