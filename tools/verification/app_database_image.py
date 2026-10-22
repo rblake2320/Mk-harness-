@@ -188,6 +188,19 @@ def main():
                                           capture_output=True, timeout=45)
                 assert restored.returncode == 0, "Restore of the synthetic pre-rotation backup failed"
                 restore_env = {**runtime_env, "DB_NAME": restored_database}
+                restored_runtime_dsn = psycopg.conninfo.make_conninfo(admin, dbname=restored_database, user="mk_app_login", password=runtime_pw)
+                with psycopg.connect(restored_runtime_dsn) as conn:
+                    report["fresh_restore_default_temp_privilege"] = conn.execute("SELECT has_database_privilege(current_database(),'TEMP')").fetchone()[0]
+                assert report["fresh_restore_default_temp_privilege"] is True
+                # pg_dump without --create does not restore database-wide ACLs.
+                # Reapply operator bootstrap before using the restored database.
+                once(["python", "-m", "app.migrate", "bootstrap"], {
+                    **env, "DB_NAME": restored_database, "MK_APP_BOOTSTRAP_USER": parsed["user"],
+                    "MK_APP_BOOTSTRAP_PASSWORD": parsed["password"], "MK_APP_RUNTIME_PASSWORD": runtime_pw,
+                    "MK_APP_MIGRATION_PASSWORD": migration_pw})
+                with psycopg.connect(restored_runtime_dsn) as conn:
+                    report["restore_temp_privilege_after_bootstrap"] = conn.execute("SELECT has_database_privilege(current_database(),'TEMP')").fetchone()[0]
+                assert report["restore_temp_privilege_after_bootstrap"] is False
                 rejected = json.loads(once(["python", "-m", "app.tools.reseal", "status"], restore_env, expected=1))
                 assert rejected["unreadable"] == 2
                 report["old_backup_without_escrow_unreadable"] = rejected["unreadable"]

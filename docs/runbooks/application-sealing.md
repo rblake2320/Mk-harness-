@@ -68,7 +68,9 @@ Activation/rekey change no customer permission or approval and call no provider.
 Rollback uses the compatible reader with retained keys, not an old binary that
 cannot understand envelopes. Do not re-enable legacy writes to silence errors.
 An old backup may contain retired-key data; recovery must use controlled escrow,
-repeat activation/rekey/verification in isolation, and keep dispatch disabled
+reapply database bootstrap/privilege checks (a restore into a fresh database does
+not copy database-level ACL revocations), repeat activation/rekey/verification
+in isolation, and keep dispatch disabled
 until the existing restore gate and replay checks pass.
 
 ## Executable checks

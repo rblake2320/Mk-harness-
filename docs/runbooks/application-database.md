@@ -47,6 +47,10 @@ Bootstrap revokes PUBLIC database CREATE/TEMP and public-schema CREATE within
 the target database; review other applications before using a shared database.
 It does not reset data, enable dispatch, or provision any cloud resources.
 Audit deletion and retention are separate governed processes, not API grants.
+After restoring into a fresh database, reapply bootstrap and validate privileges
+before starting runtime: `pg_dump`/`pg_restore` without database creation does not
+copy the source database's PUBLIC TEMP/CREATE revocations. The app's startup gate
+rejects that drift; do not weaken it to make a restore start.
 
 ## Compose / ECS
 
