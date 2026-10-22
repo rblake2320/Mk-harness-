@@ -1,0 +1,91 @@
+{
+  "scope": "author-run application database boundary verification",
+  "files": [
+    {
+      "sha256": "899678b89f362a6c289dc62f22f282a62b5b61cec9a99dac20075bcd07d696b1",
+      "path": "local-verification/appdb-image-build-source.log",
+      "bytes": 2069
+    },
+    {
+      "sha256": "98b9a797b2efc1de0f83e0e969c199fb983af01b2fd5057ba01124891512277d",
+      "path": "local-verification/appdb-image-build-v1.log",
+      "bytes": 3016
+    },
+    {
+      "sha256": "7bb05b3408f3442c053e75e57517e83db75c2f204b93183cf68e9c39c73db8ce",
+      "path": "local-verification/appdb-image-build-v2.log",
+      "bytes": 21636
+    },
+    {
+      "sha256": "933ab06a1b6e69161bbc44f02242ef793194f4537737f1ba2ed52c0ee473deb7",
+      "path": "local-verification/appdb-infra-validate-v1.log",
+      "bytes": 38
+    },
+    {
+      "sha256": "7150dfffb390c0da2042f9702ca971eca4ba6a37e9be6ac324fb9d780605c296",
+      "path": "local-verification/appdb-initial-red.xml",
+      "bytes": 3969
+    },
+    {
+      "sha256": "872e0778e8698a5cdccf1c250e749b2852cfd18250774c470d6d560ef372caa4",
+      "path": "local-verification/appdb-owner-red.xml",
+      "bytes": 681
+    },
+    {
+      "sha256": "c7a2fb53655b98f1d588e9cb24edcca554f145653679631c17eedddf5ec7eb14",
+      "path": "local-verification/appdb-postgres-c88e1c0.xml",
+      "bytes": 2727
+    },
+    {
+      "sha256": "cf5abeef75ead4874e8d774bb77bbbc43dae717f40b2cb012e49172ced1138d8",
+      "path": "local-verification/appdb-postgres-v1.xml",
+      "bytes": 647431
+    },
+    {
+      "sha256": "7917fdf1a977626dca966f6d2a180104cd27d314f57dce2ea7c028641b1c2066",
+      "path": "local-verification/appdb-postgres-v2.xml",
+      "bytes": 2553
+    },
+    {
+      "sha256": "53f349f8b7177d6c3c4245b615bbb2493c8b972bf25d411b03cf121fb158c652",
+      "path": "local-verification/appdb-postgres-v3.xml",
+      "bytes": 2106
+    },
+    {
+      "sha256": "6c0339c9119cf51aa77af88036f1795931b4f782f058b1ff56d04b245ba72f2d",
+      "path": "local-verification/appdb-postgres-v4.xml",
+      "bytes": 2601
+    },
+    {
+      "sha256": "a16aa8e342be60c2f87930897f5f7747cbb56929f2da0e0bc2caab9aaaf41f0e",
+      "path": "local-verification/appdb-postgres-v5.xml",
+      "bytes": 2727
+    },
+    {
+      "sha256": "a521befc11e4d3421bdefe8f4dd85af10c4700561e70c5d989049cc281498ece",
+      "path": "local-verification/appdb-predecessor-app-ci.json",
+      "bytes": 5319
+    },
+    {
+      "sha256": "5d9496897c352212d033f5c2c7979a2daef132799d476864f64f9f9710f021c4",
+      "path": "local-verification/appdb-predecessor-kernel-ci.json",
+      "bytes": 14017
+    },
+    {
+      "sha256": "d9f2bc2dd414009a43fffad9fcf1409b6a0f37a8d764eee73b091c91ed713353",
+      "path": "local-verification/appdb-python-c88e1c0.xml",
+      "bytes": 38483
+    },
+    {
+      "sha256": "b2da2d4e950ae7acbba5a1f956f3a005082918b8763488d40a8cc7982acc6247",
+      "path": "local-verification/appdb-python-v1.xml",
+      "bytes": 38483
+    },
+    {
+      "sha256": "fa5ffe7f47e8822ca5e271133ff694372745f73f918725a4548bf24df46bc58e",
+      "path": "local-verification/appdb-security-batch.md",
+      "bytes": 4453
+    }
+  ],
+  "source_commit": "c88e1c0415610820d2ff7d09ae4a52ecd155d51d"
+}

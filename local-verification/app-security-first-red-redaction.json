@@ -1,0 +1,10 @@
+[
+  {
+    "path": "local-verification/app-security-restore-red.log",
+    "synthetic_token_renderings_redacted": 1
+  },
+  {
+    "path": "local-verification/app-security-restore-red.xml",
+    "synthetic_token_renderings_redacted": 2
+  }
+]

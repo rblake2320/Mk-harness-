@@ -1,0 +1,11 @@
+   Compiling mk-api v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-api)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.52s
+     Running tests/http_e2e.rs (/tmp/mk-release-acceptance-target/debug/deps/http_e2e-05ff1a20f14da3a3)
+
+running 3 tests
+test editing_draft_fences_queued_and_future_proposals ... ok
+test editing_draft_serializes_with_concurrent_intake ... ok
+test editing_draft_serializes_with_human_approval ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 12 filtered out; finished in 2.77s
+

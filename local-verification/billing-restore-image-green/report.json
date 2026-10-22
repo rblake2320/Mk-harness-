@@ -1,0 +1,98 @@
+{
+  "scope": "author-run shipped container, real PostgreSQL, real HTTP; synthetic fixtures only",
+  "image_id": "sha256:aeb2ed0bf8d3bf7a512920ae3b8b1a20468ef431b3ba38d13fb7951646eb21d6",
+  "bootstrap": "Application roles/schema bootstrapped; run upgrade as mk_app_migrator",
+  "migration": "Application migrations applied: 0001_initial.sql, 0002_seal_write_fence.sql, 0003_erasure_ledger.sql, 0004_billing_erasure_fence.sql, 0005_billing_provisions.sql, 0006_billing_restore_bindings.sql",
+  "migration_repeat": "Application migrations applied: 0001_initial.sql, 0002_seal_write_fence.sql, 0003_erasure_ledger.sql, 0004_billing_erasure_fence.sql, 0005_billing_provisions.sql, 0006_billing_restore_bindings.sql",
+  "owner_runtime_refused": true,
+  "runtime": {
+    "user": "65532:65532",
+    "read_only": true,
+    "cap_drop": [
+      "ALL"
+    ]
+  },
+  "password_only_customer_status": 403,
+  "customer_created_status": 201,
+  "export_before_step_up": 403,
+  "export_after_step_up": 200,
+  "shipped_healthcheck_exit": 0,
+  "published_port_changed_after_restart": true,
+  "after_restart_customer_status": 200,
+  "pre_erasure_backup": {
+    "sha256": "dadc2c454946fba3cbb99fe6f17702e6edaa816056cf2ee4de39192f22ff4e0e",
+    "bytes": 157759
+  },
+  "billing_intent_created_after_backup": true,
+  "deletion_status": 202,
+  "downstream_pending": [
+    "backup_expiry",
+    "billing_customer",
+    "billing_provision",
+    "billing_subscription",
+    "customer_request",
+    "kernel_account",
+    "restore_ledger_anchor"
+  ],
+  "deleted_session_status": 401,
+  "unauthenticated_receipt_status": 200,
+  "billing_late_webhook_statuses": {
+    "checkout.session.completed": 200,
+    "customer.subscription.created": 200,
+    "customer.subscription.updated": 200,
+    "customer.subscription.deleted": 200,
+    "invoice.paid": 200,
+    "invoice.payment_succeeded": 200
+  },
+  "billing_erasure_mirror_unchanged": true,
+  "external_ledger": {
+    "sha256": "e0d59e1a25aa6b9b8ef2feb457d87b040d20f086460dbed6dcbc952f71ba4ace",
+    "bytes": 1088,
+    "requests": 2
+  },
+  "restored_before_ledger": {
+    "customers": 1,
+    "customer_destinations": 1,
+    "provider_keys": 1,
+    "auth_factors": 1,
+    "erasure_requests": 0
+  },
+  "restore_erasure_replay": {
+    "applied": true,
+    "requests": 2,
+    "active_store_replayed": 2,
+    "downstream_receipts_required": true
+  },
+  "restored_after_ledger": {
+    "customers": 0,
+    "customer_destinations": 0,
+    "provider_keys": 0,
+    "auth_factors": 0,
+    "erasure_requests": 2
+  },
+  "restore_erasure_repeat": {
+    "applied": true,
+    "requests": 2,
+    "active_store_replayed": 1,
+    "downstream_receipts_required": true
+  },
+  "restored_billing_cleanup_binding": {
+    "exact_identity_retained": true,
+    "business_intent_not_recreated": true,
+    "one_pending_cleanup_task": true,
+    "repeat_replay_idempotent": true
+  },
+  "restored_billing_reactivation_refused": true,
+  "audit_privacy": {
+    "url_canary_absent_from_logs": true,
+    "safe_request_events_present": true
+  },
+  "database_identity": [
+    "mk_app_login",
+    "mk_app_login"
+  ],
+  "retained_customers": 0,
+  "audit_records": 10,
+  "outcome": "Worked",
+  "owned_targets_removed": true
+}

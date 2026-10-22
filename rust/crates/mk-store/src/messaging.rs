@@ -243,12 +243,32 @@ pub async fn sender_secret(
     keyring: &Keyring,
     id: Uuid,
 ) -> Result<SenderIdentitySecret, StoreError> {
+    sender_secret_scoped(tx, keyring, id, false).await
+}
+
+/// Only the provider cleanup resolver uses this path. Disabling a sender must
+/// stop sends immediately while preserving authentication needed for erasure.
+pub async fn sender_secret_for_erasure(
+    tx: &mut TenantTx<'_>,
+    keyring: &Keyring,
+    id: Uuid,
+) -> Result<SenderIdentitySecret, StoreError> {
+    sender_secret_scoped(tx, keyring, id, true).await
+}
+
+async fn sender_secret_scoped(
+    tx: &mut TenantTx<'_>,
+    keyring: &Keyring,
+    id: Uuid,
+    allow_disabled: bool,
+) -> Result<SenderIdentitySecret, StoreError> {
     let r = sqlx::query(
         "SELECT owner_user_id, account_sid, auth_token_sealed, from_number, messaging_service_sid, status
-         FROM kernel.sender_identities WHERE tenant_id = $1 AND sender_identity_id = $2 AND status = 'active'",
+         FROM kernel.sender_identities WHERE tenant_id = $1 AND sender_identity_id = $2 AND (status = 'active' OR $3)",
     )
     .bind(tx.tenant().0)
     .bind(id)
+    .bind(allow_disabled)
     .fetch_optional(tx.conn())
     .await?
     .ok_or(StoreError::NotFound)?;
@@ -302,6 +322,48 @@ fn row_to_delivery(r: &sqlx::postgres::PgRow) -> Result<DeliveryRecord, StoreErr
 }
 
 const DCOLS: &str = "delivery_id, action_id, attempt, sender_identity_id, provider_message_id, state, provider_error_code, read_status, submission_started_at, last_event_at, reconciled_at";
+
+/// Open uncertain attempts, scoped to the authenticated sender owner (or a
+/// tenant administrator). Keyset pagination cannot hide older uncertain sends.
+pub async fn delivery_exceptions(
+    tx: &mut TenantTx<'_>,
+    user: UserId,
+    admin: bool,
+    after: Option<Uuid>,
+    limit: i64,
+) -> Result<Vec<serde_json::Value>, StoreError> {
+    let rows = sqlx::query("SELECT d.delivery_id, d.action_id, d.state AS delivery_state,
+        d.provider_message_id, d.read_status, d.submission_started_at, d.reconciled_at,
+        a.state AS action_state
+        FROM kernel.message_deliveries d
+        JOIN kernel.actions a ON a.tenant_id = d.tenant_id AND a.action_id = d.action_id
+        JOIN kernel.sender_identities s ON s.tenant_id = d.tenant_id AND s.sender_identity_id = d.sender_identity_id
+        WHERE d.tenant_id = $1 AND ($2 OR s.owner_user_id = $3)
+          AND (a.state = 'reconciliation_required' OR d.state IN ('submission_unknown','delivery_unknown'))
+          AND NOT EXISTS (SELECT 1 FROM kernel.submission_resolutions r WHERE r.tenant_id = d.tenant_id AND r.action_id = d.action_id)
+          AND ($4::uuid IS NULL OR d.delivery_id > $4)
+        ORDER BY d.delivery_id LIMIT $5")
+        .bind(tx.tenant().0).bind(admin).bind(user.0).bind(after).bind(limit.clamp(1, 101))
+        .fetch_all(tx.conn()).await?;
+    rows.iter()
+        .map(|r| {
+            Ok(json!({
+                "delivery_id": r.try_get::<Uuid, _>("delivery_id")?,
+                "action_id": r.try_get::<Uuid, _>("action_id")?,
+                "delivery_state": r.try_get::<String, _>("delivery_state")?,
+                "action_state": r.try_get::<String, _>("action_state")?,
+                "provider_message_id": r.try_get::<Option<String>, _>("provider_message_id")?,
+                "read_status": r.try_get::<String, _>("read_status")?,
+                "created_at": r.try_get::<DateTime<Utc>, _>("submission_started_at")?,
+                "reconciled_at": r.try_get::<Option<DateTime<Utc>>, _>("reconciled_at")?,
+                "resolution_options": if admin && r.try_get::<String, _>("action_state")? == "reconciliation_required"
+                    && r.try_get::<Option<String>, _>("provider_message_id")?.is_some() {
+                    crate::resolutions::Decision::for_state(&r.try_get::<String, _>("delivery_state")?).into_iter().collect::<Vec<_>>()
+                } else { vec![] },
+            }))
+        })
+        .collect()
+}
 
 /// Record that submission is starting (C4 step 3), *before* the provider
 /// request. Idempotent per (action, attempt).
@@ -432,6 +494,69 @@ pub async fn delivery_by_provider_id(
     r.as_ref().map(row_to_delivery).transpose()
 }
 
+/// Only an authenticated callback may bind a lost provider id. The signed URL
+/// identifies the exact pre-recorded attempt, not a guessed body/date match.
+/// Lock action before delivery, matching dispatch/reconciliation lock order.
+pub async fn delivery_for_callback(
+    tx: &mut TenantTx<'_>,
+    provider_message_id: &str,
+    sender: Uuid,
+    binding: Option<(ActionId, i32)>,
+) -> Result<Option<DeliveryRecord>, StoreError> {
+    let q = format!(
+        "SELECT {DCOLS} FROM kernel.message_deliveries
+        WHERE tenant_id = $1 AND provider = 'twilio' AND
+        (($2::uuid IS NOT NULL AND action_id = $2 AND attempt = $3) OR
+         ($2::uuid IS NULL AND provider_message_id = $4))"
+    );
+    let row = sqlx::query(sqlx::AssertSqlSafe(q))
+        .bind(tx.tenant().0)
+        .bind(binding.map(|b| b.0.0))
+        .bind(binding.map(|b| b.1))
+        .bind(provider_message_id)
+        .fetch_optional(tx.conn())
+        .await?;
+    let Some(row) = row else {
+        return Ok(None);
+    };
+    let preliminary = row_to_delivery(&row)?;
+    match crate::actions::get_for_update(tx, preliminary.action_id).await {
+        Ok(_) | Err(StoreError::Erased) => {} // the row lock is held in both cases
+        Err(error) => return Err(error),
+    }
+    let q = format!(
+        "SELECT {DCOLS} FROM kernel.message_deliveries
+        WHERE tenant_id = $1 AND delivery_id = $2 FOR UPDATE"
+    );
+    let row = sqlx::query(sqlx::AssertSqlSafe(q))
+        .bind(tx.tenant().0)
+        .bind(preliminary.delivery_id)
+        .fetch_one(tx.conn())
+        .await?;
+    let mut delivery = row_to_delivery(&row)?;
+    if delivery.sender_identity_id != sender
+        || delivery
+            .provider_message_id
+            .as_deref()
+            .is_some_and(|id| id != provider_message_id)
+    {
+        return Err(StoreError::Conflict("callback attempt binding mismatch"));
+    }
+    if delivery.provider_message_id.is_none() {
+        sqlx::query(
+            "UPDATE kernel.message_deliveries SET provider_message_id = $3
+            WHERE tenant_id = $1 AND delivery_id = $2",
+        )
+        .bind(tx.tenant().0)
+        .bind(delivery.delivery_id)
+        .bind(provider_message_id)
+        .execute(tx.conn())
+        .await?;
+        delivery.provider_message_id = Some(provider_message_id.to_owned());
+    }
+    Ok(Some(delivery))
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EventOutcome {
     /// First time this provider event was seen; state folded.
@@ -515,12 +640,51 @@ pub async fn record_reconciliation(
     Ok(())
 }
 
+/// Claim at most `limit` due provider GETs. Commit before resolving credentials
+/// or doing network IO; this works with a one-connection pool and many workers.
+pub async fn claim_reconciliation_checks(
+    tx: &mut TenantTx<'_>,
+    now: DateTime<Utc>,
+    limit: i64,
+) -> Result<Vec<DeliveryRecord>, StoreError> {
+    let q = format!("SELECT {DCOLS} FROM kernel.message_deliveries
+        WHERE tenant_id = $1 AND provider_message_id IS NOT NULL
+          AND state NOT IN ('delivered','failed')
+          AND submission_started_at <= $2 - interval '30 seconds'
+          AND (reconciliation_checked_at IS NULL OR reconciliation_checked_at <= $2 - interval '60 seconds')
+        ORDER BY reconciliation_checked_at ASC NULLS FIRST, submission_started_at
+        LIMIT $3 FOR UPDATE SKIP LOCKED");
+    let rows = sqlx::query(sqlx::AssertSqlSafe(q))
+        .bind(tx.tenant().0)
+        .bind(now)
+        .bind(limit.clamp(1, 100))
+        .fetch_all(tx.conn())
+        .await?;
+    let deliveries = rows
+        .iter()
+        .map(row_to_delivery)
+        .collect::<Result<Vec<_>, _>>()?;
+    for d in &deliveries {
+        sqlx::query(
+            "UPDATE kernel.message_deliveries SET reconciliation_checked_at = $3
+            WHERE tenant_id = $1 AND delivery_id = $2",
+        )
+        .bind(tx.tenant().0)
+        .bind(d.delivery_id)
+        .bind(now)
+        .execute(tx.conn())
+        .await?;
+    }
+    Ok(deliveries)
+}
+
 // ------------------------------------------------------------ inbound
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InboundOutcome {
     Recorded(Uuid),
     Duplicate(Uuid),
+    Erased(Uuid),
 }
 
 /// Durable, deduplicated inbound record (C5 steps 2–5). The body is sealed with
@@ -580,6 +744,11 @@ pub async fn record_inbound(
             .await?;
         return Ok(InboundOutcome::Duplicate(existing));
     };
+    let erased: bool = sqlx::query_scalar("SELECT content_erased_at IS NOT NULL FROM kernel.inbound_events WHERE tenant_id=$1 AND event_id=$2")
+        .bind(tx.tenant().0).bind(e).fetch_one(tx.conn()).await?;
+    if erased {
+        return Ok(InboundOutcome::Erased(e));
+    }
     append_event(
         tx,
         NewEvent {
@@ -641,7 +810,7 @@ pub async fn pending_inbound(
     let rows = sqlx::query(
         "SELECT event_id, provider_event_id, sender_identity_id, source_destination_hash, destination_fingerprints, received_at, provider_timestamp,
                 content_sealed, opt_out_signal, disposition
-         FROM kernel.inbound_events WHERE tenant_id = $1 AND processed_at IS NULL ORDER BY received_at LIMIT $2",
+         FROM kernel.inbound_events WHERE tenant_id = $1 AND processed_at IS NULL AND content_erased_at IS NULL ORDER BY received_at LIMIT $2",
     )
     .bind(tx.tenant().0)
     .bind(limit)
@@ -704,10 +873,11 @@ pub struct InboundHealth {
     pub last_failure_reason: String,
     pub paused_since: Option<DateTime<Utc>>,
     pub resumed_at: Option<DateTime<Utc>>,
+    pub recovery_required: bool,
 }
 
 pub async fn inbound_health(tx: &mut TenantTx<'_>) -> Result<Option<InboundHealth>, StoreError> {
-    let r = sqlx::query("SELECT last_ok_at, last_failure_at, last_failure_reason, paused_since, resumed_at FROM kernel.inbound_health WHERE tenant_id = $1")
+    let r = sqlx::query("SELECT last_ok_at, last_failure_at, last_failure_reason, paused_since, resumed_at, recovery_required FROM kernel.inbound_health WHERE tenant_id = $1")
         .bind(tx.tenant().0)
         .fetch_optional(tx.conn())
         .await?;
@@ -718,13 +888,14 @@ pub async fn inbound_health(tx: &mut TenantTx<'_>) -> Result<Option<InboundHealt
             last_failure_reason: r.try_get("last_failure_reason")?,
             paused_since: r.try_get("paused_since")?,
             resumed_at: r.try_get("resumed_at")?,
+            recovery_required: r.try_get("recovery_required")?,
         })
     })
     .transpose()
 }
 
-/// Record a successful inbound-path check (an authenticated webhook arrived, or
-/// the probe succeeded). Clears a pause only through `resume_inbound`.
+/// Record a successful aggregate of committed public probe receipts.
+/// Customer webhooks and caller health assertions cannot establish health.
 pub async fn inbound_ok(tx: &mut TenantTx<'_>, now: DateTime<Utc>) -> Result<(), StoreError> {
     sqlx::query(
         "INSERT INTO kernel.inbound_health (tenant_id, last_ok_at, updated_at) VALUES ($1,$2,$2)
@@ -754,9 +925,8 @@ pub async fn inbound_failure(
     Ok(())
 }
 
-/// Dispatch gate (C8): paused explicitly, or no successful check within the
-/// stale window after at least one failure, or never checked at all when a
-/// sender identity exists. Returns the reason when dispatch must not proceed.
+/// Every active sender needs a fresh, committed public-webhook receipt. Silence
+/// is stale too; an outage cannot recover while inbound processing is pending.
 pub async fn inbound_dispatch_block(
     tx: &mut TenantTx<'_>,
     now: DateTime<Utc>,
@@ -775,14 +945,14 @@ pub async fn inbound_dispatch_block(
     {
         return Ok(Some("inbound_paused"));
     }
-    match (h.last_ok_at, h.last_failure_at) {
-        (Some(ok), Some(f)) if f > ok && (now - ok).num_seconds() > INBOUND_STALE_SECS => {
-            Ok(Some("inbound_stale"))
-        }
-        (None, Some(_)) => Ok(Some("inbound_stale")),
-        (None, None) => Ok(Some("inbound_unverified")),
-        _ => Ok(None),
+    if h.last_ok_at
+        .is_none_or(|ok| now < ok || now - ok > chrono::Duration::seconds(INBOUND_STALE_SECS))
+        || !crate::probes::all_fresh(tx, now).await?
+    {
+        crate::probes::latch_outage(tx, now).await?;
+        return Ok(Some("inbound_stale"));
     }
+    Ok(h.recovery_required.then_some("inbound_recovery_pending"))
 }
 
 pub async fn pause_inbound(tx: &mut TenantTx<'_>, now: DateTime<Utc>) -> Result<(), StoreError> {
@@ -805,12 +975,12 @@ pub async fn resume_inbound(tx: &mut TenantTx<'_>, now: DateTime<Utc>) -> Result
     };
     let fresh = h
         .last_ok_at
-        .is_some_and(|ok| (now - ok).num_seconds() <= INBOUND_STALE_SECS);
+        .is_some_and(|ok| now >= ok && now - ok <= chrono::Duration::seconds(INBOUND_STALE_SECS));
     let pending = pending_inbound_count(tx).await?;
-    if !fresh || pending > 0 {
+    if !fresh || pending > 0 || !crate::probes::all_fresh(tx, now).await? {
         return Ok(false);
     }
-    sqlx::query("UPDATE kernel.inbound_health SET resumed_at = $2, pending_events_at_resume = 0, updated_at = $2 WHERE tenant_id = $1")
+    sqlx::query("UPDATE kernel.inbound_health SET resumed_at = $2, pending_events_at_resume = 0, recovery_required = false, updated_at = $2 WHERE tenant_id = $1")
         .bind(tx.tenant().0)
         .bind(now)
         .execute(tx.conn())

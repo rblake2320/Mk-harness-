@@ -1,0 +1,20 @@
+
+Initializing provider plugins...
+- Finding hashicorp/random versions matching "~> 3.6"...
+- Finding hashicorp/aws versions matching "~> 5.70"...
+
+Error: Failed to resolve provider packages
+
+Could not resolve provider hashicorp/random: could not connect to
+registry.opentofu.org: failed to request discovery document: Get
+"https://registry.opentofu.org/.well-known/terraform.json": context deadline
+exceeded
+
+
+Error: Failed to resolve provider packages
+
+Could not resolve provider hashicorp/aws: could not connect to
+registry.opentofu.org: failed to request discovery document: Get
+"https://registry.opentofu.org/.well-known/terraform.json": context deadline
+exceeded
+

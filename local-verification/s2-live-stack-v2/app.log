@@ -1,0 +1,91 @@
+INFO:     Started server process [702179]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8019 (Press CTRL+C to quit)
+INFO:     127.0.0.1:53276 - "GET /api/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55174 - "POST /api/auth/signup HTTP/1.1" 201 Created
+INFO:     127.0.0.1:55174 - "POST /api/auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:38470 - "GET /api/brief?date=2026-10-22 HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:38484 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:38484 - "GET /api/brief?date=2026-10-22 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:38470 - "GET /api/usage/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:38490 - "GET /api/usage/tenant HTTP/1.1" 200 OK
+INFO:     127.0.0.1:38484 - "GET /api/keys/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:38486 - "GET /api/auth/sessions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:38502 - "GET /api/agent-ops/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:38512 - "GET /api/agent-ops/approval-credentials HTTP/1.1" 200 OK
+INFO:     127.0.0.1:38490 - "GET /api/agent-ops/inbound/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:38486 - "POST /api/auth/sessions/3d52724e8b1e4b9c81eb19dca3fe1bc0/revoke HTTP/1.1" 200 OK
+INFO:     127.0.0.1:38470 - "GET /api/agent-ops/senders HTTP/1.1" 200 OK
+INFO:     127.0.0.1:38470 - "GET /api/auth/sessions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55174 - "GET /api/auth/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:55174 - "POST /api/auth/refresh HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:55174 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44062 - "POST /api/auth/signup HTTP/1.1" 201 Created
+INFO:     127.0.0.1:44062 - "POST /api/auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44074 - "GET /api/brief?date=2026-10-22 HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:44088 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44088 - "GET /api/brief?date=2026-10-22 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44074 - "GET /api/usage/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44102 - "GET /api/auth/sessions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44088 - "GET /api/keys/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44108 - "GET /api/usage/tenant HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44114 - "GET /api/agent-ops/approval-credentials HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44074 - "GET /api/agent-ops/senders HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44110 - "GET /api/agent-ops/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44102 - "GET /api/agent-ops/inbound/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44102 - "POST /api/auth/sessions/81952494c88d400f9595c697157bfa07/revoke HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44102 - "GET /api/auth/sessions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44062 - "GET /api/auth/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:44062 - "POST /api/auth/refresh HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:44062 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44102 - "POST /api/auth/logout HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44062 - "GET /api/auth/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:44062 - "POST /api/auth/refresh HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:44102 - "POST /api/auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44110 - "GET /api/usage/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44102 - "GET /api/keys/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44074 - "GET /api/auth/sessions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44114 - "GET /api/usage/tenant HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44108 - "GET /api/agent-ops/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44074 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44110 - "GET /api/agent-ops/senders HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44088 - "GET /api/agent-ops/approval-credentials HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44102 - "GET /api/agent-ops/inbound/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44114 - "POST /api/auth/logout HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42776 - "POST /api/auth/signup HTTP/1.1" 201 Created
+INFO:     127.0.0.1:42776 - "POST /api/auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42790 - "GET /api/brief?date=2026-10-22 HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:42804 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42804 - "GET /api/brief?date=2026-10-22 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42818 - "GET /api/auth/sessions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42790 - "GET /api/usage/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42820 - "GET /api/usage/tenant HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42804 - "GET /api/keys/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42824 - "GET /api/agent-ops/approval-credentials HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42832 - "GET /api/agent-ops/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42790 - "GET /api/agent-ops/inbound/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42818 - "GET /api/agent-ops/senders HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42832 - "POST /api/auth/sessions/483a8bb0ecc9400e9954ac238b882bff/revoke HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42832 - "GET /api/auth/sessions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42776 - "GET /api/auth/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:42776 - "POST /api/auth/refresh HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:42776 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42832 - "POST /api/auth/logout HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42776 - "GET /api/auth/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:42776 - "POST /api/auth/refresh HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:42832 - "POST /api/auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42818 - "GET /api/usage/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42790 - "GET /api/auth/sessions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42832 - "GET /api/keys/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42824 - "GET /api/usage/tenant HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42804 - "GET /api/agent-ops/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42832 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42818 - "GET /api/agent-ops/senders HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42820 - "GET /api/agent-ops/approval-credentials HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42790 - "GET /api/agent-ops/inbound/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42832 - "POST /api/auth/logout HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [702179]

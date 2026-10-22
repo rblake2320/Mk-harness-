@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="2" time="0.550" timestamp="2026-10-21T23:30:31.898279-05:00" hostname="DESKTOP-CM6G60N"><testcase classname="tests.test_delivery_exceptions" name="test_live_delivery_exceptions_keep_unknown_and_filter_customer_owner" time="0.113"><failure message="AttributeError: module 'app.db' has no attribute 'SessionLocal'">client = &lt;starlette.testclient.TestClient object at 0x000001AFF5452A50&gt;
+kernel_env = None
+
+    def test_live_delivery_exceptions_keep_unknown_and_filter_customer_owner(client, kernel_env):
+        h, uid = _user(client)
+        other, _ = _user(client)
+        cid, _, _ = _customer(client, h, phone="+15555558201")
+        foreign_cid, _, _ = _customer(client, other, phone="+15555558202")
+        aid, foreign_aid, cursor = [str(uuid.uuid4()) for _ in range(3)]
+&gt;       with dbmod.SessionLocal() as db:
+E       AttributeError: module 'app.db' has no attribute 'SessionLocal'
+
+backend\tests\test_delivery_exceptions.py:20: AttributeError</failure></testcase><testcase classname="tests.test_delivery_exceptions" name="test_delivery_exception_cursor_and_provider_evidence_never_clear_human_review" time="0.199" /></testsuite></testsuites>

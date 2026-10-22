@@ -1,0 +1,158 @@
+{
+  "source_commit": "0abace63c4f960cf9a0dc346c3470ba29e1eaf5d",
+  "image_id": "sha256:67f077f3c1bbc8f966001aa367e8b6a8617c33ea63cead168c39bd8aaac3552e",
+  "files": [
+    {
+      "path": "local-verification/billing-restore-app-ci-v1.json",
+      "sha256": "2b812c94b9544330c2e2a71e6e7f7ef20edd81d2376c6d2f3d81f3fc6736e38a"
+    },
+    {
+      "path": "local-verification/billing-restore-kernel-ci-v1.json",
+      "sha256": "3ebf925314fe7536633cb18d2ccd1cb53bb7ef6aa0ced8bc1d47357337886ad5"
+    },
+    {
+      "path": "local-verification/restriction-clippy-v1.log",
+      "sha256": "b460f20af6c6f2c1f8a600a771bb89e80770ef22461b9bea9f8f79dba7a53ac4"
+    },
+    {
+      "path": "local-verification/restriction-final-unit-v1.log",
+      "sha256": "de75e10db93f9bb1155fc2714a9a727e786e3d79ddfc63e42db816d1748822d6"
+    },
+    {
+      "path": "local-verification/restriction-gates-v1.log",
+      "sha256": "ca5c00a54cff4554efee4f7904181bdc38fbc01ddb03982c701c85ba2000227b"
+    },
+    {
+      "path": "local-verification/restriction-gates-v1.xml",
+      "sha256": "19af0427e45408f1f31aaabe8acafb66a7238e7a6168534812042a0103a4393b"
+    },
+    {
+      "path": "local-verification/restriction-image-build-v1.log",
+      "sha256": "34a6577a8a1e4da67f235d84934be75ee3c4f4459052325c56e39a48b0c62c43"
+    },
+    {
+      "path": "local-verification/restriction-image-build-v2.log",
+      "sha256": "b26f7388b0315880c65c511251c828bb33c73346ee237536254dd747583b35c6"
+    },
+    {
+      "path": "local-verification/restriction-kernel-image-v1.log",
+      "sha256": "91ae6d65b760f07f8ada311ce43e03fc0bcaccbc840b38167d677db934e512ea"
+    },
+    {
+      "path": "local-verification/restriction-kernel-image-v1/api.log",
+      "sha256": "73ca3c4191cc73ce537a703008585ef956034997175e7787b4ab1cf845e0edca"
+    },
+    {
+      "path": "local-verification/restriction-kernel-image-v1/metrics.txt",
+      "sha256": "93a2776d42d021df506cae02c02a51dfeb3bc3ec49381c0445ce827bcada3d91"
+    },
+    {
+      "path": "local-verification/restriction-kernel-image-v1/recovery-commands.json",
+      "sha256": "baa5c0e61c06dae56ff2f7c64561c2157b3cc6c3b38a06c194bfcf813f304204"
+    },
+    {
+      "path": "local-verification/restriction-kernel-image-v1/report.json",
+      "sha256": "6d2e20c8704f4e126b37089e40f72cdea7df1b922467d3f829f769c645230da3"
+    },
+    {
+      "path": "local-verification/restriction-kernel-scan-v1.log",
+      "sha256": "a1aee33de37da2af056b3d86bbad89a40896b24cc1c5021ce9a5fdfa7a669bf6"
+    },
+    {
+      "path": "local-verification/restriction-kernel-scan-v1/sbom.cdx.json",
+      "sha256": "d9c50fec22ac41acba563223a0e1140d084c0d65dbfe4a97f991737b5804f060"
+    },
+    {
+      "path": "local-verification/restriction-kernel-scan-v1/scanner-cyclonedx.log",
+      "sha256": "f3376ae05e880db3a0efdd5b3a7bf28c91e593f233c707c1993d7c141f77e1fe"
+    },
+    {
+      "path": "local-verification/restriction-kernel-scan-v1/scanner-json.log",
+      "sha256": "98dc7ced14cf49552f9b5ed3dda82d3aa2b7001100f0922ac3c790b634c6f27e"
+    },
+    {
+      "path": "local-verification/restriction-kernel-scan-v1/summary.json",
+      "sha256": "3c87a4e65b64c354eafad6f0e9b3eea280f07d6b91f8bbfb11811e1010c9066e"
+    },
+    {
+      "path": "local-verification/restriction-kernel-scan-v1/vulnerabilities.json",
+      "sha256": "dad264e0d372b7fce66459f2f581fc01479009ffce544483b2ca0405316852dc"
+    },
+    {
+      "path": "local-verification/restriction-postgres-v1.log",
+      "sha256": "dbedd1d46e0ee42d0c4016993217f184e20ade0e7be0c2f159f8abb095be583e"
+    },
+    {
+      "path": "local-verification/restriction-postgres-v1.xml",
+      "sha256": "26e5396806a00a24479a06e6e2569a29503a26c1ef516c755881bb2115342a73"
+    },
+    {
+      "path": "local-verification/restriction-readiness.json",
+      "sha256": "71a77e7a73b9bf3e59ed49a1ef12f16f07210a5e12a6a52c0890b303d8fd2427"
+    },
+    {
+      "path": "local-verification/restriction-restore-batch.md",
+      "sha256": "88d76323c8349226a44a6fe27b2473bded06bafa2ea22435cf59e2f355b6a2d3"
+    },
+    {
+      "path": "local-verification/restriction-restore-build-v1.log",
+      "sha256": "bf89666deff84a4bc1d86720eceda0594bc0184f7d40451baacbf4ba821d1338"
+    },
+    {
+      "path": "local-verification/restriction-restore-build-v2.log",
+      "sha256": "704b585fd8dee4f2de1bea0d7dbc6a5b53aa01a951a428d406dbacac5bcae38b"
+    },
+    {
+      "path": "local-verification/restriction-restore-build-v3.log",
+      "sha256": "6dfe1fc12039d3cf7650ae8f31383e1e24e8ad4c80ba71cd223aab518f801477"
+    },
+    {
+      "path": "local-verification/restriction-restore-build-v4.log",
+      "sha256": "d6383f752788fadc5ef391e20a5fc9ae1f8f8461be75a17a573e39483c30558a"
+    },
+    {
+      "path": "local-verification/restriction-restore-expanded-v1.log",
+      "sha256": "6332638fb77ebda5f96a8d4a99435d5a6f9101f1bccce71534078ebd05840fd5"
+    },
+    {
+      "path": "local-verification/restriction-restore-expanded-v1.xml",
+      "sha256": "2c90fceed65b35746af2ac5cc13ce703b668f3c81f1af2bb78c7a780e8639a2c"
+    },
+    {
+      "path": "local-verification/restriction-restore-green-v1.log",
+      "sha256": "87d806fc4c48a945080aed589d0a10d9df089002c25420ee41399fc9df28f832"
+    },
+    {
+      "path": "local-verification/restriction-restore-green-v1.xml",
+      "sha256": "88d339345789b194c198e8b9f38f0306c48c45bc6fd69ca69033dea64ddd2309"
+    },
+    {
+      "path": "local-verification/restriction-restore-green-v2.log",
+      "sha256": "14735ef710548574682a9aae64326b6bcc036b515ab29ade14f7ebee78e5a814"
+    },
+    {
+      "path": "local-verification/restriction-restore-green-v2.xml",
+      "sha256": "ebe79e21a67431f2d1fddb35ed23074bc99c9cf0e402c1144f5021f4d58c9c9f"
+    },
+    {
+      "path": "local-verification/restriction-restore-green-v3.log",
+      "sha256": "4103c4217019fabdc50751b60400da8e29483675b57fec756ad8905e81c513c1"
+    },
+    {
+      "path": "local-verification/restriction-restore-green-v3.xml",
+      "sha256": "d859145b3f318bde3358a7bed12aa4972adf2191d44c0227e3b5d7c398d62828"
+    },
+    {
+      "path": "local-verification/restriction-restore-red.log",
+      "sha256": "86457e23da1941c15b6c270b595c26d09a0795c10d368a9f07ea5df9156cd7d6"
+    },
+    {
+      "path": "local-verification/restriction-restore-red.xml",
+      "sha256": "24feb4b352aa663ef8f0944bd8e6ddf4d4bb3ee64c167897b8418c4d7448ae66"
+    },
+    {
+      "path": "local-verification/restriction-rust-green-v1.log",
+      "sha256": "1775864946477ac48cb1485c05a57343dcf0ff8d9999de53540d88e021cc8a38"
+    }
+  ]
+}

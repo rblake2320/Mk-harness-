@@ -176,9 +176,10 @@ pub async fn callback(
     let (cb, kind) =
         MobileCallback::parse(&value).map_err(|e| ApiError::from(e).with_request_id(&headers))?;
     let body_digest = mk_crypto::Digest::of(&body).to_string();
+    let audit_actor = reg.adapter_id.to_string();
     let actor = Actor {
         actor_type: ActorType::Adapter,
-        actor_id: &agent_id,
+        actor_id: &audit_actor,
         trace_id: None,
         policy_version: mk_policy::POLICY_VERSION.0,
     };
@@ -244,7 +245,7 @@ pub async fn callback(
                 &mut tx,
                 action_id,
                 Transition::FailFinal,
-                Some(&cb.error_code),
+                Some("device_reported_failure"),
                 actor,
                 now,
             )
@@ -255,7 +256,7 @@ pub async fn callback(
                 action_id,
                 action.attempt,
                 "failed_final",
-                Some(&cb.error_code),
+                Some("device_reported_failure"),
                 Some(reg.adapter_id.0),
                 Some(&task_id),
                 Some(&body_digest),
@@ -268,8 +269,8 @@ pub async fn callback(
                 action_id,
                 "failed_final",
                 action.attempt,
-                Some(&cb.error_code),
-                json!({"source": "device_callback", "error_code": cb.error_code}),
+                Some("device_reported_failure"),
+                json!({"source": "device_callback", "error_digest": mk_crypto::Digest::of(cb.error_code.as_bytes()).to_string()}),
                 now,
             )
             .await

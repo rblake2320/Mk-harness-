@@ -63,6 +63,11 @@ pub async fn grant_permission(
     actor: Actor<'_>,
     now: DateTime<Utc>,
 ) -> Result<Uuid, StoreError> {
+    crate::privacy::check_subject(tx, crate::privacy::SubjectKind::Contact, contact_id.0).await?;
+    crate::privacy::check_subject(tx, crate::privacy::SubjectKind::Account, recorded_by.0).await?;
+    if crate::privacy::destination_erased(tx, channel.as_str(), destination).await? {
+        return Err(StoreError::Erased);
+    }
     let id = Uuid::now_v7();
     let sealed = seal_destination(seal, "contact_permissions", tx.tenant(), id)?;
     sqlx::query(
@@ -94,7 +99,7 @@ pub async fn grant_permission(
             actor_id: actor.actor_id,
             action_id: None,
             event_type: EventType::PermissionGranted,
-            payload_redacted: json!({"permission_id": id, "contact_id": contact_id, "channel": channel, "scope": scope, "expires_at": expires_at}),
+            payload_redacted: json!({"permission_id": id, "contact_id": contact_id, "channel": channel, "scope_count": scope.len(), "expires_at": expires_at}),
             trace_id: actor.trace_id,
             policy_version: actor.policy_version,
         },
@@ -241,7 +246,7 @@ pub async fn add_suppression(
             actor_id: actor.actor_id,
             action_id: None,
             event_type: EventType::SuppressionAdded,
-            payload_redacted: json!({"suppression_id": id, "channel": channel, "destination_scoped": destination.is_some(), "permanent": permanent, "reason": reason}),
+            payload_redacted: json!({"suppression_id": id, "channel": channel, "destination_scoped": destination.is_some(), "permanent": permanent, "has_reason": !reason.is_empty()}),
             trace_id: actor.trace_id,
             policy_version: actor.policy_version,
         },

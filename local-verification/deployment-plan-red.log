@@ -1,0 +1,15 @@
+......FF                                                                 [100%]
+=================================== FAILURES ===================================
+_______ test_production_approval_follows_a_completed_encrypted_plan_job ________
+tools/release/test_deployment_workflow.py:73: in test_production_approval_follows_a_completed_encrypted_plan_job
+    assert "production-plan" in jobs
+E   assert 'production-plan' in {'validate-source': {'runs-on': 'ubuntu-latest', 'permissions': {'contents': 'read', 'actions': 'read'}, 'steps': [{'u...'", 'runs-on': 'ubuntu-latest', 'permissions': {'contents': 'read', 'id-token': 'write', 'attestations': 'read'}, ...}}
+__ test_only_sealed_plan_is_uploaded_and_exact_same_run_artifact_is_consumed ___
+tools/release/test_deployment_workflow.py:87: in test_only_sealed_plan_is_uploaded_and_exact_same_run_artifact_is_consumed
+    plan_steps = jobs["production-plan"]["steps"]
+                 ^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'production-plan'
+=========================== short test summary info ============================
+FAILED tools/release/test_deployment_workflow.py::test_production_approval_follows_a_completed_encrypted_plan_job
+FAILED tools/release/test_deployment_workflow.py::test_only_sealed_plan_is_uploaded_and_exact_same_run_artifact_is_consumed
+2 failed, 6 passed in 0.35s

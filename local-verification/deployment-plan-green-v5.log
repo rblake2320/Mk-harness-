@@ -1,0 +1,17 @@
+........................................................................ [ 51%]
+..F................................................................      [100%]
+=================================== FAILURES ===================================
+_______ test_provider_lock_is_a_tracked_release_input_not_a_local_cache ________
+tools/release/test_deployment_workflow.py:113: in test_provider_lock_is_a_tracked_release_input_not_a_local_cache
+    tracked = subprocess.check_output(["git", "ls-files", "--", path], cwd=ROOT, text=True, encoding="utf-8").strip()
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.12/subprocess.py:466: in check_output
+    return run(*popenargs, stdout=PIPE, timeout=timeout, check=True,
+/usr/lib/python3.12/subprocess.py:571: in run
+    raise CalledProcessError(retcode, process.args,
+E   subprocess.CalledProcessError: Command '['git', 'ls-files', '--', 'infra/terraform/modules/kernel-platform/.terraform.lock.hcl']' returned non-zero exit status 128.
+----------------------------- Captured stderr call -----------------------------
+fatal: not a git repository: /mnt/d/projects/mk-release-acceptance-20261021/D:/projects/Mk-harness-/.git/worktrees/mk-release-acceptance-20261021
+=========================== short test summary info ============================
+FAILED tools/release/test_deployment_workflow.py::test_provider_lock_is_a_tracked_release_input_not_a_local_cache
+1 failed, 138 passed in 1.02s

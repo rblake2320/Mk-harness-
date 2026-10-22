@@ -5,7 +5,28 @@
 export interface Tokens {
   access_token: string; refresh_token: string;
   role: string; display_name: string; tenant_id: string;
+  session_id?: string;
+  mfa_state?: 'enrollment_required' | 'verification_required' | 'verified';
 }
+export type SecondFactor = { code: string } | { recovery_code: string };
+export interface MfaCompletion { tokens: Tokens; recovery_codes?: string[] }
+export interface AuthSession {
+  id: string; current: boolean; created_at: string; expires_at: string; revoked_at: string | null;
+}
+export interface RevocationResult { revoked: boolean; kernel_revocation: 'confirmed' | 'pending' }
+export interface ErasureReceipt {
+  ok: boolean; request_id: string; active_store_erased: boolean;
+  status: 'completed' | 'pending_downstream'; due_at: string; backup_expires_at: string;
+  pending: string[]; detail: string; status_token?: string;
+}
+export const ERASURE_STAGE_LABELS: Record<string, string> = {
+  backup_expiry: 'Backup expiry', customer_request: 'Linked customer records',
+  kernel_account: 'Action history and sending credentials', kernel_contact: 'Customer action history',
+  restore_ledger_anchor: 'Protected recovery ledger', billing_subscription: 'Billing cancellation',
+  billing_customer: 'Billing provider records', provider_sender: 'Sending provider records',
+};
+export type AppRole = 'admin' | 'manager' | 'consultant' | 'auditor';
+export interface TeamMember { id: string; email: string; display_name: string; role: AppRole; is_active: boolean }
 export interface SkinObservation { category: string; level: string; note: string }
 export interface SkinResult {
   observations: SkinObservation[]; care_focus: string[];
@@ -60,11 +81,20 @@ export interface PendingApproval {
   supporting: { commitment: { id: string; text: string; status: string; evidence_digest: string } | null; draft_version_id: string | null; evidence_count: number };
   permission: { state: string; checked_at: string | null; note: string } | null;
   scheduled_for: string | null; approval_expires_at: string; approval_lifetime_minutes: number; human_steps: string[];
+  can_approve: boolean; approval_denial: string | null; self_approval: boolean;
 }
 export interface ExceptionItem {
   id: string; customer_id: string | null; kind: string; state: string; source_reference: string; detail: string;
   created_at: string; resolved_at: string | null;
 }
+export interface DeliveryException {
+  delivery_id: string; action_id: string; action_state: string; delivery_state: string;
+  message_state: MessageState; provider_message_id: string | null; read_status: string;
+  customer_id: string | null; customer_name: string | null; created_at: string;
+  reconciled_at: string | null; replacement_allowed: false;
+  resolution_options?: SubmissionResolution[];
+}
+export type SubmissionResolution = 'closed_no_replacement' | 'replacement_permitted';
 export interface WebAuthnAssertion { credential_id: string; client_data_json: string; authenticator_data: string; signature: string }
 
 export function b64url(bytes: ArrayBuffer | Uint8Array): string {
@@ -101,6 +131,11 @@ export class MKClient {
   baseUrl: string;
   tokens: Tokens | null = null;
   onAuthExpired: (() => void) | null = null;
+  onTokensChanged: ((tokens: Tokens | null) => void) | null = null;
+  onStepUpRequired: (() => Promise<boolean>) | null = null;
+  private refreshing: Promise<boolean> | null = null;
+  private steppingUp: Promise<boolean> | null = null;
+  private signingOut = false;
 
   constructor(baseUrl: string) { this.baseUrl = baseUrl.replace(/\/$/, ''); }
 
@@ -111,19 +146,38 @@ export class MKClient {
     return h;
   }
 
-  private async request<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
+  private async response(path: string, init: RequestInit = {}, retry = true, stepRetry = true): Promise<Response> {
+    const sentAccess = this.tokens?.access_token;
+    const sentSession = this.tokens?.session_id;
     const r = await fetch(this.baseUrl + path, { ...init, headers: { ...this.headers(!(init.body instanceof FormData)), ...(init.headers ?? {}) } });
     if (r.status === 401 && retry && this.tokens?.refresh_token) {
-      const ok = await this.refresh();
-      if (ok) return this.request<T>(path, init, false);
+      if (sentSession !== this.tokens.session_id) throw new ApiError(401, 'Session changed; retry explicitly.');
+      // A delayed 401 may belong to a token another request already refreshed.
+      const ok = sentAccess !== this.tokens.access_token || await this.refresh();
+      if (ok && sentSession === this.tokens?.session_id) return this.response(path, init, false, stepRetry);
       this.onAuthExpired?.();
     }
     if (!r.ok) {
       let detail: any = `HTTP ${r.status}`;
       try { detail = (await r.json()).detail ?? detail; } catch { /* keep status */ }
+      if (r.status === 403 && detail?.code === 'STEP_UP_REQUIRED' && stepRetry && this.onStepUpRequired) {
+        if (sentSession !== this.tokens?.session_id) throw new ApiError(401, 'Session changed; retry explicitly.');
+        if (!this.steppingUp) this.steppingUp = this.onStepUpRequired().finally(() => { this.steppingUp = null; });
+        const confirmed = await this.steppingUp;
+        if (confirmed && sentSession === this.tokens?.session_id && this.tokens) {
+          // Retry only a request explicitly refused BEFORE any sensitive action.
+          return this.response(path, init, retry, false);
+        }
+      }
+      if (r.status === 403 && detail?.code === 'MFA_REQUIRED' && retry && !this.tokens?.mfa_state) {
+        await this.refresh(); // migrate an older stored session to the MFA screen, without replaying the operation
+      }
       throw new ApiError(r.status, detail);
     }
-    return r.json() as Promise<T>;
+    return r;
+  }
+  private async request<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
+    return (await this.response(path, init, retry)).json() as Promise<T>;
   }
 
   // ---- auth ----
@@ -139,20 +193,62 @@ export class MKClient {
       method: 'POST', body: JSON.stringify({ email, password }) });
     return this.tokens;
   }
-  async refresh(): Promise<boolean> {
+  refresh(): Promise<boolean> {
+    if (this.signingOut) return Promise.resolve(false);
+    if (this.refreshing) return this.refreshing;
+    this.refreshing = this.rotateRefresh().finally(() => { this.refreshing = null; });
+    return this.refreshing;
+  }
+  private async rotateRefresh(): Promise<boolean> {
+    const original = this.tokens;
+    if (!original) return false;
     try {
       const r = await fetch(this.baseUrl + '/api/auth/refresh', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refresh_token: this.tokens?.refresh_token }) });
+        body: JSON.stringify({ refresh_token: original.refresh_token }) });
       if (!r.ok) return false;
-      this.tokens = await r.json();
+      const rotated: Tokens = await r.json();
+      if (this.tokens !== original) return false; // never resurrect a signed-out/replaced session
+      this.tokens = rotated;
+      this.onTokensChanged?.(rotated);
       return true;
     } catch { return false; }
   }
   me() { return this.request<any>('/api/auth/me'); }
+  enrollMfa() { return this.request<{ secret: string; provisioning_uri: string }>('/api/auth/mfa/enroll', { method: 'POST' }); }
+  confirmMfa(code: string) { return this.request<MfaCompletion>('/api/auth/mfa/confirm', { method: 'POST', body: JSON.stringify({ code }) }, false); }
+  verifyMfa(factor: SecondFactor) { return this.request<MfaCompletion>('/api/auth/mfa/verify', { method: 'POST', body: JSON.stringify(factor) }, false); }
+  stepUp(password: string, factor: SecondFactor) {
+    return this.request<{ verified: boolean }>('/api/auth/step-up', { method: 'POST', body: JSON.stringify({ password, ...factor }) }, false);
+  }
+  mfaStatus() { return this.request<{ enrolled: boolean; recovery_codes_remaining: number }>('/api/auth/mfa/status'); }
+  rotateRecoveryCodes() { return this.request<{ recovery_codes: string[] }>('/api/auth/mfa/recovery-codes', { method: 'POST' }); }
+  sessions() { return this.request<AuthSession[]>('/api/auth/sessions'); }
+  revokeSession(id: string) {
+    return this.request<RevocationResult>(`/api/auth/sessions/${encodeURIComponent(id)}/revoke`, { method: 'POST' });
+  }
+  async logout(): Promise<RevocationResult> {
+    if (this.refreshing) await this.refreshing;
+    const original = this.tokens;
+    this.signingOut = true;
+    try {
+      return await this.request<RevocationResult>('/api/auth/logout', { method: 'POST' }, false);
+    } finally {
+      this.signingOut = false;
+      if (this.tokens === original) {
+        this.tokens = null;
+        this.onTokensChanged?.(null);
+      }
+    }
+  }
   addMember(email: string, password: string, role = 'consultant') {
     return this.request('/api/auth/members', {
       method: 'POST', body: JSON.stringify({ email, password, role }) });
+  }
+  members() { return this.request<TeamMember[]>('/api/auth/members'); }
+  changeMemberAccess(id: string, changes: { role?: AppRole; is_active?: boolean }) {
+    return this.request<TeamMember & { kernel_revocation: string }>(`/api/auth/members/${encodeURIComponent(id)}`, {
+      method: 'PATCH', body: JSON.stringify(changes) });
   }
 
   // ---- chat (SSE over fetch) ----
@@ -232,9 +328,14 @@ export class MKClient {
 
   // ---- customers ----
   listCustomers() { return this.request<Customer[]>('/api/customers'); }
+  searchCustomers(query: string, offset = 0) {
+    return this.request<{ items: Customer[]; next_offset: number | null }>('/api/customers/search', {
+      method: 'POST', body: JSON.stringify({ query, offset, limit: 50 }),
+    });
+  }
   createCustomer(c: Partial<Customer>) { return this.request<{ id: string }>('/api/customers', { method: 'POST', body: JSON.stringify(c) }); }
   updateCustomer(id: string, c: Partial<Customer>) { return this.request(`/api/customers/${id}`, { method: 'PUT', body: JSON.stringify(c) }); }
-  deleteCustomer(id: string) { return this.request(`/api/customers/${id}`, { method: 'DELETE' }); }
+  deleteCustomer(id: string) { return this.request<ErasureReceipt>(`/api/customers/${id}`, { method: 'DELETE' }); }
 
   // ---- keys & usage ----
   keyStatus() { return this.request<any>('/api/keys/status'); }
@@ -342,6 +443,7 @@ export class MKClient {
   async approveWithPasskey(action_id: string, action_digest: string, reason?: string) {
     const ch = await this.approvalChallenge(action_id);
     if (ch.action_digest !== action_digest) throw new Error('This message changed since it was displayed. Review it again before approving.');
+    if (ch.user_verification !== 'required') throw new Error('Approval requires a verified passkey. Ask your administrator to restore the approval configuration.');
     const cred = await navigator.credentials.get({ publicKey: {
       challenge: b64urlDecode(ch.challenge), rpId: ch.rp_id, userVerification: ch.user_verification as UserVerificationRequirement,
       allowCredentials: ch.allow_credentials.map(id => ({ type: 'public-key', id: b64urlDecode(id) })),
@@ -361,6 +463,33 @@ export class MKClient {
     return this.request<ExceptionItem>(`/api/exceptions/${id}/resolve`, { method: 'POST', body: JSON.stringify({ resolution, note }) });
   }
   inboundHealth() { return this.request<any>('/api/agent-ops/inbound/health'); }
+  deliveryExceptions(after?: string) {
+    return this.request<{ items: DeliveryException[]; next_cursor: string | null }>(`/api/delivery-exceptions?limit=50${after ? `&after=${encodeURIComponent(after)}` : ''}`);
+  }
+  /** This decision never submits a message. It binds the reviewed provider evidence. */
+  async resolveSubmissionWithPasskey(item: DeliveryException, decision: SubmissionResolution) {
+    const path = `/api/agent-ops/actions/${item.action_id}`;
+    const ch = await this.request<{ challenge: string; rp_id: string; action_id: string;
+      operation_digest: string; decision: SubmissionResolution; provider_message_id: string;
+      delivery_state: string; allow_credentials: string[]; user_verification: string }>(
+      `${path}/resolution-challenge`, { method: 'POST', body: JSON.stringify({ decision }) });
+    if (ch.action_id !== item.action_id || ch.decision !== decision || ch.provider_message_id !== item.provider_message_id
+        || ch.delivery_state !== item.delivery_state || ch.user_verification !== 'required') {
+      throw new Error('Provider evidence changed. Refresh and review this attempt before resolving it.');
+    }
+    const cred = await navigator.credentials.get({ publicKey: {
+      challenge: b64urlDecode(ch.challenge), rpId: ch.rp_id, userVerification: 'required',
+      allowCredentials: ch.allow_credentials.map(id => ({ type: 'public-key', id: b64urlDecode(id) })),
+    } }) as PublicKeyCredential | null;
+    if (!cred) throw new Error('Resolution was cancelled.');
+    const assertion = cred.response as AuthenticatorAssertionResponse;
+    return this.request<{ decision: SubmissionResolution }>(`${path}/resolve-submission`, { method: 'POST', body: JSON.stringify({
+      decision, operation_digest: ch.operation_digest, webauthn: {
+        credential_id: b64url(cred.rawId), client_data_json: b64url(assertion.clientDataJSON),
+        authenticator_data: b64url(assertion.authenticatorData), signature: b64url(assertion.signature),
+      },
+    }) });
+  }
   senders() { return this.request<any[]>('/api/agent-ops/senders'); }
   registerSender(body: { owner_user_id: string; display_name: string; account_sid: string; auth_token: string; from_number?: string; messaging_service_sid?: string }) {
     return this.request<any>('/api/agent-ops/senders', { method: 'POST', body: JSON.stringify(body) });
@@ -369,7 +498,8 @@ export class MKClient {
 
   // ---- exports & deletion (account) ----
   exportAccount() { return this.request<any>('/api/account/export'); }
-  exportAudit() { return fetch(this.baseUrl + '/api/audit/export.jsonl', { headers: this.headers(false) }).then(r => r.text()); }
-  exportCustomersCsv() { return fetch(this.baseUrl + '/api/customers/export.csv', { headers: this.headers(false) }).then(r => r.text()); }
-  deleteAccount(body: { password: string }) { return this.request<any>('/api/account', { method: 'DELETE', body: JSON.stringify(body) }); }
+  exportAudit() { return this.response('/api/audit/export.jsonl').then(r => r.text()); }
+  exportCustomersCsv() { return this.response('/api/customers/export.csv').then(r => r.text()); }
+  deleteAccount(body: { password: string }) { return this.request<ErasureReceipt>('/api/account', { method: 'DELETE', body: JSON.stringify(body) }); }
+  erasureStatus(status_token: string) { return this.request<ErasureReceipt>('/api/account/erasure-status', { method: 'POST', body: JSON.stringify({ status_token }) }); }
 }

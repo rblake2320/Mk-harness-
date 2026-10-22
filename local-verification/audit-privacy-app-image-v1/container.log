@@ -1,0 +1,50 @@
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     Started parent process [1]
+INFO:     Started server process [9]
+INFO:     Waiting for application startup.
+INFO:     Started server process [8]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Application startup complete.
+INFO:     http_request method=GET route=/api/health/ready status=200 duration_ms=12.84
+INFO:     http_request method=POST route=/api/auth/signup status=201 duration_ms=59.35
+INFO:     http_request method=GET route=/api/customers status=403 duration_ms=3.88
+INFO:     http_request method=POST route=/api/auth/mfa/enroll status=200 duration_ms=7.07
+INFO:     http_request method=POST route=/api/auth/mfa/confirm status=200 duration_ms=18.16
+INFO:     http_request method=POST route=/api/customers status=201 duration_ms=6.11
+INFO:     http_request method=GET route=/api/customers/export.csv status=403 duration_ms=2.50
+INFO:     http_request method=POST route=/api/auth/step-up status=200 duration_ms=45.85
+INFO:     http_request method=GET route=/api/customers/export.csv status=200 duration_ms=7.94
+INFO:     http_request method=GET route=/api/health status=200 duration_ms=1.09
+INFO:     Received SIGTERM, exiting.
+INFO:     Terminated child process [8]
+INFO:     Terminated child process [9]
+INFO:     Waiting for child process [8]
+INFO:     Shutting down
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [8]
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [9]
+INFO:     Waiting for child process [9]
+INFO:     Stopping parent process [1]
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     Started parent process [1]
+INFO:     Started server process [8]
+INFO:     Waiting for application startup.
+INFO:     Started server process [9]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Application startup complete.
+INFO:     http_request method=GET route=/api/health/ready status=200 duration_ms=13.82
+INFO:     http_request method=GET route=/api/customers/{cid} status=200 duration_ms=7.87
+INFO:     http_request method=POST route=/api/customers/{cid}/destinations status=201 duration_ms=23.28
+INFO:     http_request method=PUT route=/api/keys/mine status=200 duration_ms=12.34
+INFO:     http_request method=DELETE route=/api/account status=202 duration_ms=111.70
+INFO:     http_request method=GET route=/api/customers status=401 duration_ms=2.24
+INFO:     http_request method=POST route=/api/account/erasure-status status=200 duration_ms=3.44
+INFO:     http_request method=GET route=/api/health status=200 duration_ms=18.32
+INFO:     http_request method=GET route=/api/health/ready status=200 duration_ms=4.48
+INFO:     http_request method=GET route=unmatched status=404 duration_ms=3.99

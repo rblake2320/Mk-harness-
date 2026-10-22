@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="pytest" errors="0" failures="3" skipped="0" tests="4" time="1.147" timestamp="2026-10-21T23:19:58.999436-05:00" hostname="DESKTOP-CM6G60N"><testcase classname="tests.test_claim_conflicts" name="test_two_approved_contradictory_claims_block_before_model" time="0.236"><failure message="AssertionError: assert ({'brief_item_id': None, 'claims_used': ['cream.fragrance.de0e0965c7'], 'customer_id': '55ec8cdeb8fd4d46816613a1c70d5de8', 'generated_by': 'ai:anthropic:claude-x', ...} is None)">tests\test_claim_conflicts.py:41: in test_two_approved_contradictory_claims_block_before_model
+    assert body["draft"] is None and "conflict" in body["limitation"].lower()
+E   AssertionError: assert ({'brief_item_id': None, 'claims_used': ['cream.fragrance.de0e0965c7'], 'customer_id': '55ec8cdeb8fd4d46816613a1c70d5de8', 'generated_by': 'ai:anthropic:claude-x', ...} is None)</failure></testcase><testcase classname="tests.test_claim_conflicts" name="test_conflict_scope_is_product_market_and_visible_tenant" time="0.121" /><testcase classname="tests.test_claim_conflicts" name="test_unannotated_claim_cannot_be_approved" time="0.054"><failure message="assert 200 == 422&#10; +  where 200 = &lt;Response [200 OK]&gt;.status_code">tests\test_claim_conflicts.py:66: in test_unannotated_claim_cannot_be_approved
+    assert response.status_code == 422
+E   assert 200 == 422
+E    +  where 200 = &lt;Response [200 OK]&gt;.status_code</failure></testcase><testcase classname="tests.test_claim_conflicts" name="test_existing_draft_is_rechecked_before_proposal_and_edit" time="0.366"><failure message="respx.models.AllMockedAssertionError: RESPX: &lt;Request('GET', 'http://kernel.test:8090/internal/v1/senders')&gt; not mocked!">tests\test_claim_conflicts.py:83: in test_existing_draft_is_rechecked_before_proposal_and_edit
+    proposed = client.post(f"/api/drafts/{draft['id']}/propose", headers=h, json={})
+..\.venv\Lib\site-packages\starlette\testclient.py:538: in post
+    return super().post(
+..\.venv\Lib\site-packages\httpx\_client.py:1144: in post
+    return self.request(
+..\.venv\Lib\site-packages\starlette\testclient.py:437: in request
+    return super().request(
+..\.venv\Lib\site-packages\httpx\_client.py:825: in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+..\.venv\Lib\site-packages\httpx\_client.py:914: in send
+    response = self._send_handling_auth(
+..\.venv\Lib\site-packages\httpx\_client.py:942: in _send_handling_auth
+    response = self._send_handling_redirects(
+..\.venv\Lib\site-packages\httpx\_client.py:979: in _send_handling_redirects
+    response = self._send_single_request(request)
+..\.venv\Lib\site-packages\httpx\_client.py:1014: in _send_single_request
+    response = transport.handle_request(request)
+..\.venv\Lib\site-packages\starlette\testclient.py:340: in handle_request
+    raise exc
+..\.venv\Lib\site-packages\starlette\testclient.py:337: in handle_request
+    portal.call(self.app, scope, receive, send)
+..\.venv\Lib\site-packages\anyio\from_thread.py:340: in call
+    return cast(T_Retval, self.start_task_soon(func, *args).result())
+C:\Users\techai\AppData\Roaming\uv\python\cpython-3.13.5-windows-x86_64-none\Lib\concurrent\futures\_base.py:456: in result
+    return self.__get_result()
+C:\Users\techai\AppData\Roaming\uv\python\cpython-3.13.5-windows-x86_64-none\Lib\concurrent\futures\_base.py:401: in __get_result
+    raise self._exception
+..\.venv\Lib\site-packages\anyio\from_thread.py:265: in _call_func
+    retval = await retval_or_awaitable
+..\.venv\Lib\site-packages\fastapi\applications.py:1054: in __call__
+    await super().__call__(scope, receive, send)
+..\.venv\Lib\site-packages\starlette\applications.py:112: in __call__
+    await self.middleware_stack(scope, receive, send)
+..\.venv\Lib\site-packages\starlette\middleware\errors.py:187: in __call__
+    raise exc
+..\.venv\Lib\site-packages\starlette\middleware\errors.py:165: in __call__
+    await self.app(scope, receive, _send)
+..\.venv\Lib\site-packages\starlette\middleware\cors.py:85: in __call__
+    await self.app(scope, receive, send)
+..\.venv\Lib\site-packages\starlette\middleware\exceptions.py:62: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+..\.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+..\.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+..\.venv\Lib\site-packages\starlette\routing.py:714: in __call__
+    await self.middleware_stack(scope, receive, send)
+..\.venv\Lib\site-packages\starlette\routing.py:734: in app
+    await route.handle(scope, receive, send)
+..\.venv\Lib\site-packages\starlette\routing.py:288: in handle
+    await self.app(scope, receive, send)
+..\.venv\Lib\site-packages\starlette\routing.py:76: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+..\.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+..\.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+..\.venv\Lib\site-packages\starlette\routing.py:73: in app
+    response = await f(request)
+..\.venv\Lib\site-packages\fastapi\routing.py:301: in app
+    raw_response = await run_endpoint_function(
+..\.venv\Lib\site-packages\fastapi\routing.py:212: in run_endpoint_function
+    return await dependant.call(**values)
+app\routes\outreach.py:67: in propose_draft
+    sender_id = await _select_sender(client, p, None)
+app\routes\agent_ops.py:210: in _select_sender
+    r = await client.call("GET", "/senders", user_id=p.user_id, tenant_id=p.tenant_id,
+app\kernel\client.py:104: in call
+    r = await http.request(method.upper(), url, headers=headers, json=json)
+..\.venv\Lib\site-packages\httpx\_client.py:1540: in request
+    return await self.send(request, auth=auth, follow_redirects=follow_redirects)
+..\.venv\Lib\site-packages\httpx\_client.py:1629: in send
+    response = await self._send_handling_auth(
+..\.venv\Lib\site-packages\httpx\_client.py:1657: in _send_handling_auth
+    response = await self._send_handling_redirects(
+..\.venv\Lib\site-packages\httpx\_client.py:1694: in _send_handling_redirects
+    response = await self._send_single_request(request)
+..\.venv\Lib\site-packages\httpx\_client.py:1730: in _send_single_request
+    response = await transport.handle_async_request(request)
+..\.venv\Lib\site-packages\httpx\_transports\default.py:394: in handle_async_request
+    resp = await self._pool.handle_async_request(req)
+..\.venv\Lib\site-packages\respx\mocks.py:190: in amock
+    response = await cls._send_async_request(
+..\.venv\Lib\site-packages\respx\mocks.py:224: in _send_async_request
+    httpx_response = await cls.async_handler(httpx_request)
+..\.venv\Lib\site-packages\respx\mocks.py:136: in async_handler
+    raise assertion_error
+..\.venv\Lib\site-packages\respx\mocks.py:129: in async_handler
+    httpx_response = await router.async_handler(httpx_request)
+..\.venv\Lib\site-packages\respx\router.py:318: in async_handler
+    resolved = await self.aresolve(request)
+..\.venv\Lib\site-packages\respx\router.py:291: in aresolve
+    with self.resolver(request) as resolved:
+C:\Users\techai\AppData\Roaming\uv\python\cpython-3.13.5-windows-x86_64-none\Lib\contextlib.py:148: in __exit__
+    next(self.gen)
+..\.venv\Lib\site-packages\respx\router.py:250: in resolver
+    raise AllMockedAssertionError(f"RESPX: {request!r} not mocked!")
+E   respx.models.AllMockedAssertionError: RESPX: &lt;Request('GET', 'http://kernel.test:8090/internal/v1/senders')&gt; not mocked!</failure></testcase></testsuite></testsuites>

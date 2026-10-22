@@ -1,0 +1,1 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="pytest" errors="0" failures="0" skipped="0" tests="1" time="3.396" timestamp="2026-10-22T02:40:35.674340-05:00" hostname="DESKTOP-CM6G60N"><testcase classname="tools.verification.test_privacy_bridge" name="test_actual_privacy_delivery_across_both_databases" time="2.741" /></testsuite></testsuites>

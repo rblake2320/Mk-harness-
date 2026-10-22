@@ -137,6 +137,10 @@ mod tests {
 
     #[test]
     fn vocabulary_matches_contract_exactly() {
+        let definitions: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../../contracts/action/v1/message-state-definitions.json"
+        ))
+        .unwrap();
         let schema: serde_json::Value = serde_json::from_str(include_str!(
             "../../../../contracts/action/v1/action-result.schema.json"
         ))
@@ -155,6 +159,7 @@ mod tests {
                 serde_json::json!(s.as_str())
             );
             assert!(!s.definition().is_empty());
+            assert_eq!(definitions[s.as_str()], s.definition());
         }
     }
 

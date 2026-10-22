@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "mk.claim-review.v2",
+  "title": "Reviewer-authored product facts",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["decision", "reviewer"],
+  "properties": {
+    "decision": {"enum": ["approved", "withdrawn"]},
+    "reviewer": {"type": "string", "minLength": 1, "maxLength": 120},
+    "facts": {
+      "type": "object",
+      "maxProperties": 16,
+      "propertyNames": {"pattern": "^[a-z][a-z0-9_.]{0,99}$"},
+      "additionalProperties": {"type": "string", "minLength": 1, "maxLength": 120, "pattern": "\\S"}
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"decision": {"const": "approved"}}},
+      "then": {"required": ["facts"], "properties": {"facts": {"minProperties": 1}}}
+    }
+  ]
+}

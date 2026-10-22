@@ -24,6 +24,59 @@ class Base(DeclarativeBase):
     pass
 
 
+class ApplicationSealPolicy(Base):
+    """Operator-owned write fence; runtime may read but never change it."""
+    __tablename__ = "application_seal_policy"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    writer_kid: Mapped[str] = mapped_column(String(16))
+    allow_legacy: Mapped[bool] = mapped_column(Boolean)
+
+
+class ErasureRequest(Base):
+    """Content-free, append-only tombstone; replayed before a backup is served."""
+    __tablename__ = "erasure_requests"
+    __table_args__ = (UniqueConstraint("tenant_id", "subject_kind", "subject_id", name="uq_erasure_subject"),)
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=uid)
+    tenant_id: Mapped[str] = mapped_column(String(32), index=True)
+    requested_by: Mapped[str] = mapped_column(String(32))
+    subject_kind: Mapped[str] = mapped_column(String(16))
+    subject_id: Mapped[str] = mapped_column(String(32))
+    requested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    due_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    backup_expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class ErasureTask(Base):
+    """Durable downstream work. Pending is never reported as completed erasure."""
+    __tablename__ = "erasure_tasks"
+    __table_args__ = (UniqueConstraint("request_id", "kind", "target_id", name="uq_erasure_task"),)
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=uid)
+    request_id: Mapped[str] = mapped_column(ForeignKey("erasure_requests.id"), index=True)
+    tenant_id: Mapped[str] = mapped_column(String(32), index=True)
+    kind: Mapped[str] = mapped_column(String(32))
+    target_id: Mapped[str] = mapped_column(String(80))
+    status: Mapped[str] = mapped_column(String(16), default="pending")
+    receipt_json: Mapped[str] = mapped_column(Text, default="{}")
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    last_error: Mapped[str] = mapped_column(String(80), default="")
+    next_attempt_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    lease_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class RetainedConsent(Base):
+    """Minimal consent proof, without contact details, free text or customer FK."""
+    __tablename__ = "retained_consents"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=uid)
+    tenant_id: Mapped[str] = mapped_column(String(32), index=True)
+    request_id: Mapped[str] = mapped_column(ForeignKey("erasure_requests.id"), index=True)
+    source_kind: Mapped[str] = mapped_column(String(20))
+    source_id: Mapped[str] = mapped_column(String(32))
+    proof_json: Mapped[str] = mapped_column(Text)
+    retain_until: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    __table_args__ = (UniqueConstraint("tenant_id", "source_kind", "source_id", name="uq_retained_consent"),)
+
+
 class Tenant(Base):
     __tablename__ = "tenants"
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=uid)
@@ -53,6 +106,83 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
     tenant: Mapped[Tenant] = relationship(back_populates="users")
+
+
+class AuthSession(Base):
+    """Server-side authority for both access and rotating refresh credentials."""
+    __tablename__ = "auth_sessions"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=uid)
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    refresh_digest: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    mfa_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    step_up_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class AuthRevocation(Base):
+    """Durable delivery of a locally revoked session to kernel approval authority."""
+    __tablename__ = "auth_revocations"
+    session_id: Mapped[str] = mapped_column(ForeignKey("auth_sessions.id"), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    last_error: Mapped[str] = mapped_column(String(80), default="")
+    next_attempt_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, index=True)
+    lease_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+
+
+class SecurityRestoreReceipt(Base):
+    """Operator-only binding of a recovery generation to its pinned inputs."""
+    __tablename__ = "security_restore_receipts"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    ledger_sha256: Mapped[str] = mapped_column(String(64))
+    privacy_sha256: Mapped[str] = mapped_column(String(64))
+    target_binding: Mapped[str] = mapped_column(String(64))
+    source_exported_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    sessions_json: Mapped[str] = mapped_column(Text)
+    applied_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class RecoveredSessionRevocation(Base):
+    """Recovery session fences/outbox survive even when a session is absent."""
+    __tablename__ = "recovered_session_revocations"
+    session_id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(32), index=True)
+    user_id: Mapped[str] = mapped_column(String(32), index=True)
+    restore_id: Mapped[str] = mapped_column(ForeignKey("security_restore_receipts.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    last_error: Mapped[str] = mapped_column(String(80), default="")
+    next_attempt_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, index=True)
+    lease_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+
+
+class AuthFactor(Base):
+    __tablename__ = "auth_factors"
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), index=True)
+    secret_enc: Mapped[str | None] = mapped_column(Text, nullable=True)
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_counter: Mapped[int] = mapped_column(Integer, default=-1)
+    pending_secret_enc: Mapped[str | None] = mapped_column(Text, nullable=True)
+    pending_session_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    failed_attempts: Mapped[int] = mapped_column(Integer, default=0)
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class AuthRecoveryCode(Base):
+    __tablename__ = "auth_recovery_codes"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=uid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), index=True)
+    digest: Mapped[str] = mapped_column(String(64), unique=True)
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class ProviderKey(Base):
@@ -167,6 +297,35 @@ class ConsultantProfile(Base):
     last_active: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class BillingProvision(Base):
+    """Immutable customer-creation identity, committed before contacting Stripe.
+
+    No email or other customer content is needed to replay the identical request.
+    A bound provider ID may be filled once, even after account erasure.
+    """
+    __tablename__ = "billing_provisions"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=uid)
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), unique=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    stripe_customer_id: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
+
+
+class BillingErasureBinding(Base):
+    """Cleanup-only identity recovered from an externally pinned erasure ledger.
+
+    No user/tenant FK: an external obligation can postdate the entire backup.
+    This cannot enable billing or recreate a user's application account.
+    """
+    __tablename__ = "billing_erasure_bindings"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    request_id: Mapped[str] = mapped_column(ForeignKey("erasure_requests.id"), unique=True)
+    tenant_id: Mapped[str] = mapped_column(String(32), index=True)
+    user_id: Mapped[str] = mapped_column(String(32), unique=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    stripe_customer_id: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
 
 
 class Subscription(Base):
@@ -582,3 +741,15 @@ class ApprovedClaim(Base):
     version: Mapped[int] = mapped_column(Integer, default=1)
     audit_ref: Mapped[str] = mapped_column(String(32), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class ClaimFact(Base):
+    """Reviewer-authored, normalized product assertions (P2), not model inference.
+
+    A separate additive table keeps existing claim rows readable. Legacy claims
+    without facts are withheld until an explicit review supplies them.
+    """
+    __tablename__ = "claim_facts"
+    claim_row_id: Mapped[str] = mapped_column(ForeignKey("approved_claims.id", ondelete="CASCADE"), primary_key=True)
+    name: Mapped[str] = mapped_column(String(100), primary_key=True)
+    value: Mapped[str] = mapped_column(String(120))

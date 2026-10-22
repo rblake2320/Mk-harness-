@@ -1,0 +1,22 @@
+FFF                                                                      [100%]
+=================================== FAILURES ===================================
+_ test_post_backup_contact_and_principal_restrictions_survive_recovery[suppression] _
+tools/verification/test_kernel_privacy_restore.py:74: in test_post_backup_contact_and_principal_restrictions_survive_recovery
+    assert count == 1, "post-backup restriction disappeared even though restore gate passed"
+E   AssertionError: post-backup restriction disappeared even though restore gate passed
+E   assert 0 == 1
+_ test_post_backup_contact_and_principal_restrictions_survive_recovery[session_revocation] _
+tools/verification/test_kernel_privacy_restore.py:74: in test_post_backup_contact_and_principal_restrictions_survive_recovery
+    assert count == 1, "post-backup restriction disappeared even though restore gate passed"
+E   AssertionError: post-backup restriction disappeared even though restore gate passed
+E   assert 0 == 1
+_ test_post_backup_contact_and_principal_restrictions_survive_recovery[user_revocation] _
+tools/verification/test_kernel_privacy_restore.py:74: in test_post_backup_contact_and_principal_restrictions_survive_recovery
+    assert count == 1, "post-backup restriction disappeared even though restore gate passed"
+E   AssertionError: post-backup restriction disappeared even though restore gate passed
+E   assert 0 == 1
+=========================== short test summary info ============================
+FAILED tools/verification/test_kernel_privacy_restore.py::test_post_backup_contact_and_principal_restrictions_survive_recovery[suppression]
+FAILED tools/verification/test_kernel_privacy_restore.py::test_post_backup_contact_and_principal_restrictions_survive_recovery[session_revocation]
+FAILED tools/verification/test_kernel_privacy_restore.py::test_post_backup_contact_and_principal_restrictions_survive_recovery[user_revocation]
+3 failed, 17 deselected in 10.48s

@@ -1,0 +1,31 @@
+{
+  "scope": "author/CI-run local image scan; not independent release qualification",
+  "scanner": "aquasec/trivy:0.76.0@sha256:2416d1f74045b57274df1a340eee6b510cacd73c66a6ccb8da092b117eb7d222",
+  "image_id": "sha256:cd4af647f73ab2feb2949dedfd32c54625c2c3087d7c7d104d3ce7ef3df754e6",
+  "architecture": "amd64",
+  "os": "linux",
+  "archive_sha256": "97eff6d696d51c593cb6e1f97a8e96cda29b00c0bbfc948d1879321782708460",
+  "counts": {
+    "CRITICAL": 0,
+    "HIGH": 0,
+    "LOW": 0,
+    "MEDIUM": 0,
+    "UNKNOWN": 0
+  },
+  "components": 71,
+  "scan_image_config_digest": "sha256:cc7f1a1674f122eb0e600efea2f3f00f6575f4f117401db62635f4da548c410c",
+  "filesystem_layers": [
+    "sha256:75c137aedfb2760f88629236cb7b797630aed0c3d91d626d1d1bb694878fc2ba",
+    "sha256:631edff44224924165ce2b5f8b7c2a9d55cc06f8e15528ad70d475173bdb3b7d",
+    "sha256:8cd5f028b744bfcb850b4d8b8a5fec249e7938152e4c9e69da3691eb2f3fe641",
+    "sha256:1e6e26d9bf7ade604f81da062368f8b19e047e3db1ea78f27000bbb3fd23f490",
+    "sha256:461b04c9e6c4e7ddd5b6e2c2a180ef917a9662cf22192e3abff2548f0dd6f582",
+    "sha256:eec98208857b6a46c6e52e888931624ca076173b012de63cc9e430a07e19d0fd",
+    "sha256:384d476d1f9dbf6290bbfd6332cd6d041e0c3cd2f7f346c1025d068b4a4a8f7b",
+    "sha256:316e2b6f1124068ef730d9f01c3bb8abd1013fd20eca662b7e19c2578b54a14e",
+    "sha256:f2f727f3a6857874535b9239057727ca8afdf4472db71933b09bf4fbe320eab7"
+  ],
+  "vulnerability_report_sha256": "f7a0002d0267ec0ed00121a6e89b2bc60075447eb3f887df149bdbc8cd95ad99",
+  "sbom_sha256": "e77e03a6fdc4dd56eaff98c797b93a0f894fd6d2bf729bf5a031d8537a30f50a",
+  "outcome": "Worked"
+}

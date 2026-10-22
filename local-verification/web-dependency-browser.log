@@ -1,0 +1,56 @@
+
+> mk-harness-web@1.0.0 test:a11y
+> playwright test
+
+[WebServer] (node:77292) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:117124) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 29 tests using 7 workers
+
+(node:118324) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:66076) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:101824) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:38988) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:73500) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:39392) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:120352) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok  4 tests\session-security.spec.ts:5:1 › SDK coalesces refreshes and handles a delayed old-token 401 without a second refresh (28ms)
+  ok  8 tests\session-security.spec.ts:35:1 › SDK cannot resurrect a session if sign-out happens during refresh (1ms)
+  ok  9 tests\session-security.spec.ts:51:1 › SDK never replays an old-session operation under a new login (2ms)
+  ok  7 tests\mfa.spec.ts:6:1 › SDK coalesces step-up, retries only explicit refusal and guards changed sessions (33ms)
+  ok 10 tests\session-security.spec.ts:70:3 › Sign out reports confirmed and clears browser tokens (3.1s)
+  ok  1 tests\approval.spec.ts:7:1 › approval screen shows every H1 field and requires an explicit per-message passkey gesture (3.5s)
+  ok  6 tests\privacy.spec.ts:10:1 › account deletion clears auth and shows a saveable pending receipt (3.5s)
+  ok  2 tests\draft-edit.spec.ts:4:1 › editing after proposal withdraws the old version and offers a fresh proposal (3.7s)
+  ok 12 tests\session-security.spec.ts:70:3 › Sign out reports pending and clears browser tokens (442ms)
+  ok  5 tests\rbac.spec.ts:5:1 › auditor sees only account security and audit evidence, never customer or action UI (3.8s)
+  ok  3 tests\a11y.spec.ts:13:3 › Today's brief has no WCAG 2.2 A/AA violations (3.8s)
+  ok 11 tests\mfa.spec.ts:34:1 › enrollment keeps recovery codes out of storage, gates the app and fits 360px (3.7s)
+  ok 13 tests\approval.spec.ts:44:1 › a changed digest between display and approval is refused client-side (434ms)
+  ok 14 tests\privacy.spec.ts:27:1 › customer deletion reports downstream pending and displays server refusal (498ms)
+  ok 15 tests\session-security.spec.ts:70:3 › Sign out reports offline and clears browser tokens (330ms)
+  ok 16 tests\rbac.spec.ts:22:1 › administrator can change another member role but not own access (374ms)
+  ok 19 tests\approval.spec.ts:57:1 › self-approval policy is displayed and refusal disables the ceremony (335ms)
+  ok 20 tests\session-security.spec.ts:90:1 › Session list revokes another session and reports pending delivery honestly (391ms)
+  ok 21 tests\approval.spec.ts:69:1 › a missing selected sender disables approval instead of guessing another identity (337ms)
+  ok 17 tests\a11y.spec.ts:13:3 › Approvals has no WCAG 2.2 A/AA violations (788ms)
+  ok 18 tests\mfa.spec.ts:56:1 › sensitive change uses a modal keyboard check, cancel sends nothing, then confirmation retries once (1.0s)
+  ok 22 tests\approval.spec.ts:77:1 › approval refuses a user-verification downgrade before requesting a signature (416ms)
+  ok 24 tests\approval.spec.ts:92:1 › brief offers drafting when the permission observation is active (271ms)
+  ok 23 tests\a11y.spec.ts:13:3 › Inbox & exceptions has no WCAG 2.2 A/AA violations (861ms)
+  ok 25 tests\approval.spec.ts:100:3 › brief retains source and safe controls without drafting when permission is none (325ms)
+  ok 27 tests\approval.spec.ts:100:3 › brief retains source and safe controls without drafting when permission is suppressed (259ms)
+  ok 26 tests\a11y.spec.ts:13:3 › My customers has no WCAG 2.2 A/AA violations (717ms)
+  ok 28 tests\a11y.spec.ts:13:3 › Settings has no WCAG 2.2 A/AA violations (858ms)
+  ok 29 tests\a11y.spec.ts:23:1 › customer page has no WCAG 2.2 A/AA violations (921ms)
+
+  29 passed (10.7s)

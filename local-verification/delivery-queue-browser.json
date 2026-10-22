@@ -1,0 +1,46 @@
+{
+  "environment": "production web build, explicit mocked API fixtures, native Python Playwright",
+  "checks": [
+    "visible unknown states",
+    "pagination",
+    "no resend/dismiss",
+    "refresh failure preserves warning and entries",
+    "360px no overflow"
+  ],
+  "browser_errors": [],
+  "provider_calls": 0,
+  "requests": [
+    {
+      "method": "GET",
+      "path": "/api/brief"
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/me"
+    },
+    {
+      "method": "GET",
+      "path": "/api/delivery-exceptions"
+    },
+    {
+      "method": "GET",
+      "path": "/api/exceptions"
+    },
+    {
+      "method": "GET",
+      "path": "/api/agent-ops/inbound/health"
+    },
+    {
+      "method": "GET",
+      "path": "/api/delivery-exceptions"
+    },
+    {
+      "method": "GET",
+      "path": "/api/delivery-exceptions"
+    }
+  ],
+  "width_360": {
+    "viewport": 360,
+    "document": 360
+  }
+}

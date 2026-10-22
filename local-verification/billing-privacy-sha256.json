@@ -1,0 +1,226 @@
+{
+  "source": "81dfbfad8f21addce9340675202db96ebd862963",
+  "scope": "Author-run billing erasure fences and completed deployment-plan CI",
+  "files": [
+    {
+      "path": "local-verification/billing-privacy-batch.md",
+      "bytes": 4631,
+      "sha256": "5ae2c5d15838a4673921afe05c71e99deeea48df1895def51e962b534dae8740"
+    },
+    {
+      "path": "local-verification/billing-privacy-full-green.log",
+      "bytes": 1034,
+      "sha256": "5c228f7a2b48ec324365330c4dae3b97af582dc57fc31f49e83732fd02e03175"
+    },
+    {
+      "path": "local-verification/billing-privacy-full-green.xml",
+      "bytes": 49572,
+      "sha256": "ded3701d1850752b06735c1903f91b410120b54b0c2bc36fafb816da3cf7cbfc"
+    },
+    {
+      "path": "local-verification/billing-privacy-gate-regression.log",
+      "bytes": 962,
+      "sha256": "4d0d2de5ce7bfd13cde8e3fdd146d3439e783f7f2032db6a57b2579c89db9ef9"
+    },
+    {
+      "path": "local-verification/billing-privacy-gate-regression.xml",
+      "bytes": 21694,
+      "sha256": "4ff5420688f932ac83b57d34c79b95c9f719c3196a6792101afbd2e892314830"
+    },
+    {
+      "path": "local-verification/billing-privacy-green-v1.log",
+      "bytes": 631,
+      "sha256": "abd242fdcf3773fcc22f72801fc3676a54b88e59bfe789e90a6160ef0bfaf0ce"
+    },
+    {
+      "path": "local-verification/billing-privacy-green-v1.xml",
+      "bytes": 1353,
+      "sha256": "937dc83200aa8776af7d0227b86586b690ad172c4097224fe7322c62f60877b0"
+    },
+    {
+      "path": "local-verification/billing-privacy-image-build.log",
+      "bytes": 2641,
+      "sha256": "dfe2223cad41e29a29ac26248c4430af96f828fe903ea2b1185ed242f54d9889"
+    },
+    {
+      "path": "local-verification/billing-privacy-image-green.log",
+      "bytes": 2888,
+      "sha256": "e9529774b18fd2b2170b24cecbf5a524924cc10904a5b3d0e0c04930473c6930"
+    },
+    {
+      "path": "local-verification/billing-privacy-image-green/container.log",
+      "bytes": 3497,
+      "sha256": "1030a6b834cddb4b86aa7502d1fe55c90fc71869c63b6d8e0fd512135ea8086b"
+    },
+    {
+      "path": "local-verification/billing-privacy-image-green/report.json",
+      "bytes": 2888,
+      "sha256": "e9529774b18fd2b2170b24cecbf5a524924cc10904a5b3d0e0c04930473c6930"
+    },
+    {
+      "path": "local-verification/billing-privacy-image-red.log",
+      "bytes": 490,
+      "sha256": "1652cc3329f5ca33a439d738b996afe669af9ab348a295a08b803b76353b1fed"
+    },
+    {
+      "path": "local-verification/billing-privacy-image-red/container.log",
+      "bytes": 2813,
+      "sha256": "867bfe1f60ea2836f6617014e53a280fba743cb7397ac28c7f1eb6831f2160ee"
+    },
+    {
+      "path": "local-verification/billing-privacy-image-red/report.json",
+      "bytes": 1545,
+      "sha256": "661b3a03946c6e58a4ee0854960afe01a37601eb44f93cf2fcfdb499cec80afa"
+    },
+    {
+      "path": "local-verification/billing-privacy-image-security/sbom.cdx.json",
+      "bytes": 92040,
+      "sha256": "476ac4535cf0abac5086d640f9c5100506e00f469c5ae154f9aef4fc9189ff42"
+    },
+    {
+      "path": "local-verification/billing-privacy-image-security/scanner-cyclonedx.log",
+      "bytes": 571,
+      "sha256": "ff935e9ff0aa8936271b033b240b097c10fe0ebcc639847ca1e39bf0f775476d"
+    },
+    {
+      "path": "local-verification/billing-privacy-image-security/scanner-json.log",
+      "bytes": 571,
+      "sha256": "66ca7de79606fa7a1c462577e31f6ddf826f5d68648992d5225a2fc532e66f59"
+    },
+    {
+      "path": "local-verification/billing-privacy-image-security/summary.json",
+      "bytes": 1623,
+      "sha256": "75112649b577c278082d462e1ae3311da529fecc8127ca541a54a5b9d1c07e07"
+    },
+    {
+      "path": "local-verification/billing-privacy-image-security/vulnerabilities.json",
+      "bytes": 114568,
+      "sha256": "f9ed4aa2be0de4c040cb229ade0a9e6556f2ce469650ed5a08cfe3f5472db2ce"
+    },
+    {
+      "path": "local-verification/billing-privacy-pg-full-green-v2.log",
+      "bytes": 653,
+      "sha256": "38dbb5e0c86875c9621fc62186b45475a6bcfd1acc5178b9912874f11cb602e0"
+    },
+    {
+      "path": "local-verification/billing-privacy-pg-full-green-v2.xml",
+      "bytes": 9991,
+      "sha256": "b6abaa48567043ea8122cd76f6b22b46acc83fd3db5ee89d1a501a3eb9b2af2b"
+    },
+    {
+      "path": "local-verification/billing-privacy-pg-full-green.log",
+      "bytes": 652,
+      "sha256": "64410eb963e0c0105eaac58a1ccf66e25d266c5a1bdd310bd6690273f51cbb58"
+    },
+    {
+      "path": "local-verification/billing-privacy-pg-full-green.xml",
+      "bytes": 9821,
+      "sha256": "38fea5e40c63e402bf7d1b15b5e4fe4d927cf718d6cd7cfc571aeb316fc7b0a7"
+    },
+    {
+      "path": "local-verification/billing-privacy-pg-green-v1.log",
+      "bytes": 98,
+      "sha256": "096fb5dacfa1491fa26b1cf57fd8da08c3fea866ba03209ccec2decbdf1fe13c"
+    },
+    {
+      "path": "local-verification/billing-privacy-pg-green-v1.xml",
+      "bytes": 706,
+      "sha256": "a71172a85d338a8d3d47f181ff3a90c9b5e5d350fbb9488de0e0655dd1963a41"
+    },
+    {
+      "path": "local-verification/billing-privacy-pg-green-v2.log",
+      "bytes": 98,
+      "sha256": "c5b6fb9ab0b870139748cbd84556786201c774fe3fd5cb81afb67c55ad1f9919"
+    },
+    {
+      "path": "local-verification/billing-privacy-pg-green-v2.xml",
+      "bytes": 875,
+      "sha256": "3546ad58475202ee21fd2175c350a6f29b266f9ad854fc35d20e01004678392c"
+    },
+    {
+      "path": "local-verification/billing-privacy-pg-red-v2.log",
+      "bytes": 1179,
+      "sha256": "8399753f6546a05b46faed3c94ae209c2d906d62cab23002443e3da8b49ccff9"
+    },
+    {
+      "path": "local-verification/billing-privacy-pg-red-v2.xml",
+      "bytes": 1222,
+      "sha256": "e5f895f97e88f94ce842d4f741bb6e190626a89566a9ec6ed818a91313921db8"
+    },
+    {
+      "path": "local-verification/billing-privacy-pg-red.log",
+      "bytes": 1708,
+      "sha256": "e001c5f21b1983ad57319d2d3619d9d3f71ed6be712d3bd523716a17c8a83660"
+    },
+    {
+      "path": "local-verification/billing-privacy-pg-red.xml",
+      "bytes": 2022,
+      "sha256": "09e3677f3f76aae60bef49a86fc9c582139858f082c3c13de9da9e44f72b27f5"
+    },
+    {
+      "path": "local-verification/billing-privacy-readiness.json",
+      "bytes": 31322,
+      "sha256": "71a77e7a73b9bf3e59ed49a1ef12f16f07210a5e12a6a52c0890b303d8fd2427"
+    },
+    {
+      "path": "local-verification/billing-privacy-red.log",
+      "bytes": 6439,
+      "sha256": "4117026509bde7051a3e2ccd4125503b097925d62ba2fed33d9b00bf4743d2c6"
+    },
+    {
+      "path": "local-verification/billing-privacy-red.xml",
+      "bytes": 8699,
+      "sha256": "c6f02d32629acbdef807d6c561ebbb9da518d6d4bbcbcecc0f2cff3672840f8c"
+    },
+    {
+      "path": "local-verification/billing-privacy-secret-scan.json",
+      "bytes": 3,
+      "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+    },
+    {
+      "path": "local-verification/billing-privacy-secret-scan.log",
+      "bytes": 113,
+      "sha256": "bf6e168e365ecdcd69cb74502a0a2956021d5a7d31d43e651e59c8b189b3e327"
+    },
+    {
+      "path": "local-verification/deployment-plan-app-ci-v1-complete.json",
+      "bytes": 11015,
+      "sha256": "a6f7543c228561261e11c0c92c0921deda2f0cfb8a7fa483250bdefacb45085d"
+    },
+    {
+      "path": "local-verification/deployment-plan-app-ci-v2.json",
+      "bytes": 12975,
+      "sha256": "1564c53488074e4b30b97aaa51b6a1e4e1ff6b16d150185d24add697015af273"
+    },
+    {
+      "path": "local-verification/deployment-plan-ci-control-v2/encrypted-package/plan.enc.json",
+      "bytes": 3439,
+      "sha256": "08daa61a3dd90c4cfd32c0d2ed111d53fec5f1943292f2bd1e5612592adcf087"
+    },
+    {
+      "path": "local-verification/deployment-plan-ci-control-v2/encrypted-package/review.json",
+      "bytes": 139,
+      "sha256": "4b159b70d087580975c154604016991d3e05eb0b63c6e19ef785e069ba39bad7"
+    },
+    {
+      "path": "local-verification/deployment-plan-ci-control-v2/seal-report.json",
+      "bytes": 1366,
+      "sha256": "de51ddc5437106a2f0f6c9490f865d3a2d4c8abc0c341cbaabd72f0b412d773a"
+    },
+    {
+      "path": "local-verification/deployment-plan-ci-control-v2/summary.json",
+      "bytes": 1970,
+      "sha256": "f0380cb5fc088d0de41943e4b350d40c418b8805af361c6a6410ae8a0fe09354"
+    },
+    {
+      "path": "local-verification/deployment-plan-kernel-ci-v1-complete.json",
+      "bytes": 14057,
+      "sha256": "10a4b00f91b2ee736ac57051c0fba2c9b2b95757469bcec26528812a97afc7a2"
+    },
+    {
+      "path": "local-verification/deployment-plan-kernel-ci-v2.json",
+      "bytes": 14057,
+      "sha256": "61ed088eb4b3497fd3ce37cfc2c49ce339a1d12ab5640b8ecde59540d727588a"
+    }
+  ]
+}

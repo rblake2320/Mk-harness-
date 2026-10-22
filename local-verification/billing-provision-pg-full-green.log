@@ -1,0 +1,13 @@
+.............F....................................................       [100%]
+=================================== FAILURES ===================================
+E   psycopg.errors.DuplicateTable: relation "billing_provisions" already exists
+/tmp/mk-security-python-20261022/lib/python3.12/site-packages/psycopg/connection.py:257: psycopg.errors.DuplicateTable: relation "billing_provisions" already exists
+=============================== warnings summary ===============================
+tools/verification/test_app_database.py::test_real_api_mfa_and_customer_transaction_with_runtime_identity
+  /tmp/mk-security-python-20261022/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tools/verification/test_app_database.py::test_public_data_adoption_is_explicit_and_preserves_rows
+1 failed, 65 passed, 1 warning in 118.50s (0:01:58)

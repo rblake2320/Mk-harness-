@@ -39,7 +39,7 @@ trap cleanup EXIT
 
 log "building release binaries"
 (cd "$ROOT/rust" && cargo build --release -q --bin mk-action-api --bin mk-outbox-relay --bin mk-action-worker \
-   --bin mk-audit-verifier --bin mk-devkeys --bin mk-softauthn --bin mk-twilio-sim --bin mk-restore-gate --bin mk-keyctl)
+   --bin mk-audit-verifier --bin mk-devkeys --bin mk-softauthn --bin mk-twilio-sim --bin mk-restore-gate --bin mk-keyctl --bin mk-privacy-ledger)
 BIN="$ROOT/rust/target/release"
 
 log "fresh database"
@@ -60,7 +60,7 @@ TW_ACCOUNT=ACaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; TW_TOKEN=drill-auth-token-$(pytho
 start_api() { MK_DATABASE_URL="$(url_for mk_api_login api)" MK_BIND=127.0.0.1:8090 RUST_ACTION_KERNEL_ENABLED=1 MK_APPROVAL_RP_ID="$RP_ID" MK_APPROVAL_ORIGINS="$ORIGIN" MK_PUBLIC_WEBHOOK_BASE="$WEBHOOK_BASE" "$BIN/mk-action-api" >>"$WORK/api.log" 2>&1 & PIDS+=($!); }
 start_relay() { MK_DATABASE_URL="$(url_for mk_relay_login relay)" MK_RELAY_ID=relay-drill "$BIN/mk-outbox-relay" >>"$WORK/relay.log" 2>&1 & PIDS+=($!); }
 start_worker() { MK_DATABASE_URL="$(url_for mk_worker_login worker)" MK_WORKER_ID=worker-drill MK_LEASE_SECS="${1:-8}" MK_ALLOW_LOOPBACK_HTTP=1 \
-  MK_EGRESS_AUTHORITIES=127.0.0.1:8790 MK_TWILIO_API_BASE="$TWSIM" MK_PUBLIC_WEBHOOK_BASE="$WEBHOOK_BASE" "$BIN/mk-action-worker" >>"$WORK/worker.log" 2>&1 & WORKER_PID=$!; }
+  MK_EGRESS_AUTHORITIES=127.0.0.1:8790,127.0.0.1:8090 MK_TWILIO_API_BASE="$TWSIM" MK_PUBLIC_WEBHOOK_BASE="$WEBHOOK_BASE" "$BIN/mk-action-worker" >>"$WORK/worker.log" 2>&1 & WORKER_PID=$!; }
 start_sim() { MK_TWSIM_ACCOUNT_SID="$TW_ACCOUNT" MK_TWSIM_AUTH_TOKEN="$TW_TOKEN" MK_TWSIM_BIND=127.0.0.1:8790 MK_TWSIM_MODE="${1:-accept}" MK_TWSIM_CALLBACK_BASE="$WEBHOOK_BASE" "$BIN/mk-twilio-sim" >>"$WORK/twsim.log" 2>&1 & SIM_PID=$!; PIDS+=($SIM_PID); }
 start_api; start_relay; start_sim accept
 for i in $(seq 1 30); do curl -fsS "$API/health/ready" >/dev/null 2>&1 && break; sleep 1; done
@@ -71,9 +71,11 @@ export DATABASE_URL="sqlite:///$WORK/app.db" JWT_SECRET=dev-secret-dev-secret-de
 (cd "$ROOT/backend" && exec python3 -m uvicorn app.main:app --port 8000 >"$WORK/app.log" 2>&1) & PIDS+=($!)
 for i in $(seq 1 30); do [ "$(curl -s -o /dev/null -w '%{http_code}' "$APP/docs" || true)" != 000 ] && break; sleep 1; done
 TOK=$(curl -fsS "$APP/api/auth/signup" -H 'content-type: application/json' -d '{"org_name":"Drill Org","email":"admin@drill.example.com","password":"superSecret123!","key_policy":"both"}' | python3 -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')
+TOK=$(printf '%s' "$TOK" | python3 "$ROOT/tools/verification/mfa_fixture.py" --api "$APP")
 H=(-H "authorization: Bearer $TOK" -H 'content-type: application/json')
 curl -fsS "$APP/api/auth/members" "${H[@]}" -d '{"email":"approver@drill.example.com","password":"superSecret123!","role":"consultant"}' >/dev/null
 TOK2=$(curl -fsS "$APP/api/auth/login" -H 'content-type: application/json' -d '{"email":"approver@drill.example.com","password":"superSecret123!"}' | python3 -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')
+TOK2=$(printf '%s' "$TOK2" | python3 "$ROOT/tools/verification/mfa_fixture.py" --api "$APP")
 H2=(-H "authorization: Bearer $TOK2" -H 'content-type: application/json')
 ops() { curl -sS -o "$WORK/out.json" -w '%{http_code}' "${H[@]}" "$@"; }
 ops2() { curl -sS -o "$WORK/out.json" -w '%{http_code}' "${H2[@]}" "$@"; }
@@ -83,7 +85,18 @@ ME=$(python3 -c "import jwt,uuid;print(uuid.UUID(jwt.decode('$TOK',options={'ver
 SA="$WORK/sa.json"; "$BIN/mk-softauthn" new "$SA" >/dev/null
 ops2 -X POST "$APP/api/agent-ops/approval-credentials/register/begin" >/dev/null
 [ "$(ops2 -X POST "$APP/api/agent-ops/approval-credentials/register/finish" -d "$("$BIN/mk-softauthn" register "$SA" "$(j 'd["challenge"]')" "$RP_ID" "$ORIGIN")")" = 201 ] || die "passkey"
-[ "$(ops -X POST "$APP/api/agent-ops/inbound/health" -d '{"ok":true}')" = 204 ] || die "inbound health"
+# Start only to establish the public-route receipt; no actions exist yet. F1
+# deliberately starts with no worker, so stop this owned process afterwards.
+start_worker 60
+for i in $(seq 1 40); do
+  ops "$APP/api/agent-ops/inbound/health" >/dev/null
+  [ "$(j 'd.get("dispatch_blocked", "unverified") is None')" = True ] && break
+  sleep 0.5
+done
+[ "$(j 'd.get("dispatch_blocked", "unverified") is None')" = True ] || die "no committed public inbound probe"
+kill "$WORKER_PID" 2>/dev/null || true
+wait "$WORKER_PID" 2>/dev/null || true
+WORKER_PID=""
 NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ); LATER=$(date -u -d '+30 min' +%Y-%m-%dT%H:%M:%SZ)
 new_customer() { local c; c=$(curl -fsS "$APP/api/customers" "${H[@]}" -d "{\"name\":\"Drill $1\",\"phone\":\"$2\"}" | python3 -c 'import sys,json;print(json.load(sys.stdin)["id"])')
   curl -fsS "$APP/api/customers/$c/destinations" "${H[@]}" -d "{\"channel\":\"sms\",\"value\":\"$2\"}" >/dev/null
@@ -187,10 +200,14 @@ RESTORED_AT=$(date -u -d '+2 seconds' +%Y-%m-%dT%H:%M:%SZ); sleep 3
 kill -9 "$WORKER_PID" 2>/dev/null || true
 psql -q "$PGURL" -c "update kernel.actions set state='dispatching' where action_id='$A6'" -c "insert into kernel.message_deliveries (tenant_id, action_id, attempt, sender_identity_id, provider, state, submission_started_at) select tenant_id, action_id, 1, (select sender_identity_id from kernel.sender_identities limit 1), 'twilio', 'submission_started', now() from kernel.actions where action_id='$A6'"
 # Dispatch is still enabled → gate must FAIL first.
-if "$BIN/mk-restore-gate" --restored-at "$RESTORED_AT" >"$WORK/gate1.json" 2>&1; then die "restore gate passed with dispatch enabled"; fi
+PRIVACY_NOT_BEFORE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+"$BIN/mk-privacy-ledger" export --ledger "$WORK/privacy-ledger.json" >"$WORK/privacy-ledger-export.json"
+PRIVACY_DIGEST=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["sha256"])' "$WORK/privacy-ledger-export.json")
+PRIVACY_ARGS=(--privacy-ledger "$WORK/privacy-ledger.json" --privacy-sha256 "$PRIVACY_DIGEST" --privacy-not-before "$PRIVACY_NOT_BEFORE")
+if "$BIN/mk-restore-gate" --restored-at "$RESTORED_AT" "${PRIVACY_ARGS[@]}" >"$WORK/gate1.json" 2>&1; then die "restore gate passed with dispatch enabled"; fi
 grep -q '"check":"global_dispatch_disabled","ok":false' "$WORK/gate1.json" || die "gate did not flag enabled dispatch"
 psql -q "$PGURL" -c "insert into kernel.kill_switches (scope, tenant_id, dispatch_enabled, changed_by) values ('global', null, false, 'restore-drill') on conflict do nothing" -c "update kernel.kill_switches set dispatch_enabled=false where scope='global'" 2>/dev/null || true
-"$BIN/mk-restore-gate" --restored-at "$RESTORED_AT" --apply >"$WORK/gate2.json" 2>&1 || die "restore gate failed: $(cat "$WORK/gate2.json")"
+"$BIN/mk-restore-gate" --restored-at "$RESTORED_AT" "${PRIVACY_ARGS[@]}" --apply >"$WORK/gate2.json" 2>&1 || die "restore gate failed: $(cat "$WORK/gate2.json")"
 grep -q '"gate":"PASS"' "$WORK/gate2.json" || die "gate not PASS"
 [ "$(psql -tA "$PGURL" -c "select state from kernel.actions where action_id='$A6'")" = reconciliation_required ] || die "in-flight not marked"
 [ "$(psql -tA "$PGURL" -c "select count(*) from kernel.approvals where decision='approved' and consumed_at is null and revoked_at is null and created_at < '$RESTORED_AT'")" = 0 ] || die "pre-restore approvals remain"

@@ -1,0 +1,232 @@
+{
+  "scope": "read-only source preflight; not deployment or independent release qualification",
+  "source_sha": "80e08d0ab9e9f149e0c365d29b60a6311f26f7df",
+  "repository": "rblake2320/Mk-harness-",
+  "target": "staging",
+  "verdict": "REFUSED",
+  "checks": [
+    {
+      "check": "bounded_main_workflow_inputs",
+      "ok": true
+    },
+    {
+      "check": "main_is_protected",
+      "ok": false
+    },
+    {
+      "check": "source_is_on_main",
+      "ok": true
+    },
+    {
+      "check": "main_requires_fresh_human_review",
+      "ok": false
+    },
+    {
+      "check": "main_requires_trusted_ci_checks",
+      "ok": false
+    },
+    {
+      "check": "main_disallows_delete_and_force_push",
+      "ok": false
+    },
+    {
+      "check": "exact_source_has_independent_merged_pr_approval",
+      "ok": false
+    },
+    {
+      "check": "ci.yml:active_definition",
+      "ok": true
+    },
+    {
+      "check": "ci.yml:exact_main_push",
+      "ok": true
+    },
+    {
+      "check": "ci.yml:successful_run",
+      "ok": true
+    },
+    {
+      "check": "ci.yml:fresh_run",
+      "ok": true
+    },
+    {
+      "check": "ci.yml:all_required_jobs",
+      "ok": false
+    },
+    {
+      "check": "kernel-ci.yml:active_definition",
+      "ok": true
+    },
+    {
+      "check": "kernel-ci.yml:exact_main_push",
+      "ok": true
+    },
+    {
+      "check": "kernel-ci.yml:successful_run",
+      "ok": true
+    },
+    {
+      "check": "kernel-ci.yml:fresh_run",
+      "ok": true
+    },
+    {
+      "check": "kernel-ci.yml:all_required_jobs",
+      "ok": true
+    }
+  ],
+  "evidence": {
+    "branch": {
+      "name": "main",
+      "protected": false
+    },
+    "comparison": {
+      "status": "identical",
+      "merge_base_sha": "80e08d0ab9e9f149e0c365d29b60a6311f26f7df"
+    },
+    "rules": [],
+    "pull_requests": [
+      {
+        "number": 36,
+        "merged_at": "2026-10-22T01:59:25Z",
+        "base": "main",
+        "merge_commit_sha": "80e08d0ab9e9f149e0c365d29b60a6311f26f7df",
+        "head_sha": "ee789dd164d1508e5f6902d7e6c505338c54011b",
+        "author_id": 73768949,
+        "reviews": [
+          {
+            "id": 5606254280,
+            "state": "COMMENTED",
+            "commit_id": "81421876a65abcf9b53a2429674e3271ccd54ee6",
+            "user_id": 199175422,
+            "user_type": "Bot"
+          },
+          {
+            "id": 5606727947,
+            "state": "COMMENTED",
+            "commit_id": "de52e657ba5401bc4a196448f09b742e77ea7126",
+            "user_id": 73768949,
+            "user_type": "User"
+          },
+          {
+            "id": 5606728203,
+            "state": "COMMENTED",
+            "commit_id": "ee789dd164d1508e5f6902d7e6c505338c54011b",
+            "user_id": 73768949,
+            "user_type": "User"
+          }
+        ]
+      }
+    ],
+    "workflows": {
+      "ci.yml": {
+        "definition": {
+          "id": 295193055,
+          "path": ".github/workflows/ci.yml",
+          "state": "active"
+        },
+        "runs": [
+          {
+            "id": 39708841833,
+            "run_attempt": 1,
+            "workflow_id": 295193055,
+            "head_sha": "80e08d0ab9e9f149e0c365d29b60a6311f26f7df",
+            "head_branch": "main",
+            "event": "push",
+            "status": "completed",
+            "conclusion": "success",
+            "updated_at": "2026-10-22T02:01:25Z",
+            "repository": "rblake2320/Mk-harness-"
+          }
+        ],
+        "jobs": [
+          {
+            "name": "web-build",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 39708841833,
+            "run_attempt": 1
+          },
+          {
+            "name": "backend-tests",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 39708841833,
+            "run_attempt": 1
+          },
+          {
+            "name": "docker-build",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 39708841833,
+            "run_attempt": 1
+          }
+        ]
+      },
+      "kernel-ci.yml": {
+        "definition": {
+          "id": 390535077,
+          "path": ".github/workflows/kernel-ci.yml",
+          "state": "active"
+        },
+        "runs": [
+          {
+            "id": 39708841763,
+            "run_attempt": 1,
+            "workflow_id": 390535077,
+            "head_sha": "80e08d0ab9e9f149e0c365d29b60a6311f26f7df",
+            "head_branch": "main",
+            "event": "push",
+            "status": "completed",
+            "conclusion": "success",
+            "updated_at": "2026-10-22T02:07:07Z",
+            "repository": "rblake2320/Mk-harness-"
+          }
+        ],
+        "jobs": [
+          {
+            "name": "observability",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 39708841763,
+            "run_attempt": 1
+          },
+          {
+            "name": "kernel",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 39708841763,
+            "run_attempt": 1
+          },
+          {
+            "name": "secret-scan",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 39708841763,
+            "run_attempt": 1
+          },
+          {
+            "name": "contracts",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 39708841763,
+            "run_attempt": 1
+          },
+          {
+            "name": "live-smoke",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 39708841763,
+            "run_attempt": 1
+          },
+          {
+            "name": "kernel-image",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 39708841763,
+            "run_attempt": 1
+          }
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "proposed": "Proposed by the AI or the consultant; nothing has been authorized.",
+  "awaiting_approval": "Waiting for an explicit human approval gesture.",
+  "approved": "Approved by a human; not yet queued for execution.",
+  "queued": "Queued for execution; policy will be re-evaluated before any send.",
+  "dispatch_authorized": "Dispatch authorization obtained; no provider request has been made.",
+  "submission_started": "The provider request is in flight or its outcome is not yet recorded.",
+  "provider_accepted": "Provider acknowledged submission.",
+  "sent": "Provider reports outbound network submission.",
+  "delivered": "Supported provider/carrier receipt reports delivery.",
+  "failed": "Provider reported a terminal failure.",
+  "delivery_unknown": "Evidence is insufficient to say whether the message was delivered.",
+  "submission_unknown": "Evidence is insufficient to say whether the message was submitted; a human must resolve before any replacement.",
+  "cancelled": "Cancelled before any provider submission.",
+  "denied": "Refused by policy; nothing was sent.",
+  "expired": "The authorization window elapsed before execution."
+}

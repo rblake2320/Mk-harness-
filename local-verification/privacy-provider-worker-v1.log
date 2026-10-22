@@ -1,0 +1,52 @@
+   Compiling tower v0.5.3
+   Compiling mk-audit v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-audit)
+   Compiling mk-store v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-store)
+   Compiling tower-http v0.6.11
+   Compiling axum v0.8.9
+   Compiling reqwest v0.12.28
+   Compiling mk-testkit v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-testkit)
+   Compiling mk-queue v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-queue)
+   Compiling mk-adapters v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-adapters)
+   Compiling mk-worker v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-worker)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 7.86s
+     Running tests/privacy_e2e.rs (/tmp/mk-release-acceptance-target/debug/deps/privacy_e2e-8e7b1383c49e3591)
+
+running 4 tests
+test provider_worker_disabled_sender_cleanup_preserves_backup_obligation_and_audit ... FAILED
+test provider_worker_false_success_stays_pending_then_recovers ... FAILED
+test provider_worker_lease_crash_expiry_cas_and_concurrent_replicas ... FAILED
+test provider_worker_lost_response_and_restart_retries_without_resend ... FAILED
+
+failures:
+
+---- provider_worker_disabled_sender_cleanup_preserves_backup_obligation_and_audit stdout ----
+
+thread 'provider_worker_disabled_sender_cleanup_preserves_backup_obligation_and_audit' (1362031) panicked at crates/mk-worker/tests/privacy_e2e.rs:167:10:
+called `Result::unwrap()` on an `Err` value: Db(Database(PgDatabaseError { severity: Error, code: "42703", message: "column \"backup_not_before\" of relation \"privacy_provider_deletions\" does not exist", detail: None, hint: None, position: Some(Original(176)), where: None, schema: None, table: None, column: None, data_type: None, constraint: None, file: Some("analyze.c"), line: Some(2527), routine: Some("transformUpdateTargetList") }))
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- provider_worker_false_success_stays_pending_then_recovers stdout ----
+
+thread 'provider_worker_false_success_stays_pending_then_recovers' (1362032) panicked at crates/mk-worker/tests/privacy_e2e.rs:325:10:
+called `Result::unwrap()` on an `Err` value: Db(Database(PgDatabaseError { severity: Error, code: "42703", message: "column \"backup_not_before\" of relation \"privacy_provider_deletions\" does not exist", detail: None, hint: None, position: Some(Original(176)), where: None, schema: None, table: None, column: None, data_type: None, constraint: None, file: Some("analyze.c"), line: Some(2527), routine: Some("transformUpdateTargetList") }))
+
+---- provider_worker_lease_crash_expiry_cas_and_concurrent_replicas stdout ----
+
+thread 'provider_worker_lease_crash_expiry_cas_and_concurrent_replicas' (1362090) panicked at crates/mk-worker/tests/privacy_e2e.rs:299:18:
+called `Result::unwrap()` on an `Err` value: Db(Database(PgDatabaseError { severity: Error, code: "42703", message: "column \"backup_not_before\" of relation \"privacy_provider_deletions\" does not exist", detail: None, hint: None, position: Some(Original(176)), where: None, schema: None, table: None, column: None, data_type: None, constraint: None, file: Some("analyze.c"), line: Some(2527), routine: Some("transformUpdateTargetList") }))
+
+---- provider_worker_lost_response_and_restart_retries_without_resend stdout ----
+
+thread 'provider_worker_lost_response_and_restart_retries_without_resend' (1362116) panicked at crates/mk-worker/tests/privacy_e2e.rs:257:10:
+called `Result::unwrap()` on an `Err` value: Db(Database(PgDatabaseError { severity: Error, code: "42703", message: "column \"backup_not_before\" of relation \"privacy_provider_deletions\" does not exist", detail: None, hint: None, position: Some(Original(176)), where: None, schema: None, table: None, column: None, data_type: None, constraint: None, file: Some("analyze.c"), line: Some(2527), routine: Some("transformUpdateTargetList") }))
+
+
+failures:
+    provider_worker_disabled_sender_cleanup_preserves_backup_obligation_and_audit
+    provider_worker_false_success_stays_pending_then_recovers
+    provider_worker_lease_crash_expiry_cas_and_concurrent_replicas
+    provider_worker_lost_response_and_restart_retries_without_resend
+
+test result: FAILED. 0 passed; 4 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.40s
+
+error: test failed, to rerun pass `-p mk-worker --test privacy_e2e`

@@ -97,6 +97,13 @@ pub async fn insert_draft(
     now: DateTime<Utc>,
 ) -> Result<StoredAction, StoreError> {
     tx.assert_tenant(req.tenant_id)?;
+    crate::privacy::check_intake(tx, req).await?;
+    if let (Some(ch), Some(dest)) = (channel, destination)
+        && crate::privacy::destination_erased(tx, ch.as_str(), dest).await?
+    {
+        return Err(StoreError::Erased);
+    }
+    crate::drafts::check_intake(tx, req).await?;
     let action_id = req
         .action_id
         .ok_or(StoreError::Corrupt("unbound action_id"))?;
@@ -141,7 +148,8 @@ pub async fn insert_draft(
             action_id: Some(action_id),
             event_type: EventType::ActionProposed,
             payload_redacted: json!({
-                "workflow": req.workflow, "action_kind": req.action_kind, "tool_id": req.tool_id,
+                "workflow": req.workflow, "action_kind": req.action_kind,
+                "tool_id": mk_policy::ToolAllowlist::v1().get(&req.tool_id).map(|tool| tool.tool_id),
                 "risk": req.risk, "origin_type": req.origin.origin_type, "action_digest": digest.to_string(),
                 "resource_type": req.resource.resource_type, "evidence_count": req.evidence.len(),
             }),
@@ -161,6 +169,11 @@ fn plain<T: serde::Serialize>(v: &T) -> String {
 }
 
 fn row_to_action(tenant: TenantId, r: &sqlx::postgres::PgRow) -> Result<StoredAction, StoreError> {
+    if r.try_get::<Option<DateTime<Utc>>, _>("content_erased_at")?
+        .is_some()
+    {
+        return Err(StoreError::Erased);
+    }
     let canonical: Vec<u8> = r.try_get("canonical_request")?;
     let request: ActionRequest =
         serde_json::from_slice(&canonical).map_err(|_| StoreError::Corrupt("canonical_request"))?;
@@ -194,7 +207,7 @@ fn row_to_action(tenant: TenantId, r: &sqlx::postgres::PgRow) -> Result<StoredAc
 }
 
 const SELECT: &str = "SELECT action_id, state, canonical_request, action_digest, channel, destination_hash, destination_fingerprints, attempt,
-    error_code, replay_of, expires_at, updated_at FROM kernel.actions WHERE tenant_id = $1 AND action_id = $2";
+    error_code, replay_of, expires_at, updated_at, content_erased_at FROM kernel.actions WHERE tenant_id = $1 AND action_id = $2";
 
 pub async fn get(tx: &mut TenantTx<'_>, action_id: ActionId) -> Result<StoredAction, StoreError> {
     let tenant = tx.tenant();
@@ -322,6 +335,16 @@ pub async fn insert_replay(
 ) -> Result<StoredAction, StoreError> {
     if !original.state.is_terminal() {
         return Err(StoreError::Conflict("replay requires a terminal original"));
+    }
+    if original.state == ActionState::ReconciliationRequired
+        && crate::resolutions::decision(tx, original.action_id)
+            .await?
+            .as_deref()
+            != Some("replacement_permitted")
+    {
+        return Err(StoreError::Conflict(
+            "replay requires a passkey resolution permitting replacement",
+        ));
     }
     let mut req = original.request.clone();
     req.action_id = Some(new_id);

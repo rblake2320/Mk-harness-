@@ -44,7 +44,7 @@ def kernel_env(monkeypatch):
 
 
 def _user(client, tag=None):
-    tag = tag or uuid.uuid4().hex[:6]
+    tag = tag or uuid.uuid4().hex
     tok = signup(client, org=f"Org {tag}", email=f"u-{tag}@example.com")
     return auth_headers(tok)
 

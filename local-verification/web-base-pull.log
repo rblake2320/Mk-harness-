@@ -1,0 +1,29 @@
+1.30.6-alpine-slim: Pulling from library/nginx
+bb658a254196: Pulling fs layer
+e125989d16f0: Pulling fs layer
+7b229517ed22: Pulling fs layer
+885725a63a7c: Pulling fs layer
+f19a2d3b6951: Pulling fs layer
+9f0afb44f10e: Pulling fs layer
+81b64ae234ef: Pulling fs layer
+e125989d16f0: Download complete
+db37a9cb7fa6: Download complete
+bb6b3564a997: Download complete
+bb658a254196: Download complete
+885725a63a7c: Download complete
+81b64ae234ef: Download complete
+f19a2d3b6951: Download complete
+9f0afb44f10e: Download complete
+7b229517ed22: Download complete
+9f0afb44f10e: Pull complete
+7b229517ed22: Pull complete
+e125989d16f0: Pull complete
+bb658a254196: Pull complete
+e125989d16f0: Pull complete
+bb658a254196: Pull complete
+885725a63a7c: Pull complete
+81b64ae234ef: Pull complete
+f19a2d3b6951: Pull complete
+Digest: sha256:a6cc4968d63e87b7d78fb0e089dcd85a6c88e7660b9b06ee0c9b380ac7bc5593
+Status: Downloaded newer image for nginx:1.30.6-alpine-slim
+docker.io/library/nginx:1.30.6-alpine-slim

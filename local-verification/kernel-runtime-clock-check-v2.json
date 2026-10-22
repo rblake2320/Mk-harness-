@@ -1,0 +1,26 @@
+[
+  {
+    "attempt": 1,
+    "host_before_ms": 1792662633851,
+    "container_ms": 1792662633150.140000,
+    "host_after_ms": 1792662634130,
+    "offset_lower_ms": -979.860000,
+    "offset_upper_ms": -700.860000
+  },
+  {
+    "attempt": 2,
+    "host_before_ms": 1792662634137,
+    "container_ms": 1792662633392.760000,
+    "host_after_ms": 1792662634389,
+    "offset_lower_ms": -996.240000,
+    "offset_upper_ms": -744.240000
+  },
+  {
+    "attempt": 3,
+    "host_before_ms": 1792662634390,
+    "container_ms": 1792662633664.101000,
+    "host_after_ms": 1792662634679,
+    "offset_lower_ms": -1014.899000,
+    "offset_upper_ms": -725.899000
+  }
+]

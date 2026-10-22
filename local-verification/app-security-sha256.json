@@ -1,0 +1,254 @@
+{
+  "source_commit": "ac14c4e77b550ef89614a5e76cf1fc3659dece8c",
+  "image_id": "sha256:cdaa55609924164a60857546956022977f654724b4cc4855dec75c8b666770f5",
+  "files": [
+    {
+      "path": "local-verification/app-security-build-v1.log",
+      "sha256": "f07a1bcd2a31afb352d79747c820aac1c3d9e8fc00b2e764a6cbbeea6c3f87f0"
+    },
+    {
+      "path": "local-verification/app-security-build-v2.log",
+      "sha256": "656fe3b5e258d15fdc81ef8ced3820ca5cee63f1050b33d011fafdf2d200e527"
+    },
+    {
+      "path": "local-verification/app-security-evidence-secrets-v1.log",
+      "sha256": "671317bf3c5e1cfdc82815b43a7c9b5675b710e1f640ad45a5c1ef3ffd630b9e"
+    },
+    {
+      "path": "local-verification/app-security-expanded-v1.log",
+      "sha256": "a848a32a316ff20a8effc111f6e9032a72d81593fdc538f2d2f6bd7fec65c623"
+    },
+    {
+      "path": "local-verification/app-security-expanded-v1.xml",
+      "sha256": "502b1a457463a02a8b75f66d35e30164649e6ebe86853745072bb42e38a4a4b4"
+    },
+    {
+      "path": "local-verification/app-security-expanded-v2.log",
+      "sha256": "a07a41d6adff75f8aaeee8b020e7423d39f672ae84202e4cf4fce3037d40812d"
+    },
+    {
+      "path": "local-verification/app-security-expanded-v2.xml",
+      "sha256": "778597ab7ef37bc476b4a9fedc453a0e86043a89da5489415032823ea42b3ee8"
+    },
+    {
+      "path": "local-verification/app-security-first-red-redaction.json",
+      "sha256": "684b647e9b76d8b916177bd68fd25ffb60fe2b553d9e30388dea00d9ac571109"
+    },
+    {
+      "path": "local-verification/app-security-full-app-v1.log",
+      "sha256": "f5072c0483de9dc5fcf3ae74d5aaeb3de817973d4f2863081afe513ed01f485e"
+    },
+    {
+      "path": "local-verification/app-security-full-app-v1.xml",
+      "sha256": "979cff9ec40f500b79d43a4692a488d7d76ab5f4241268294ef45fd605cb4257"
+    },
+    {
+      "path": "local-verification/app-security-full-app-v2.log",
+      "sha256": "76ae5d6c5390dc51b27894f9e24e1ad5d223d2222ec2438ac0d5136b996fbb06"
+    },
+    {
+      "path": "local-verification/app-security-full-app-v2.xml",
+      "sha256": "6cf17df3dc7e092bb0fc26ceebbb10e0dcc4711e888ce555038dcf4102f067b1"
+    },
+    {
+      "path": "local-verification/app-security-full-postgres-v1.log",
+      "sha256": "07d6165fc40460de8035bc832ce54e07fe51e9b1e5da4c0a1fff9be609f9665e"
+    },
+    {
+      "path": "local-verification/app-security-full-postgres-v1.xml",
+      "sha256": "8defd0e94a43919d6fa2bce1cde81692180983fe850fc389eabfed463c445efd"
+    },
+    {
+      "path": "local-verification/app-security-full-postgres-v2.log",
+      "sha256": "f3869c61f448b28d7755a5e8fe34fe95e338c0f5ab81f5b5a274481cb9cc39f4"
+    },
+    {
+      "path": "local-verification/app-security-full-postgres-v2.xml",
+      "sha256": "a5cfa1533548b931942672ff7a0d31c3178aa03382b926b39c56fb6a30ebccb8"
+    },
+    {
+      "path": "local-verification/app-security-image-runtime-v1.log",
+      "sha256": "3106fac6568579fa12470aa1de9a9b2ffd93ec55f3c40f5b17ec6d10fc39f056"
+    },
+    {
+      "path": "local-verification/app-security-image-runtime-v1/container.log",
+      "sha256": "565d870ef7f12a8485bd3e8bc5a7e5bcbe79f82a64851a987ab77cde393d8c03"
+    },
+    {
+      "path": "local-verification/app-security-image-runtime-v1/privacy-ledger.json",
+      "sha256": "17ed2fb4c15b44146060d48dc909c9a299d80cdb04f6b364e94d5c08b527714a"
+    },
+    {
+      "path": "local-verification/app-security-image-runtime-v1/report.json",
+      "sha256": "3106fac6568579fa12470aa1de9a9b2ffd93ec55f3c40f5b17ec6d10fc39f056"
+    },
+    {
+      "path": "local-verification/app-security-image-runtime-v1/security-ledger.enc",
+      "sha256": "73674e310ac7a949adce53d5698572caea5f5e7f53c74a901a75b9e2783d5bff"
+    },
+    {
+      "path": "local-verification/app-security-image-runtime-v2.log",
+      "sha256": "fc95ea80fbe632bbbbc32a2631772569cabdad0ea904a21b50a89bcf3fbd5d9d"
+    },
+    {
+      "path": "local-verification/app-security-image-runtime-v2/container.log",
+      "sha256": "b4eb9bf9b035833a960d91e599f85d3af40cfa5a77ef2f3637f7d49734b98ece"
+    },
+    {
+      "path": "local-verification/app-security-image-runtime-v2/privacy-ledger.json",
+      "sha256": "67f6d91e20d165f0eb63e2975f6d5361af82596d3ae48bb6749a7769ee00df93"
+    },
+    {
+      "path": "local-verification/app-security-image-runtime-v2/report.json",
+      "sha256": "fc95ea80fbe632bbbbc32a2631772569cabdad0ea904a21b50a89bcf3fbd5d9d"
+    },
+    {
+      "path": "local-verification/app-security-image-runtime-v2/security-ledger.enc",
+      "sha256": "8381095cae121bdcb91d2af8e53de035683954ef0677c781d3f01b64d6661c91"
+    },
+    {
+      "path": "local-verification/app-security-image-scan-v1/sbom.cdx.json",
+      "sha256": "e77e03a6fdc4dd56eaff98c797b93a0f894fd6d2bf729bf5a031d8537a30f50a"
+    },
+    {
+      "path": "local-verification/app-security-image-scan-v1/scanner-cyclonedx.log",
+      "sha256": "1240ab9098ec6aa1e6e9ec677384d2e7df0c34ed7abbd76bb770e732afdc3764"
+    },
+    {
+      "path": "local-verification/app-security-image-scan-v1/scanner-json.log",
+      "sha256": "ec50b0de8708f7aab04d85bd063ad4336805c73fcf33210fc157412a557c8a7f"
+    },
+    {
+      "path": "local-verification/app-security-image-scan-v1/summary.json",
+      "sha256": "d67d94a58ad83f97cd366cdc27ac7f3ec276565f55a7deaaa325da369d27cbfd"
+    },
+    {
+      "path": "local-verification/app-security-image-scan-v1/vulnerabilities.json",
+      "sha256": "f7a0002d0267ec0ed00121a6e89b2bc60075447eb3f887df149bdbc8cd95ad99"
+    },
+    {
+      "path": "local-verification/app-security-image-scan-v2/sbom.cdx.json",
+      "sha256": "95c306b79426f642b4481fa4187bd9e411cede94b2d6fa1667374bd9b6a756a9"
+    },
+    {
+      "path": "local-verification/app-security-image-scan-v2/scanner-cyclonedx.log",
+      "sha256": "6053a731738c7269793b32fe1f7a358dbbd07440eeacfc76572c58b8dacc1223"
+    },
+    {
+      "path": "local-verification/app-security-image-scan-v2/scanner-json.log",
+      "sha256": "632fce6645242e14877739c667d82d533c11abd412eac1589e9b7c3804b20088"
+    },
+    {
+      "path": "local-verification/app-security-image-scan-v2/summary.json",
+      "sha256": "6f1c05ba8387a4c3baa7cd3cb00abd5710a3637d074069053fe6f1e77277ba5d"
+    },
+    {
+      "path": "local-verification/app-security-image-scan-v2/vulnerabilities.json",
+      "sha256": "dab1bec8bc7c998bbce363551497f6275e0e005c0909d8683d08cab76615a637"
+    },
+    {
+      "path": "local-verification/app-security-privacy-retest-v1.log",
+      "sha256": "5a5841b0790f6293a78bd665e21b494b4e8f828ff30ee3a89bbf9649683df2f6"
+    },
+    {
+      "path": "local-verification/app-security-privacy-retest-v1.xml",
+      "sha256": "7bd088e9f0acd1dfe362bfe8779501640319f6c6820f2a2d2a14c2fe4c589688"
+    },
+    {
+      "path": "local-verification/app-security-readiness.json",
+      "sha256": "71a77e7a73b9bf3e59ed49a1ef12f16f07210a5e12a6a52c0890b303d8fd2427"
+    },
+    {
+      "path": "local-verification/app-security-recovery-batch.md",
+      "sha256": "d3d0ee2ce4e61be39867acf8c368f877a5564fc8778060ddb919b23ebfc60def"
+    },
+    {
+      "path": "local-verification/app-security-restore-green-v1.log",
+      "sha256": "b05cc9b7bbc2c8afaaaeb1bfbda51f4ba175caa91c0fe3d830d20aa98b00867c"
+    },
+    {
+      "path": "local-verification/app-security-restore-green-v1.xml",
+      "sha256": "cce931f70267e358ff704bed02b30ca197bb120d8d50ff37247cec5a0039a0ed"
+    },
+    {
+      "path": "local-verification/app-security-restore-green-v2.log",
+      "sha256": "7ac3a288e5cade2c60faa6a3bcd2df178de37f40dbfcf22dc53fd27914865e27"
+    },
+    {
+      "path": "local-verification/app-security-restore-green-v2.xml",
+      "sha256": "69b411447c2e90408ee77539d4bb14839d5d10ff04d89188015cf3e3f1996830"
+    },
+    {
+      "path": "local-verification/app-security-restore-red-v2.log",
+      "sha256": "52acdd9bc6b20372e8ce60059875af2c08c96a103509259336cfc9fe8b4cd12e"
+    },
+    {
+      "path": "local-verification/app-security-restore-red-v2.xml",
+      "sha256": "f85f60e35b2db60024dd1de8ee9efb819185c8d20c9f8097dfb09022f0a592fe"
+    },
+    {
+      "path": "local-verification/app-security-restore-red.log",
+      "sha256": "4e2b6f295dbbca56e8e50067bd835785d1d172bde1695c2fbc6173a03978f12c"
+    },
+    {
+      "path": "local-verification/app-security-restore-red.xml",
+      "sha256": "8bf2c0b101081114984c7a6635ec56ab75ed11272d99b1629fff8a03a7579f86"
+    },
+    {
+      "path": "local-verification/app-security-source-secrets-v1.log",
+      "sha256": "4373c5a78d6c335c34fe6b056ebc0252947132fe35ccfff5ee31a8c58fd4dcc7"
+    },
+    {
+      "path": "local-verification/app-security-static-v1.json",
+      "sha256": "ba709623ceea87959ec7927c92cf8e6e64beb23ee0d6158d6b82e9d278ce763b"
+    },
+    {
+      "path": "local-verification/app-security-tool-gates-v1.log",
+      "sha256": "0933b9cd31a1d52bf5b907ca1ca3be18b98072f2f8de3a80cdb0da25be2394c5"
+    },
+    {
+      "path": "local-verification/app-security-tool-gates-v1.xml",
+      "sha256": "4868ec4b5bed1c8e74f517359d42bbf2dff609d3cdcd585406ab2ac79c47fd5c"
+    },
+    {
+      "path": "local-verification/app-security-unit-v1.log",
+      "sha256": "40f2a1cff3038c2efaca254af538d0c6b49df48cdc26bea851e1acdcca0e346b"
+    },
+    {
+      "path": "local-verification/app-security-unit-v1.xml",
+      "sha256": "5a08060b6e557e27ce11f70c55ccf74df089d6b51d6907d84395fdf5e3e9abab"
+    },
+    {
+      "path": "local-verification/app-security-unit-v2.log",
+      "sha256": "f77d61751b73d98f27b4a50614c9f96fdeab82b440d82cfd13bce725f74dcdbc"
+    },
+    {
+      "path": "local-verification/app-security-unit-v2.xml",
+      "sha256": "743f82511f62eed07b73594b540b08751d679d44ff48421a9595b7613c6d248a"
+    },
+    {
+      "path": "local-verification/app-security-unit-v3.log",
+      "sha256": "e27d74b437812e66e63e5e42fa0bf44a2123034aea3dc0daf0d53ea49e69ae0b"
+    },
+    {
+      "path": "local-verification/app-security-unit-v3.xml",
+      "sha256": "6e0285f2c2b063d0a7bf38a90db3dab29827478c6305d3804f03362da4eb0195"
+    },
+    {
+      "path": "local-verification/app-security-unit-v4.log",
+      "sha256": "137ff9dfceea8bece31dfe270a9d49ea9ce7061d788500f9850f73788172d93b"
+    },
+    {
+      "path": "local-verification/app-security-unit-v4.xml",
+      "sha256": "42a7974b49d3070546d0b0580a545abc11cfd31a2e5da8eccb085110cf4379e4"
+    },
+    {
+      "path": "local-verification/authority-app-ci-v1.json",
+      "sha256": "f4760950e742c7de4dc4cab698b30993d3850aa664265173db50756ba0e7de48"
+    },
+    {
+      "path": "local-verification/authority-kernel-ci-v1.json",
+      "sha256": "530d9d094b8e012fdef236b6fa1a9c7fb1a45b7d2e990550ad958f7a08698fcf"
+    }
+  ]
+}

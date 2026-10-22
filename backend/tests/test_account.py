@@ -179,6 +179,21 @@ class TestPrivacyPolicy:
 # ---------------------------------------------------------------------------
 
 class TestDeleteAccount:
+    def test_receipt_status_survives_logout_but_cannot_authenticate(self, client):
+        t = signup(client, email=_email())
+        r = _del(client, "/api/account", {"password": "superSecret123!"}, auth_headers(t))
+        assert r.status_code == 202 and r.headers["cache-control"] == "no-store"
+        receipt = r.json()
+        token = receipt["status_token"]
+        status = client.post("/api/account/erasure-status", json={"status_token": token})
+        assert status.status_code == 200 and status.json()["request_id"] == receipt["request_id"]
+        assert status.json()["status"] == "pending_downstream"
+        assert "status_token" not in status.json()
+        assert status.headers["cache-control"] == "no-store"
+        assert client.get("/api/auth/me", headers={"Authorization": "Bearer " + token}).status_code == 401
+        for invalid in (t["access_token"], "invalid", token[:-8] + "tampered"):
+            assert client.post("/api/account/erasure-status", json={"status_token": invalid}).status_code == 401
+
     def test_happy_path(self, client):
         email = _email()
         t = signup(client, email=email)
@@ -189,8 +204,10 @@ class TestDeleteAccount:
         }, headers=hdrs)
 
         r = _del(client, "/api/account", {"password": "superSecret123!"}, hdrs)
-        assert r.status_code == 200
+        assert r.status_code == 202
         assert r.json()["ok"] is True
+        assert r.json()["status"] == "pending_downstream"
+        assert "kernel_account" in r.json()["pending"]
 
         # Subsequent authenticated requests must fail (password hash wiped)
         r2 = client.get("/api/auth/me", headers=hdrs)

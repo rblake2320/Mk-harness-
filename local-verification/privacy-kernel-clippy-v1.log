@@ -1,0 +1,45 @@
+    Checking mk-audit v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-audit)
+    Checking mk-store v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-store)
+error: this `if` statement can be collapsed
+   --> crates/mk-store/src/actions.rs:101:5
+    |
+101 | /     if l...
+102 | |         ...
+103 | |         ...
+104 | |         }
+105 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#collapsible_if
+    = note: `-D clippy::collapsible-if` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::collapsible_if)]`
+help: collapse nested if block
+    |
+101 ~     if let (Some(ch), Some(dest)) = (channel, destination)
+102 ~         && crate::privacy::destination_erased(tx, ch.as_str(), dest).await? {
+103 |             return Err(StoreError::Erased);
+104 ~         }
+    |
+
+error: this `if` statement can be collapsed
+  --> crates/mk-store/src/privacy.rs:70:5
+   |
+70 | /     if r...
+71 | |         ...
+72 | |         ...
+73 | |         }
+74 | |     }
+   | |_____^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#collapsible_if
+help: collapse nested if block
+   |
+70 ~     if req.resource.resource_type == ResourceType::Contact
+71 ~         && let Ok(id) = req.resource.id.parse::<Uuid>() {
+72 |             check_subject(tx, SubjectKind::Contact, id).await?;
+73 ~         }
+   |
+
+error: could not compile `mk-store` (lib) due to 2 previous errors
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `mk-store` (lib test) due to 2 previous errors

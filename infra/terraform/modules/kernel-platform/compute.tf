@@ -75,7 +75,7 @@ locals {
       env = concat(local.common_kernel_env, [
         { name = "MK_REDIS_URL", value = local.redis_url },
         { name = "MK_TWILIO_API_BASE", value = var.twilio_api_base },
-        { name = "MK_EGRESS_AUTHORITIES", value = "api.twilio.com" },
+        { name = "MK_EGRESS_AUTHORITIES", value = "api.twilio.com,${var.public_webhook_domain}" },
         { name = "MK_METRICS_BIND", value = "0.0.0.0:9100" },
         { name = "MK_DB_USER", value = "mk_worker_login" },
       ])
@@ -103,9 +103,14 @@ locals {
         { name = "RUST_ACTION_KERNEL_URL", value = "http://kernel-api.${local.name}.local:8090" },
         { name = "KERNEL_ASSERTION_KID", value = "k1" },
         { name = "DB_HOST", value = local.db_host },
+        { name = "DB_USER", value = "mk_app_login" },
+        { name = "DB_NAME", value = "mkharness" },
+        { name = "DB_SSLMODE", value = "verify-full" },
+        { name = "DB_SSLROOTCERT", value = "/etc/mk/rds-global-bundle.pem" },
       ]
       secrets = [
         { name = "MASTER_KEY", valueFrom = local.secret["master_key"] },
+        { name = "APP_SEAL_KEYS", valueFrom = local.secret["app_seal_keys"] },
         # Same secret as the kernel's MK_FINGERPRINT_KEYS: one value, never two.
         { name = "FINGERPRINT_KEYS", valueFrom = local.secret["fingerprint_keys"] },
         { name = "KERNEL_ASSERTION_PRIVATE_KEY", valueFrom = local.secret["assertion_private"] },
@@ -148,7 +153,7 @@ resource "aws_ecs_task_definition" "svc" {
     secrets                = each.value.secrets
     logConfiguration       = local.log_config
     healthCheck = each.value.port == null ? null : {
-      command     = ["CMD", "/usr/local/bin/mk-healthcheck", "http://127.0.0.1:${each.value.port}/health/live"]
+      command     = each.key == "app" ? ["CMD", "python", "-m", "app.healthcheck"] : ["CMD", "/usr/local/bin/mk-healthcheck", "http://127.0.0.1:${each.value.port}/health/live"]
       interval    = 15
       timeout     = 5
       retries     = 3
@@ -230,6 +235,36 @@ resource "aws_ecs_service" "svc" {
   lifecycle {
     ignore_changes = [desired_count]
   }
+  tags = local.tags
+}
+
+# Explicit one-shot application migration. Operators run and verify exit 0 before
+# rolling the app service; the runtime task never receives migration credentials.
+resource "aws_ecs_task_definition" "app_migrator" {
+  family                   = "${local.name}-app-migrator"
+  requires_compatibilities = ["FARGATE"]
+  network_mode             = "awsvpc"
+  cpu                      = "512"
+  memory                   = "1024"
+  execution_role_arn       = aws_iam_role.execution.arn
+  task_role_arn            = aws_iam_role.task["app_migrator"].arn
+  container_definitions = jsonencode([{
+    name                   = "app-migrator"
+    image                  = var.app_image
+    command                = ["python", "-m", "app.migrate", "upgrade"]
+    essential              = true
+    readonlyRootFilesystem = true
+    user                   = "65532:65532"
+    linuxParameters        = { capabilities = { drop = ["ALL"] }, initProcessEnabled = true }
+    environment = [
+      { name = "DB_HOST", value = local.db_host },
+      { name = "DB_NAME", value = "mkharness" },
+      { name = "DB_SSLMODE", value = "verify-full" },
+      { name = "DB_SSLROOTCERT", value = "/etc/mk/rds-global-bundle.pem" },
+    ]
+    secrets          = [{ name = "MK_APP_MIGRATION_PASSWORD", valueFrom = local.secret["db_app_migration_credential"] }]
+    logConfiguration = local.log_config
+  }])
   tags = local.tags
 }
 

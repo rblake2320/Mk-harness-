@@ -1,5 +1,6 @@
 """MK Consultant Harness API."""
 from contextlib import asynccontextmanager
+import asyncio
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -7,9 +8,12 @@ from fastapi.responses import HTMLResponse
 
 from .config import get_settings, require_secret
 from .db import init_engine
+from .auth_sessions import revocation_worker
+from .privacy_delivery import privacy_worker
+from .telemetry import PrivateHttpTelemetry
 from .routes import (
     account, agent_ops, auth, billing, chat, commitments, consent, customers, drafting, foundation, inbound, outreach,
-    keys, profile, skin, skindata, usage,
+    keys, mfa, profile, skin, skindata, usage,
 )
 
 _PRIVACY_HTML = """<!DOCTYPE html>
@@ -67,13 +71,20 @@ My Data Act (MHMDA). We collect this data only after obtaining explicit operator
 stored with an integrity hash of the exact text agreed to. You may withdraw consent at any
 time via the app settings, which immediately blocks further processing.</p>
 
-<h2>5. Data retention</h2>
+<h2>5. Data deletion and retention</h2>
+<p>Deletion removes active application content and revokes account access. A deletion
+receipt tracks the remaining kernel, provider and backup processing; an accepted
+request is not confirmation that those copies have been erased.</p>
 <ul>
-  <li>Account and customer data: retained while your account is active, deleted within
-      30 days of account deletion.</li>
-  <li>Conversation history: retained for 12 months, then auto-purged.</li>
-  <li>Skin analysis scores: retained while the associated customer record exists.</li>
-  <li>Audit logs: retained for 7 years (legal / compliance requirement).</li>
+  <li>Engineering retention targets pending launch review: ordinary deletion requests
+      within 30 days; database backups age out within 35 days.</li>
+  <li>Message content: 12 months; resolved commitments and ordinary outcomes: 24 months.</li>
+  <li>Content-free security and audit events: 24 months. Minimal consent proof:
+      five years after last reliance. Minimal suppression identifiers remain while
+      the business relationship or account is active.</li>
+  <li>Provider deletion controls, automated retention jobs and any explicit legal hold
+      require verification before production launch. No blanket seven-year legal
+      retention requirement is asserted here.</li>
 </ul>
 
 <h2>6. Your rights</h2>
@@ -83,9 +94,9 @@ time via the app settings, which immediately blocks further processing.</p>
       <code>GET /api/account/export</code> (authenticated).</li>
   <li><strong>Portability</strong> — the export endpoint returns a machine-readable JSON
       file containing your complete account data.</li>
-  <li><strong>Deletion</strong> — contact us at the address below to request account
-      deletion. We will delete your data within 30 days, subject to legal holds on
-      audit logs.</li>
+  <li><strong>Deletion</strong> — request deletion in Settings, save the receipt and
+      check its pending stages. Provider processing, backup expiry and any reviewed
+      retention exception are separate from removal of active application content.</li>
   <li><strong>Correction</strong> — update your profile or customer records in-app at
       any time.</li>
 </ul>
@@ -121,11 +132,58 @@ async def lifespan(app: FastAPI):
     settings = get_settings()
     require_secret(settings)
     settings.master_key_bytes  # fail fast if missing/malformed
-    init_engine()
-    yield
+    settings.seal_key_list
+    engine = init_engine()
+    if engine.dialect.name == "postgresql":
+        from sqlalchemy import text
+        with engine.connect() as connection:
+            writer_kid = connection.execute(text("SELECT writer_kid FROM mk_app.application_seal_policy WHERE id=1")).scalar_one()
+            if writer_kid != settings.seal_key_list[0][0]:
+                raise RuntimeError("Application sealing writer differs from the database fence; finish the authorized key rollout")
+    stop = asyncio.Event()
+    workers = [asyncio.create_task(revocation_worker(stop)), asyncio.create_task(privacy_worker(stop))]
+    try:
+        yield
+    finally:
+        stop.set()
+        try:
+            await asyncio.wait_for(asyncio.gather(*workers), timeout=15)
+        except asyncio.TimeoutError:
+            pass  # cancellation leaves the durable lease for the next worker
 
 
 app = FastAPI(title="MK Consultant Harness", version="1.6.2", lifespan=lifespan)
+
+
+from sqlalchemy.exc import IntegrityError  # noqa: E402
+
+
+@app.exception_handler(IntegrityError)
+async def database_constraint_failure(_request, exc):
+    from fastapi.responses import JSONResponse
+    original = exc.orig
+    message = getattr(getattr(original, "diag", None), "message_primary", "")
+    if getattr(original, "sqlstate", None) == "23514" and message in {
+        "SEAL_WRITER_RETIRED", "SEAL_WRITE_REQUIRES_READ_COMMITTED"
+    }:
+        return JSONResponse(status_code=503, content={"detail": {"code": "SEAL_WRITER_RETIRED",
+            "message": "This server's encryption configuration needs an operator rollout. The change was not saved."}})
+    if getattr(original, "sqlstate", None) == "23514" and message in {
+        "PRIVACY_SUBJECT_ERASED", "PRIVACY_WRITE_REQUIRES_READ_COMMITTED"
+    }:
+        return JSONResponse(status_code=409, content={"detail": {"code": "PRIVACY_WRITE_REFUSED",
+            "message": "The record cannot be written under the current privacy state. The change was not saved."}})
+    # Never echo SQL, parameters, encrypted data or credentials to the caller.
+    return JSONResponse(status_code=500, content={"detail": "Database operation failed"})
+
+
+@app.middleware('http')
+async def private_auth_responses(request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith('/api/'):
+        response.headers['Cache-Control'] = 'no-store'
+        response.headers['Pragma'] = 'no-cache'
+    return response
 
 app.add_middleware(
     CORSMiddleware,
@@ -134,10 +192,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["Authorization", "Content-Type"],
 )
+app.add_middleware(PrivateHttpTelemetry)
 
 # foundation before customers: its /customers/import/* and /customers/export.csv paths
 # must win over customers' /customers/{cid}.
-for r in (auth.router, chat.router, skin.router, foundation.router, commitments.router, drafting.router, inbound.router, outreach.router, customers.router,
+for r in (auth.router, mfa.router, chat.router, skin.router, foundation.router, commitments.router, drafting.router, inbound.router, outreach.router, customers.router,
           keys.router, usage.router, profile.router, consent.router, skindata.router,
           billing.router, account.router, agent_ops.router):
     app.include_router(r, prefix="/api")
@@ -157,7 +216,9 @@ async def ready():
     so a dead database or kernel counts as downtime. Unauthenticated by design;
     the body carries no tenant data."""
     from fastapi.responses import JSONResponse
-    from sqlalchemy import text
+    from sqlalchemy import text, select, func
+    from datetime import datetime, timezone
+    from .models import AuthRevocation, RecoveredSessionRevocation
 
     from .db import get_db
     from .kernel.client import KernelUnavailable, get_kernel_client
@@ -168,6 +229,17 @@ async def ready():
         db = next(get_db())
         try:
             db.execute(text("SELECT 1"))
+            pending = [db.scalar(select(func.min(model.created_at)).where(model.confirmed_at.is_(None)))
+                       for model in (AuthRevocation, RecoveredSessionRevocation)]
+            oldest = min((value for value in pending if value is not None), default=None)
+            checks["recovery_security"] = "pending" if pending[1] is not None else "ok"
+            ok = ok and pending[1] is None
+            if oldest is not None:
+                age = (datetime.now(timezone.utc) - oldest.replace(tzinfo=timezone.utc)).total_seconds()
+                checks["revocation_delivery"] = "delayed" if age > 60 else "pending"
+                ok = ok and age <= 60
+            else:
+                checks["revocation_delivery"] = "ok"
         finally:
             db.close()
         checks["database"] = "ok"

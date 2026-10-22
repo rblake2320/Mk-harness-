@@ -56,6 +56,20 @@ impl Store {
     /// Begin a transaction scoped to one tenant. Every query inside is also
     /// filtered by RLS on `kernel.tenant_id`.
     pub async fn begin(&self, tenant: TenantId) -> Result<TenantTx<'_>, StoreError> {
+        self.begin_scoped(tenant, false).await
+    }
+
+    /// Erasure excludes all ordinary tenant transactions, before either side
+    /// acquires row, control-path or audit locks. Never upgrade a shared lock.
+    pub async fn begin_erasure(&self, tenant: TenantId) -> Result<TenantTx<'_>, StoreError> {
+        self.begin_scoped(tenant, true).await
+    }
+
+    async fn begin_scoped(
+        &self,
+        tenant: TenantId,
+        erasure: bool,
+    ) -> Result<TenantTx<'_>, StoreError> {
         let mut tx = self.pool.begin().await?;
         // SET LOCAL cannot take a bind parameter; the value is a validated UUID.
         sqlx::query(sqlx::AssertSqlSafe(format!(
@@ -64,7 +78,16 @@ impl Store {
         )))
         .execute(&mut *tx)
         .await?;
-        Ok(TenantTx { tx, tenant })
+        sqlx::query("SELECT kernel.privacy_tenant_lock($1,$2)")
+            .bind(tenant.0)
+            .bind(erasure)
+            .execute(&mut *tx)
+            .await?;
+        Ok(TenantTx {
+            tx,
+            tenant,
+            erasure,
+        })
     }
 }
 
@@ -73,6 +96,7 @@ impl Store {
 pub struct TenantTx<'a> {
     pub(crate) tx: Transaction<'a, Postgres>,
     pub(crate) tenant: TenantId,
+    pub(crate) erasure: bool,
 }
 
 impl TenantTx<'_> {

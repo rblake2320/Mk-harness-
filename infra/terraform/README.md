@@ -33,7 +33,7 @@ infra/terraform/
 | External uptime checks | Route 53 health check on the application’s `/api/health/ready` (DB + kernel readiness) + CloudWatch alarm → SNS | measures the real path, not the kernel's liveness endpoint alone |
 | Observability wiring | Amazon Managed Prometheus workspace with `deploy/observability/alerts.yml` loaded as a rule namespace; Alertmanager → SNS; RDS/Redis saturation alarms | the scrape collector (ADOT) task is **not** in this tree yet |
 | Versioned containers | `kernel_image` / `app_image` must be digest-pinned (`@sha256:`) — tags are rejected at plan time | |
-| Automated gated deployment | **not here** — see `.github/workflows/` (CI) and the enable sequence in `deploy/kernel/README.md`; a deploy pipeline that applies this tree does not exist yet |
+| Automated gated deployment | `.github/workflows/deploy.yml` enforces reviewed main/CI, configured main-only environments, exact image scans/source provenance, and encrypted exact-plan review before production approval; **never live-run**. Remote smoke intentionally blocks promotion; authorized environments/IAM/key custody remain required. See `docs/runbooks/deployment-gates.md`; dispatch is never enabled by the workflow. |
 
 ## Deliberate non-defaults, stated plainly
 

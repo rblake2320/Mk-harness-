@@ -2,15 +2,15 @@
  * Consultant Studio — React Native client (Expo).
  * Shares the TypeScript SDK with the web app; streaming via src/stream.ts.
  */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator, Alert, FlatList, Image, KeyboardAvoidingView, Platform,
-  Pressable, ScrollView, StyleSheet, Text, TextInput, View,
+  Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import * as ImagePicker from 'expo-image-picker';
 import Constants from 'expo-constants';
-import { MKClient, SkinResult, Tokens, Customer } from '../packages/sdk/src/index';
+import { MKClient, SkinResult, Tokens, Customer, MfaCompletion } from '../packages/sdk/src/index';
 import { rnChatStream } from './src/stream';
 
 const API_URL = (Constants.expoConfig?.extra as any)?.apiUrl ?? 'http://localhost:8000';
@@ -26,26 +26,45 @@ type Tab = 'chat' | 'skin' | 'customers';
 export default function App() {
   const [tokens, setTokens] = useState<Tokens | null>(null);
   const [tab, setTab] = useState<Tab>('chat');
+  const [stepUp, setStepUp] = useState<{ finish: (ok: boolean) => void } | null>(null);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     client.tokens = tokens;
     client.onAuthExpired = () => setTokens(null);
+    client.onTokensChanged = setTokens;
   }, [tokens]);
+  useEffect(() => {
+    client.onStepUpRequired = () => new Promise(resolve => setStepUp({ finish: resolve }));
+    return () => { client.onStepUpRequired = null; };
+  }, []);
 
   if (!tokens) return <Auth onAuthed={setTokens} />;
+  if (tokens.mfa_state && tokens.mfa_state !== 'verified') return <MfaAuth key={tokens.session_id} tokens={tokens} onAuthed={setTokens} onSignOut={() => setTokens(null)} />;
   return (
     <View style={s.app}>
       <StatusBar style="light" />
+      {stepUp && <Modal visible animationType="slide" onRequestClose={() => { stepUp.finish(false); setStepUp(null); }}>
+        <MfaAuth stepUp tokens={tokens} onAuthed={() => { stepUp.finish(true); setStepUp(null); }}
+          onSignOut={() => { stepUp.finish(false); setStepUp(null); }} />
+      </Modal>}
       <View style={s.header}>
         <Text style={s.brand}>Consultant <Text style={{ color: C.rose }}>Studio</Text></Text>
-        <Pressable onPress={() => setTokens(null)}><Text style={s.muted}>Sign out</Text></Pressable>
+        <Pressable onPress={async () => {
+          try {
+            const result = await client.logout();
+            if (result.kernel_revocation === 'pending') Alert.alert('Signed out', 'App access revoked. Kernel approval revocation is pending delivery.');
+          } catch { Alert.alert('Local sign-out only', 'Server revocation was not confirmed. Revoke the old session after signing in again.'); }
+          finally { setTokens(null); }
+        }}><Text style={s.muted}>Sign out</Text></Pressable>
       </View>
       <View style={{ flex: 1 }}>
+        {tokens.role === 'auditor' ? <AuditAccess /> : <>
         {tab === 'chat' && <Chat />}
         {tab === 'skin' && <Skin />}
         {tab === 'customers' && <Customers />}
+        </>}
       </View>
-      <View style={s.tabbar}>
+      {tokens.role !== 'auditor' && <View style={s.tabbar}>
         {(['chat', 'skin', 'customers'] as Tab[]).map(t => (
           <Pressable key={t} style={s.tab} onPress={() => setTab(t)}>
             <Text style={[s.tabLabel, tab === t && { color: C.rose }]}>
@@ -53,9 +72,24 @@ export default function App() {
             </Text>
           </Pressable>
         ))}
-      </View>
+      </View>}
     </View>
   );
+}
+
+function AuditAccess() {
+  const [audit, setAudit] = useState('');
+  const [busy, setBusy] = useState(false);
+  return <ScrollView contentContainerStyle={{ padding: 24, gap: 14 }}>
+    <Text style={s.h1}>Audit access</Text>
+    <Text style={s.muted}>Your role can read your tenant's audit evidence. Customer, AI and messaging actions are unavailable.</Text>
+    <Pressable disabled={busy} style={s.btn} onPress={async () => {
+      setBusy(true);
+      try { setAudit(await client.exportAudit()); } catch (e: any) { Alert.alert('Audit export failed', e.message); }
+      finally { setBusy(false); }
+    }}><Text style={s.btnText}>{busy ? 'Loading…' : 'Read audit evidence'}</Text></Pressable>
+    {audit !== '' && <Text selectable style={{ color: C.text }}>{audit}</Text>}
+  </ScrollView>;
 }
 
 function Auth({ onAuthed }: { onAuthed: (t: Tokens) => void }) {
@@ -87,6 +121,53 @@ function Auth({ onAuthed }: { onAuthed: (t: Tokens) => void }) {
       </Text>
     </View>
   );
+}
+
+function MfaAuth({ tokens, onAuthed, onSignOut, stepUp = false }: {
+  tokens: Tokens; onAuthed: (t: Tokens) => void; onSignOut: () => void; stepUp?: boolean;
+}) {
+  const enrollment = !stepUp && tokens.mfa_state === 'enrollment_required';
+  const [secret, setSecret] = useState('');
+  const [value, setValue] = useState('');
+  const [password, setPassword] = useState('');
+  const [recovery, setRecovery] = useState(false);
+  const [result, setResult] = useState<MfaCompletion | null>(null);
+  const [busy, setBusy] = useState(false);
+  async function run(action: () => Promise<void>) {
+    setBusy(true);
+    try { await action(); } catch (e: any) { Alert.alert('Verification failed', e.message); } finally { setBusy(false); }
+  }
+  return <ScrollView style={s.app} contentContainerStyle={{ padding: 24, gap: 14 }} keyboardShouldPersistTaps="handled">
+    <Text accessibilityRole="header" style={s.h1}>{result ? 'Save your recovery codes' : stepUp ? 'Confirm this sensitive action' : enrollment ? 'Protect your account' : 'Verify your sign-in'}</Text>
+    {result ? <>
+      <Text style={s.muted}>Save these eight one-use codes in your password manager. They are shown only now.</Text>
+      {result.recovery_codes!.map(code => <Text selectable key={code} style={{ color: C.text }}>{code}</Text>)}
+      <Pressable style={s.btn} onPress={() => onAuthed(result.tokens)}><Text style={s.btnText}>I saved my recovery codes</Text></Pressable>
+    </> : <>
+      <Text style={s.muted}>Use a fresh authenticator code, or a one-use recovery code. Codes cannot be reused. A sensitive-action check lasts five minutes in this session.</Text>
+      {enrollment && !secret && <Pressable style={s.btn} disabled={busy} onPress={() => run(async () => { setSecret((await client.enrollMfa()).secret); })}><Text style={s.btnText}>Set up authenticator</Text></Pressable>}
+      {secret && <><Text style={s.muted}>Add a time-based Consultant Studio account in your authenticator using this private setup key:</Text><Text selectable style={{ color: C.text }}>{secret}</Text></>}
+      {(!enrollment || secret) && <>
+        {stepUp && <TextInput accessibilityLabel="Password" placeholder="Password" placeholderTextColor={C.muted} style={s.input} secureTextEntry value={password} onChangeText={setPassword} />}
+        <TextInput accessibilityLabel={recovery ? 'Recovery code' : 'Authenticator code'} placeholder={recovery ? 'Recovery code' : 'Authenticator code'} placeholderTextColor={C.muted}
+          style={s.input} value={value} onChangeText={setValue} autoCapitalize="none" autoCorrect={false} keyboardType={recovery ? 'default' : 'number-pad'} maxLength={recovery ? 64 : 6} />
+        {!enrollment && <Pressable onPress={() => { setRecovery(!recovery); setValue(''); }}><Text style={{ color: C.rose }}>{recovery ? 'Use authenticator instead' : 'Use a recovery code'}</Text></Pressable>}
+        <Pressable style={s.btn} disabled={busy} onPress={() => run(async () => {
+          const factor = recovery ? { recovery_code: value.trim() } : { code: value.trim() };
+          if (stepUp) { await client.stepUp(password, factor); onAuthed(tokens); return; }
+          const completed = enrollment ? await client.confirmMfa(value.trim()) : await client.verifyMfa(factor);
+          client.tokens = completed.tokens; setSecret(''); setValue('');
+          if (completed.recovery_codes) setResult(completed); else onAuthed(completed.tokens);
+        })}><Text style={s.btnText}>{busy ? 'Checking…' : stepUp ? 'Confirm identity' : 'Verify code'}</Text></Pressable>
+      </>}
+    </>}
+    <Pressable disabled={busy} style={s.btnGhost} onPress={() => run(async () => {
+      if (!stepUp) {
+        try { await client.logout(); } catch { Alert.alert('Local sign-out only', 'Server revocation was not confirmed.'); }
+      }
+      onSignOut();
+    })}><Text style={{ color: C.rose }}>{stepUp ? 'Cancel' : 'Sign out'}</Text></Pressable>
+  </ScrollView>;
 }
 
 function Chat() {
@@ -232,8 +313,9 @@ function Customers() {
   async function followUp(c: Customer) {
     setBusyId(c.id); setDrafts('');
     try {
-      const r = await client.followUp(c.id, 'warm check-in and gentle reorder');
-      setDrafts(`For ${c.name}:\n\n${r.drafts}`);
+      const r = await client.generateDraft({ customer_id: c.id });
+      setDrafts(r.draft ? `For ${c.name}:\n\n${r.draft.text}\n\nSaved draft — not sent. ${r.draft.note}`
+        : r.limitation ?? 'A supported draft could not be generated.');
     } catch (e: any) { Alert.alert('Draft failed', e.message); }
     finally { setBusyId(''); }
   }
@@ -249,6 +331,7 @@ function Customers() {
           <Text style={{ color: C.text, fontWeight: '600', fontSize: 16 }}>{c.name}</Text>
           {!!c.notes && <Text style={[s.muted, { marginTop: 4 }]}>{c.notes}</Text>}
           <Pressable style={[s.btnGhost, { marginTop: 10, alignSelf: 'flex-start' }]}
+                     disabled={busyId !== ''}
                      onPress={() => followUp(c)}>
             <Text style={{ color: C.rose }}>
               {busyId === c.id ? 'Writing…' : 'Draft follow-up'}
@@ -275,6 +358,7 @@ const s = StyleSheet.create({
   muted: { color: C.muted },
   input: { backgroundColor: C.bg, borderWidth: 1, borderColor: C.edgeHi, borderRadius: 10,
            color: C.text, padding: 12, marginBottom: 10 },
+  composer: { flexDirection: 'row', gap: 8, padding: 12, alignItems: 'center' },
   btn: { backgroundColor: C.rose, borderRadius: 10, padding: 12, alignItems: 'center',
          justifyContent: 'center' },
   btnText: { color: '#2a1620', fontWeight: '600' },

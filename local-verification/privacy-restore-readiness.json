@@ -1,0 +1,1041 @@
+{
+  "verdict": "NOT READY",
+  "rows_total": 87,
+  "rows_closed": 0,
+  "failing": [
+    {
+      "id": "A1",
+      "required": "independently_verified",
+      "matrix_claim": "not_demonstrated",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "A2",
+      "required": "independently_verified",
+      "matrix_claim": "not_demonstrated",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "A3",
+      "required": "independently_verified",
+      "matrix_claim": "not_demonstrated",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "A4",
+      "required": "independently_verified",
+      "matrix_claim": "not_demonstrated",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "A5",
+      "required": "independently_verified",
+      "matrix_claim": "not_demonstrated",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "A6",
+      "required": "independently_verified",
+      "matrix_claim": "not_demonstrated",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "C1",
+      "required": "independently_verified",
+      "matrix_claim": "implemented",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "C2",
+      "required": "independently_verified",
+      "matrix_claim": "implemented",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "C3",
+      "required": "independently_verified",
+      "matrix_claim": "implemented",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "C4",
+      "required": "independently_verified",
+      "matrix_claim": "not_demonstrated",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "C5",
+      "required": "independently_verified",
+      "matrix_claim": "not_demonstrated",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "C6",
+      "required": "independently_verified",
+      "matrix_claim": "not_demonstrated",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "C7",
+      "required": "independently_verified",
+      "matrix_claim": "implemented",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "C8",
+      "required": "independently_verified",
+      "matrix_claim": "not_demonstrated",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "C9",
+      "required": "independently_verified",
+      "matrix_claim": "implemented",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "C10",
+      "required": "independently_verified",
+      "matrix_claim": "not_demonstrated",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "D1",
+      "required": "independently_verified",
+      "matrix_claim": "not_demonstrated",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "D2",
+      "required": "independently_verified",
+      "matrix_claim": "not_demonstrated",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "D3",
+      "required": "independently_verified",
+      "matrix_claim": "implemented",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "D4",
+      "required": "independently_verified",
+      "matrix_claim": "not_demonstrated",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "D5",
+      "required": "independently_verified",
+      "matrix_claim": "not_demonstrated",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "D6",
+      "required": "independently_verified",
+      "matrix_claim": "not_demonstrated",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "D7",
+      "required": "independently_verified",
+      "matrix_claim": "not_demonstrated",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "F1",
+      "required": "independently_verified",
+      "matrix_claim": "implemented",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "F2",
+      "required": "independently_verified",
+      "matrix_claim": "not_demonstrated",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "F3",
+      "required": "independently_verified",
+      "matrix_claim": "implemented",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "F4",
+      "required": "independently_verified",
+      "matrix_claim": "independently_verified",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "F5",
+      "required": "independently_verified",
+      "matrix_claim": "implemented",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "F6",
+      "required": "independently_verified",
+      "matrix_claim": "implemented",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "F7",
+      "required": "independently_verified",
+      "matrix_claim": "not_demonstrated",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "F8",
+      "required": "independently_verified",
+      "matrix_claim": "implemented",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "F9",
+      "required": "independently_verified",
+      "matrix_claim": "implemented",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "H1",
+      "required": "independently_verified",
+      "matrix_claim": "not_demonstrated",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "H2",
+      "why": "status cell does not use the vocabulary",
+      "required": "independently_verified",
+      "matrix": "Branch-tested, release not closed: durable invalidation rejects old idempotency keys, new keys and operator replay; queued approvals are revoked/cancelled, late in-flight edits are refused. Application rollback and two-tab one-byte edit/fresh-passkey browser checks retained in `local-verification/draft-invalidation-batch.md`. Independent staging record pending."
+    },
+    {
+      "id": "H3",
+      "required": "independently_verified",
+      "matrix_claim": "independently_verified",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "H4",
+      "required": "independently_verified",
+      "matrix_claim": "implemented",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "H5",
+      "required": "independently_verified",
+      "matrix_claim": "independently_verified",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "H6",
+      "required": "independently_verified",
+      "matrix_claim": "implemented",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "H7",
+      "required": "independently_verified",
+      "matrix_claim": "independently_verified",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "H8",
+      "required": "independently_verified",
+      "matrix_claim": "not_demonstrated",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "H9",
+      "required": "independently_verified",
+      "matrix_claim": "implemented",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "K1",
+      "required": "independently_verified",
+      "matrix_claim": "not_demonstrated",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "K2",
+      "required": "independently_verified",
+      "matrix_claim": "not_demonstrated",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "M1",
+      "required": "independently_verified",
+      "matrix_claim": "not_demonstrated",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "M2",
+      "required": "independently_verified",
+      "matrix_claim": "not_demonstrated",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "M3",
+      "required": "independently_verified",
+      "matrix_claim": "not_demonstrated",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "M4",
+      "required": "independently_verified",
+      "matrix_claim": "not_demonstrated",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "O1",
+      "required": "independently_verified",
+      "matrix_claim": "not_demonstrated",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "O2",
+      "required": "production_proven",
+      "matrix_claim": "not_demonstrated",
+      "record": "no record",
+      "needed": "evidence record at production_proven by a verifier independent of the author"
+    },
+    {
+      "id": "O3",
+      "required": "production_proven",
+      "matrix_claim": "not_demonstrated",
+      "record": "no record",
+      "needed": "evidence record at production_proven by a verifier independent of the author"
+    },
+    {
+      "id": "O4",
+      "required": "production_proven",
+      "matrix_claim": "not_demonstrated",
+      "record": "no record",
+      "needed": "evidence record at production_proven by a verifier independent of the author"
+    },
+    {
+      "id": "O5",
+      "required": "independently_verified",
+      "matrix_claim": "not_demonstrated",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "O6",
+      "required": "independently_verified",
+      "matrix_claim": "not_demonstrated",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "O7",
+      "required": "independently_verified",
+      "matrix_claim": "not_demonstrated",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "O8",
+      "required": "independently_verified",
+      "matrix_claim": "not_demonstrated",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "O9",
+      "required": "independently_verified",
+      "matrix_claim": "implemented",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "O10",
+      "required": "independently_verified",
+      "matrix_claim": "not_demonstrated",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "P1",
+      "required": "independently_verified",
+      "matrix_claim": "implemented",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "P2",
+      "required": "independently_verified",
+      "matrix_claim": "implemented",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "P3",
+      "required": "independently_verified",
+      "matrix_claim": "not_demonstrated",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "S1",
+      "required": "independently_verified",
+      "matrix_claim": "not_demonstrated",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "S2",
+      "required": "independently_verified",
+      "matrix_claim": "implemented",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "S3",
+      "why": "status cell does not use the vocabulary",
+      "required": "independently_verified",
+      "matrix": "**In progress, release not closed** \u2014 explicit scoped app roles, concurrent-admin safeguards and role-change session revocation (`docs/tenant-access.md`); distinct app runtime/migration logins, startup privilege/schema/checksum gate, append-only app audit grants, explicit data-preserving upgrade and actual PostgreSQL/container tests (`docs/runbooks/application-database.md`). Author-run engineering evidence; independent staging qualification required"
+    },
+    {
+      "id": "S4",
+      "required": "independently_verified",
+      "matrix_claim": "not_demonstrated",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "S5",
+      "required": "independently_verified",
+      "matrix_claim": "not_demonstrated",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "S6",
+      "required": "independently_verified",
+      "matrix_claim": "not_demonstrated",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "S7",
+      "required": "independently_verified",
+      "matrix_claim": "not_demonstrated",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "S8",
+      "required": "independently_verified",
+      "matrix_claim": "not_demonstrated",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "S9",
+      "required": "independently_verified",
+      "matrix_claim": "not_demonstrated",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "S10",
+      "required": "independently_verified",
+      "matrix_claim": "implemented",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "S11",
+      "required": "independently_verified",
+      "matrix_claim": "not_demonstrated",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "S12",
+      "required": "independently_verified",
+      "matrix_claim": "not_demonstrated",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "S13",
+      "required": "independently_verified",
+      "matrix_claim": "implemented",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "S14",
+      "required": "independently_verified",
+      "matrix_claim": "not_demonstrated",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "S15",
+      "required": "independently_verified",
+      "matrix_claim": "not_demonstrated",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "W1",
+      "required": "independently_verified",
+      "matrix_claim": "implemented",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "W2",
+      "required": "independently_verified",
+      "matrix_claim": "implemented",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "W3",
+      "required": "independently_verified",
+      "matrix_claim": "implemented",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "W4",
+      "required": "independently_verified",
+      "matrix_claim": "not_demonstrated",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "W5",
+      "why": "status cell does not use the vocabulary",
+      "required": "independently_verified",
+      "matrix": "Branch-tested, release not closed: edits require a committed kernel version fence, cancellation and revocation before saving; new version requires fresh proposal and passkey. Real-Postgres intake/approval races and built-UI two-tab ceremony retained in `local-verification/draft-invalidation-batch.md`. Independent staging record pending."
+    },
+    {
+      "id": "W6",
+      "required": "independently_verified",
+      "matrix_claim": "implemented",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "W7",
+      "required": "independently_verified",
+      "matrix_claim": "not_demonstrated",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "X1",
+      "required": "independently_verified",
+      "matrix_claim": "implemented",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "X2",
+      "required": "independently_verified",
+      "matrix_claim": "not_demonstrated",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "X3",
+      "required": "independently_verified",
+      "matrix_claim": "not_demonstrated",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "X4",
+      "required": "independently_verified",
+      "matrix_claim": "not_demonstrated",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    },
+    {
+      "id": "X5",
+      "required": "independently_verified",
+      "matrix_claim": "not_demonstrated",
+      "record": "no record",
+      "needed": "evidence record at independently_verified by a verifier independent of the author"
+    }
+  ],
+  "matrix_claims_without_record": [
+    {
+      "id": "C1",
+      "matrix_claim": "implemented",
+      "record": "none"
+    },
+    {
+      "id": "C2",
+      "matrix_claim": "implemented",
+      "record": "none"
+    },
+    {
+      "id": "C3",
+      "matrix_claim": "implemented",
+      "record": "none"
+    },
+    {
+      "id": "C7",
+      "matrix_claim": "implemented",
+      "record": "none"
+    },
+    {
+      "id": "C9",
+      "matrix_claim": "implemented",
+      "record": "none"
+    },
+    {
+      "id": "D3",
+      "matrix_claim": "implemented",
+      "record": "none"
+    },
+    {
+      "id": "F1",
+      "matrix_claim": "implemented",
+      "record": "none"
+    },
+    {
+      "id": "F3",
+      "matrix_claim": "implemented",
+      "record": "none"
+    },
+    {
+      "id": "F4",
+      "matrix_claim": "independently_verified",
+      "record": "none"
+    },
+    {
+      "id": "F5",
+      "matrix_claim": "implemented",
+      "record": "none"
+    },
+    {
+      "id": "F6",
+      "matrix_claim": "implemented",
+      "record": "none"
+    },
+    {
+      "id": "F8",
+      "matrix_claim": "implemented",
+      "record": "none"
+    },
+    {
+      "id": "F9",
+      "matrix_claim": "implemented",
+      "record": "none"
+    },
+    {
+      "id": "H3",
+      "matrix_claim": "independently_verified",
+      "record": "none"
+    },
+    {
+      "id": "H4",
+      "matrix_claim": "implemented",
+      "record": "none"
+    },
+    {
+      "id": "H5",
+      "matrix_claim": "independently_verified",
+      "record": "none"
+    },
+    {
+      "id": "H6",
+      "matrix_claim": "implemented",
+      "record": "none"
+    },
+    {
+      "id": "H7",
+      "matrix_claim": "independently_verified",
+      "record": "none"
+    },
+    {
+      "id": "H9",
+      "matrix_claim": "implemented",
+      "record": "none"
+    },
+    {
+      "id": "O9",
+      "matrix_claim": "implemented",
+      "record": "none"
+    },
+    {
+      "id": "P1",
+      "matrix_claim": "implemented",
+      "record": "none"
+    },
+    {
+      "id": "P2",
+      "matrix_claim": "implemented",
+      "record": "none"
+    },
+    {
+      "id": "S2",
+      "matrix_claim": "implemented",
+      "record": "none"
+    },
+    {
+      "id": "S10",
+      "matrix_claim": "implemented",
+      "record": "none"
+    },
+    {
+      "id": "S13",
+      "matrix_claim": "implemented",
+      "record": "none"
+    },
+    {
+      "id": "W1",
+      "matrix_claim": "implemented",
+      "record": "none"
+    },
+    {
+      "id": "W2",
+      "matrix_claim": "implemented",
+      "record": "none"
+    },
+    {
+      "id": "W3",
+      "matrix_claim": "implemented",
+      "record": "none"
+    },
+    {
+      "id": "W6",
+      "matrix_claim": "implemented",
+      "record": "none"
+    },
+    {
+      "id": "X1",
+      "matrix_claim": "implemented",
+      "record": "none"
+    }
+  ],
+  "checklist": [
+    {
+      "question": "Is the full advertised consultant workflow complete?",
+      "answer": "no",
+      "blocking": [
+        "F1",
+        "F5",
+        "F6",
+        "F8",
+        "F9",
+        "W1",
+        "W2",
+        "W3",
+        "W4",
+        "W6",
+        "W7",
+        "P1",
+        "P2",
+        "X1",
+        "X2",
+        "X3",
+        "X4"
+      ]
+    },
+    {
+      "question": "Are all approvals genuinely human-authorized and digest-bound?",
+      "answer": "no",
+      "blocking": [
+        "D4",
+        "H1",
+        "H2",
+        "H3",
+        "H4",
+        "H5",
+        "H6",
+        "H7",
+        "H8",
+        "H9",
+        "W5"
+      ]
+    },
+    {
+      "question": "Can no legacy path bypass the kernel?",
+      "answer": "no",
+      "blocking": [
+        "P3",
+        "C9"
+      ]
+    },
+    {
+      "question": "Is the production transport registered, permitted, and operational?",
+      "answer": "no",
+      "blocking": [
+        "D1",
+        "C1",
+        "C2",
+        "C9",
+        "M1"
+      ]
+    },
+    {
+      "question": "Does inbound handling reliably stop unwanted follow-up?",
+      "answer": "no",
+      "blocking": [
+        "D2",
+        "C5",
+        "C6",
+        "C7",
+        "C8"
+      ]
+    },
+    {
+      "question": "Are ambiguous external actions handled without blind retries?",
+      "answer": "no",
+      "blocking": [
+        "C3",
+        "C4"
+      ]
+    },
+    {
+      "question": "Are status labels accurate?",
+      "answer": "no",
+      "blocking": [
+        "C3",
+        "X2"
+      ]
+    },
+    {
+      "question": "Are tenant isolation, identity, and least privilege independently verified?",
+      "answer": "no",
+      "blocking": [
+        "F7",
+        "S2",
+        "S3",
+        "S4",
+        "S11",
+        "S12"
+      ]
+    },
+    {
+      "question": "Are credential rotation and data deletion exercised?",
+      "answer": "no",
+      "blocking": [
+        "S6",
+        "S10",
+        "S13",
+        "F4"
+      ]
+    },
+    {
+      "question": "Are restore and rollback safe from accidental re-sending?",
+      "answer": "no",
+      "blocking": [
+        "O9",
+        "O10"
+      ]
+    },
+    {
+      "question": "Are SLO, load, fault, and communications targets met?",
+      "answer": "no",
+      "blocking": [
+        "O2",
+        "O3",
+        "O4",
+        "O5",
+        "C10"
+      ]
+    },
+    {
+      "question": "Are monitoring, support, and incident responsibilities staffed?",
+      "answer": "no",
+      "blocking": [
+        "O6",
+        "O7",
+        "M3"
+      ]
+    },
+    {
+      "question": "Have AI safety and factuality evaluations passed?",
+      "answer": "no",
+      "blocking": [
+        "A1",
+        "A2",
+        "A3",
+        "A4",
+        "A5",
+        "A6"
+      ]
+    },
+    {
+      "question": "Has the interface passed usability and accessibility acceptance?",
+      "answer": "no",
+      "blocking": [
+        "X5"
+      ]
+    },
+    {
+      "question": "Are legal, privacy, provider, and branding permissions documented?",
+      "answer": "no",
+      "blocking": [
+        "D7",
+        "S13",
+        "M1",
+        "M2"
+      ]
+    },
+    {
+      "question": "Are economics viable at the approved price?",
+      "answer": "no",
+      "blocking": [
+        "M4"
+      ]
+    },
+    {
+      "question": "Are all product claims supported?",
+      "answer": "no",
+      "blocking": [
+        "K1",
+        "K2"
+      ]
+    },
+    {
+      "question": "Is every acceptance result linked to retained, commit-specific evidence?",
+      "answer": "no",
+      "blocking": [
+        "A1",
+        "A2",
+        "A3",
+        "A4",
+        "A5",
+        "A6",
+        "C1",
+        "C2",
+        "C3",
+        "C4",
+        "C5",
+        "C6",
+        "C7",
+        "C8",
+        "C9",
+        "C10",
+        "D1",
+        "D2",
+        "D3",
+        "D4",
+        "D5",
+        "D6",
+        "D7",
+        "F1",
+        "F2",
+        "F3",
+        "F4",
+        "F5",
+        "F6",
+        "F7",
+        "F8",
+        "F9",
+        "H1",
+        "H2",
+        "H3",
+        "H4",
+        "H5",
+        "H6",
+        "H7",
+        "H8",
+        "H9",
+        "K1",
+        "K2",
+        "M1",
+        "M2",
+        "M3",
+        "M4",
+        "O1",
+        "O2",
+        "O3",
+        "O4",
+        "O5",
+        "O6",
+        "O7",
+        "O8",
+        "O9",
+        "O10",
+        "P1",
+        "P2",
+        "P3",
+        "S1",
+        "S2",
+        "S3",
+        "S4",
+        "S5",
+        "S6",
+        "S7",
+        "S8",
+        "S9",
+        "S10",
+        "S11",
+        "S12",
+        "S13",
+        "S14",
+        "S15",
+        "W1",
+        "W2",
+        "W3",
+        "W4",
+        "W5",
+        "W6",
+        "W7",
+        "X1",
+        "X2",
+        "X3",
+        "X4",
+        "X5"
+      ]
+    }
+  ],
+  "note": "Only validated evidence records close rows. Matrix cells describe progress; they are not evidence."
+}

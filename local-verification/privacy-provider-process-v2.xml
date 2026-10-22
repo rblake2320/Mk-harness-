@@ -1,0 +1,3 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="2.424" timestamp="2026-10-22T03:03:37.846994-05:00" hostname="DESKTOP-CM6G60N"><testcase classname="tools.verification.test_privacy_process" name="test_worker_survives_redis_outage_and_recovers_killed_provider_deletion" time="1.805"><failure message="KeyError: 'pending_provider_deletions'">tools/verification/test_privacy_process.py:154: in test_worker_survives_redis_outage_and_recovers_killed_provider_deletion
+    assert after.body["pending_provider_deletions"]==0 and after.body["pending_provider_retention"]==1
+E   KeyError: 'pending_provider_deletions'</failure></testcase></testsuite></testsuites>

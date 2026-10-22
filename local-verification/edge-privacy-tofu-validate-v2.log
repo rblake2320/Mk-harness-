@@ -1,0 +1,14 @@
+ingress.tf
+{
+  "format_version": "1.0",
+  "valid": false,
+  "error_count": 1,
+  "warning_count": 0,
+  "diagnostics": [
+    {
+      "severity": "error",
+      "summary": "missing or corrupted provider plugins:\n  - registry.opentofu.org/hashicorp/random: there is no package for registry.opentofu.org/hashicorp/random 3.9.1 cached in .terraform/providers\n  - registry.opentofu.org/hashicorp/aws: there is no package for registry.opentofu.org/hashicorp/aws 5.100.0 cached in .terraform/providers",
+      "detail": ""
+    }
+  ]
+}

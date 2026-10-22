@@ -1,0 +1,107 @@
+{
+  "source_commit": "650b407d5d504918e07fc02a221097e4b931bf94",
+  "verifier_commit": "94234cc8eb138e756460890996e3abc7c66b6009",
+  "files": [
+    {
+      "sha256": "f26304ac93b6b37c183a940dacb94f8a6a4aba5879c45cec72beb0fe140dc332",
+      "bytes": 2072,
+      "path": "local-verification/seal-image-build-650b407.log"
+    },
+    {
+      "sha256": "c0cc7cdd50b9b83b1b51917ca93fb017ee4508d7ec98eb6a132a5a3fb2b94c36",
+      "bytes": 2105,
+      "path": "local-verification/seal-image-build-v1.log"
+    },
+    {
+      "sha256": "85ee496ca10f15eadbb189350eb3a1ea2e8b626adb34450120b917c029b20847",
+      "bytes": 2192,
+      "path": "local-verification/seal-image-build-v2.log"
+    },
+    {
+      "sha256": "933ab06a1b6e69161bbc44f02242ef793194f4537737f1ba2ed52c0ee473deb7",
+      "bytes": 38,
+      "path": "local-verification/seal-infra-validate.log"
+    },
+    {
+      "sha256": "60b0ae3759522fe3a0043a3fb89d3da466227cbe3359adcba3eb365f62a2cbf2",
+      "bytes": 1695,
+      "path": "local-verification/seal-initial-red.xml"
+    },
+    {
+      "sha256": "c11add9395e2d0ce0621a39908dd5e8c2788a026048b138bc089501e48cbd094",
+      "bytes": 365,
+      "path": "local-verification/seal-kill-v1.xml"
+    },
+    {
+      "sha256": "1b8a2fda811965259c1ea044587b13dde1167b6c641b558188a5c82e42b1f712",
+      "bytes": 126706,
+      "path": "local-verification/seal-migration-v1.xml"
+    },
+    {
+      "sha256": "487cd11c0fc1b8d09e6afca5951c2be068c197d9fcd160e2fef67a9a46a46b63",
+      "bytes": 2727,
+      "path": "local-verification/seal-migration-v2.xml"
+    },
+    {
+      "sha256": "a9f9dc4083dff9483ca174b854c79cf3a4e188fb440b09717915a23b0d0ee40c",
+      "bytes": 3290,
+      "path": "local-verification/seal-postgres-650b407.xml"
+    },
+    {
+      "sha256": "7ffbaff0eba15a047508af22c129ed89059a9f7625ae4b0fcab0014e8bb3a799",
+      "bytes": 3012,
+      "path": "local-verification/seal-postgres-v1.xml"
+    },
+    {
+      "sha256": "fd6df6e3a2839dcbb4ffb6a9590b13deb65c1bccd6e3f768879341d550183ca9",
+      "bytes": 3156,
+      "path": "local-verification/seal-postgres-v2.xml"
+    },
+    {
+      "sha256": "068023d3f65247f5e44470b0834c646677cf8e97a08064402dfc37457070b1b5",
+      "bytes": 7463,
+      "path": "local-verification/seal-predecessor-app-ci.json"
+    },
+    {
+      "sha256": "94293043f90dec078562fb32cea3106ce1c8a6bb2da4809b4a51e4cc7147e90a",
+      "bytes": 14017,
+      "path": "local-verification/seal-predecessor-kernel-ci.json"
+    },
+    {
+      "sha256": "de5151eb5d0341ff6ae2785f9f47be09abe7c324bf7d36084e16f6d2ab8f21bf",
+      "bytes": 40558,
+      "path": "local-verification/seal-python-650b407.xml"
+    },
+    {
+      "sha256": "207aae29323fc1dd243974896485f01ddf1cd015ae0a501eb3f9573611818790",
+      "bytes": 39759,
+      "path": "local-verification/seal-python-v1.xml"
+    },
+    {
+      "sha256": "9e5bae7c6c767588006e9e6845be252180d5a4a4ed162a3c9169db08e83a6b76",
+      "bytes": 115634,
+      "path": "local-verification/seal-python-v2.xml"
+    },
+    {
+      "sha256": "eddcf54dd5296c6b5a2e8770237f8cb60720c36705c16d3bbc663c25d8a5ab33",
+      "bytes": 4853,
+      "path": "local-verification/seal-security-batch.md"
+    },
+    {
+      "sha256": "673e7da7ba968d532d23865ae110ca20196c0894359a29ad6eb1ad0851c7aaa1",
+      "bytes": 2035,
+      "path": "local-verification/seal-targeted-v1.xml"
+    },
+    {
+      "sha256": "b9790f62253d4e3c26043c0c8ce938b4b73468094bd02fce48256938a893a0d4",
+      "bytes": 1509,
+      "path": "local-verification/seal-targeted-v2.xml"
+    },
+    {
+      "sha256": "3b9b9cb25b32e60a2a980c90bad00dcba54454852958a65b960dca80cbfff8d8",
+      "bytes": 1509,
+      "path": "local-verification/seal-targeted-v3.xml"
+    }
+  ],
+  "scope": "author-run application sealing rotation and restore verification"
+}

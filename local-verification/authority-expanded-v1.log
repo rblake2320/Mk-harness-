@@ -1,0 +1,12 @@
+........F                                                                [100%]
+=================================== FAILURES ===================================
+___________ test_post_backup_draft_withdrawal_cancels_restored_queue ___________
+tools/verification/test_kernel_privacy_restore.py:271: in test_post_backup_draft_withdrawal_cancels_restored_queue
+    assert conn.execute("SELECT state FROM kernel.actions WHERE action_id=%s",(action,)).fetchone() == ("cancelled",)
+E   AssertionError: assert ('queued',) == ('cancelled',)
+E     
+E     At index 0 diff: 'queued' != 'cancelled'
+E     Use -v to get more diff
+=========================== short test summary info ============================
+FAILED tools/verification/test_kernel_privacy_restore.py::test_post_backup_draft_withdrawal_cancels_restored_queue
+1 failed, 8 passed, 29 deselected in 34.43s

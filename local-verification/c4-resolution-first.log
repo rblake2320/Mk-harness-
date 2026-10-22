@@ -1,0 +1,14 @@
+   Compiling mk-store v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-store)
+   Compiling mk-testkit v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-testkit)
+   Compiling mk-queue v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-queue)
+   Compiling mk-adapters v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-adapters)
+   Compiling mk-api v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-api)
+   Compiling mk-worker v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-worker)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 9.21s
+     Running tests/http_e2e.rs (/tmp/mk-release-acceptance-target/debug/deps/http_e2e-18de0e99f101486d)
+
+running 1 test
+test uncertainty_gate_and_passkey_resolution_enforce_provider_evidence_and_no_replay ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 9 filtered out; finished in 0.97s
+

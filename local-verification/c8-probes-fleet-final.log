@@ -1,0 +1,10 @@
+   Compiling mk-api v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-api)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.85s
+     Running tests/http_e2e.rs (/tmp/mk-release-acceptance-target/debug/deps/http_e2e-05ff1a20f14da3a3)
+
+running 1 test
+test public_inbound_probes_require_committed_receipts_and_drain_before_recovery ... C8 fleet: businesses=1000 broken_tenants=1 elapsed_ms=17881 checked=1000 confirmed=1000 failed=0 tenant_failures=1 api_pool=1 worker_pool=1 tenant_concurrency=16 network_limit=32
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 10 filtered out; finished in 24.04s
+

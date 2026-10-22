@@ -1,0 +1,32 @@
+[
+  {
+    "binary": "mk-privacy-ledger",
+    "exit_code": 0,
+    "diagnostic": "{\"sha256\":\"sha256:a3bfbf539167e3ae94fd02154f2a40f70458cae9bfe4bc7366fae2f6171b1499\",\"bytes\":2189,\"traffic_enabled\":false}\n"
+  },
+  {
+    "binary": "mk-privacy-ledger",
+    "exit_code": 1,
+    "diagnostic": "Error: conflict: privacy ledger version or freshness\n"
+  },
+  {
+    "binary": "mk-restore-gate",
+    "exit_code": 1,
+    "diagnostic": "{\"check\":\"global_dispatch_disabled\",\"ok\":true,\"detail\":{\"dispatch_enabled\":false}}\n{\"check\":\"privacy_restore_ledger\",\"ok\":false,\"detail\":{\"status\":\"missing_invalid_or_conflicting_external_ledger\",\"traffic_enabled\":false}}\n{\"gate\":\"FAIL\",\"apply\":false,\"next\":\"do not enable dispatch; supply and verify the independently retained erasure ledger\"}\n"
+  },
+  {
+    "binary": "mk-restore-gate",
+    "exit_code": 1,
+    "diagnostic": "{\"check\":\"global_dispatch_disabled\",\"ok\":true,\"detail\":{\"dispatch_enabled\":false}}\n{\"check\":\"privacy_restore_ledger\",\"ok\":false,\"detail\":{\"applied\":false,\"requests\":1,\"fences\":1,\"suppressions\":1,\"revocations\":1,\"authority_withdrawals\":3,\"pending_content\":2,\"pending_restrictions\":5,\"enforced\":false}}\n{\"check\":\"keyring_loads\",\"ok\":true,\"detail\":{\"current\":0,\"versions\":[0]}}\n{\"check\":\"audit_chain_verified\",\"ok\":true,\"detail\":{\"tenants\":1,\"failures\":[]}}\n{\"check\":\"suppression_ledger_loaded\",\"ok\":true,\"detail\":{\"live_suppressions\":0,\"revocations\":0,\"inventory_only\":true}}\n{\"check\":\"credentials_unseal\",\"ok\":true,\"detail\":{\"checked\":1,\"unreadable\":0}}\n{\"check\":\"in_flight_marked_unknown\",\"ok\":true,\"detail\":{\"found_in_flight\":0,\"marked\":0,\"remaining_dispatching\":0,\"remaining_submission_started\":0,\"apply\":false}}\n{\"check\":\"pre_restore_approvals_invalidated\",\"ok\":true,\"detail\":{\"found\":0,\"revoked\":0,\"remaining\":0,\"restored_at\":\"2026-10-22T12:01:29.284994Z\",\"apply\":false}}\n{\"check\":\"reconciliation_backlog\",\"ok\":true,\"detail\":{\"actions_requiring_human_reconciliation\":0,\"note\":\"resolve each against provider records before any replacement message; dispatch stays disabled until the release owner authorises\"}}\n{\"gate\":\"FAIL\",\"apply\":false,\"next\":\"do not enable dispatch\"}\n"
+  },
+  {
+    "binary": "mk-restore-gate",
+    "exit_code": 0,
+    "diagnostic": "{\"check\":\"global_dispatch_disabled\",\"ok\":true,\"detail\":{\"dispatch_enabled\":false}}\n{\"check\":\"privacy_restore_ledger\",\"ok\":true,\"detail\":{\"applied\":true,\"requests\":1,\"fences\":1,\"suppressions\":1,\"revocations\":1,\"authority_withdrawals\":3,\"pending_content\":0,\"pending_restrictions\":0,\"enforced\":true}}\n{\"check\":\"keyring_loads\",\"ok\":true,\"detail\":{\"current\":0,\"versions\":[0]}}\n{\"check\":\"audit_chain_verified\",\"ok\":true,\"detail\":{\"tenants\":1,\"failures\":[]}}\n{\"check\":\"suppression_ledger_loaded\",\"ok\":true,\"detail\":{\"live_suppressions\":1,\"revocations\":1,\"inventory_only\":true}}\n{\"check\":\"credentials_unseal\",\"ok\":true,\"detail\":{\"checked\":0,\"unreadable\":0}}\n{\"check\":\"in_flight_marked_unknown\",\"ok\":true,\"detail\":{\"found_in_flight\":0,\"marked\":0,\"remaining_dispatching\":0,\"remaining_submission_started\":0,\"apply\":true}}\n{\"check\":\"pre_restore_approvals_invalidated\",\"ok\":true,\"detail\":{\"found\":0,\"revoked\":0,\"remaining\":0,\"restored_at\":\"2026-10-22T12:01:29.284994Z\",\"apply\":true}}\n{\"check\":\"reconciliation_backlog\",\"ok\":true,\"detail\":{\"actions_requiring_human_reconciliation\":0,\"note\":\"resolve each against provider records before any replacement message; dispatch stays disabled until the release owner authorises\"}}\n{\"gate\":\"PASS\",\"apply\":true,\"next\":\"operator may enable dispatch via /kill-switch/global with passkey step-up after reviewing the reconciliation backlog\"}\n"
+  },
+  {
+    "binary": "mk-restore-gate",
+    "exit_code": 0,
+    "diagnostic": "{\"check\":\"global_dispatch_disabled\",\"ok\":true,\"detail\":{\"dispatch_enabled\":false}}\n{\"check\":\"privacy_restore_ledger\",\"ok\":true,\"detail\":{\"applied\":false,\"requests\":1,\"fences\":1,\"suppressions\":1,\"revocations\":1,\"authority_withdrawals\":3,\"pending_content\":0,\"pending_restrictions\":0,\"enforced\":true}}\n{\"check\":\"keyring_loads\",\"ok\":true,\"detail\":{\"current\":0,\"versions\":[0]}}\n{\"check\":\"audit_chain_verified\",\"ok\":true,\"detail\":{\"tenants\":1,\"failures\":[]}}\n{\"check\":\"suppression_ledger_loaded\",\"ok\":true,\"detail\":{\"live_suppressions\":1,\"revocations\":1,\"inventory_only\":true}}\n{\"check\":\"credentials_unseal\",\"ok\":true,\"detail\":{\"checked\":0,\"unreadable\":0}}\n{\"check\":\"in_flight_marked_unknown\",\"ok\":true,\"detail\":{\"found_in_flight\":0,\"marked\":0,\"remaining_dispatching\":0,\"remaining_submission_started\":0,\"apply\":false}}\n{\"check\":\"pre_restore_approvals_invalidated\",\"ok\":true,\"detail\":{\"found\":0,\"revoked\":0,\"remaining\":0,\"restored_at\":\"2026-10-22T12:01:29.284994Z\",\"apply\":false}}\n{\"check\":\"reconciliation_backlog\",\"ok\":true,\"detail\":{\"actions_requiring_human_reconciliation\":0,\"note\":\"resolve each against provider records before any replacement message; dispatch stays disabled until the release owner authorises\"}}\n{\"gate\":\"PASS\",\"apply\":false,\"next\":\"operator may enable dispatch via /kill-switch/global with passkey step-up after reviewing the reconciliation backlog\"}\n"
+  }
+]

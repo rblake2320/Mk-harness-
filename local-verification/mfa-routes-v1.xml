@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="8" time="1.298" timestamp="2026-10-22T01:04:42.926358-05:00" hostname="DESKTOP-CM6G60N"><testcase classname="tests.test_mfa_security" name="test_password_only_session_cannot_read_customer_data" time="0.071" /><testcase classname="tests.test_mfa_security" name="test_enrollment_retires_pre_mfa_credentials_and_returns_backup_codes_once" time="0.111" /><testcase classname="tests.test_mfa_security" name="test_sensitive_export_requires_a_separate_fresh_check" time="0.088" /><testcase classname="tests.test_mfa_security" name="test_every_sensitive_route_is_registered_and_refused_before_validation" time="0.042"><failure message="AssertionError: assert frozenset({('...xport'), ...}) &lt;= {('DELETE', '...vider}'), ...}&#10;  &#10;  Extra items in the left set:&#10;  ('GET', '/api/skin-data/export')&#10;  ('DELETE', '/api/skin-data')">client = &lt;starlette.testclient.TestClient object at 0x74380498ab40&gt;
+
+    def test_every_sensitive_route_is_registered_and_refused_before_validation(client):
+        import re
+        from app.main import app
+        from app.security import SENSITIVE_ROUTES
+        _, _, _, result = enroll(client)
+        registered = {(method, route.path) for route in app.routes for method in getattr(route, 'methods', [])}
+&gt;       assert SENSITIVE_ROUTES &lt;= registered
+E       AssertionError: assert frozenset({('...xport'), ...}) &lt;= {('DELETE', '...vider}'), ...}
+E         
+E         Extra items in the left set:
+E         ('GET', '/api/skin-data/export')
+E         ('DELETE', '/api/skin-data')
+
+backend/tests/test_mfa_security.py:72: AssertionError</failure></testcase><testcase classname="tests.test_mfa_security" name="test_recovery_once_lockout_survives_new_login_and_stepup_expires" time="0.263" /><testcase classname="tests.test_mfa_security" name="test_factor_storage_is_bound_encrypted_and_backups_are_hashes" time="0.043" /><testcase classname="tests.test_mfa_security" name="test_limited_refresh_cannot_extend_enrollment_and_can_sign_out" time="0.044"><failure message="AssertionError: assert 202 == 200&#10; +  where 202 = &lt;Response [202 Accepted]&gt;.status_code&#10; +    where &lt;Response [202 Accepted]&gt; = post('/api/auth/logout', headers={'Authorization': 'Bearer [REDACTED_SYNTHETIC_JWT]'})&#10; +      where post = &lt;starlette.testclient.TestClient object at 0x7438048be690&gt;.post&#10; +      and   {'Authorization': 'Bearer [REDACTED_SYNTHETIC_JWT]'} = auth_headers({'access_token': '[REDACTED_SYNTHETIC_JWT]', ...})">client = &lt;starlette.testclient.TestClient object at 0x7438048be690&gt;
+
+    def test_limited_refresh_cannot_extend_enrollment_and_can_sign_out(client):
+        from app import db as dbmod
+        from app.models import AuthSession
+        limited = signup(client, email=f'limited-life-{uuid.uuid4().hex}@example.com')
+        with dbmod._SessionLocal() as db:
+            before = db.get(AuthSession, limited['session_id']).expires_at
+        rotated = client.post('/api/auth/refresh', json={'refresh_token': limited['refresh_token']}).json()
+        assert rotated['mfa_state'] == 'enrollment_required'
+        with dbmod._SessionLocal() as db:
+            after = db.get(AuthSession, limited['session_id']).expires_at
+        assert before == after
+&gt;       assert client.post('/api/auth/logout', headers=auth_headers(rotated)).status_code == 200
+E       AssertionError: assert 202 == 200
+E        +  where 202 = &lt;Response [202 Accepted]&gt;.status_code
+E        +    where &lt;Response [202 Accepted]&gt; = post('/api/auth/logout', headers={'Authorization': 'Bearer [REDACTED_SYNTHETIC_JWT]'})
+E        +      where post = &lt;starlette.testclient.TestClient object at 0x7438048be690&gt;.post
+E        +      and   {'Authorization': 'Bearer [REDACTED_SYNTHETIC_JWT]'} = auth_headers({'access_token': '[REDACTED_SYNTHETIC_JWT]', ...})
+
+backend/tests/test_mfa_security.py:135: AssertionError</failure></testcase><testcase classname="tests.test_mfa_security" name="test_factor_replacement_preserves_old_until_confirm_then_revokes_all" time="0.158" /></testsuite></testsuites>

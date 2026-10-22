@@ -1,0 +1,6 @@
+   Compiling mk-store v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-store)
+   Compiling mk-queue v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-queue)
+   Compiling mk-adapters v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-adapters)
+   Compiling mk-worker v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-worker)
+   Compiling mk-api v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-api)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 6.39s

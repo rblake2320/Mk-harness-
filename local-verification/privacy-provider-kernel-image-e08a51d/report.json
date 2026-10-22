@@ -1,0 +1,5 @@
+{
+  "scope": "author-run built kernel image; synthetic fixtures; no provider calls",
+  "image_id": "sha256:6be6b56caade9abec3b12af0f7358b0d803f80618506cf00c1aaf03acfff13cd",
+  "owned_targets_removed": true
+}

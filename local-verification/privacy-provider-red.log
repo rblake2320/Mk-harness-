@@ -1,0 +1,43 @@
+   Compiling mk-testkit v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-testkit)
+   Compiling mk-store v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-store)
+   Compiling mk-queue v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-queue)
+   Compiling mk-adapters v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-adapters)
+error[E0599]: no method named `erase_message` found for struct `TwilioAdapter` in the current scope
+   --> crates/mk-adapters/tests/twilio_simulator.rs:103:27
+    |
+103 | ...er.erase_message(te...
+    |       ^^^^^^^^^^^^^
+    |
+help: there is a method `observe_message` with a similar name, but with different arguments
+   --> crates/mk-adapters/src/twilio.rs:485:5
+    |
+485 | /     pub async fn observe_message(
+486 | |         &self,
+487 | |         tenant: TenantId,
+488 | |         sender_identity_id: uuid::Uuid,
+489 | |         message_sid: &str,
+490 | |         to: &str,
+491 | |     ) -> Result<ProviderObservation, AdapterError> {
+    | |__________________________________________________^
+
+error[E0599]: no method named `erase_message` found for struct `TwilioAdapter` in the current scope
+   --> crates/mk-adapters/tests/twilio_simulator.rs:107:28
+    |
+107 | ...er.erase_message(te...
+    |       ^^^^^^^^^^^^^
+    |
+help: there is a method `observe_message` with a similar name, but with different arguments
+   --> crates/mk-adapters/src/twilio.rs:485:5
+    |
+485 | /     pub async fn observe_message(
+486 | |         &self,
+487 | |         tenant: TenantId,
+488 | |         sender_identity_id: uuid::Uuid,
+489 | |         message_sid: &str,
+490 | |         to: &str,
+491 | |     ) -> Result<ProviderObservation, AdapterError> {
+    | |__________________________________________________^
+
+For more information about this error, try `rustc --explain E0599`.
+error: could not compile `mk-adapters` (test "twilio_simulator") due to 2 previous errors
+warning: build failed, waiting for other jobs to finish...

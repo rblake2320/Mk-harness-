@@ -1,0 +1,31 @@
+...................FFFFF.FF.................................             [100%]
+=================================== FAILURES ===================================
+E   jwt.exceptions.InvalidKeyError: HMAC key must not be empty.
+/tmp/mk-security-python-20261022/lib/python3.12/site-packages/jwt/algorithms.py:350: jwt.exceptions.InvalidKeyError: HMAC key must not be empty.
+E   jwt.exceptions.InvalidKeyError: HMAC key must not be empty.
+/tmp/mk-security-python-20261022/lib/python3.12/site-packages/jwt/algorithms.py:350: jwt.exceptions.InvalidKeyError: HMAC key must not be empty.
+E   jwt.exceptions.InvalidKeyError: HMAC key must not be empty.
+/tmp/mk-security-python-20261022/lib/python3.12/site-packages/jwt/algorithms.py:350: jwt.exceptions.InvalidKeyError: HMAC key must not be empty.
+E   jwt.exceptions.InvalidKeyError: HMAC key must not be empty.
+/tmp/mk-security-python-20261022/lib/python3.12/site-packages/jwt/algorithms.py:350: jwt.exceptions.InvalidKeyError: HMAC key must not be empty.
+E   jwt.exceptions.InvalidKeyError: HMAC key must not be empty.
+/tmp/mk-security-python-20261022/lib/python3.12/site-packages/jwt/algorithms.py:350: jwt.exceptions.InvalidKeyError: HMAC key must not be empty.
+E   jwt.exceptions.InvalidKeyError: HMAC key must not be empty.
+/tmp/mk-security-python-20261022/lib/python3.12/site-packages/jwt/algorithms.py:350: jwt.exceptions.InvalidKeyError: HMAC key must not be empty.
+E   jwt.exceptions.InvalidKeyError: HMAC key must not be empty.
+/tmp/mk-security-python-20261022/lib/python3.12/site-packages/jwt/algorithms.py:350: jwt.exceptions.InvalidKeyError: HMAC key must not be empty.
+=============================== warnings summary ===============================
+tools/verification/test_app_database.py::test_real_api_mfa_and_customer_transaction_with_runtime_identity
+  /tmp/mk-security-python-20261022/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tools/verification/test_app_privacy.py::test_linked_customer_deletion_works_under_foreign_keys
+FAILED tools/verification/test_app_privacy.py::test_account_deletion_erases_owned_provider_credential
+FAILED tools/verification/test_app_privacy.py::test_full_graph_erased_minimal_consent_and_suppression_retained
+FAILED tools/verification/test_app_privacy.py::test_cross_tenant_and_other_member_data_survive
+FAILED tools/verification/test_app_privacy.py::test_runtime_cannot_rewrite_erasure_tombstones_or_minimal_proof
+FAILED tools/verification/test_app_privacy.py::test_deleted_identity_and_shared_keys_cannot_be_resurrected
+FAILED tools/verification/test_app_privacy.py::test_restore_ledger_rejects_corruption_staleness_and_scope_mismatch
+7 failed, 53 passed, 1 warning in 96.05s (0:01:36)

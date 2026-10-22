@@ -81,7 +81,7 @@ pub async fn dispatch_one(
     // routing facts unlocked first, take the advisory locks, then lock the row.
     let pre = match actions::get(&mut tx, action_id).await {
         Ok(a) => a,
-        Err(StoreError::NotFound) => {
+        Err(StoreError::NotFound | StoreError::Erased) => {
             return Ok(DispatchOutcome::Skipped {
                 ack: true,
                 reason: "unknown_action",
@@ -95,7 +95,24 @@ pub async fn dispatch_one(
             reason: "not_queued",
         });
     }
+    if let Err(error) = mk_store::privacy::check_intake(&mut tx, &pre.request).await {
+        if matches!(error, StoreError::Erased) {
+            return Ok(DispatchOutcome::Skipped {
+                ack: true,
+                reason: "privacy_erased",
+            });
+        }
+        return Err(error.into());
+    }
     let pre_fps = pre.destination_fingerprints_set();
+    if let (Some(ch), Some(dest)) = (pre.channel, pre_fps.as_ref())
+        && mk_store::privacy::destination_erased(&mut tx, ch.as_str(), dest).await?
+    {
+        return Ok(DispatchOutcome::Skipped {
+            ack: true,
+            reason: "privacy_erased",
+        });
+    }
     let outreach_path = match (pre.channel, pre_fps.as_ref()) {
         (Some(ch), Some(dest))
             if pre.request.action_kind.is_outreach()
@@ -116,7 +133,7 @@ pub async fn dispatch_one(
     };
     let action = match actions::get_for_update(&mut tx, action_id).await {
         Ok(a) => a,
-        Err(StoreError::NotFound) => {
+        Err(StoreError::NotFound | StoreError::Erased) => {
             return Ok(DispatchOutcome::Skipped {
                 ack: true,
                 reason: "unknown_action",
@@ -174,8 +191,8 @@ pub async fn dispatch_one(
         None => None,
     };
     // Row H9: an approval whose approver (user or the approving session) was
-    // revoked after approving must not dispatch, even if the approval row was
-    // not yet marked revoked. Treated exactly like a revoked approval.
+    // revoked must not dispatch, even if an in-flight approval committed after
+    // the revocation cascade. Treated exactly like a revoked approval.
     if let Some(a) = &approval
         && human_approval::approver_revoked_since(
             &mut tx,
@@ -200,27 +217,6 @@ pub async fn dispatch_one(
             code: DenyCode::ApprovalRevoked,
             state: t.state,
         });
-    }
-    // C8: a stale or paused inbound path defers provider dispatch for this
-    // tenant. The action stays queued; it is re-delivered later.
-    let adapter_kind_early = ctx
-        .tools
-        .get(&action.request.tool_id)
-        .map_or("", |t| t.adapter_kind);
-    if adapter_kind_early == mk_adapters::twilio::ADAPTER_KIND
-        && let Some(reason) = messaging::inbound_dispatch_block(&mut tx, now).await?
-    {
-        outbox::enqueue(
-            &mut tx,
-            action_id,
-            "retry",
-            now + chrono::Duration::seconds(30),
-            json!({"deferred": reason}),
-        )
-        .await?;
-        outbox::release_lease(&mut tx, action_id, lease).await?;
-        tx.commit().await?;
-        return Ok(DispatchOutcome::Deferred { reason });
     }
     let attempt = u32::try_from(action.attempt).unwrap_or(0);
     let recheck = RecheckInput {
@@ -268,6 +264,72 @@ pub async fn dispatch_one(
             code,
             state: a.state,
         });
+    }
+    // C8: policy expiry/revocation wins before a health deferral, so a paused
+    // inbound path cannot leave an expired action queued indefinitely.
+    let adapter_kind_early = ctx
+        .tools
+        .get(&action.request.tool_id)
+        .map_or("", |t| t.adapter_kind);
+    if adapter_kind_early == mk_adapters::twilio::ADAPTER_KIND
+        && let Some(reason) = messaging::inbound_dispatch_block(&mut tx, now).await?
+    {
+        outbox::enqueue(
+            &mut tx,
+            action_id,
+            "retry",
+            now + chrono::Duration::seconds(30),
+            json!({"deferred": reason}),
+        )
+        .await?;
+        outbox::release_lease(&mut tx, action_id, lease).await?;
+        tx.commit().await?;
+        return Ok(DispatchOutcome::Deferred { reason });
+    }
+    // C4: evaluate policy first so expired/revoked authorizations terminate,
+    // then hold new sends while the destination has unresolved uncertainty.
+    // This executes under the shared destination lock, before approval use.
+    if let (Some(ch), Some(dest)) = (action.channel, action_fps.as_ref())
+        && action.request.action_kind.is_outreach()
+        && let Some(resolved_at) =
+            mk_store::resolutions::latest_for_destination(&mut tx, ch.as_str(), dest).await?
+        && approval
+            .as_ref()
+            .is_none_or(|a| a.created_at <= resolved_at)
+    {
+        let code = DenyCode::ApprovalPredatesResolution;
+        let a = actions::transition(
+            &mut tx,
+            action_id,
+            Transition::Cancel,
+            Some(code.as_str()),
+            worker_actor,
+            now,
+        )
+        .await?;
+        outbox::release_lease(&mut tx, action_id, lease).await?;
+        tx.commit().await?;
+        return Ok(DispatchOutcome::Blocked {
+            code,
+            state: a.state,
+        });
+    }
+    if let (Some(ch), Some(dest)) = (action.channel, action_fps.as_ref())
+        && action.request.action_kind.is_outreach()
+        && mk_store::resolutions::blocks_destination(&mut tx, action_id, ch.as_str(), dest).await?
+    {
+        let reason = "unresolved_submission";
+        outbox::enqueue(
+            &mut tx,
+            action_id,
+            "retry",
+            now + chrono::Duration::seconds(30),
+            json!({"deferred": reason}),
+        )
+        .await?;
+        outbox::release_lease(&mut tx, action_id, lease).await?;
+        tx.commit().await?;
+        return Ok(DispatchOutcome::Deferred { reason });
     }
     if attempt == 0
         && let Some(a) = &approval

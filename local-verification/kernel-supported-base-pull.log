@@ -1,0 +1,29 @@
+nonroot: Pulling from distroless/cc-debian13
+b96fe2995f90: Pulling fs layer
+dd0d9bfd3bee: Pulling fs layer
+bd8962e29291: Pulling fs layer
+7cc70dfd88cf: Pulling fs layer
+cac2ae0193cb: Pulling fs layer
+8224d91da70b: Pulling fs layer
+ec1b04bf2eb2: Pulling fs layer
+810e2b405a08: Pulling fs layer
+1a4be5562d92: Pulling fs layer
+cac2ae0193cb: Already exists
+8224d91da70b: Already exists
+b96fe2995f90: Already exists
+7cc70dfd88cf: Already exists
+1a4be5562d92: Already exists
+dd0d9bfd3bee: Already exists
+bd8962e29291: Already exists
+ec1b04bf2eb2: Download complete
+b96fe2995f90: Pull complete
+7cc70dfd88cf: Pull complete
+810e2b405a08: Download complete
+cac2ae0193cb: Pull complete
+8224d91da70b: Pull complete
+b96fe2995f90: Pull complete
+7cc70dfd88cf: Pull complete
+1a4be5562d92: Pull complete
+Digest: sha256:83b9b50586253821cf63ffcec87d3d94265a093ad30da232039af962dd8f4edf
+Status: Downloaded newer image for gcr.io/distroless/cc-debian13:nonroot
+gcr.io/distroless/cc-debian13:nonroot

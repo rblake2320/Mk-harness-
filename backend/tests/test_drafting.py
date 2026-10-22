@@ -23,7 +23,7 @@ import respx
 
 from .conftest import auth_headers, signup
 from .test_commitments_brief import _anthropic_json, _commit, _user_with_key
-from .test_foundation import _customer
+from .test_foundation import _customer, kernel_env  # noqa: F401
 
 
 def _registry(client, h, claim_text="Our TimeWise 3D Day Cream is formulated with vitamin C.",
@@ -38,7 +38,8 @@ def _registry(client, h, claim_text="Our TimeWise 3D Day Cream is formulated wit
                                                    "approved_text": claim_text, "source_id": sid, "market": market,
                                                    "expires_at": expires}, headers=h)
     assert c.status_code == 201, c.text
-    client.post(f"/api/knowledge/claims/{c.json()['id']}/review", json={"decision": claim_status, "reviewer": "QA"}, headers=h)
+    client.post(f"/api/knowledge/v2/claims/{c.json()['id']}/review", json={
+        "decision": claim_status, "reviewer": "QA", "facts": {"composition.vitamin_c": "present"}}, headers=h)
     return sid, c.json()["id"]
 
 
@@ -154,19 +155,23 @@ def test_injected_instructions_in_context_cannot_change_binding(client):
 
 
 @respx.mock
-def test_consultant_edit_creates_new_version_and_cannot_smuggle_claims(client):
+def test_consultant_edit_creates_new_version_and_cannot_smuggle_claims(client, kernel_env):
     h = _user_with_key(client)
     _registry(client, h)
     cid, _, _ = _customer(client, h, phone="+15555556006")
     respx.post("https://api.anthropic.com/v1/messages").mock(return_value=_model(
         "Hi Angela! {claim:daycream.vitc.v1} Reply STOP to opt out.", ["daycream.vitc.v1"]))
     d = client.post("/api/drafts", json={"customer_id": cid, "product_ids": ["daycream"], "provider": "anthropic"}, headers=h).json()["draft"]
+    from .test_agent_ops import KERNEL
+    withdrawal = respx.post(f"{KERNEL}/internal/v1/drafts/{d['id']}/invalidate").mock(
+        return_value=httpx.Response(200, json={"draft_id": str(uuid.UUID(d["id"])), "edit_permitted": True}))
     e = client.post(f"/api/drafts/{d['id']}/edit", json={"text": "Hi Angela — hope the week is good! Our TimeWise 3D Day Cream is formulated with vitamin C. Reply STOP to opt out."}, headers=h)
     assert e.status_code == 201
     assert e.json()["version"] == 2 and e.json()["text_digest"] != d["text_digest"] and e.json()["claims_used"] == ["daycream.vitc.v1"]
     bad = client.post(f"/api/drafts/{d['id']}/edit", json={"text": "Hi Angela! This cream is dermatologist recommended. Reply STOP to opt out."}, headers=h)
     assert bad.status_code == 422 and bad.json()["detail"]["code"] == "UNAPPROVED_CLAIM_LANGUAGE"
     assert client.post(f"/api/drafts/{d['id']}/edit", json={"text": "Earn income with me!"}, headers=h).status_code == 422
+    assert withdrawal.call_count == 1, "invalid content must not withdraw a usable old draft"
 
 
 def test_registry_is_admin_only_and_tenant_scoped(client):
@@ -242,7 +247,7 @@ def test_evaluation_harness_replay_passes_on_synthetic_sets():
     import json
     from pathlib import Path
     syn = Path(ev.__file__).parent / "cases" / "synthetic"
-    lines = [json.loads(l) for f in syn.glob("*.jsonl") for l in f.read_text().splitlines() if l.strip()]
+    lines = [json.loads(l) for f in syn.glob("*.jsonl") for l in f.read_text(encoding="utf-8").splitlines() if l.strip()]
     assert len(lines) > 1000 and all(l["provenance"].startswith("synthetic-generated") for l in lines)
 
 

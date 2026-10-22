@@ -186,14 +186,17 @@ pub async fn release_lease_any(
 /// Expired leases across tenants (worker sweep under the worker policy).
 pub async fn expired_leases(
     pool: &PgPool,
+    tenants: &[TenantId],
     now: DateTime<Utc>,
     limit: i64,
 ) -> Result<Vec<(TenantId, ActionId)>, StoreError> {
     let rows = sqlx::query(
-        "SELECT tenant_id, action_id FROM kernel.execution_leases WHERE expires_at < $1 LIMIT $2",
+        "SELECT tenant_id, action_id FROM kernel.execution_leases
+         WHERE expires_at < $1 AND tenant_id = ANY($3) ORDER BY expires_at LIMIT $2",
     )
     .bind(now)
     .bind(limit)
+    .bind(tenants.iter().map(|t| t.0).collect::<Vec<_>>())
     .fetch_all(pool)
     .await?;
     rows.into_iter()

@@ -1,0 +1,46 @@
+........................................................................ [ 18%]
+........................................................................ [ 37%]
+........................................................................ [ 55%]
+......FFF.......................................F..F.................... [ 74%]
+........................................................................ [ 93%]
+..........................                                               [100%]
+=================================== FAILURES ===================================
+E   assert 200 == 403
+     +  where 200 = <Response [200 OK]>.status_code
+/mnt/d/projects/mk-release-acceptance-20261021/backend/tests/test_mfa_security.py:58: assert 200 == 403
+E   AssertionError: assert frozenset({('...-data'), ...}) <= {('GET', '/ap...rivacy'), ...}
+      
+      Extra items in the left set:
+      ('POST', '/api/auth/members')
+      ('GET', '/api/me/skin-data/export')
+      ('GET', '/api/account/export')
+      ('POST', '/api/consent/skin')
+      ('PUT', '/api/keys/mine')...
+      
+      ...Full output truncated (26 lines hidden), use '-vv' to show
+/mnt/d/projects/mk-release-acceptance-20261021/backend/tests/test_mfa_security.py:72: AssertionError: assert frozenset({('...-data'), ...}) <= {('GET', '/ap...rivacy'), ...}
+E   AssertionError: assert 200 == 403
+     +  where 200 = <Response [200 OK]>.status_code
+     +    where <Response [200 OK]> = get('/api/account/export', headers={'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIzM2YwN2IxOWFjM2Q0MmQyODgxNWQ1MjFmNDZlNjFlNSI...WU0YjQ5YzY3M2FiNjkzMzNjYSIsImlhdCI6MTc5MjY2MTYxNSwiZXhwIjoxNzkyNjYzNDE1fQ.J2lIDlSlmiThJi0oe7qvQrxyPdbbxVS4pm7REo9oWGw'})
+     +      where get = <starlette.testclient.TestClient object at 0x7693e81d2990>.get
+/mnt/d/projects/mk-release-acceptance-20261021/backend/tests/test_mfa_security.py:93: AssertionError: assert 200 == 403
+E   AssertionError: assert 403 == 200
+     +  where 403 = <Response [403 Forbidden]>.status_code
+     +    where <Response [403 Forbidden]> = get('/api/audit/export.jsonl', headers={'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJkMjY3M2U0NDgzZGM0OGI1OWRhYzU5N2RlZDBkZTIzNyI...jZGU4ZDM4MDgxNzBmZmU0ZTg2IiwiaWF0IjoxNzkyNjYxNjI0LCJleHAiOjE3OTI2NjM0MjR9.m10a8DMrpwZo5xjz_vVrR6gU51r6r5vgkU_TkQ9nqmg'})
+     +      where get = <starlette.testclient.TestClient object at 0x7693e87828a0>.get
+/mnt/d/projects/mk-release-acceptance-20261021/backend/tests/test_rbac.py:46: AssertionError: assert 403 == 200
+E   assert 0 > 70
+/mnt/d/projects/mk-release-acceptance-20261021/backend/tests/test_rbac.py:104: assert 0 > 70
+=============================== warnings summary ===============================
+../../../../tmp/mk-security-python-20261022/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /tmp/mk-security-python-20261022/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED backend/tests/test_mfa_security.py::test_sensitive_export_requires_a_separate_fresh_check
+FAILED backend/tests/test_mfa_security.py::test_every_sensitive_route_is_registered_and_refused_before_validation
+FAILED backend/tests/test_mfa_security.py::test_recovery_once_lockout_survives_new_login_and_stepup_expires
+FAILED backend/tests/test_rbac.py::test_manager_and_auditor_are_distinct_from_admin_and_consultant
+FAILED backend/tests/test_rbac.py::test_auditor_allowlist_is_fail_closed_on_every_authenticated_route
+5 failed, 381 passed, 1 warning in 54.55s

@@ -14,7 +14,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use axum::Router;
 use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
-use axum::routing::post;
+use axum::routing::{get, post};
 use base64::Engine as _;
 use mk_crypto::AdapterSecret;
 use serde_json::{Value, json};
@@ -39,6 +39,17 @@ pub enum TwilioSimMode {
     RateLimited,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ErasureSimMode {
+    #[default]
+    Delete,
+    FalseSuccess,
+    DeleteThenUnavailable,
+    RateLimited,
+    ProxyNotFound,
+    AuthFailed,
+}
+
 #[derive(Debug)]
 struct SimState {
     account_sid: String,
@@ -47,6 +58,8 @@ struct SimState {
     calls: AtomicUsize,
     /// Messages "created" at the provider, by sid.
     messages: Mutex<Vec<Value>>,
+    erasure_mode: Mutex<ErasureSimMode>,
+    deletes: AtomicUsize,
 }
 
 #[derive(Debug)]
@@ -144,6 +157,8 @@ async fn create_message(
         "status_callback": form.get("StatusCallback").cloned().unwrap_or_default(),
         "date_created": chrono::Utc::now().to_rfc2822(), "error_code": null, "num_segments": "1",
         "account_sid": st.account_sid,
+        "direction": "outbound-api",
+        "messaging_service_sid": form.get("MessagingServiceSid"),
     });
     st.messages.lock().await.push(msg.clone());
     if st.mode == TwilioSimMode::AcceptButDropResponse {
@@ -186,6 +201,58 @@ async fn list_messages(
     axum::Json(json!({"messages": out, "page_size": 50})).into_response()
 }
 
+async fn fetch_message(
+    State(st): State<Arc<SimState>>,
+    Path((account, resource)): Path<(String, String)>,
+    headers: HeaderMap,
+) -> axum::response::Response {
+    use axum::response::IntoResponse as _;
+    if account != st.account_sid || !basic_ok(&headers, &st.account_sid, &st.auth_token) {
+        return (StatusCode::UNAUTHORIZED, "").into_response();
+    }
+    if *st.erasure_mode.lock().await == ErasureSimMode::ProxyNotFound {
+        return (StatusCode::NOT_FOUND, "<html>proxy not found</html>").into_response();
+    }
+    let sid = resource.strip_suffix(".json").unwrap_or_default();
+    let messages = st.messages.lock().await;
+    match messages.iter().find(|m| m["sid"] == sid) {
+        Some(m) => axum::Json(m.clone()).into_response(),
+        None => (StatusCode::NOT_FOUND, axum::Json(json!({"code":20404}))).into_response(),
+    }
+}
+
+async fn delete_message(
+    State(st): State<Arc<SimState>>,
+    Path((account, resource)): Path<(String, String)>,
+    headers: HeaderMap,
+) -> axum::response::Response {
+    use axum::response::IntoResponse as _;
+    if account != st.account_sid || !basic_ok(&headers, &st.account_sid, &st.auth_token) {
+        return StatusCode::UNAUTHORIZED.into_response();
+    }
+    st.deletes.fetch_add(1, Ordering::SeqCst);
+    let mode = *st.erasure_mode.lock().await;
+    match mode {
+        ErasureSimMode::FalseSuccess => return StatusCode::NO_CONTENT.into_response(),
+        ErasureSimMode::RateLimited => return StatusCode::TOO_MANY_REQUESTS.into_response(),
+        ErasureSimMode::AuthFailed => return StatusCode::UNAUTHORIZED.into_response(),
+        _ => {}
+    }
+    let sid = resource.strip_suffix(".json").unwrap_or_default();
+    let mut messages = st.messages.lock().await;
+    let before = messages.len();
+    messages.retain(|m| m["sid"] != sid);
+    if mode == ErasureSimMode::DeleteThenUnavailable {
+        *st.erasure_mode.lock().await = ErasureSimMode::Delete;
+        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+    }
+    if before == messages.len() {
+        (StatusCode::NOT_FOUND, axum::Json(json!({"code":20404}))).into_response()
+    } else {
+        StatusCode::NO_CONTENT.into_response()
+    }
+}
+
 impl TwilioSimulator {
     pub async fn start(
         account_sid: &str,
@@ -207,11 +274,17 @@ impl TwilioSimulator {
             mode,
             calls: AtomicUsize::new(0),
             messages: Mutex::new(Vec::new()),
+            erasure_mode: Mutex::new(ErasureSimMode::Delete),
+            deletes: AtomicUsize::new(0),
         });
         let app = Router::new()
             .route(
                 "/2010-04-01/Accounts/{account}/Messages.json",
                 post(create_message).get(list_messages),
+            )
+            .route(
+                "/2010-04-01/Accounts/{account}/Messages/{resource}",
+                get(fetch_message).delete(delete_message),
             )
             .with_state(state.clone());
         let listener = tokio::net::TcpListener::bind(bind).await?;
@@ -238,6 +311,34 @@ impl TwilioSimulator {
 
     pub async fn created_messages(&self) -> Vec<Value> {
         self.state.messages.lock().await.clone()
+    }
+
+    pub async fn set_erasure_mode(&self, mode: ErasureSimMode) {
+        *self.state.erasure_mode.lock().await = mode;
+    }
+
+    pub fn deletes(&self) -> usize {
+        self.state.deletes.load(Ordering::SeqCst)
+    }
+
+    /// Inject a resource from another sender, or an inbound resource.
+    pub async fn patch_message(&self, sid: &str, fields: Value) {
+        for message in self.state.messages.lock().await.iter_mut() {
+            if message["sid"] == sid
+                && let (Some(m), Some(f)) = (message.as_object_mut(), fields.as_object())
+            {
+                m.extend(f.clone());
+            }
+        }
+    }
+
+    /// Inject authoritative provider state independently of callback delivery.
+    pub async fn set_message_status(&self, sid: &str, status: &str) {
+        for message in self.state.messages.lock().await.iter_mut() {
+            if message["sid"] == sid {
+                message["status"] = json!(status);
+            }
+        }
     }
 
     /// Mark a created message as having had its callbacks posted (standalone binary bookkeeping).
@@ -267,7 +368,13 @@ impl TwilioSimulator {
             .unwrap_or_default()
             .to_owned();
         let path = url::Url::parse(&public)
-            .map(|u| u.path().to_owned())
+            .map(|u| {
+                format!(
+                    "{}{}",
+                    u.path(),
+                    u.query().map_or(String::new(), |q| format!("?{q}"))
+                )
+            })
             .unwrap_or_default();
         let deliver = format!("{}{}", deliver_base.trim_end_matches('/'), path);
         let form: Vec<(String, String)> = vec![

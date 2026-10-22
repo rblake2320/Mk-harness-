@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="2.255" timestamp="2026-10-22T03:02:37.178009-05:00" hostname="DESKTOP-CM6G60N"><testcase classname="tools.verification.test_privacy_process" name="test_worker_survives_redis_outage_and_recovers_killed_provider_deletion" time="1.642"><failure message="AssertionError: worker exited before privacy cleanup while Redis was unavailable&#10;assert 1 is None&#10; +  where 1 = poll()&#10; +    where poll = &lt;Popen: returncode: 1 args: ['/tmp/mk-release-acceptance-target/debug/mk-act...&gt;.poll">tools/verification/test_privacy_process.py:134: in test_worker_survives_redis_outage_and_recovers_killed_provider_deletion
+    assert worker.poll() is None, "worker exited before privacy cleanup while Redis was unavailable"
+E   AssertionError: worker exited before privacy cleanup while Redis was unavailable
+E   assert 1 is None
+E    +  where 1 = poll()
+E    +    where poll = &lt;Popen: returncode: 1 args: ['/tmp/mk-release-acceptance-target/debug/mk-act...&gt;.poll</failure></testcase></testsuite></testsuites>

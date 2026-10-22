@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="4" skipped="0" tests="4" time="9.736" timestamp="2026-10-22T06:49:32.055556-05:00" hostname="DESKTOP-CM6G60N"><testcase classname="tools.verification.test_kernel_privacy_restore" name="test_post_backup_authority_withdrawal_survives_recovery[permission]" time="3.254"><failure message="AssertionError: restore gate passed but withdrawn authority was restored&#10;assert (False,) == (True,)&#10;  &#10;  At index 0 diff: False != True&#10;  Use -v to get more diff">tools/verification/test_kernel_privacy_restore.py:228: in test_post_backup_authority_withdrawal_survives_recovery
+    assert conn.execute(query,(entity,)).fetchone() == (True,), "restore gate passed but withdrawn authority was restored"
+E   AssertionError: restore gate passed but withdrawn authority was restored
+E   assert (False,) == (True,)
+E     
+E     At index 0 diff: False != True
+E     Use -v to get more diff</failure></testcase><testcase classname="tools.verification.test_kernel_privacy_restore" name="test_post_backup_authority_withdrawal_survives_recovery[approval_credential]" time="3.335"><failure message="AssertionError: restored revoked credential can request operator step-up&#10;assert 200 == 412&#10; +  where 200 = KernelResponse(status_code=200, body={'challenge': 'BpWZAfndMRHTjcfUv_rYrqMGSlGmN0NDXuLrvqUi1u4', 'rp_id': 'localhost'...-switch:enable', 'user_verification': 'required'}, request_id='dc62ea1e-6309-4628-871f-3c3de28da949', retry_after=None).status_code">tools/verification/test_kernel_privacy_restore.py:226: in test_post_backup_authority_withdrawal_survives_recovery
+    assert challenge.status_code == 412, "restored revoked credential can request operator step-up"
+E   AssertionError: restored revoked credential can request operator step-up
+E   assert 200 == 412
+E    +  where 200 = KernelResponse(status_code=200, body={'challenge': 'BpWZAfndMRHTjcfUv_rYrqMGSlGmN0NDXuLrvqUi1u4', 'rp_id': 'localhost'...-switch:enable', 'user_verification': 'required'}, request_id='dc62ea1e-6309-4628-871f-3c3de28da949', retry_after=None).status_code</failure></testcase><testcase classname="tools.verification.test_kernel_privacy_restore" name="test_post_backup_authority_withdrawal_survives_recovery[adapter]" time="1.159"><failure message="KeyError: 'adapter_id'">tools/verification/test_kernel_privacy_restore.py:203: in test_post_backup_authority_withdrawal_survives_recovery
+    entity = created.body["adapter_id"]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'adapter_id'</failure></testcase><testcase classname="tools.verification.test_kernel_privacy_restore" name="test_post_backup_authority_withdrawal_survives_recovery[adapter_rotation]" time="1.188"><failure message="KeyError: 'adapter_id'">tools/verification/test_kernel_privacy_restore.py:203: in test_post_backup_authority_withdrawal_survives_recovery
+    entity = created.body["adapter_id"]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'adapter_id'</failure></testcase></testsuite></testsuites>

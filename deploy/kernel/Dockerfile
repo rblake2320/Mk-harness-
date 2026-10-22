@@ -1,9 +1,9 @@
 # syntax=docker/dockerfile:1.7
 # Multi-stage build for the MK action kernel. One image, four process types
 # (mk-action-api, mk-outbox-relay, mk-action-worker, mk-audit-verifier) plus the
-# operator tools mk-keyctl and mk-restore-gate run
+# operator tools mk-keyctl, mk-restore-gate and mk-privacy-ledger run
 # with distinct DB roles via MK_DATABASE_URL.
-FROM rust:1.97.0-bookworm AS builder
+FROM rust:1.97.0-bookworm@sha256:8fa55b2f3ddf97471ab6a767bfa3f37e6bad0986ba823e75fea57e2a2a5c3073 AS builder
 WORKDIR /src
 COPY rust/ rust/
 COPY contracts/ contracts/
@@ -13,13 +13,13 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/src/rust/target \
     cargo build --release --locked --bins \
  && mkdir -p /out \
- && cp target/release/mk-action-api target/release/mk-outbox-relay target/release/mk-action-worker target/release/mk-audit-verifier target/release/mk-mcp-server target/release/mk-keyctl target/release/mk-restore-gate target/release/mk-healthcheck /out/
+ && cp target/release/mk-action-api target/release/mk-outbox-relay target/release/mk-action-worker target/release/mk-audit-verifier target/release/mk-mcp-server target/release/mk-keyctl target/release/mk-restore-gate target/release/mk-healthcheck target/release/mk-privacy-ledger /out/
 
 # Database CA bundle (RDS global bundle) baked in; fetched at build time and pinned by
 # checksum supplied by the operator (`--build-arg RDS_CA_BUNDLE_SHA256=…`, from
 # https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem). Without the arg the
 # build fails closed: a production image must not ship an unverified trust anchor.
-FROM debian:bookworm-slim AS cabundle
+FROM debian:bookworm-slim@sha256:7ff6ba31527b9e336162fa061746c366c4b2032f4d2cff2078bea43f78efe3f8 AS cabundle
 ARG RDS_CA_BUNDLE_URL=https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
 ARG RDS_CA_BUNDLE_SHA256
 RUN apt-get update -q && apt-get install -y -q --no-install-recommends ca-certificates curl >/dev/null \
@@ -28,7 +28,7 @@ RUN apt-get update -q && apt-get install -y -q --no-install-recommends ca-certif
  && echo "$RDS_CA_BUNDLE_SHA256  /rds-global-bundle.pem" | sha256sum -c -
 
 # Minimal runtime: CA certs only, non-root numeric UID, no shell.
-FROM gcr.io/distroless/cc-debian12:nonroot
+FROM gcr.io/distroless/cc-debian13:nonroot@sha256:83b9b50586253821cf63ffcec87d3d94265a093ad30da232039af962dd8f4edf
 COPY --from=builder /out/ /usr/local/bin/
 COPY --from=cabundle /rds-global-bundle.pem /etc/mk/rds-global-bundle.pem
 USER 65532:65532

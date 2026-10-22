@@ -29,11 +29,13 @@ pub async fn check_or_insert(
         .unwrap_or_default();
     let existing = sqlx::query(
         "SELECT request_digest, first_action_id FROM kernel.idempotency_records
-         WHERE tenant_id = $1 AND action_kind = $2 AND idempotency_key = $3 FOR UPDATE",
+         WHERE tenant_id = $1 AND action_kind = $2
+         AND ((NOT key_erased AND idempotency_key = $3) OR (key_erased AND idempotency_key = $4)) FOR UPDATE",
     )
     .bind(tx.tenant().0)
     .bind(&kind_s)
     .bind(key)
+    .bind(Digest::of(key.as_bytes()).to_string())
     .fetch_optional(tx.conn())
     .await?;
     if let Some(r) = existing {

@@ -1,0 +1,78 @@
+   Compiling serde_core v1.0.229
+   Compiling tokio v1.54.1
+   Compiling zerofrom v0.1.8
+   Compiling ref-cast v1.0.27
+   Compiling thiserror v2.0.21
+   Compiling num-bigint v0.4.8
+   Compiling yoke v0.8.3
+   Compiling zerovec v0.11.8
+   Compiling zerotrie v0.2.5
+   Compiling tinystr v0.8.4
+   Compiling potential_utf v0.1.6
+   Compiling icu_collections v2.3.0
+   Compiling icu_locale_core v2.3.0
+   Compiling num-rational v0.4.2
+   Compiling num v0.4.3
+   Compiling fraction v0.15.4
+   Compiling icu_provider v2.3.1
+   Compiling icu_properties v2.3.0
+   Compiling icu_normalizer v2.3.0
+   Compiling serde v1.0.229
+   Compiling serde_json v1.0.154
+   Compiling uuid v1.28.0
+   Compiling uuid-simd v0.8.0
+   Compiling chrono v0.4.45
+   Compiling ciborium v0.2.2
+   Compiling secrecy v0.10.3
+   Compiling ahash v0.8.12
+   Compiling fluent-uri v0.3.2
+   Compiling email_address v0.2.9
+   Compiling serde_urlencoded v0.7.1
+   Compiling idna_adapter v1.2.2
+   Compiling idna v1.1.0
+   Compiling referencing v0.33.0
+   Compiling url v2.5.8
+   Compiling jsonschema v0.33.0
+   Compiling schemars v1.2.3
+   Compiling chrono-tz v0.10.4
+   Compiling mk-crypto v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-crypto)
+   Compiling mk-domain v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-domain)
+   Compiling tokio-util v0.7.20
+   Compiling tokio-stream v0.1.19
+   Compiling tower v0.5.3
+   Compiling tokio-rustls v0.26.6
+   Compiling sqlx-core v0.9.0
+   Compiling tower-http v0.6.11
+   Compiling h2 v0.4.20
+   Compiling mk-contracts v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-contracts)
+   Compiling mk-audit v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-audit)
+   Compiling sqlx-postgres v0.9.0
+   Compiling mk-policy v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-policy)
+   Compiling hyper v1.12.0
+   Compiling hyper-util v0.1.21
+   Compiling sqlx v0.9.0
+   Compiling hyper-rustls v0.27.10
+   Compiling reqwest v0.12.28
+   Compiling mk-testkit v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-testkit)
+   Compiling mk-store v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-store)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 9.87s
+     Running unittests src/lib.rs (/tmp/mk-release-acceptance-target/debug/deps/mk_store-ac465907e29a530c)
+
+running 14 tests
+test database_url_tests::composed_url_percent_encodes_the_password_and_requires_tls ... ok
+test database_url_tests::empty_url_falls_through_and_missing_parts_is_an_error ... ok
+test database_url_tests::explicit_root_cert_switches_to_verify_full ... ok
+test database_url_tests::verbatim_url_wins ... ok
+test fingerprint::tests::debug_never_prints_key_material ... ok
+test fingerprint::tests::lock_keys_are_sorted_and_deduped ... ok
+test fingerprint::tests::default_key_reproduces_the_python_vector ... ok
+test fingerprint::tests::parse_rejects_bad_specs ... ok
+test fingerprint::tests::rotated_set_keeps_the_old_tag_and_switches_primary ... ok
+test privacy_ledger::tests::deserialized_ledger_has_no_external_authentication ... ok
+test privacy_ledger::tests::rejects_malformed_duplicate_unbound_or_account_fences ... ok
+test privacy_ledger::tests::fence_vocabulary_matches_every_domain_channel ... ok
+test privacy_ledger::tests::restriction_shapes_are_closed_and_version_one_is_refused ... ok
+test tests::migrations_are_registered ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+

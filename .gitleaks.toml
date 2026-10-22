@@ -22,4 +22,8 @@ regexes = [
   '''ACbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb''',   # e2e account SID (fake)
   '''ACcccccccccccccccccccccccccccccccc''',   # load account SID (fake)
   '''dev-secret-dev-secret-dev-secret-123''', # MK_ALLOW_DEV_SECRETS placeholder
+  # Public Python release-signing key fingerprint, not a credential. Included
+  # in official image history/env and therefore in complete Trivy reports:
+  # https://github.com/docker-library/python/blob/master/3.13/alpine3.24/Dockerfile
+  '''^7169605F62C751356D054A26A821E680E5FA6305$''',
 ]

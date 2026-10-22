@@ -53,7 +53,7 @@ MK_DATABASE_URL="$(url_for mk_api_login api)" MK_BIND=127.0.0.1:8091 RUST_ACTION
 MK_DATABASE_URL="$(url_for mk_relay_login relay)" MK_RELAY_ID=relay-load "$BIN/mk-outbox-relay" >"$WORK/relay.log" 2>&1 & PIDS+=($!)
 for i in $(seq 1 "$WORKERS"); do
   MK_DATABASE_URL="$(url_for mk_worker_login worker)" MK_WORKER_ID="worker-load-$i" MK_LEASE_SECS=60 MK_ALLOW_LOOPBACK_HTTP=1 \
-    MK_EGRESS_AUTHORITIES=127.0.0.1:8791 MK_TWILIO_API_BASE="$TWSIM" MK_PUBLIC_WEBHOOK_BASE="$WEBHOOK_BASE" \
+    MK_EGRESS_AUTHORITIES=127.0.0.1:8791,127.0.0.1:8091 MK_TWILIO_API_BASE="$TWSIM" MK_PUBLIC_WEBHOOK_BASE="$WEBHOOK_BASE" \
     MK_METRICS_BIND="127.0.0.1:$((9200 + i))" MK_WORKER_BATCH=32 \
     "$BIN/mk-action-worker" >"$WORK/worker-$i.log" 2>&1 & PIDS+=($!)
 done

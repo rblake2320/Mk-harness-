@@ -1,0 +1,15 @@
+3.13-slim: Pulling from library/python
+1972997cb127: Pulling fs layer
+bec94cf691b4: Pulling fs layer
+e1f7d490169d: Pulling fs layer
+4cd23d2113f0: Download complete
+1972997cb127: Download complete
+f32118bb86ed: Download complete
+bec94cf691b4: Download complete
+bec94cf691b4: Pull complete
+e1f7d490169d: Download complete
+e1f7d490169d: Pull complete
+1972997cb127: Pull complete
+Digest: sha256:27b7c9d4f13ca20bb1170148f02095d50a5dfce1f7f2dabf5ca273727e43b7ea
+Status: Downloaded newer image for python:3.13-slim
+docker.io/library/python:3.13-slim

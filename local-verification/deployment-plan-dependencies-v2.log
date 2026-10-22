@@ -1,0 +1,8 @@
+Collecting cffi==2.1.1 (from -r /mnt/d/projects/mk-release-acceptance-20261021/tools/release/requirements.txt (line 3))
+  Using cached cffi-2.1.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (221 kB)
+Collecting cryptography==50.0.2 (from -r /mnt/d/projects/mk-release-acceptance-20261021/tools/release/requirements.txt (line 105))
+  Using cached cryptography-50.0.2-cp311-abi3-manylinux_2_34_x86_64.whl (4.8 MB)
+Collecting pycparser==3.11 (from -r /mnt/d/projects/mk-release-acceptance-20261021/tools/release/requirements.txt (line 166))
+  Using cached pycparser-3.11-py3-none-any.whl (51 kB)
+Installing collected packages: pycparser, cffi, cryptography
+Successfully installed cffi-2.1.1 cryptography-50.0.2 pycparser-3.11

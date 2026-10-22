@@ -1,0 +1,44 @@
+    Checking mk-store v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-store)
+    Checking mk-testkit v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-testkit)
+    Checking mk-queue v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-queue)
+    Checking mk-adapters v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-adapters)
+    Checking mk-worker v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-worker)
+    Checking mk-api v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-api)
+error: you seem to be trying to use `match` for destructuring a single pattern. Consider using `if let`
+   --> crates/mk-worker/src/inbound_probe.rs:155:17
+    |
+155 | /                 matc...
+156 | |                     ...
+157 | |                     ...
+158 | |                     ...
+159 | |                     },
+160 | |                     ...
+161 | |                 }
+    | |_________________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#single_match_else
+    = note: `-D clippy::single-match-else` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::single_match_else)]`
+help: try
+    |
+155 ~                 if let Ok(tenants) = mk_store::audit::all_tenants(this.store.pool()).await { match this.run_once(&tenants).await {
+156 +                     Ok(stats) => tracing::info!(?stats, "public inbound checks"),
+157 +                     Err(_) => tracing::warn!("public inbound checks failed"),
+158 +                 } } else { tracing::warn!("inbound-check tenant listing failed") }
+    |
+
+error: you seem to be trying to use `match` for destructuring a single pattern. Consider using `if let`
+   --> crates/mk-worker/src/inbound_probe.rs:156:36
+    |
+156 |                       Ok(tenants) => matc...
+    |  ____________________________________^
+157 | |                         Ok(stats) => tr...
+158 | |                         Err(_) => traci...
+159 | |                     },
+    | |_____________________^ help: try: `if let Ok(stats) = this.run_once(&tenants).await { tracing::info!(?stats, "public inbound checks") } else { tracing::warn!("public inbound checks failed") }`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#single_match_else
+
+error: could not compile `mk-worker` (lib test) due to 2 previous errors
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `mk-worker` (lib) due to 2 previous errors

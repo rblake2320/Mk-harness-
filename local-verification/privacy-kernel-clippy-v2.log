@@ -1,0 +1,57 @@
+    Checking mk-store v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-store)
+    Checking mk-queue v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-queue)
+    Checking mk-adapters v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-adapters)
+    Checking mk-worker v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-worker)
+    Checking mk-api v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-api)
+error: this `if` statement can be collapsed
+   --> crates/mk-worker/src/dispatch.rs:108:5
+    |
+108 | /     if l...
+109 | |         ...
+110 | |         ...
+111 | |         ...
+...   |
+115 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#collapsible_if
+    = note: `-D clippy::collapsible-if` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::collapsible_if)]`
+help: collapse nested if block
+    |
+108 ~     if let (Some(ch), Some(dest)) = (pre.channel, pre_fps.as_ref())
+109 ~         && mk_store::privacy::destination_erased(&mut tx, ch.as_str(), dest).await? {
+110 |             return Ok(DispatchOutcome::Skipped {
+...
+113 |             });
+114 ~         }
+    |
+
+error: could not compile `mk-worker` (lib) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `mk-worker` (lib test) due to 1 previous error
+error: this `if` statement can be collapsed
+   --> crates/mk-api/src/routes/actions.rs:93:5
+    |
+ 93 | /     if l...
+ 94 | |         ...
+ 95 | |         ...
+ 96 | |         ...
+...   |
+100 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#collapsible_if
+    = note: `-D clippy::collapsible-if` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::collapsible_if)]`
+help: collapse nested if block
+    |
+ 93 ~     if let (Some(ch), Some(destination)) = (channel, dest.as_ref())
+ 94 ~         && mk_store::privacy::destination_erased(&mut tx, ch.as_str(), destination)
+ 95 |             .await
+...
+ 98 |             return Err(rid(mk_store::StoreError::Erased.into()));
+ 99 ~         }
+    |
+
+error: could not compile `mk-api` (lib) due to 1 previous error

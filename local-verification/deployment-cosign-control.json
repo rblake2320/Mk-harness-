@@ -1,0 +1,7 @@
+{
+  "control_exit": 0,
+  "foreign_identity_exit": 1,
+  "binary_sha256": "cbe953787074611f1334cbf37dc1cf953995bb8c45398eb4fc7bb781d29c1f2a",
+  "bundle_sha256": "c51171a1afd22f3a96787c23f5c5e2adf145b2c0c812586a7a720fde61e1118c",
+  "scope": "Actual released binary signature control; not a deployment image or release qualification"
+}

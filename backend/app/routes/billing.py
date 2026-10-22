@@ -20,8 +20,9 @@ from sqlalchemy.orm import Session
 
 from .. import billing
 from ..config import get_settings
+from ..billing_provision import account_available, provision_customer
 from ..db import get_db
-from ..models import AuditLog, ReferralCredit, Subscription, User
+from ..models import AuditLog, ErasureRequest, ReferralCredit, Subscription, User
 from ..security import get_current_user
 
 router = APIRouter(prefix="/billing", tags=["billing"])
@@ -29,11 +30,26 @@ router = APIRouter(prefix="/billing", tags=["billing"])
 _ACTIVE = ("trialing", "active")
 
 
+def _billing_account_available(db: Session, user: User | None) -> bool:
+    return bool(user and user.is_active and not db.scalar(select(ErasureRequest.id).where(
+        ErasureRequest.tenant_id == user.tenant_id, ErasureRequest.subject_kind == "account",
+        ErasureRequest.subject_id == user.id)))
+
+
+def _mutable_subscription(db: Session, sub: Subscription | None) -> Subscription | None:
+    if sub is None:
+        return None
+    user = db.get(User, sub.user_id)
+    return sub if user and user.tenant_id == sub.tenant_id and _billing_account_available(db, user) else None
+
+
 def _ts(unix: int | None) -> datetime | None:
     return datetime.fromtimestamp(unix, tz=timezone.utc) if unix else None
 
 
 def _get_or_create_sub(db: Session, user: User) -> Subscription:
+    if not _billing_account_available(db, user):
+        raise HTTPException(410, "Billing account is unavailable.")
     sub = db.scalar(select(Subscription).where(Subscription.user_id == user.id))
     if not sub:
         sub = Subscription(tenant_id=user.tenant_id, user_id=user.id, status="none")
@@ -90,7 +106,9 @@ async def checkout(body: CheckoutIn, user: User = Depends(get_current_user),
 
     sub = _get_or_create_sub(db, user)
     if not sub.stripe_customer_id:
-        sub.stripe_customer_id = await billing.create_customer(user.email, user.id)
+        sub.stripe_customer_id = await provision_customer(db, user)
+    if not account_available(db, user):
+        raise HTTPException(410, "Billing account is unavailable.")
     # Record the chosen plan now; the webhook confirms activation.
     sub.tier, sub.interval = body.tier, body.interval
     sub.updated_at = datetime.now(timezone.utc)
@@ -99,6 +117,8 @@ async def checkout(body: CheckoutIn, user: User = Depends(get_current_user),
     session = await billing.create_checkout_session(
         customer_id=sub.stripe_customer_id, price_id=price_id,
         trial_days=s.billing_trial_days, client_reference_id=user.id)
+    if not account_available(db, user):
+        raise HTTPException(410, "Billing account is unavailable.")
     return {"url": session.get("url"), "session_id": session.get("id")}
 
 
@@ -115,19 +135,19 @@ async def portal(user: User = Depends(get_current_user), db: Session = Depends(g
 # Webhook — Stripe is the source of truth for subscription state.
 # --------------------------------------------------------------------------- #
 def _sub_by_customer(db: Session, customer_id: str) -> Subscription | None:
-    return db.scalar(select(Subscription).where(Subscription.stripe_customer_id == customer_id))
+    return _mutable_subscription(db, db.scalar(select(Subscription).where(Subscription.stripe_customer_id == customer_id)))
 
 
 async def _maybe_award_referral(db: Session, referred: User) -> None:
     """On a referred user's first payment, credit the referrer once."""
-    if not referred.referred_by:
+    if not referred.referred_by or not _billing_account_available(db, referred):
         return
     exists = db.scalar(select(ReferralCredit).where(
         ReferralCredit.referred_user_id == referred.id))
     if exists:
         return
     referrer = db.get(User, referred.referred_by)
-    if not referrer:
+    if not _billing_account_available(db, referrer):
         return
     s = get_settings()
     credit = ReferralCredit(
@@ -139,10 +159,12 @@ async def _maybe_award_referral(db: Session, referred: User) -> None:
     ref_sub = _get_or_create_sub(db, referrer)
     try:
         if not ref_sub.stripe_customer_id:
-            ref_sub.stripe_customer_id = await billing.create_customer(referrer.email, referrer.id)
+            ref_sub.stripe_customer_id = await provision_customer(db, referrer)
+        if not account_available(db, referrer):
+            return
         txn = await billing.apply_customer_credit(
             ref_sub.stripe_customer_id, s.referral_credit_cents,
-            f"Referral credit: {referred.email}")
+            "Referral credit")
         credit.status = "applied"
         credit.stripe_txn_id = txn
         credit.applied_at = datetime.now(timezone.utc)
@@ -161,7 +183,7 @@ async def webhook(request: Request, db: Session = Depends(get_db)):
     if etype == "checkout.session.completed":
         user_id = obj.get("client_reference_id")
         customer_id = obj.get("customer")
-        sub = db.scalar(select(Subscription).where(Subscription.user_id == user_id)) if user_id else None
+        sub = _mutable_subscription(db, db.scalar(select(Subscription).where(Subscription.user_id == user_id))) if user_id else None
         if sub:
             sub.stripe_customer_id = customer_id or sub.stripe_customer_id
             sub.stripe_subscription_id = obj.get("subscription") or sub.stripe_subscription_id

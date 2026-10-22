@@ -43,7 +43,17 @@ dbmod._SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commi
 
 
 @pytest.fixture
-def client():
+def client(monkeypatch, request):
+    # Shared StaticPool fixtures are intentionally single-threaded. Delivery
+    # worker lifecycle/restart/concurrency has its own file-backed tests.
+    async def idle_worker(stop):
+        await stop.wait()
+    monkeypatch.setattr("app.main.revocation_worker", idle_worker)
+    monkeypatch.setattr("app.main.privacy_worker", idle_worker)
+    if not request.node.get_closest_marker('real_mfa'):
+        # Feature tests isolate their own behavior. Dedicated real_mfa tests and
+        # deployed entrypoints keep mandatory MFA and fresh-step-up enforcement.
+        monkeypatch.setattr('app.security.mfa_required', lambda: False)
     with TestClient(app) as c:
         yield c
 

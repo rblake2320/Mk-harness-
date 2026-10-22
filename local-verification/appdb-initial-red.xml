@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="pytest" errors="0" failures="6" skipped="0" tests="6" time="0.803" timestamp="2026-10-22T01:28:22.677986-05:00" hostname="DESKTOP-CM6G60N"><testcase classname="tests.test_database_config" name="test_ecs_database_fields_do_not_fall_back_to_sqlite" time="0.006"><failure message="AssertionError: ECS DB_HOST was silently ignored&#10;assert 'sqlite' == 'postgresql'&#10;  &#10;  - postgresql&#10;  + sqlite">backend/tests/test_database_config.py:27: in test_ecs_database_fields_do_not_fall_back_to_sqlite
+    assert seen[0].get_backend_name() == "postgresql", "ECS DB_HOST was silently ignored"
+E   AssertionError: ECS DB_HOST was silently ignored
+E   assert 'sqlite' == 'postgresql'
+E     
+E     - postgresql
+E     + sqlite</failure></testcase><testcase classname="tests.test_database_config" name="test_partial_ambiguous_or_insecure_database_configuration_fails[fields0]" time="0.001"><failure message="AttributeError: 'Settings' object has no attribute 'connection_url'">backend/tests/test_database_config.py:45: in test_partial_ambiguous_or_insecure_database_configuration_fails
+    Settings(_env_file=None, **fields).connection_url
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/pydantic/main.py:1105: in __getattr__
+    raise AttributeError(f'{type(self).__name__!r} object has no attribute {item!r}')
+E   AttributeError: 'Settings' object has no attribute 'connection_url'</failure></testcase><testcase classname="tests.test_database_config" name="test_partial_ambiguous_or_insecure_database_configuration_fails[fields1]" time="0.000"><failure message="AttributeError: 'Settings' object has no attribute 'connection_url'">backend/tests/test_database_config.py:45: in test_partial_ambiguous_or_insecure_database_configuration_fails
+    Settings(_env_file=None, **fields).connection_url
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/pydantic/main.py:1105: in __getattr__
+    raise AttributeError(f'{type(self).__name__!r} object has no attribute {item!r}')
+E   AttributeError: 'Settings' object has no attribute 'connection_url'</failure></testcase><testcase classname="tests.test_database_config" name="test_partial_ambiguous_or_insecure_database_configuration_fails[fields2]" time="0.000"><failure message="AttributeError: 'Settings' object has no attribute 'connection_url'">backend/tests/test_database_config.py:45: in test_partial_ambiguous_or_insecure_database_configuration_fails
+    Settings(_env_file=None, **fields).connection_url
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/pydantic/main.py:1105: in __getattr__
+    raise AttributeError(f'{type(self).__name__!r} object has no attribute {item!r}')
+E   AttributeError: 'Settings' object has no attribute 'connection_url'</failure></testcase><testcase classname="tests.test_database_config" name="test_partial_ambiguous_or_insecure_database_configuration_fails[fields3]" time="0.001"><failure message="AttributeError: 'Settings' object has no attribute 'connection_url'">backend/tests/test_database_config.py:45: in test_partial_ambiguous_or_insecure_database_configuration_fails
+    Settings(_env_file=None, **fields).connection_url
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/pydantic/main.py:1105: in __getattr__
+    raise AttributeError(f'{type(self).__name__!r} object has no attribute {item!r}')
+E   AttributeError: 'Settings' object has no attribute 'connection_url'</failure></testcase><testcase classname="" name="test_owner_is_rejected_before_api_creates_any_tables" time="0.101"><failure message="AttributeError: 'URL' object has no attribute 'startswith'">tools/verification/test_app_database.py:42: in test_owner_is_rejected_before_api_creates_any_tables
+    db.init_engine(database)
+backend/app/db.py:21: in init_engine
+    if target.startswith("sqlite"):
+E   AttributeError: 'URL' object has no attribute 'startswith'</failure></testcase></testsuite></testsuites>

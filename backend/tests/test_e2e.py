@@ -4,6 +4,7 @@ import base64
 import io
 import json
 import uuid
+from urllib.parse import parse_qs
 
 import httpx
 import respx
@@ -471,6 +472,12 @@ def _send_webhook(client, event):
                        headers={"Stripe-Signature": sig, "Content-Type": "application/json"})
 
 
+def stripe_customer_response(request, customer_id):
+    form = parse_qs(request.content.decode())
+    metadata = {key[9:-1]: values[0] for key, values in form.items() if key.startswith("metadata[")}
+    return httpx.Response(200, json={"id": customer_id, "object": "customer", "metadata": metadata})
+
+
 def _mock_stripe_customers():
     """Mock Stripe customer-create. Returns a list that captures each created id (the
     test DB is shared across the session, so ids must be globally unique)."""
@@ -479,7 +486,7 @@ def _mock_stripe_customers():
     def _make(request):
         cid = f"cus_{uuid.uuid4().hex[:14]}"
         created.append(cid)
-        return httpx.Response(200, json={"id": cid})
+        return stripe_customer_response(request, cid)
 
     respx.post("https://api.stripe.com/v1/customers").mock(side_effect=_make)
     return created

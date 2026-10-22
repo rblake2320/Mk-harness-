@@ -1,0 +1,19 @@
+   Compiling mk-store v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-store)
+   Compiling mk-queue v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-queue)
+   Compiling mk-adapters v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-adapters)
+   Compiling mk-api v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-api)
+   Compiling mk-worker v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-worker)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.98s
+     Running tests/http_e2e.rs (/tmp/mk-release-acceptance-target/debug/deps/http_e2e-05ff1a20f14da3a3)
+
+running 7 tests
+test privacy_account_erasure_revokes_sessions_approvals_and_reports_sender_cleanup ... ok
+test privacy_erasure_authority_rls_and_legacy_writes_fail_closed ... ok
+test privacy_erasure_blocks_uncertain_submission_until_authenticated_resolution ... ok
+test privacy_erasure_clears_inbound_and_late_webhooks_without_false_provider_receipts ... ok
+test privacy_erasure_completed_delivery_accepts_late_receipts ... ok
+test privacy_erasure_removes_queued_content_and_blocks_dispatch_and_reintake ... ok
+test privacy_erasure_serializes_before_dispatch_intake_and_inbound ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 18 filtered out; finished in 2.49s
+

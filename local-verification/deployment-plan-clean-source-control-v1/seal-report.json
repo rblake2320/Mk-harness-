@@ -1,0 +1,33 @@
+{
+  "verdict": "SEALED",
+  "envelope_sha256": "584d88a0223d2b2cfaf5bab01a552e2a8c01d34e3c00de14b88ebfc395a43cc6",
+  "metadata": {
+    "repository": "example/local-control",
+    "source_sha": "da65913c1e7d19dfc508e5d870c8469924861b7a",
+    "run_id": "12345",
+    "run_attempt": "1",
+    "kernel_image": "123456789012.dkr.ecr.us-east-1.amazonaws.com/mk-action-kernel@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "app_image": "123456789012.dkr.ecr.us-east-1.amazonaws.com/mk-app@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "environment": "production",
+    "provider_lock_sha256": "2479a0d9019c76d6e5c5267da0c2ef9ecbbe892c3715b256c538fb588ad81d5b",
+    "tofu_version": "1.10.6",
+    "created_at": "2026-10-22T10:33:42.610930+00:00",
+    "expires_at": "2026-10-22T12:33:42.610930+00:00",
+    "plan_sha256": "cbfd000b6f46ed3024f5cd760584aa553cf2641c2783e29a99d2252f732d33d9",
+    "review_sha256": "4b159b70d087580975c154604016991d3e05eb0b63c6e19ef785e069ba39bad7",
+    "recipient_sha256": "9c675a0ebfeb06dc7ecba461e762967e1d7b5d735852fa8d97e0831490412045"
+  },
+  "review": {
+    "tofu_version": "1.10.6",
+    "private_plan_review_required": true,
+    "resource_changes": [
+      {
+        "type": "terraform_data",
+        "actions": [
+          "create"
+        ],
+        "count": 1
+      }
+    ]
+  }
+}

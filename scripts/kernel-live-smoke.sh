@@ -82,7 +82,7 @@ MK_DATABASE_URL="$(url_for mk_relay_login relay)" MK_RELAY_ID=relay-smoke \
   "$BIN/mk-outbox-relay" >"$WORK/relay.log" 2>&1 & PIDS+=($!)
 TWSIM=http://127.0.0.1:8790; TW_ACCOUNT=ACaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; TW_TOKEN=smoke-auth-token-$(python3 -c 'import secrets;print(secrets.token_hex(8))')
 MK_DATABASE_URL="$(url_for mk_worker_login worker)" MK_WORKER_ID=worker-smoke MK_LEASE_SECS=60 MK_ALLOW_LOOPBACK_HTTP=1 \
-  MK_MOBILE_INTAKE_URL="$AGENT/work-orders" MK_EGRESS_AUTHORITIES=127.0.0.1:8787,127.0.0.1:8790 \
+  MK_MOBILE_INTAKE_URL="$AGENT/work-orders" MK_EGRESS_AUTHORITIES=127.0.0.1:8787,127.0.0.1:8790,127.0.0.1:8090 \
   MK_TWILIO_API_BASE="$TWSIM" MK_PUBLIC_WEBHOOK_BASE="$WEBHOOK_BASE" \
   "$BIN/mk-action-worker" >"$WORK/worker.log" 2>&1 & WORKER_PID=$!; PIDS+=($WORKER_PID)
 MK_TWSIM_ACCOUNT_SID="$TW_ACCOUNT" MK_TWSIM_AUTH_TOKEN="$TW_TOKEN" MK_TWSIM_BIND=127.0.0.1:8790 MK_TWSIM_CALLBACK_BASE="$WEBHOOK_BASE" \
@@ -100,11 +100,13 @@ for i in $(seq 1 30); do [ "$(curl -s -o /dev/null -w '%{http_code}' "$APP/docs"
 TOK=$(curl -fsS "$APP/api/auth/signup" -H 'content-type: application/json' \
   -d '{"org_name":"Smoke Org","email":"admin@smoke.example.com","password":"superSecret123!","key_policy":"both"}' \
   | python3 -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')
+TOK=$(printf '%s' "$TOK" | python3 "$ROOT/tools/verification/mfa_fixture.py" --api "$APP")
 H=(-H "authorization: Bearer $TOK" -H 'content-type: application/json')
 # Separate approver: outreach forbids self-approval by default, so a second
 # consultant in the same tenant approves what the admin's agent proposed.
 curl -fsS "$APP/api/auth/members" "${H[@]}" -d '{"email":"approver@smoke.example.com","password":"superSecret123!","role":"consultant"}' >/dev/null
 TOK2=$(curl -fsS "$APP/api/auth/login" -H 'content-type: application/json' -d '{"email":"approver@smoke.example.com","password":"superSecret123!"}' | python3 -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')
+TOK2=$(printf '%s' "$TOK2" | python3 "$ROOT/tools/verification/mfa_fixture.py" --api "$APP")
 H2=(-H "authorization: Bearer $TOK2" -H 'content-type: application/json')
 TENANT=$(python3 -c "import jwt,sys,uuid;print(uuid.UUID(jwt.decode('$TOK',options={'verify_signature':False})['tid']))")
 # The default tenant policy evaluates contact hours (08–21) in America/Chicago, which made
@@ -256,12 +258,15 @@ log "worker log clean under its restricted login (housekeeping under mk_kernel_w
 log "gate 9: session revocation blocks the approver's next request and any live approval"
 [ "$(propose "$CONTACT" "+15555550100" "smoke-revocation-1")" = 201 ] || die "propose revocation"
 A4=$(j 'd["result"]["action_id"]'); D4=$(j 'd["result"]["action_digest"]')
-[ "$(approve "$A4" "$D4")" = 200 ] || die "approve A4: $(cat "$WORK/out.json")"
-# kill the worker briefly so the approval is still live when the session is revoked
+# Freeze before approval so a fast worker cannot dispatch before the test's revoke.
 kill -STOP "${PIDS[2]}" 2>/dev/null || true
+[ "$(approve "$A4" "$D4")" = 200 ] || die "approve A4: $(cat "$WORK/out.json")"
 [ "$(ops2 -X POST "$APP/api/agent-ops/revocations" -d '{"reason":"smoke: lost phone"}')" = 201 ] || die "revocation: $(cat "$WORK/out.json")"
 kill -CONT "${PIDS[2]}" 2>/dev/null || true
-c=$(ops2 "$APP/api/agent-ops/approvals/pending"); [ "$c" = 401 ] && [ "$(j 'd["code"]')" = PRINCIPAL_REVOKED ] || die "revoked session still accepted ($c)"
+c=$(ops2 "$APP/api/agent-ops/approvals/pending")
+[ "$c" = 401 ] || die "revoked session still accepted ($c)"
+# Revoked sessions are rejected at the app boundary before minting an assertion.
+[ "$(j 'd.get("detail")')" = 'Session expired or revoked' ] || die "unexpected app revocation error"
 sleep 3; s=$(state "$A4"); case "$s" in cancelled) ;; *) die "approval by revoked session still dispatched: $s";; esac
 grep -q "$A4" "$WORK/agent.log" && die "revoked-approver action reached the device agent"
 log "  revoked session → 401 PRINCIPAL_REVOKED; its live approval → cancelled"
@@ -275,13 +280,19 @@ SENDER=$(j 'd["sender_identity_id"]')
 # Third approver (the earlier one's session is revoked): register a passkey.
 curl -fsS "$APP/api/auth/members" "${H[@]}" -d '{"email":"approver3@smoke.example.com","password":"superSecret123!","role":"consultant"}' >/dev/null
 TOK3=$(curl -fsS "$APP/api/auth/login" -H 'content-type: application/json' -d '{"email":"approver3@smoke.example.com","password":"superSecret123!"}' | python3 -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')
+TOK3=$(printf '%s' "$TOK3" | python3 "$ROOT/tools/verification/mfa_fixture.py" --api "$APP")
 H2=(-H "authorization: Bearer $TOK3" -H 'content-type: application/json')
 SA="$WORK/softauthn3.json"; "$BIN/mk-softauthn" new "$SA" es256 >/dev/null
 [ "$(ops2 -X POST "$APP/api/agent-ops/approval-credentials/register/begin")" = 200 ] || die "register/begin 3"
 REG=$("$BIN/mk-softauthn" register "$SA" "$(j 'd["challenge"]')" "$RP_ID" "$ORIGIN")
 [ "$(ops2 -X POST "$APP/api/agent-ops/approval-credentials/register/finish" -d "$REG")" = 201 ] || die "register/finish 3"
 # C8: dispatch is deferred until the inbound path has a successful check.
-[ "$(ops -X POST "$APP/api/agent-ops/inbound/health" -d '{"ok":true}')" = 204 ] || die "inbound health"
+for i in $(seq 1 40); do
+  ops "$APP/api/agent-ops/inbound/health" >/dev/null
+  [ "$(j 'd.get("dispatch_blocked", "unverified") is None')" = True ] && break
+  sleep 0.5
+done
+[ "$(j 'd.get("dispatch_blocked", "unverified") is None')" = True ] || die "no committed public inbound probe"
 CONTACT3=$(python3 -c 'import uuid;print(uuid.uuid4())')
 # The application customer record (timezone known → F9 passes; contact tz travels to the kernel).
 CUST=$(curl -fsS "$APP/api/customers" "${H[@]}" -d '{"name":"Smoke Customer","phone":"+15555550123"}' | python3 -c 'import sys,json;print(json.load(sys.stdin)["id"])')
@@ -334,7 +345,7 @@ MK_DATABASE_URL="$(url_for mk_api_login api)" MK_BIND=127.0.0.1:8090 RUST_ACTION
   MK_APPROVAL_RP_ID="$RP_ID" MK_APPROVAL_ORIGINS="$ORIGIN" MK_PUBLIC_WEBHOOK_BASE="$WEBHOOK_BASE" \
   "$BIN/mk-action-api" >>"$WORK/api.log" 2>&1 & PIDS+=($!)
 MK_DATABASE_URL="$(url_for mk_worker_login worker)" MK_WORKER_ID=worker-smoke MK_LEASE_SECS=60 MK_ALLOW_LOOPBACK_HTTP=1 \
-  MK_MOBILE_INTAKE_URL="$AGENT/work-orders" MK_EGRESS_AUTHORITIES=127.0.0.1:8787,127.0.0.1:8790 \
+  MK_MOBILE_INTAKE_URL="$AGENT/work-orders" MK_EGRESS_AUTHORITIES=127.0.0.1:8787,127.0.0.1:8790,127.0.0.1:8090 \
   MK_TWILIO_API_BASE="$TWSIM" MK_PUBLIC_WEBHOOK_BASE="$WEBHOOK_BASE" \
   "$BIN/mk-action-worker" >>"$WORK/worker.log" 2>&1 & PIDS+=($!)
 for i in $(seq 1 30); do curl -fsS "$API/health/ready" >/dev/null 2>&1 && break; sleep 1; done
@@ -363,7 +374,7 @@ for i in $(seq 1 40); do ops "$APP/api/agent-ops/actions/$A6" >/dev/null; ms=$(j
 [ "$ms" = delivered ] || die "provider path broken after key rotation: $(cat "$WORK/out.json")"
 # Restore gate in report mode on the live database: must FAIL (dispatch is enabled) while every
 # recoverability check passes — it never enables anything.
-set +e; "$BIN/mk-restore-gate" --restored-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"$WORK/restore-gate.json" 2>"$WORK/restore-gate.err"; rc=$?; set -e
+set +e; "$BIN/mk-restore-gate" --inspection-only --restored-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"$WORK/restore-gate.json" 2>"$WORK/restore-gate.err"; rc=$?; set -e
 [ "$rc" = 1 ] || die "restore gate must refuse while dispatch is enabled (rc=$rc): $(cat "$WORK/restore-gate.json" "$WORK/restore-gate.err")"
 python3 - "$WORK/restore-gate.json" <<'EOF2'
 import json,sys
@@ -384,7 +395,7 @@ log "no PII in kernel/agent logs"
 log "gate 8: production pre-flight passes against this stack (and refuses --for-enable without an acceptance record)"
 export KERNEL_URL="$API" APP_URL="$APP" PG_HOST="${HOSTDB%/*}" PG_DB="${HOSTDB##*/}" PG_ADMIN_URL="$PGURL" \
   MK_DB_API_PASSWORD="api-$PW" MK_DB_WORKER_PASSWORD="worker-$PW" MK_DB_RELAY_PASSWORD="relay-$PW" MK_DB_READONLY_PASSWORD="readonly-$PW" \
-  MK_PREFLIGHT_EMAIL=admin@smoke.example.com MK_PREFLIGHT_PASSWORD='superSecret123!' \
+  MK_PREFLIGHT_ACCESS_TOKEN="$TOK" \
   MK_AUDIT_VERIFIER="$BIN/mk-audit-verifier" MK_EGRESS_AUTHORITIES=127.0.0.1:8787 MK_MOBILE_INTAKE_URL="https://127.0.0.1:8787/work-orders"
 bash "$ROOT/scripts/kernel-preflight.sh" > "$WORK/preflight.log" 2>&1 || { cat "$WORK/preflight.log"; die "pre-flight failed"; }
 grep -E "passed, 0 failed" "$WORK/preflight.log" >/dev/null || { cat "$WORK/preflight.log"; die "pre-flight"; }
@@ -424,7 +435,7 @@ for envset in "" "MK_LEGACY_SEAL_RETIRED=1 MK_PUBLIC_WEBHOOK_BASE=https://hooks.
   for why in "legacy seal version 0" "WEBHOOK_BASE is not https"; do
     grep "FAIL" "$WORK/preflight-devenv.log" | grep -q "$why" || { cat "$WORK/preflight-devenv.log"; die "pre-flight --for-enable did not name: $why"; }; done
   # The parts this stack CAN satisfy pass: the record, fingerprints, restore gate.
-  for good in "real-device acceptance record complete" "fingerprint keys match the running kernel" "kernel enforces passkey-bound approvals"; do
+  for good in "real-device acceptance record complete" "fingerprint keys match the running kernel" "kernel enforces passkey-bound approvals" "live recovery inspection passes"; do
     grep "PASS" "$WORK/preflight-devenv.log" | grep -q "$good" || { cat "$WORK/preflight-devenv.log"; die "pre-flight --for-enable failed: $good"; }; done
 done
 sed -i 's/^Result: ACCEPTED$/Result: REJECTED (screenshot missing)/' "$WORK/ACCEPTANCE.md"

@@ -24,7 +24,17 @@ import respx
 from app.commitments import date_text_present, parse_extractor_output, window_for
 
 from .conftest import auth_headers, signup
-from .test_foundation import _customer, _user
+from .test_foundation import CONSENT, _customer, _user, kernel_env, kernel_ok  # noqa: F401
+
+
+@pytest.fixture(autouse=True)
+def fixed_commitment_clock(monkeypatch):
+    """Golden dates and relative windows share an explicit business clock.
+
+    Do not freeze authentication/session time: only the commitment domain clock
+    is fixed, so the API still authenticates requests using the real wall clock.
+    """
+    monkeypatch.setattr("app.commitments.utcnow", lambda: datetime(2026, 10, 20, 17, tzinfo=timezone.utc))
 
 
 def _anthropic_json(obj) -> httpx.Response:
@@ -140,6 +150,28 @@ def _commit(client, h, cid, text, **kw):
     r = client.post("/api/commitments", json=body, headers=h)
     assert r.status_code == 201, r.text
     return r.json()
+
+
+@pytest.mark.parametrize("create_before_suppression", [False, True])
+def test_suppressed_brief_keeps_evidence_and_refreshes_permission(client, kernel_env, create_before_suppression):
+    h = _user(client)
+    cid, did, _ = _customer(client, h, phone="+15555557501")
+    commitment = _commit(client, h, cid, "Requested check-in", absolute_date="2026-10-20")
+    with kernel_ok():
+        assert client.post(f"/api/customers/{cid}/consent", json={**CONSENT, "destination_id": did}, headers=h).status_code == 201
+        if create_before_suppression:
+            old = client.get("/api/brief?date=2026-10-20", headers=h).json()["items"]
+            assert old[0]["permission_state"] == "active"
+        assert client.post("/api/suppressions", json={"destination_id": did, "reason": "STOP", "source": "sms_reply"}, headers=h).status_code == 201
+    items = client.get("/api/brief?date=2026-10-20", headers=h).json()["items"]
+    assert len(items) == 1
+    assert items[0]["source_reference"] == commitment["id"]
+    assert items[0]["source"]["text"] == "Requested check-in"
+    assert items[0]["permission_state"] == "suppressed"
+    assert "approve" not in items[0]["controls"]
+    assert "blocked" in items[0]["suggested_step"].lower()
+    again = client.get("/api/brief?date=2026-10-20", headers=h).json()["items"]
+    assert [item["id"] for item in again] == [items[0]["id"]]
 
 
 def test_golden_brief_candidates_and_ordering(client):

@@ -1,0 +1,56 @@
+    Checking mk-audit v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-audit)
+    Checking mk-store v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-store)
+    Checking mk-queue v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-queue)
+    Checking mk-adapters v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-adapters)
+    Checking mk-worker v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-worker)
+    Checking mk-api v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-api)
+error: you seem to be trying to use `match` for destructuring a single pattern. Consider using `if let`
+   --> crates/mk-worker/src/bin/worker.rs:121:17
+    |
+121 | /                 matc...
+122 | |                     ...
+123 | |                     ...
+...   |
+131 | |                     ...
+132 | |                 }
+    | |_________________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#single_match_else
+    = note: `-D clippy::single-match-else` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::single_match_else)]`
+help: try
+    |
+121 ~                 if let Ok(tenants) = mk_store::audit::all_tenants(ctx.store.pool()).await {
+122 +                     match mk_worker::privacy::run_once(&ctx, &tenants, chrono::Utc::now()).await
+123 +                     {
+124 +                         Ok(stats) => tracing::info!(?stats, "provider privacy cleanup"),
+125 +                         Err(_) => tracing::warn!(
+126 +                             "provider privacy cleanup failed; retained lease will retry"
+127 +                         ),
+128 +                     }
+129 +                 } else { tracing::warn!("privacy tenant listing failed") }
+    |
+
+error: you seem to be trying to use `match` for destructuring a single pattern. Consider using `if let`
+   --> crates/mk-worker/src/bin/worker.rs:123:25
+    |
+123 | /                         matc...
+124 | |                         {
+125 | |                             ...
+126 | |                             ...
+127 | |                             ...
+128 | |                             ),
+129 | |                         }
+    | |_________________________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#single_match_else
+help: try
+    |
+123 ~                         if let Ok(stats) = mk_worker::privacy::run_once(&ctx, &tenants, chrono::Utc::now()).await { tracing::info!(?stats, "provider privacy cleanup") } else { tracing::warn!(
+124 +                             "provider privacy cleanup failed; retained lease will retry"
+125 +                         ) }
+    |
+
+error: could not compile `mk-worker` (bin "mk-action-worker") due to 2 previous errors
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `mk-worker` (bin "mk-action-worker" test) due to 2 previous errors

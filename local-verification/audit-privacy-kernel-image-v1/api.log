@@ -1,0 +1,3 @@
+{"timestamp":"2026-10-22T09:11:01.037743Z","level":"WARN","fields":{"message":"sealing with the legacy single master key (no MK_KEK / key versions); pre-flight refuses this for production"},"target":"mk_action_api"}
+{"timestamp":"2026-10-22T09:11:02.416560Z","level":"ERROR","fields":{"message":"store error","code":"CONTENT_ERASED","error":"content erased by privacy request"},"target":"mk_api::error"}
+{"timestamp":"2026-10-22T09:11:02.556272Z","level":"ERROR","fields":{"message":"store error","code":"CONTENT_ERASED","error":"content erased by privacy request"},"target":"mk_api::error"}

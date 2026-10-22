@@ -1,0 +1,26 @@
+    Checking tokio v1.54.1
+    Checking tokio-util v0.7.20
+    Checking tokio-stream v0.1.19
+    Checking tokio-rustls v0.26.6
+    Checking sqlx-core v0.9.0
+    Checking h2 v0.4.20
+    Checking tower v0.5.3
+    Checking combine v4.6.9
+    Checking rmcp v3.6.0
+    Checking tower-http v0.6.11
+    Checking sqlx-postgres v0.9.0
+    Checking hyper v1.12.0
+    Checking redis v0.29.5
+    Checking sqlx v0.9.0
+    Checking mk-store v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-store)
+    Checking hyper-util v0.1.21
+    Checking hyper-rustls v0.27.10
+    Checking axum v0.8.9
+    Checking reqwest v0.12.28
+    Checking mk-testkit v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-testkit)
+    Checking mk-mcp v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-mcp)
+    Checking mk-queue v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-queue)
+    Checking mk-adapters v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-adapters)
+    Checking mk-worker v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-worker)
+    Checking mk-api v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-api)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 12.41s

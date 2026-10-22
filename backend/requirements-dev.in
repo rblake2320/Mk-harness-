@@ -1,0 +1,7 @@
+# Runtime pins are shared with the hash-locked production environment.
+-r requirements-runtime.in
+-c requirements-runtime.lock
+pytest==9.1.1
+pytest-asyncio==1.4.0
+respx==0.22.0
+jsonschema[format]==4.23.0

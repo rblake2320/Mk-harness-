@@ -1,0 +1,22 @@
+FF                                                                       [100%]
+=================================== FAILURES ===================================
+_________ test_late_runtime_sql_cannot_revive_or_rebind_erased_billing _________
+tools/verification/test_app_billing_privacy.py:44: in test_late_runtime_sql_cannot_revive_or_rebind_erased_billing
+    connection.execute(statement, parameters)
+/tmp/mk-security-python-20261022/lib/python3.12/site-packages/psycopg/connection.py:257: in execute
+    raise ex.with_traceback(None)
+E   psycopg.errors.UndefinedTable: relation "subscriptions" does not exist
+E   LINE 1: UPDATE subscriptions SET status='active' WHERE id=$1
+E                  ^
+___ test_erased_billing_only_allows_terminal_cleanup_not_new_business_fields ___
+tools/verification/test_app_billing_privacy.py:58: in test_erased_billing_only_allows_terminal_cleanup_not_new_business_fields
+    connection.execute("UPDATE subscriptions SET status='canceled',stripe_customer_id=NULL,stripe_subscription_id=NULL WHERE id=%s", (subscription_id,))
+/tmp/mk-security-python-20261022/lib/python3.12/site-packages/psycopg/connection.py:257: in execute
+    raise ex.with_traceback(None)
+E   psycopg.errors.UndefinedTable: relation "subscriptions" does not exist
+E   LINE 1: UPDATE subscriptions SET status='canceled',stripe_customer_i...
+E                  ^
+=========================== short test summary info ============================
+FAILED tools/verification/test_app_billing_privacy.py::test_late_runtime_sql_cannot_revive_or_rebind_erased_billing
+FAILED tools/verification/test_app_billing_privacy.py::test_erased_billing_only_allows_terminal_cleanup_not_new_business_fields
+2 failed in 3.64s

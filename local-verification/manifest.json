@@ -1,0 +1,44 @@
+{
+  "source_commit": "4f103085252c34073b4480482c5c485a992bbd22",
+  "environment": "local Windows; author-run",
+  "independent_verification": false,
+  "release_rows_closed": 0,
+  "artifacts": [
+    {
+      "path": "a11y.json",
+      "sha256": "97fa98febfb31193a0abae106124829002a730ab6f047c3a219586d96f451f9b"
+    },
+    {
+      "path": "backend-final.xml",
+      "sha256": "7a570582858c6685b3d23212329285692fa6ad38996856a49d5d9a911b167482"
+    },
+    {
+      "path": "backend-tests.xml",
+      "sha256": "660c66a32800757bfb4de20b84a3fdc4caf23321630214f9ad8c6e8e6df03d2f"
+    },
+    {
+      "path": "backend-utf8-retest.xml",
+      "sha256": "094b04588f31180081b330529bdacc44f865715e309eff58963f70a71ff7dba7"
+    },
+    {
+      "path": "contract-readiness.xml",
+      "sha256": "08c07506029c428db1a8baf8d8bc1409c3ea1532964b3c977daf1695035237a8"
+    },
+    {
+      "path": "readiness.json",
+      "sha256": "a22b99dcad162f683d66c60a8c1795d6ab7dbe3fd0b8ff735d644f6809669e4f"
+    },
+    {
+      "path": "search-360.png",
+      "sha256": "8add1b9e94869e43f39042771039ec72a8f5495ff6b51f36223b610ebfae507f"
+    },
+    {
+      "path": "search-browser.json",
+      "sha256": "ba18727ed01b76b505fdc04c59b77653ea003a2ebd34cb23239caec7f21a2976"
+    },
+    {
+      "path": "search-desktop.png",
+      "sha256": "29e59508daf3319dcf249ce62e6960883bd327f7015be74709438c99798e324d"
+    }
+  ]
+}

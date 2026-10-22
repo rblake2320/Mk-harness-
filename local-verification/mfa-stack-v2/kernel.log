@@ -1,0 +1,2 @@
+{"timestamp":"2026-10-22T06:08:30.078945Z","level":"WARN","fields":{"message":"sealing with the legacy single master key (no MK_KEK / key versions); pre-flight refuses this for production"},"target":"mk_action_api"}
+Error: Address already in use (os error 98)

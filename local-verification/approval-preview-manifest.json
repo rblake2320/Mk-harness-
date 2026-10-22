@@ -1,0 +1,50 @@
+{
+  "source_commit": "3c9b45f631e4a74323ec5e284ba789ad51d6f348",
+  "classification": "author_run_local_verification_not_release_closure",
+  "artifacts": [
+    {
+      "path": "local-verification/h1-h8-a11y.json",
+      "sha256": "cba20704d224c2e50343630ecd216081e96bf667297ea41ae82f1367286ffac4"
+    },
+    {
+      "path": "local-verification/h1-h8-browser/approval-browser.json",
+      "sha256": "72bb38763df6e768fedbe733141b12901454f252462cd47d94fa0ed47553685b"
+    },
+    {
+      "path": "local-verification/h1-h8-browser/approval-policy-360.png",
+      "sha256": "8d09af9430634c278ba9be3bfdf780344ad63688357aa53894bdb177b22adf64"
+    },
+    {
+      "path": "local-verification/h1-h8-browser/approval-preview-360.png",
+      "sha256": "538bed8d4f74a2f96c54cf9b9edba00f21da52767a6c0d07de3b0072becd41de"
+    },
+    {
+      "path": "local-verification/h1-h8-clippy.log",
+      "sha256": "ce3c51b84c56ef8348c2d2fd45cba0e490fee5305a422e79ee66ed92f2eb853f"
+    },
+    {
+      "path": "local-verification/h1-h8-kernel-final.log",
+      "sha256": "87600c395310660f4510f4af5107b2abecf3e4c8aa9a598399cbb1517c6d3161"
+    },
+    {
+      "path": "local-verification/h1-h8-kernel.log",
+      "sha256": "46e326fb25cc96ed03a639fde6d02494810e29dbfb197ee8168436c8fad7abcb"
+    },
+    {
+      "path": "local-verification/h1-h8-python.xml",
+      "sha256": "4f90137824c591497606fce984c00cfa414d0e71e4e8235d7f8f7b9088294f9c"
+    },
+    {
+      "path": "local-verification/h1-h8-workspace.log",
+      "sha256": "e66fd8d78d8c9d8be9b0662d56a9a8d7685a36681c376b1e6d86d08de93df43d"
+    },
+    {
+      "path": "local-verification/h1-outreach-retest.xml",
+      "sha256": "b41c69578f1100c0c4f2422b4c66c69c8080530a3f4f32b130ec7cc295b8c060"
+    },
+    {
+      "path": "local-verification/h1-sender-binding-red.xml",
+      "sha256": "958d698fc04e8aec455a02ca3927effda8346ed527d4240dd41c830f92484dea"
+    }
+  ]
+}

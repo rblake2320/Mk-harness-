@@ -1,0 +1,13 @@
+2026-10-22T09:39:10Z	INFO	[vuln] Vulnerability scanning is enabled
+2026-10-22T09:39:29Z	INFO	[python] Licenses acquired from one or more METADATA files may be subject to additional terms. Use `--debug` flag to see all affected packages.
+2026-10-22T09:39:29Z	INFO	Detected OS	family="debian" version="13.7"
+2026-10-22T09:39:29Z	INFO	[debian] Detecting vulnerabilities...	os_version="13" pkg_num=38
+2026-10-22T09:39:29Z	INFO	Number of language-specific files	num=1
+2026-10-22T09:39:29Z	INFO	[python-pkg] Detecting vulnerabilities...
+2026-10-22T09:39:29Z	WARN	Using severities from other vendors for some vulnerabilities. Read https://trivy.dev/docs/v0.76/guide/scanner/vulnerability#severity-selection for details.
+
+ðŸ“£ [34mNotices:[0m
+  - Version 0.76.1 of Trivy is now available, current version is 0.76.0
+
+To suppress version checks, run Trivy scans with the --skip-version-check flag
+

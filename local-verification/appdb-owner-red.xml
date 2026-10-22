@@ -1,0 +1,3 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="1.201" timestamp="2026-10-22T01:28:28.947570-05:00" hostname="DESKTOP-CM6G60N"><testcase classname="tools.verification.test_app_database" name="test_owner_is_rejected_before_api_creates_any_tables" time="0.733"><failure message="Failed: DID NOT RAISE &lt;class 'RuntimeError'&gt;">tools/verification/test_app_database.py:41: in test_owner_is_rejected_before_api_creates_any_tables
+    with pytest.raises(RuntimeError, match="runtime database identity"):
+E   Failed: DID NOT RAISE &lt;class 'RuntimeError'&gt;</failure></testcase></testsuite></testsuites>

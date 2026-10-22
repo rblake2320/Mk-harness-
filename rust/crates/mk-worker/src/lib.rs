@@ -15,7 +15,11 @@
 pub mod config;
 pub mod dispatch;
 pub mod housekeeping;
+pub mod inbound_probe;
 pub mod metrics;
+pub mod privacy;
+pub mod privacy_recovery;
+pub mod reconciliation;
 pub mod resolver;
 
 pub use dispatch::{DispatchError, DispatchOutcome, WorkerContext, dispatch_one};

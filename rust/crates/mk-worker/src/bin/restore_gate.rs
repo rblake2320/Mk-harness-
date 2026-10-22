@@ -5,22 +5,25 @@
 //! action with a passkey step-up. Every check prints a JSON line; the exit code
 //! is non-zero unless every check passed.
 //!
-//!   mk-restore-gate --restored-at <RFC3339> [--apply]
+//!   mk-restore-gate --restored-at <RFC3339> --privacy-ledger <file>
+//!     --privacy-sha256 <independent pin> --privacy-not-before <RFC3339> [--apply]
 //!
 //! Without `--apply` it reports what it would change. With `--apply` it:
+//!   * replays independently retained deletion, opt-out and principal restrictions;
 //!   * marks in-flight actions (dispatching) as reconciliation_required and
 //!     their delivery records as submission_unknown ("uncertain → unknown");
 //!   * revokes every live approval created before `--restored-at` and cancels
 //!     the queued actions they authorised (pre-restore approvals are invalid);
 //!
 //! Checks (all must pass): global dispatch disabled; audit chain verifies for
-//! every tenant; suppression ledger readable with row count; every active
+//! every tenant; external restriction replay verified plus tenant-scoped counts; every active
 //! sender credential and adapter credential unseals with the configured
 //! keyring; no action left in dispatching; no delivery left in
 //! submission_started; no live approval older than the restore point.
 //!
-//! Env: MK_DATABASE_URL (owner identity for --apply; readonly suffices for
-//! report mode), MK_MASTER_KEY, MK_KEK / MK_KEK_ID.
+//! Env: MK_DATABASE_URL (controlled recovery/owner identity, including report
+//! mode's locking transaction), MK_MASTER_KEY, MK_KEK / MK_KEK_ID. The separate
+//! --inspection-only mode never certifies restoration and cannot use --apply.
 
 use chrono::{DateTime, Utc};
 use mk_crypto::MasterKey;
@@ -47,6 +50,10 @@ async fn main() -> anyhow::Result<()> {
             anyhow::anyhow!("usage: mk-restore-gate --restored-at <RFC3339> [--apply]")
         })?;
     let apply = args.iter().any(|a| a == "--apply");
+    let inspection = args.iter().any(|a| a == "--inspection-only");
+    if apply && inspection {
+        anyhow::bail!("inspection-only cannot apply a restoration");
+    }
     let master = MasterKey::from_base64(&std::env::var("MK_MASTER_KEY")?)
         .map_err(|e| anyhow::anyhow!("MK_MASTER_KEY: {e}"))?;
     let store = Store::connect(&mk_store::database_url_from_env()?, 4).await?;
@@ -71,6 +78,56 @@ async fn main() -> anyhow::Result<()> {
         !enabled,
         json!({"dispatch_enabled": enabled}),
     );
+
+    // A restored database cannot prove it contains requests accepted AFTER its
+    // backup point. Missing or invalid independently pinned input fails before
+    // any recovery write. Live preflight inspection is explicitly not a restore.
+    if inspection {
+        ok(
+            "privacy_restore_ledger",
+            true,
+            json!({"inspection_only":true,"restore_authorized":false}),
+        );
+    } else {
+        let arg = |name: &str| {
+            args.iter()
+                .position(|a| a == name)
+                .and_then(|i| args.get(i + 1))
+        };
+        let checked = async {
+            let path =
+                arg("--privacy-ledger").ok_or_else(|| anyhow::anyhow!("missing privacy ledger"))?;
+            let expected = arg("--privacy-sha256")
+                .ok_or_else(|| anyhow::anyhow!("missing external digest"))?;
+            let freshness = arg("--privacy-not-before")
+                .ok_or_else(|| anyhow::anyhow!("missing external freshness bound"))?;
+            let ledger = mk_worker::privacy_recovery::load_pinned(
+                std::path::Path::new(path),
+                expected,
+                freshness,
+            )?;
+            Ok::<_, anyhow::Error>(mk_store::privacy_ledger::replay(&store, &ledger, apply).await?)
+        }
+        .await;
+        if let Ok(result) = checked {
+            ok(
+                "privacy_restore_ledger",
+                result.enforced,
+                serde_json::to_value(result)?,
+            );
+        } else {
+            report(
+                "privacy_restore_ledger",
+                false,
+                json!({"status":"missing_invalid_or_conflicting_external_ledger","traffic_enabled":false}),
+            );
+            println!(
+                "{}",
+                json!({"gate":"FAIL","apply":apply,"next":"do not enable dispatch; supply and verify the independently retained erasure ledger"})
+            );
+            std::process::exit(1);
+        }
+    }
 
     // 2. Keyring loads (credentials are recoverable) — prerequisite for 5.
     let keyring = match keys::keyring_from_env(pool, &master).await {
@@ -103,18 +160,29 @@ async fn main() -> anyhow::Result<()> {
         json!({"tenants": tenants.len(), "failures": chain_failures}),
     );
 
-    // 4. Suppression / deletion ledger present and readable.
-    let sup: i64 =
-        sqlx::query_scalar("SELECT count(*) FROM kernel.suppressions WHERE lifted_at IS NULL")
-            .fetch_one(pool)
-            .await?;
-    let rev: i64 = sqlx::query_scalar("SELECT count(*) FROM kernel.revocations")
-        .fetch_one(pool)
+    // 4. Inventory only. Completeness/enforcement is checked against the
+    // independently pinned ledger above, never inferred from readable tables.
+    // Scope every count so recovery/inspection works without a BYPASSRLS login.
+    let (mut sup, mut rev) = (0i64, 0i64);
+    for tenant in &tenants {
+        let mut tx = store.begin(*tenant).await?;
+        sup += sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM kernel.suppressions WHERE tenant_id=$1 AND lifted_at IS NULL",
+        )
+        .bind(tenant.0)
+        .fetch_one(tx.raw_conn())
         .await?;
+        rev += sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM kernel.revocations WHERE tenant_id=$1",
+        )
+        .bind(tenant.0)
+        .fetch_one(tx.raw_conn())
+        .await?;
+    }
     ok(
         "suppression_ledger_loaded",
         true,
-        json!({"live_suppressions": sup, "revocations": rev}),
+        json!({"live_suppressions": sup, "revocations": rev, "inventory_only": true}),
     );
 
     // 5. Sender bindings and adapter credentials unseal with the loaded keyring.
@@ -269,8 +337,8 @@ async fn main() -> anyhow::Result<()> {
 
     println!(
         "{}",
-        json!({"gate": if all_ok { "PASS" } else { "FAIL" }, "apply": apply,
-        "next": if all_ok { "operator may enable dispatch via /kill-switch/global with passkey step-up after reviewing the reconciliation backlog" } else { "do not enable dispatch" }})
+        json!({"gate": if !all_ok { "FAIL" } else if inspection { "INSPECTION_ONLY" } else { "PASS" }, "apply": apply,
+        "next": if inspection { "inspection only; no restore authorization" } else if all_ok { "operator may enable dispatch via /kill-switch/global with passkey step-up after reviewing the reconciliation backlog" } else { "do not enable dispatch" }})
     );
     if !all_ok {
         std::process::exit(1);

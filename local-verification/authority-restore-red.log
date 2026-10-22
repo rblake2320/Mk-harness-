@@ -1,0 +1,32 @@
+FFFF                                                                     [100%]
+=================================== FAILURES ===================================
+_____ test_post_backup_authority_withdrawal_survives_recovery[permission] ______
+tools/verification/test_kernel_privacy_restore.py:228: in test_post_backup_authority_withdrawal_survives_recovery
+    assert conn.execute(query,(entity,)).fetchone() == (True,), "restore gate passed but withdrawn authority was restored"
+E   AssertionError: restore gate passed but withdrawn authority was restored
+E   assert (False,) == (True,)
+E     
+E     At index 0 diff: False != True
+E     Use -v to get more diff
+_ test_post_backup_authority_withdrawal_survives_recovery[approval_credential] _
+tools/verification/test_kernel_privacy_restore.py:226: in test_post_backup_authority_withdrawal_survives_recovery
+    assert challenge.status_code == 412, "restored revoked credential can request operator step-up"
+E   AssertionError: restored revoked credential can request operator step-up
+E   assert 200 == 412
+E    +  where 200 = KernelResponse(status_code=200, body={'challenge': 'BpWZAfndMRHTjcfUv_rYrqMGSlGmN0NDXuLrvqUi1u4', 'rp_id': 'localhost'...-switch:enable', 'user_verification': 'required'}, request_id='dc62ea1e-6309-4628-871f-3c3de28da949', retry_after=None).status_code
+_______ test_post_backup_authority_withdrawal_survives_recovery[adapter] _______
+tools/verification/test_kernel_privacy_restore.py:203: in test_post_backup_authority_withdrawal_survives_recovery
+    entity = created.body["adapter_id"]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'adapter_id'
+__ test_post_backup_authority_withdrawal_survives_recovery[adapter_rotation] ___
+tools/verification/test_kernel_privacy_restore.py:203: in test_post_backup_authority_withdrawal_survives_recovery
+    entity = created.body["adapter_id"]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'adapter_id'
+=========================== short test summary info ============================
+FAILED tools/verification/test_kernel_privacy_restore.py::test_post_backup_authority_withdrawal_survives_recovery[permission]
+FAILED tools/verification/test_kernel_privacy_restore.py::test_post_backup_authority_withdrawal_survives_recovery[approval_credential]
+FAILED tools/verification/test_kernel_privacy_restore.py::test_post_backup_authority_withdrawal_survives_recovery[adapter]
+FAILED tools/verification/test_kernel_privacy_restore.py::test_post_backup_authority_withdrawal_survives_recovery[adapter_rotation]
+4 failed, 29 deselected in 9.75s

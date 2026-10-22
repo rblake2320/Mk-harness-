@@ -17,6 +17,7 @@ pub mod approvals;
 pub mod assertions;
 pub mod audit;
 pub mod consent;
+pub mod drafts;
 pub mod error;
 pub mod fingerprint;
 pub mod human_approval;
@@ -25,6 +26,12 @@ pub mod keys;
 pub mod messaging;
 pub mod outbox;
 pub mod policy;
+pub mod privacy;
+pub mod privacy_ledger;
+pub mod probes;
+mod recovery_authority;
+mod recovery_restrictions;
+pub mod resolutions;
 pub mod tx;
 
 pub use error::StoreError;
@@ -144,6 +151,66 @@ pub fn migrator() -> sqlx::migrate::Migrator {
             9,
             "tenant directory",
             include_str!("../../../../migrations/kernel/0009_tenant_directory.sql"),
+        ),
+        (
+            10,
+            "reconciliation check watermark",
+            include_str!("../../../../migrations/kernel/0010_reconciliation_checks.sql"),
+        ),
+        (
+            11,
+            "worker reconciliation evidence grant",
+            include_str!("../../../../migrations/kernel/0011_reconciliation_event_grant.sql"),
+        ),
+        (
+            12,
+            "passkey submission resolutions",
+            include_str!("../../../../migrations/kernel/0012_submission_resolutions.sql"),
+        ),
+        (
+            13,
+            "durable public inbound probes",
+            include_str!("../../../../migrations/kernel/0013_inbound_probes.sql"),
+        ),
+        (
+            14,
+            "draft version invalidation fences",
+            include_str!("../../../../migrations/kernel/0014_draft_invalidation.sql"),
+        ),
+        (
+            15,
+            "draft fence insert guard",
+            include_str!("../../../../migrations/kernel/0015_draft_fence_insert_guard.sql"),
+        ),
+        (
+            16,
+            "draft rollout backfill",
+            include_str!("../../../../migrations/kernel/0016_draft_rollout_backfill.sql"),
+        ),
+        (
+            17,
+            "privacy erasure and subject fences",
+            include_str!("../../../../migrations/kernel/0017_privacy_erasure.sql"),
+        ),
+        (
+            18,
+            "provider erasure receipts",
+            include_str!("../../../../migrations/kernel/0018_provider_erasure_receipts.sql"),
+        ),
+        (
+            19,
+            "privacy intake privileges",
+            include_str!("../../../../migrations/kernel/0019_privacy_intake_privileges.sql"),
+        ),
+        (
+            20,
+            "recovered_session_revocations",
+            include_str!("../../../../migrations/kernel/0020_recovered_session_revocations.sql"),
+        ),
+        (
+            21,
+            "recovered authority fences",
+            include_str!("../../../../migrations/kernel/0021_recovery_authority_fences.sql"),
         ),
     ];
     let migrations: Vec<Migration> = FILES

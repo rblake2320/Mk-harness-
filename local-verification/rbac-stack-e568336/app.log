@@ -1,0 +1,52 @@
+INFO:     Started server process [964919]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8019 (Press CTRL+C to quit)
+INFO:     127.0.0.1:48886 - "GET /api/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35448 - "POST /api/auth/signup HTTP/1.1" 201 Created
+INFO:     127.0.0.1:35448 - "POST /api/auth/mfa/enroll HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35448 - "POST /api/auth/mfa/confirm HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35448 - "POST /api/auth/step-up HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35448 - "POST /api/auth/members HTTP/1.1" 201 Created
+INFO:     127.0.0.1:35448 - "POST /api/auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35448 - "POST /api/auth/mfa/enroll HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35448 - "POST /api/auth/mfa/confirm HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35448 - "POST /api/auth/step-up HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35448 - "POST /api/auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35448 - "POST /api/auth/mfa/verify HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35448 - "PATCH /api/auth/members/717501df086245d29ff3904688524fd1 HTTP/1.1" 403 Forbidden
+INFO:     127.0.0.1:35462 - "GET /api/brief?date=2026-10-22 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35472 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35462 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35472 - "GET /api/auth/members HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35496 - "GET /api/usage/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35484 - "GET /api/keys/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35500 - "GET /api/auth/sessions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35504 - "GET /api/auth/mfa/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35462 - "GET /api/usage/tenant HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35504 - "PATCH /api/auth/members/717501df086245d29ff3904688524fd1 HTTP/1.1" 403 Forbidden
+INFO:     127.0.0.1:35472 - "GET /api/agent-ops/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35484 - "GET /api/agent-ops/senders HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35500 - "GET /api/agent-ops/inbound/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35496 - "GET /api/agent-ops/approval-credentials HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35496 - "POST /api/auth/step-up HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35496 - "PATCH /api/auth/members/717501df086245d29ff3904688524fd1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35496 - "GET /api/auth/members HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35448 - "GET /api/customers HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:35448 - "POST /api/auth/refresh HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:35496 - "POST /api/auth/logout HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35448 - "POST /api/auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35448 - "POST /api/auth/mfa/verify HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35448 - "GET /api/customers HTTP/1.1" 403 Forbidden
+INFO:     127.0.0.1:35448 - "GET /api/agent-ops/senders HTTP/1.1" 403 Forbidden
+INFO:     127.0.0.1:35484 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35500 - "GET /api/auth/mfa/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35496 - "GET /api/auth/sessions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35496 - "GET /api/audit/export.jsonl HTTP/1.1" 403 Forbidden
+INFO:     127.0.0.1:35496 - "POST /api/auth/step-up HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35496 - "GET /api/audit/export.jsonl HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35496 - "POST /api/auth/logout HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [964919]

@@ -1,0 +1,5 @@
+ Downloading crates ...
+error: failed to download from `https://static.crates.io/crates/tokio/1.54.1/download`
+
+Caused by:
+  transfer too slow: failed to transfer more than 10 bytes in 20s (transferred 0 bytes)

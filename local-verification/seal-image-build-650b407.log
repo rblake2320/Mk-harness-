@@ -1,0 +1,46 @@
+#0 building with "desktop-linux" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 794B done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/python:3.12-slim
+#2 DONE 0.1s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 113B done
+#3 DONE 0.0s
+
+#4 [internal] load build context
+#4 transferring context: 8.21kB done
+#4 DONE 0.0s
+
+#5 [1/6] FROM docker.io/library/python:3.12-slim@sha256:a6e34c598f2467ed0e9a8d349809fcd8b5c603269512df273a0bb1784edc11b1
+#5 resolve docker.io/library/python:3.12-slim@sha256:a6e34c598f2467ed0e9a8d349809fcd8b5c603269512df273a0bb1784edc11b1 0.0s done
+#5 DONE 0.0s
+
+#6 [2/6] RUN test -n "90a6f1a7978a1b1b096dca6c57511ca48d3b8cf052f8e704baf358f34ea2f21b"  && mkdir -p /etc/mk  && python -c "import urllib.request; urllib.request.urlretrieve('https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem', '/etc/mk/rds-global-bundle.pem')"  && echo "90a6f1a7978a1b1b096dca6c57511ca48d3b8cf052f8e704baf358f34ea2f21b  /etc/mk/rds-global-bundle.pem" | sha256sum -c -
+#6 CACHED
+
+#7 [4/6] COPY requirements.txt .
+#7 CACHED
+
+#8 [3/6] WORKDIR /app
+#8 CACHED
+
+#9 [5/6] RUN pip install --no-cache-dir -r requirements.txt
+#9 CACHED
+
+#10 [6/6] COPY app ./app
+#10 DONE 0.1s
+
+#11 exporting to image
+#11 exporting layers 0.1s done
+#11 exporting manifest sha256:7f89190afefdf6aef956c02a5cbacdf995568ab7d6b744ce2a680d5609cb526d 0.0s done
+#11 exporting config sha256:3182fe7955dee19c8a9f6b80d720c3554a9997a231c77746fc00e6cc2133de88 0.0s done
+#11 exporting attestation manifest sha256:851517c0ea7350f01df5c7b546fa477cbe4349692cc2412d75f1f36a7ec657af 0.0s done
+#11 exporting manifest list sha256:e846cae2dc699b1c174ca91fd41cfbc779ca6875fe60d023dacf248ab1bba5d2
+#11 exporting manifest list sha256:e846cae2dc699b1c174ca91fd41cfbc779ca6875fe60d023dacf248ab1bba5d2 0.0s done
+#11 naming to docker.io/library/mk-app-acceptance:seal-rotation done
+#11 unpacking to docker.io/library/mk-app-acceptance:seal-rotation 0.0s done
+#11 DONE 0.3s

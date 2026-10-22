@@ -1,0 +1,86 @@
+{
+  "source_commit": "7e469cab02e4db789e0fd6c5efaa544b5af4efd4",
+  "classification": "author_run_local_verification_not_release_closure",
+  "artifacts": [
+    {
+      "path": "local-verification/c8-backlog-authorization-red.log",
+      "sha256": "60c7f342a9a32267bd75bee50f1d7e4980c38f07cf756aeb2757eb4dceab4d31"
+    },
+    {
+      "path": "local-verification/c8-clock-retest.xml",
+      "sha256": "dfd2971d3bab090589cc56dbe26985630fbec1e2579da9f2e07877e5d1fd026d"
+    },
+    {
+      "path": "local-verification/c8-final-clippy.log",
+      "sha256": "71c221f4ab4d33c1d441f5aed0fd3b52d054e86650c5be4453fd1bd408da762d"
+    },
+    {
+      "path": "local-verification/c8-final-python.xml",
+      "sha256": "30bbdf1a1098166f1ef08f403d977762ad782bc1935e1ea6c5a3d54a27f4212a"
+    },
+    {
+      "path": "local-verification/c8-final-workspace.log",
+      "sha256": "2331e194de05a97d6274c6335ee96c31c15983ac72ce5e52a3cb93dec6f8cb8e"
+    },
+    {
+      "path": "local-verification/c8-probes-clippy-final.log",
+      "sha256": "345ea124c007cb3265451d7d9acce4421262cda24cc63187c07d13504390fb53"
+    },
+    {
+      "path": "local-verification/c8-probes-clippy.log",
+      "sha256": "844ce142d081fba820df9d56f02c511b4ae6a7cfcc0e786585a5706b5964bd0b"
+    },
+    {
+      "path": "local-verification/c8-probes-first.log",
+      "sha256": "1efd5015968f148d816840382d12b36b5637d897f1a6a91b1389a6b4ceecece3"
+    },
+    {
+      "path": "local-verification/c8-probes-fleet-final.log",
+      "sha256": "7555dafcf0765bac0365192f6f8939a99ab5cef82c7f3bff5750d6302fc960f2"
+    },
+    {
+      "path": "local-verification/c8-probes-fleet.log",
+      "sha256": "9f7744f63852a25d31dbe7f91ef389a03fd04873e8188e90e7bd02e95e4bc157"
+    },
+    {
+      "path": "local-verification/c8-probes-http.log",
+      "sha256": "bdde7289f44e6478c235da5cb6b78fa77177bc43be9b37189b13acdcef213267"
+    },
+    {
+      "path": "local-verification/c8-probes-workspace.log",
+      "sha256": "b3a95d6a4ff532410831f0f9294c739da3e5f76ec75b7417203c70fbbae69c88"
+    },
+    {
+      "path": "local-verification/c8-python-retest.xml",
+      "sha256": "c28880839deeb72d94a930cda7379f74fe61b54967dc78c86707aa43b8f7a2ad"
+    },
+    {
+      "path": "local-verification/c8-tofu-init-isolated-final.log",
+      "sha256": "8ade7cdebab1c7774a889b1367d082e82cdc6ba242002df96a06d1d02dee3ba7"
+    },
+    {
+      "path": "local-verification/c8-tofu-init-isolated.log",
+      "sha256": "b9605542561c211c8ad8ad5bfa89476cf578325b8184fd7147ac5d111c0ee8a0"
+    },
+    {
+      "path": "local-verification/c8-tofu-init-layout.log",
+      "sha256": "8ade7cdebab1c7774a889b1367d082e82cdc6ba242002df96a06d1d02dee3ba7"
+    },
+    {
+      "path": "local-verification/c8-tofu-init-windows.log",
+      "sha256": "808c8c4b75cec531186195bd94fb7d410988baf91753dbc5530d4701425ffe4b"
+    },
+    {
+      "path": "local-verification/c8-tofu-init.log",
+      "sha256": "2c608ff4571a8e867a97ca51593237c4344f8a93f4e3dc07150013072ced4ea3"
+    },
+    {
+      "path": "local-verification/c8-tofu-validate-final.json",
+      "sha256": "870b77a12518d244f5b14bcf2072f03dbeeff4f3902e316f5539072c9694ce5b"
+    },
+    {
+      "path": "local-verification/c8-tofu-validate.json",
+      "sha256": "e91877ac8bbf3792b072d4ae25507b1208943090efd35034cc07840080fcd82b"
+    }
+  ]
+}

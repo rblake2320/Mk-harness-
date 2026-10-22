@@ -1,0 +1,207 @@
+[
+  {
+    "path": "local-verification/audit-privacy-app-ci.json",
+    "sha256": "1eb7a8ef11c43118a34b981ac00f84142c8972fdafb8169ba6c243f28ead015e",
+    "bytes": 8413
+  },
+  {
+    "path": "local-verification/audit-privacy-app-image-red-v1/container.log",
+    "sha256": "9f5734d29d01b8b7fdb6234811e3e2c49686336be3880baf7746a79ba7e41df9",
+    "bytes": 2449
+  },
+  {
+    "path": "local-verification/audit-privacy-app-image-red-v1/report.json",
+    "sha256": "d9cc5f9f95e30a00997647e2d3f8b1bddc53f1580006f4991b324aa6ad02a820",
+    "bytes": 1149
+  },
+  {
+    "path": "local-verification/audit-privacy-app-image-v1/container.log",
+    "sha256": "ec42d836faabd061f399b8eddb5881d4f3958d879c65ea9fc6ff6b97f791269d",
+    "bytes": 3027
+  },
+  {
+    "path": "local-verification/audit-privacy-app-image-v1/report.json",
+    "sha256": "07240b5fcee2d7b909bbf54a3813a1c3b72528ae5a6c65fd7dce823e01e51890",
+    "bytes": 2398
+  },
+  {
+    "path": "local-verification/audit-privacy-app-red-v1.xml",
+    "sha256": "573990cca6fddf715b37d5bd168b079ae38fe4c417095bc5c0ceec8094195135",
+    "bytes": 4771
+  },
+  {
+    "path": "local-verification/audit-privacy-app-red-v2.xml",
+    "sha256": "56ba88c9112cbe1561f1bb1326c8f1229fd7410680e37282048ad1da3862c7de",
+    "bytes": 2666
+  },
+  {
+    "path": "local-verification/audit-privacy-app-v1.xml",
+    "sha256": "b6d8f536036de533e22240b4df24990f0d21644123dd853079184a34c9198775",
+    "bytes": 596
+  },
+  {
+    "path": "local-verification/audit-privacy-app-v2.xml",
+    "sha256": "1964ffc78d919f2ea02fca364b9b3d96021ec1d1fa26067c02aa25067bbb2c1a",
+    "bytes": 148127
+  },
+  {
+    "path": "local-verification/audit-privacy-app-v3.xml",
+    "sha256": "586816b569e7b5e839f5ebeeca22cfc4bb14882a02cade2f38bed57653ac4665",
+    "bytes": 2652
+  },
+  {
+    "path": "local-verification/audit-privacy-app-v4.xml",
+    "sha256": "25c50058d47d65f9265240e23d23f7832fa297d83daf9fe011b17ec935115614",
+    "bytes": 46278
+  },
+  {
+    "path": "local-verification/audit-privacy-app-v5.xml",
+    "sha256": "be736e403f16d30a769191942e26e5c3ddffb5076a48c86a1b78d4cf7a13b7de",
+    "bytes": 46807
+  },
+  {
+    "path": "local-verification/audit-privacy-batch.md",
+    "sha256": "c224d14583d051c72ccec279de3a2ac9b01f4cd4211de7395c077d4d704a1bbb",
+    "bytes": 4344
+  },
+  {
+    "path": "local-verification/audit-privacy-build-v1.log",
+    "sha256": "316e0c68ea98f00ee53faaf822dcad4aff2f32c9fab8bd28aae5c4d65742f1d0",
+    "bytes": 571
+  },
+  {
+    "path": "local-verification/audit-privacy-build-v2.log",
+    "sha256": "32055243d210ae473453311612fbba8f8c0ecec9e591b96d98981d5e856f0855",
+    "bytes": 670
+  },
+  {
+    "path": "local-verification/audit-privacy-build-v3.log",
+    "sha256": "11a2edf40bba76c84e6784558e9a153f6e79625c2d1015f6cd84432cc7450a7b",
+    "bytes": 670
+  },
+  {
+    "path": "local-verification/audit-privacy-build-v4.log",
+    "sha256": "e9390910814396c058efc2a616b7bb52c9aea9afd48c744981f98f43470806a6",
+    "bytes": 268
+  },
+  {
+    "path": "local-verification/audit-privacy-build-v5.log",
+    "sha256": "1db266ef934b10140ab8913620fd91eaa31d6c1c2b628d606c09118014906005",
+    "bytes": 571
+  },
+  {
+    "path": "local-verification/audit-privacy-callback-red-v1.xml",
+    "sha256": "0d69fd58ea77b319f55e54f14f29b70d3fc028aaac18b394b197db097752263a",
+    "bytes": 2979
+  },
+  {
+    "path": "local-verification/audit-privacy-clippy-v1.log",
+    "sha256": "e3fa8e6da223afc98638d9eda0b01ac13c44644b9e2e103aa6d94498f098ea4e",
+    "bytes": 670
+  },
+  {
+    "path": "local-verification/audit-privacy-clippy-v2.log",
+    "sha256": "2c21a6c5060915a771162e9eccabd9c1013d4f658d70a1dc4edf99ecc059ba5e",
+    "bytes": 670
+  },
+  {
+    "path": "local-verification/audit-privacy-clippy-v3.log",
+    "sha256": "e81f166ad908f47970223d97c75a4f984ce5713738a8ebd41d030917524ab866",
+    "bytes": 1252
+  },
+  {
+    "path": "local-verification/audit-privacy-clippy-v4.log",
+    "sha256": "6bbbb88aeeaea4d36cdaae9a1ee3dc053f25618905841eb76ace230f60cec06d",
+    "bytes": 167
+  },
+  {
+    "path": "local-verification/audit-privacy-identifier-red-v1.xml",
+    "sha256": "05284b9e7996a7e313de518364c099e27a7fa09324491e64fd20dedbb4bcf958",
+    "bytes": 5075
+  },
+  {
+    "path": "local-verification/audit-privacy-kernel-build-v1.log",
+    "sha256": "4ac096590df502e3f96861293dc937873f82bcd470222bc2e15a8881de21c210",
+    "bytes": 5335
+  },
+  {
+    "path": "local-verification/audit-privacy-kernel-ci.json",
+    "sha256": "f1b1b244792ce814ed0c69bf4a52b73f532ecc913ee2db5e50293477960a97ae",
+    "bytes": 13942
+  },
+  {
+    "path": "local-verification/audit-privacy-kernel-image-v1/api.log",
+    "sha256": "d7832dbd806e9088a11085524ab0f78f40ea6213f67869eb7e668e4a51cd9a3b",
+    "bytes": 595
+  },
+  {
+    "path": "local-verification/audit-privacy-kernel-image-v1/metrics.txt",
+    "sha256": "07e490b8eb66e30798b85d82b08d9a614a54115d22fb9bac1518459fc739175f",
+    "bytes": 14567
+  },
+  {
+    "path": "local-verification/audit-privacy-kernel-image-v1/report.json",
+    "sha256": "1e2da6ea35ff85b2f893ffdb25ebec21de3a44a98920373c73c54bfddf92fb18",
+    "bytes": 3764
+  },
+  {
+    "path": "local-verification/audit-privacy-kernel-red-v1.xml",
+    "sha256": "75605de794c3ce1763838fa92f1813745b62162ef08b5d34e88013c27346a8bd",
+    "bytes": 2953
+  },
+  {
+    "path": "local-verification/audit-privacy-kernel-v1.xml",
+    "sha256": "f737bb7676a2f918e669aba4278ede6a77b20963e1aebb6e56779d80993b103b",
+    "bytes": 537
+  },
+  {
+    "path": "local-verification/audit-privacy-kernel-v2.xml",
+    "sha256": "e01556abb009e25ef0ad55b0c82a519137aedc279611ca95935ed1f5975f4eb0",
+    "bytes": 2501
+  },
+  {
+    "path": "local-verification/audit-privacy-kernel-v3.xml",
+    "sha256": "2140e6a70533fa3a51db48a343c178c2e7c82f6c890618ceda99bed926e8918a",
+    "bytes": 997
+  },
+  {
+    "path": "local-verification/audit-privacy-kernel-v4.xml",
+    "sha256": "21c7e5e2f34392ddb41c02a2edb706c8adef4cf3ebf7b4c451ccd248d7f527c5",
+    "bytes": 1603
+  },
+  {
+    "path": "local-verification/audit-privacy-postgres-v1.xml",
+    "sha256": "fddd960577caf6bee09c71696f102807904496749b2da223cd5c03b29db66ac8",
+    "bytes": 9347
+  },
+  {
+    "path": "local-verification/audit-privacy-readiness.json",
+    "sha256": "da0faa3333da0c923ad3ac995c2b7bd99b39e4c54a4a3246f7d5fc77946fe23e",
+    "bytes": 31140
+  },
+  {
+    "path": "local-verification/audit-privacy-source-secret-scan.json",
+    "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+    "bytes": 3
+  },
+  {
+    "path": "local-verification/audit-privacy-telemetry-v1.xml",
+    "sha256": "0ef02e1cf3121b2f112ea6d6e1cdf6ab671f96fddfcfec50c6ff213f9fe6eae1",
+    "bytes": 761
+  },
+  {
+    "path": "local-verification/audit-privacy-workspace-v1.log",
+    "sha256": "8ada538d7735d888dd98e0e9a02a371449da18e91d3c968485b495f5e0db10bd",
+    "bytes": 8762
+  },
+  {
+    "path": "local-verification/audit-privacy-workspace-v2.log",
+    "sha256": "ec19ef65079a1615cf164464508b33f71f80076f46c60e8bb0c7a0956b99dbe4",
+    "bytes": 24970
+  },
+  {
+    "path": "local-verification/audit-privacy-workspace-v3.log",
+    "sha256": "d9b611fe3463b53867125388f156e451872d83971a0ef371fd3519dd20935e44",
+    "bytes": 25374
+  }
+]

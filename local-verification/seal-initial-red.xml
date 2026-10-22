@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="2" time="0.480" timestamp="2026-10-22T01:40:14.046972-05:00" hostname="DESKTOP-CM6G60N"><testcase classname="tests.test_seal_rotation" name="test_application_sealing_uses_selected_key_without_changing_fingerprints" time="0.008"><failure message="AssertionError: sealing key rotation setting was ignored&#10;assert False&#10; +  where False = &lt;built-in method startswith of str object at 0x7f1c08ff8420&gt;('mk1:s2:')&#10; +    where &lt;built-in method startswith of str object at 0x7f1c08ff8420&gt; = 'NiXxT82O2N2MzTyodW8oIbXGQ19PtvkVStMxTlcTqCvYIoevuQh/3g=='.startswith">backend/tests/test_seal_rotation.py:19: in test_application_sealing_uses_selected_key_without_changing_fingerprints
+    assert encrypted.startswith("mk1:s2:"), "sealing key rotation setting was ignored"
+E   AssertionError: sealing key rotation setting was ignored
+E   assert False
+E    +  where False = &lt;built-in method startswith of str object at 0x7f1c08ff8420&gt;('mk1:s2:')
+E    +    where &lt;built-in method startswith of str object at 0x7f1c08ff8420&gt; = 'NiXxT82O2N2MzTyodW8oIbXGQ19PtvkVStMxTlcTqCvYIoevuQh/3g=='.startswith</failure></testcase><testcase classname="tests.test_seal_rotation" name="test_removing_legacy_seal_key_refuses_legacy_ciphertext" time="0.001"><failure message="Failed: DID NOT RAISE &lt;class 'ValueError'&gt;">backend/tests/test_seal_rotation.py:33: in test_removing_legacy_seal_key_refuses_legacy_ciphertext
+    with pytest.raises(ValueError, match="unavailable"):
+E   Failed: DID NOT RAISE &lt;class 'ValueError'&gt;</failure></testcase></testsuite></testsuites>

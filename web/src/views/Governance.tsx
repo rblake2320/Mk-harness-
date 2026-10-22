@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { client } from '../App.tsx';
 import { ErrorNote, HumanSteps, fmtWhen } from '../components/Common.tsx';
+import type { ErasureReceipt } from '../../../packages/sdk/src/index.ts';
 
 /**
  * Settings → Governance: approval passkeys, sending number status, inbound health,
  * session revocation, data export, audit export, account deletion.
  */
-export default function GovernanceSettings({ role, userId }: { role: string; userId: string }) {
+export default function GovernanceSettings({ role, userId, onDeleted }: { role: string; userId: string; onDeleted: (receipt: ErasureReceipt) => void }) {
   const [passkeys, setPasskeys] = useState<any[]>([]);
   const [senders, setSenders] = useState<any[]>([]);
   const [health, setHealth] = useState<any>(null);
@@ -19,6 +20,7 @@ export default function GovernanceSettings({ role, userId }: { role: string; use
 
   function load() {
     setErr(null);
+    if (role === 'auditor') return;
     client.kernelHealth().then(() => setKernel('ok')).catch(e => setKernel(e?.status === 503 ? 'down' : 'unconfigured'));
     client.passkeys().then(setPasskeys).catch(() => setPasskeys([]));
     client.senders().then(setSenders).catch(() => setSenders([]));
@@ -36,14 +38,14 @@ export default function GovernanceSettings({ role, userId }: { role: string; use
   return (
     <div>
       <h2>Governance</h2>
-      <div className={`card small ${kernel === 'ok' ? '' : 'limitation'}`} role="status">
+      {role !== 'auditor' && <div className={`card small ${kernel === 'ok' ? '' : 'limitation'}`} role="status">
         Action kernel: <strong>{kernel === 'ok' ? 'connected' : kernel === 'down' ? 'unreachable — approvals and sending are unavailable' : 'not configured in this environment'}</strong>.
         {kernel !== 'ok' && ' Nothing can be approved or sent until it is. No local fallback exists.'}
-      </div>
+      </div>}
       <ErrorNote error={err} onDismiss={() => setErr(null)} />
       {msg && <div className="ok-note" role="status">{msg}</div>}
 
-      <section className="card" style={{ marginTop: 16 }}>
+      {role !== 'auditor' && <><section className="card" style={{ marginTop: 16 }}>
         <h3 style={{ marginTop: 0 }}>Approval passkeys</h3>
         <p className="muted small">Approving a message requires a passkey registered here. The kernel verifies it; your sign-in alone can never approve.</p>
         <ul className="plain">
@@ -85,22 +87,24 @@ export default function GovernanceSettings({ role, userId }: { role: string; use
             {health.health?.last_failure_at && <> Last failure {fmtWhen(health.health.last_failure_at)} ({health.health.last_failure_reason}).</>}
             <br /><span className="muted">If replies cannot be received for 60 s, outbound sending pauses automatically and resumes only after a successful check with no backlog.</span></p>
         ) : <p className="muted small">Not available (kernel unreachable or not configured).</p>}
-      </section>
+      </section></>}
 
       <section className="card" style={{ marginTop: 16 }}>
         <h3 style={{ marginTop: 0 }}>Your data & evidence</h3>
-        <HumanSteps steps={['Deleting your account is irreversible for your data; anonymised audit records are retained for legal hold.']} />
+        <HumanSteps steps={['Deletion removes active application data and signs out all sessions. Downstream provider processing and backup expiry are tracked separately. Minimal consent and content-free audit records are retained.']} />
         <div className="row">
           <button className="btn ghost" onClick={() => client.exportAccount().then(d => download('my-data.json', JSON.stringify(d, null, 2))).catch(setErr)}>Export my data (JSON)</button>
-          <button className="btn ghost" onClick={() => client.exportCustomersCsv().then(t => download('customers.csv', t, 'text/csv')).catch(setErr)}>Export customers (CSV)</button>
-          {role === 'admin' && <button className="btn ghost" onClick={() => client.exportAudit().then(t => download('audit.jsonl', t, 'application/x-ndjson')).catch(setErr)}>Export audit log (admin)</button>}
-          <button className="btn ghost" onClick={() => run(() => client.revokeMySession('user requested'), 'Session revoked. Pending approvals you made were cancelled. Sign in again to continue.')}>Revoke my kernel session</button>
+          {role !== 'auditor' && <button className="btn ghost" onClick={() => client.exportCustomersCsv().then(t => download('customers.csv', t, 'text/csv')).catch(setErr)}>Export customers (CSV)</button>}
+          {(role === 'admin' || role === 'auditor') && <button className="btn ghost" onClick={() => client.exportAudit().then(t => download('audit.jsonl', t, 'application/x-ndjson')).catch(setErr)}>Export audit log ({role})</button>}
         </div>
+        <p className="small">Use Sign out to revoke this app session and its pending kernel approvals. Other sessions can be revoked above.</p>
         <details style={{ marginTop: 10 }}>
           <summary>Delete my account</summary>
           <label className="muted small" htmlFor="del-pw">Confirm with your password</label>
           <input id="del-pw" type="password" autoComplete="current-password" value={del} onChange={e => setDel(e.target.value)} />
-          <button className="btn ghost" disabled={!del} onClick={() => run(() => client.deleteAccount({ password: del }), 'Deletion requested.')}>Delete account</button>
+          <button className="btn ghost" disabled={!del} onClick={() => {
+            setErr(null); client.deleteAccount({ password: del }).then(onDeleted).catch(setErr);
+          }}>Delete account</button>
         </details>
       </section>
     </div>

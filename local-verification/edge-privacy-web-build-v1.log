@@ -1,0 +1,93 @@
+#0 building with "desktop-linux" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 322B done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/nginx:1.27-alpine
+#2 ...
+
+#3 [internal] load metadata for docker.io/library/node:22-slim
+#3 DONE 0.3s
+
+#2 [internal] load metadata for docker.io/library/nginx:1.27-alpine
+#2 DONE 0.3s
+
+#4 [internal] load .dockerignore
+#4 transferring context: 2B done
+#4 DONE 0.0s
+
+#5 [stage-1 1/3] FROM docker.io/library/nginx:1.27-alpine@sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10
+#5 resolve docker.io/library/nginx:1.27-alpine@sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10 0.0s done
+#5 DONE 0.1s
+
+#6 [build 1/6] FROM docker.io/library/node:22-slim@sha256:de170b39439eb0e5a3444ad7d60b015614a381e10fecae2e30ec9e735122f38d
+#6 resolve docker.io/library/node:22-slim@sha256:de170b39439eb0e5a3444ad7d60b015614a381e10fecae2e30ec9e735122f38d 0.0s done
+#6 DONE 0.1s
+
+#7 [internal] load build context
+#7 transferring context: 267.20kB 0.1s done
+#7 DONE 0.1s
+
+#8 [build 2/6] WORKDIR /repo
+#8 CACHED
+
+#9 [build 3/6] COPY packages ./packages
+#9 CACHED
+
+#10 [build 4/6] COPY web ./web
+#10 DONE 0.4s
+
+#11 [build 5/6] WORKDIR /repo/web
+#11 DONE 0.1s
+
+#12 [build 6/6] RUN npm install && npm run build
+#12 5.261 
+#12 5.261 added 3 packages, and audited 81 packages in 5s
+#12 5.261 
+#12 5.261 9 packages are looking for funding
+#12 5.261   run `npm fund` for details
+#12 5.307 
+#12 5.307 8 vulnerabilities (1 moderate, 7 high)
+#12 5.307 
+#12 5.307 To address all issues, run:
+#12 5.307   npm audit fix
+#12 5.307 
+#12 5.307 Run `npm audit` for details.
+#12 5.307 npm notice
+#12 5.307 npm notice New major version of npm available! 10.9.9 -> 12.2.1
+#12 5.307 npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.1
+#12 5.307 npm notice To update run: npm install -g npm@12.2.1
+#12 5.307 npm notice
+#12 5.406 
+#12 5.406 > mk-harness-web@1.0.0 build
+#12 5.406 > tsc -b && vite build
+#12 5.406 
+#12 7.034 vite v6.4.3 building for production...
+#12 7.067 transforming...
+#12 7.497 ✓ 44 modules transformed.
+#12 7.572 rendering chunks...
+#12 7.577 computing gzip size...
+#12 7.583 dist/index.html                   0.69 kB │ gzip:  0.41 kB
+#12 7.583 dist/assets/index-CSdiOXR9.css    9.40 kB │ gzip:  2.85 kB
+#12 7.583 dist/assets/index-C8aNeBjX.js   241.76 kB │ gzip: 73.67 kB
+#12 7.584 ✓ built in 535ms
+#12 DONE 7.7s
+
+#13 [stage-1 2/3] COPY --from=build /repo/web/dist /usr/share/nginx/html
+#13 CACHED
+
+#14 [stage-1 3/3] COPY web/nginx.conf /etc/nginx/conf.d/default.conf
+#14 DONE 0.1s
+
+#15 exporting to image
+#15 exporting layers
+#15 exporting layers 0.3s done
+#15 exporting manifest sha256:76ce9f66f56add41946f63f726fa420c320bf14c44d3998d65a046474c21a1c6 0.0s done
+#15 exporting config sha256:6e4e0b723e5c2b6ad4b0cd5c30c0aa58d8f5f5171ef48633952ce2e67dbeb919 0.0s done
+#15 exporting attestation manifest sha256:f22b99f4e0c2d991553868e35d238c0cdc0274225ab115dbceed6b2600d0a45b 0.0s done
+#15 exporting manifest list sha256:a208f0235f52f7cc0f41506bf07dc99e181343680a71632f036b1a76494d302e
+#15 exporting manifest list sha256:a208f0235f52f7cc0f41506bf07dc99e181343680a71632f036b1a76494d302e 0.0s done
+#15 naming to docker.io/library/mk-web-acceptance:audit-privacy done
+#15 unpacking to docker.io/library/mk-web-acceptance:audit-privacy 0.0s done
+#15 DONE 0.5s

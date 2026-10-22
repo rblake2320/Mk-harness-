@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="pytest" errors="0" failures="3" skipped="0" tests="3" time="0.678" timestamp="2026-10-22T03:47:42.661306-05:00" hostname="DESKTOP-CM6G60N"><testcase classname="tests.test_audit_privacy" name="test_member_email_is_not_audit_metadata" time="0.094"><failure message="AssertionError: assert 'audit-perso...@example.com' not in '\naudit-per...@example.com'&#10;  &#10;  'audit-person-6aca7...bd5fb9e@example.com' is contained here:&#10;  Strings contain only whitespace, escaping them using repr()&#10;    '\naudit-person-6aca708c6624476e9efe7fe9fbd5fb9e@example.com'">backend/tests/test_audit_privacy.py:20: in test_member_email_is_not_audit_metadata
+    assert canary not in audit_details(token["tenant_id"])
+E   AssertionError: assert 'audit-perso...@example.com' not in '\naudit-per...@example.com'
+E     
+E     'audit-person-6aca7...bd5fb9e@example.com' is contained here:
+E     Strings contain only whitespace, escaping them using repr()
+E       '\naudit-person-6aca708c6624476e9efe7fe9fbd5fb9e@example.com'</failure></testcase><testcase classname="tests.test_audit_privacy" name="test_source_provenance_stays_in_business_record_not_audit" time="0.041"><failure message="assert 'PRIVATE-SOU...118687561d65' not in '\n{&quot;source_...8687561d65&quot;}'&#10;  &#10;  'PRIVATE-SOURCE-fba...8dfad6b118687561d65' is contained here:&#10;    ?customer=PRIVATE-SOURCE-fba04150413048dfad6b118687561d65&quot;,&quot;source_version&quot;:&quot;PRIVATE-SOURCE-fba04150413048dfad6b118687561d65&quot;}&#10;  ?           +++++++++++++++++++++++++++++++++++++++++++++++">backend/tests/test_audit_privacy.py:30: in test_source_provenance_stays_in_business_record_not_audit
+    assert canary not in audit_details(token["tenant_id"])
+E   assert 'PRIVATE-SOU...118687561d65' not in '\n{"source_...8687561d65"}'
+E     
+E     'PRIVATE-SOURCE-fba...8dfad6b118687561d65' is contained here:
+E       ?customer=PRIVATE-SOURCE-fba04150413048dfad6b118687561d65","source_version":"PRIVATE-SOURCE-fba04150413048dfad6b118687561d65"}
+E     ?           +++++++++++++++++++++++++++++++++++++++++++++++</failure></testcase><testcase classname="tests.test_audit_privacy" name="test_nested_raw_personal_data_is_rejected_by_audit_boundary" time="0.038"><failure message="Failed: DID NOT RAISE (&lt;class 'ValueError'&gt;, &lt;class 'RuntimeError'&gt;)">backend/tests/test_audit_privacy.py:40: in test_nested_raw_personal_data_is_rejected_by_audit_boundary
+    with pytest.raises((ValueError,RuntimeError)):
+E   Failed: DID NOT RAISE (&lt;class 'ValueError'&gt;, &lt;class 'RuntimeError'&gt;)</failure></testcase></testsuite></testsuites>

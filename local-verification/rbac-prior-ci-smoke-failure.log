@@ -1,0 +1,1133 @@
+﻿2026-10-22T06:17:26.6392038Z Current runner version: '2.338.0'
+2026-10-22T06:17:26.6418721Z ##[group]Runner Image Provisioner
+2026-10-22T06:17:26.6419572Z Hosted Compute Agent
+2026-10-22T06:17:26.6420243Z Version: 20261015.610
+2026-10-22T06:17:26.6420917Z Commit: 267fdb4e8bbec4ab5ea31367f3a00d5c480c7656
+2026-10-22T06:17:26.6421634Z Build Date: 2026-10-14T17:06:54Z
+2026-10-22T06:17:26.6422421Z Worker ID: {92e04ae7-b867-4903-9266-ff00169c8b06}
+2026-10-22T06:17:26.6423192Z Region: eastus
+2026-10-22T06:17:26.6424368Z Cloud: Azure
+2026-10-22T06:17:26.6424949Z ##[endgroup]
+2026-10-22T06:17:26.6426669Z ##[group]Operating System
+2026-10-22T06:17:26.6427336Z Ubuntu
+2026-10-22T06:17:26.6427857Z 24.04.5
+2026-10-22T06:17:26.6428458Z LTS
+2026-10-22T06:17:26.6428979Z ##[endgroup]
+2026-10-22T06:17:26.6429526Z ##[group]Runner Image
+2026-10-22T06:17:26.6430262Z Image: ubuntu-24.04
+2026-10-22T06:17:26.6430836Z Version: 20261018.339.1
+2026-10-22T06:17:26.6432194Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20261018.339/images/ubuntu/Ubuntu2404-Readme.md
+2026-10-22T06:17:26.6434042Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20261018.339
+2026-10-22T06:17:26.6435170Z ##[endgroup]
+2026-10-22T06:17:26.6436288Z ##[group]GITHUB_TOKEN Permissions
+2026-10-22T06:17:26.6438518Z Contents: read
+2026-10-22T06:17:26.6439111Z Metadata: read
+2026-10-22T06:17:26.6439779Z ##[endgroup]
+2026-10-22T06:17:26.6441995Z Secret source: Actions
+2026-10-22T06:17:26.6443090Z Cache mode: write
+2026-10-22T06:17:26.6444404Z Prepare workflow directory
+2026-10-22T06:17:26.6894196Z Prepare all required actions
+2026-10-22T06:17:26.6944453Z Getting action download info
+2026-10-22T06:17:26.9125281Z Download action repository 'actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0' (SHA:9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0)
+2026-10-22T06:17:27.0469764Z Download action repository 'dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8' (SHA:683b588c487a69d01f6c6ddf40f036ff682cc2c8)
+2026-10-22T06:17:27.1467780Z Download action repository 'Swatinem/rust-cache@f13886b937689c021905a6b90929199931d60db1' (SHA:f13886b937689c021905a6b90929199931d60db1)
+2026-10-22T06:17:27.3190893Z Download action repository 'actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1' (SHA:ece7cb06caefa5fff74198d8649806c4678c61a1)
+2026-10-22T06:17:27.4385367Z Download action repository 'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02' (SHA:ea165f8d65b6e75b540449e92b4886f43607fa02)
+2026-10-22T06:17:27.7554591Z Complete job name: live-smoke
+2026-10-22T06:17:27.8180663Z ##[group]Checking docker version
+2026-10-22T06:17:27.8194917Z ##[command]/usr/bin/docker version --format '{{.Server.APIVersion}}'
+2026-10-22T06:17:27.9110666Z '1.48'
+2026-10-22T06:17:27.9130069Z Docker daemon API version: '1.48'
+2026-10-22T06:17:27.9131605Z ##[command]/usr/bin/docker version --format '{{.Client.APIVersion}}'
+2026-10-22T06:17:27.9333238Z '1.48'
+2026-10-22T06:17:27.9351980Z Docker client API version: '1.48'
+2026-10-22T06:17:27.9358148Z ##[endgroup]
+2026-10-22T06:17:27.9361587Z ##[group]Clean up resources from previous jobs
+2026-10-22T06:17:27.9368208Z ##[command]/usr/bin/docker ps --all --quiet --no-trunc --filter "label=09fd5a"
+2026-10-22T06:17:27.9547781Z ##[command]/usr/bin/docker network prune --force --filter "label=09fd5a"
+2026-10-22T06:17:27.9717212Z ##[endgroup]
+2026-10-22T06:17:27.9718278Z ##[group]Create local container network
+2026-10-22T06:17:27.9729904Z ##[command]/usr/bin/docker network create --label 09fd5a github_network_5d925d6623c9421ab22e25605ee6f85f
+2026-10-22T06:17:28.0290468Z 7848e251c2efbc62a97174c51b4b881e901212e31a28f719715d31c8cdd34607
+2026-10-22T06:17:28.0316116Z ##[endgroup]
+2026-10-22T06:17:28.0342708Z ##[group]Starting postgres service container
+2026-10-22T06:17:28.0365254Z ##[command]/usr/bin/docker pull postgres:16-alpine
+2026-10-22T06:17:28.2833120Z 16-alpine: Pulling from library/postgres
+2026-10-22T06:17:28.3601051Z 7b229517ed22: Pulling fs layer
+2026-10-22T06:17:28.3606201Z 768bbab50810: Pulling fs layer
+2026-10-22T06:17:28.3608745Z d982e6c592c4: Pulling fs layer
+2026-10-22T06:17:28.3609939Z a735dce41235: Pulling fs layer
+2026-10-22T06:17:28.3610953Z 42065dcfea93: Pulling fs layer
+2026-10-22T06:17:28.3611517Z f121f7f3dec1: Pulling fs layer
+2026-10-22T06:17:28.3612386Z 7ea8819886f9: Pulling fs layer
+2026-10-22T06:17:28.3613229Z d3f6cab92edc: Pulling fs layer
+2026-10-22T06:17:28.3613689Z 911527e7800c: Pulling fs layer
+2026-10-22T06:17:28.3614443Z 22df74fd5323: Pulling fs layer
+2026-10-22T06:17:28.3614803Z 9f477227db48: Pulling fs layer
+2026-10-22T06:17:28.3615094Z a735dce41235: Waiting
+2026-10-22T06:17:28.3615358Z 42065dcfea93: Waiting
+2026-10-22T06:17:28.3615615Z f121f7f3dec1: Waiting
+2026-10-22T06:17:28.3615877Z 7ea8819886f9: Waiting
+2026-10-22T06:17:28.3616178Z d3f6cab92edc: Waiting
+2026-10-22T06:17:28.3616424Z 911527e7800c: Waiting
+2026-10-22T06:17:28.3616672Z 22df74fd5323: Waiting
+2026-10-22T06:17:28.3616917Z 9f477227db48: Waiting
+2026-10-22T06:17:28.4038183Z 768bbab50810: Verifying Checksum
+2026-10-22T06:17:28.4083197Z 768bbab50810: Download complete
+2026-10-22T06:17:28.4088309Z d982e6c592c4: Download complete
+2026-10-22T06:17:28.4193092Z 7b229517ed22: Verifying Checksum
+2026-10-22T06:17:28.4194291Z 7b229517ed22: Download complete
+2026-10-22T06:17:28.4335082Z a735dce41235: Verifying Checksum
+2026-10-22T06:17:28.4336143Z a735dce41235: Download complete
+2026-10-22T06:17:28.4355584Z 42065dcfea93: Verifying Checksum
+2026-10-22T06:17:28.4356577Z 42065dcfea93: Download complete
+2026-10-22T06:17:28.4625378Z d3f6cab92edc: Verifying Checksum
+2026-10-22T06:17:28.4626611Z d3f6cab92edc: Download complete
+2026-10-22T06:17:28.4628797Z 7ea8819886f9: Verifying Checksum
+2026-10-22T06:17:28.4629631Z 7ea8819886f9: Download complete
+2026-10-22T06:17:28.4936947Z 22df74fd5323: Verifying Checksum
+2026-10-22T06:17:28.4940791Z 22df74fd5323: Download complete
+2026-10-22T06:17:28.4949995Z 911527e7800c: Verifying Checksum
+2026-10-22T06:17:28.4950927Z 911527e7800c: Download complete
+2026-10-22T06:17:28.5240999Z 9f477227db48: Download complete
+2026-10-22T06:17:28.5601874Z 7b229517ed22: Pull complete
+2026-10-22T06:17:28.6039845Z 768bbab50810: Pull complete
+2026-10-22T06:17:28.6514830Z d982e6c592c4: Pull complete
+2026-10-22T06:17:28.6727377Z a735dce41235: Pull complete
+2026-10-22T06:17:28.6889046Z 42065dcfea93: Pull complete
+2026-10-22T06:17:28.8293120Z f121f7f3dec1: Verifying Checksum
+2026-10-22T06:17:28.8293992Z f121f7f3dec1: Download complete
+2026-10-22T06:17:31.3129183Z f121f7f3dec1: Pull complete
+2026-10-22T06:17:31.3229876Z 7ea8819886f9: Pull complete
+2026-10-22T06:17:31.3321669Z d3f6cab92edc: Pull complete
+2026-10-22T06:17:31.3419757Z 911527e7800c: Pull complete
+2026-10-22T06:17:31.3515974Z 22df74fd5323: Pull complete
+2026-10-22T06:17:31.3598939Z 9f477227db48: Pull complete
+2026-10-22T06:17:31.3669914Z Digest: sha256:deb28ee471183cb0c303113dac9b2433c51eeeeb678def7af9a9ec5820367815
+2026-10-22T06:17:31.3685598Z Status: Downloaded newer image for postgres:16-alpine
+2026-10-22T06:17:31.3693183Z docker.io/library/postgres:16-alpine
+2026-10-22T06:17:31.3761181Z ##[command]/usr/bin/docker create --name 976d37b2229648d5a6fffd424d72ff7a_postgres16alpine_f1033f --label 09fd5a --network github_network_5d925d6623c9421ab22e25605ee6f85f --network-alias postgres -p 5432:5432 --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10 -e "POSTGRES_PASSWORD=kernel" -e "POSTGRES_DB=postgres" -e GITHUB_ACTIONS=true -e CI=true postgres:16-alpine
+2026-10-22T06:17:31.4045880Z e939d1542d5f1ed31205c495645998ffadec15afb09a15cca034e3cebc52b487
+2026-10-22T06:17:31.4074937Z ##[command]/usr/bin/docker start e939d1542d5f1ed31205c495645998ffadec15afb09a15cca034e3cebc52b487
+2026-10-22T06:17:31.6401260Z e939d1542d5f1ed31205c495645998ffadec15afb09a15cca034e3cebc52b487
+2026-10-22T06:17:31.6427623Z ##[command]/usr/bin/docker ps --all --filter id=e939d1542d5f1ed31205c495645998ffadec15afb09a15cca034e3cebc52b487 --filter status=running --no-trunc --format "{{.ID}} {{.Status}}"
+2026-10-22T06:17:31.6589347Z e939d1542d5f1ed31205c495645998ffadec15afb09a15cca034e3cebc52b487 Up Less than a second (health: starting)
+2026-10-22T06:17:31.6614854Z ##[command]/usr/bin/docker port e939d1542d5f1ed31205c495645998ffadec15afb09a15cca034e3cebc52b487
+2026-10-22T06:17:31.6781788Z 5432/tcp -> 0.0.0.0:5432
+2026-10-22T06:17:31.6782665Z 5432/tcp -> [::]:5432
+2026-10-22T06:17:31.6841948Z ##[endgroup]
+2026-10-22T06:17:31.6843198Z ##[group]Starting redis service container
+2026-10-22T06:17:31.6845287Z ##[command]/usr/bin/docker pull redis:7-alpine
+2026-10-22T06:17:31.9274835Z 7-alpine: Pulling from library/redis
+2026-10-22T06:17:32.0434909Z 759efa4719c9: Pulling fs layer
+2026-10-22T06:17:32.0437595Z 964ae3503686: Pulling fs layer
+2026-10-22T06:17:32.0441140Z 6577e1d2b27e: Pulling fs layer
+2026-10-22T06:17:32.0442020Z 5e61c876e615: Pulling fs layer
+2026-10-22T06:17:32.0442812Z 766c91354b27: Pulling fs layer
+2026-10-22T06:17:32.0443772Z 4f4fb700ef54: Pulling fs layer
+2026-10-22T06:17:32.0444539Z 8bfa4f5e3c40: Pulling fs layer
+2026-10-22T06:17:32.0445398Z 5e61c876e615: Waiting
+2026-10-22T06:17:32.0446163Z 766c91354b27: Waiting
+2026-10-22T06:17:32.0446950Z 4f4fb700ef54: Waiting
+2026-10-22T06:17:32.0447719Z 8bfa4f5e3c40: Waiting
+2026-10-22T06:17:32.0786413Z 964ae3503686: Verifying Checksum
+2026-10-22T06:17:32.0787956Z 964ae3503686: Download complete
+2026-10-22T06:17:32.0833968Z 6577e1d2b27e: Verifying Checksum
+2026-10-22T06:17:32.0842083Z 6577e1d2b27e: Download complete
+2026-10-22T06:17:32.0966093Z 759efa4719c9: Download complete
+2026-10-22T06:17:32.1161644Z 766c91354b27: Verifying Checksum
+2026-10-22T06:17:32.1166458Z 766c91354b27: Download complete
+2026-10-22T06:17:32.1240920Z 4f4fb700ef54: Verifying Checksum
+2026-10-22T06:17:32.1241416Z 4f4fb700ef54: Download complete
+2026-10-22T06:17:32.1567206Z 8bfa4f5e3c40: Verifying Checksum
+2026-10-22T06:17:32.1572221Z 8bfa4f5e3c40: Download complete
+2026-10-22T06:17:32.1653568Z 5e61c876e615: Download complete
+2026-10-22T06:17:32.2458364Z 759efa4719c9: Pull complete
+2026-10-22T06:17:32.2792077Z 964ae3503686: Pull complete
+2026-10-22T06:17:32.4368192Z 6577e1d2b27e: Pull complete
+2026-10-22T06:17:32.6729380Z 5e61c876e615: Pull complete
+2026-10-22T06:17:32.6836811Z 766c91354b27: Pull complete
+2026-10-22T06:17:32.6929686Z 4f4fb700ef54: Pull complete
+2026-10-22T06:17:32.7094327Z 8bfa4f5e3c40: Pull complete
+2026-10-22T06:17:32.7135475Z Digest: sha256:892022f9f18c26c92c30e15194d132f90044af87b94a491a75429bbc3982eab1
+2026-10-22T06:17:32.7152684Z Status: Downloaded newer image for redis:7-alpine
+2026-10-22T06:17:32.7161740Z docker.io/library/redis:7-alpine
+2026-10-22T06:17:32.7184862Z ##[command]/usr/bin/docker create --name 02fd235ac3d24267a6ca6df27ab7560f_redis7alpine_01d29c --label 09fd5a --network github_network_5d925d6623c9421ab22e25605ee6f85f --network-alias redis -p 6379:6379 --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 5s --health-retries 10 -e GITHUB_ACTIONS=true -e CI=true redis:7-alpine
+2026-10-22T06:17:32.7536449Z e6e9b615f6dc2f25788072ec68b88a49bec011fe098224c04ec462983d847bcd
+2026-10-22T06:17:32.7556325Z ##[command]/usr/bin/docker start e6e9b615f6dc2f25788072ec68b88a49bec011fe098224c04ec462983d847bcd
+2026-10-22T06:17:32.9206582Z e6e9b615f6dc2f25788072ec68b88a49bec011fe098224c04ec462983d847bcd
+2026-10-22T06:17:32.9226457Z ##[command]/usr/bin/docker ps --all --filter id=e6e9b615f6dc2f25788072ec68b88a49bec011fe098224c04ec462983d847bcd --filter status=running --no-trunc --format "{{.ID}} {{.Status}}"
+2026-10-22T06:17:32.9372550Z e6e9b615f6dc2f25788072ec68b88a49bec011fe098224c04ec462983d847bcd Up Less than a second (health: starting)
+2026-10-22T06:17:32.9389697Z ##[command]/usr/bin/docker port e6e9b615f6dc2f25788072ec68b88a49bec011fe098224c04ec462983d847bcd
+2026-10-22T06:17:32.9529733Z 6379/tcp -> 0.0.0.0:6379
+2026-10-22T06:17:32.9530195Z 6379/tcp -> [::]:6379
+2026-10-22T06:17:32.9547345Z ##[endgroup]
+2026-10-22T06:17:32.9560508Z ##[group]Waiting for all services to be ready
+2026-10-22T06:17:32.9574931Z ##[command]/usr/bin/docker inspect --format="{{if .Config.Healthcheck}}{{print .State.Health.Status}}{{end}}" e939d1542d5f1ed31205c495645998ffadec15afb09a15cca034e3cebc52b487
+2026-10-22T06:17:32.9714739Z starting
+2026-10-22T06:17:32.9738567Z postgres service is starting, waiting 2 seconds before checking again.
+2026-10-22T06:17:34.9743020Z ##[command]/usr/bin/docker inspect --format="{{if .Config.Healthcheck}}{{print .State.Health.Status}}{{end}}" e939d1542d5f1ed31205c495645998ffadec15afb09a15cca034e3cebc52b487
+2026-10-22T06:17:34.9889714Z starting
+2026-10-22T06:17:34.9905628Z postgres service is starting, waiting 4 seconds before checking again.
+2026-10-22T06:17:39.3676845Z ##[command]/usr/bin/docker inspect --format="{{if .Config.Healthcheck}}{{print .State.Health.Status}}{{end}}" e939d1542d5f1ed31205c495645998ffadec15afb09a15cca034e3cebc52b487
+2026-10-22T06:17:39.3823964Z healthy
+2026-10-22T06:17:39.3843911Z postgres service is healthy.
+2026-10-22T06:17:39.3844765Z ##[command]/usr/bin/docker inspect --format="{{if .Config.Healthcheck}}{{print .State.Health.Status}}{{end}}" e6e9b615f6dc2f25788072ec68b88a49bec011fe098224c04ec462983d847bcd
+2026-10-22T06:17:39.3977116Z healthy
+2026-10-22T06:17:39.3993398Z redis service is healthy.
+2026-10-22T06:17:39.3994375Z ##[endgroup]
+2026-10-22T06:17:39.4304040Z ##[group]Run actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+2026-10-22T06:17:39.4304749Z with:
+2026-10-22T06:17:39.4304974Z   repository: rblake2320/Mk-harness-
+2026-10-22T06:17:39.4307713Z   token: ***
+2026-10-22T06:17:39.4307920Z   ssh-strict: true
+2026-10-22T06:17:39.4308129Z   ssh-user: git
+2026-10-22T06:17:39.4308336Z   persist-credentials: true
+2026-10-22T06:17:39.4308569Z   clean: true
+2026-10-22T06:17:39.4308777Z   sparse-checkout-cone-mode: true
+2026-10-22T06:17:39.4309031Z   fetch-depth: 1
+2026-10-22T06:17:39.4309229Z   fetch-tags: false
+2026-10-22T06:17:39.4309426Z   show-progress: true
+2026-10-22T06:17:39.4309625Z   lfs: false
+2026-10-22T06:17:39.4309807Z   submodules: false
+2026-10-22T06:17:39.4310007Z   set-safe-directory: true
+2026-10-22T06:17:39.4310244Z   allow-unsafe-pr-checkout: false
+2026-10-22T06:17:39.4310687Z env:
+2026-10-22T06:17:39.4310894Z   CARGO_TERM_COLOR: always
+2026-10-22T06:17:39.4311133Z   RUSTFLAGS: -D warnings
+2026-10-22T06:17:39.4311415Z ##[endgroup]
+2026-10-22T06:17:39.5321597Z Syncing repository: rblake2320/Mk-harness-
+2026-10-22T06:17:39.5323040Z ##[group]Getting Git version info
+2026-10-22T06:17:39.5323462Z Working directory is '/home/runner/work/Mk-harness-/Mk-harness-'
+2026-10-22T06:17:39.5324308Z [command]/usr/bin/git version
+2026-10-22T06:17:39.5387408Z git version 2.55.0
+2026-10-22T06:17:39.5409368Z ##[endgroup]
+2026-10-22T06:17:39.5421444Z Temporarily overriding HOME='/home/runner/work/_temp/6299cba1-46e8-498e-bffd-1eb161d9c90d' before making global git config changes
+2026-10-22T06:17:39.5423126Z Adding repository directory to the temporary git global config as a safe directory
+2026-10-22T06:17:39.5428567Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/Mk-harness-/Mk-harness-
+2026-10-22T06:17:39.5481644Z Deleting the contents of '/home/runner/work/Mk-harness-/Mk-harness-'
+2026-10-22T06:17:39.5485369Z ##[group]Determining repository object format
+2026-10-22T06:17:39.5487303Z ##[endgroup]
+2026-10-22T06:17:39.5487768Z ##[group]Initializing the repository
+2026-10-22T06:17:39.5493157Z [command]/usr/bin/git init /home/runner/work/Mk-harness-/Mk-harness-
+2026-10-22T06:17:39.5596131Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-10-22T06:17:39.5596880Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-10-22T06:17:39.5597422Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-10-22T06:17:39.5597901Z hint: call:
+2026-10-22T06:17:39.5598262Z hint:
+2026-10-22T06:17:39.5598787Z hint: 	git config --global init.defaultBranch <name>
+2026-10-22T06:17:39.5599360Z hint:
+2026-10-22T06:17:39.5599904Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-10-22T06:17:39.5600782Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-10-22T06:17:39.5601801Z hint:
+2026-10-22T06:17:39.5602181Z hint: 	git branch -m <name>
+2026-10-22T06:17:39.5602615Z hint:
+2026-10-22T06:17:39.5603226Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-10-22T06:17:39.5604534Z Initialized empty Git repository in /home/runner/work/Mk-harness-/Mk-harness-/.git/
+2026-10-22T06:17:39.5611480Z [command]/usr/bin/git remote add origin https://github.com/rblake2320/Mk-harness-
+2026-10-22T06:17:39.5662522Z ##[endgroup]
+2026-10-22T06:17:39.5663167Z ##[group]Disabling automatic garbage collection
+2026-10-22T06:17:39.5667015Z [command]/usr/bin/git config --local gc.auto 0
+2026-10-22T06:17:39.5702205Z ##[endgroup]
+2026-10-22T06:17:39.5702790Z ##[group]Setting up auth
+2026-10-22T06:17:39.5703238Z Removing SSH command configuration
+2026-10-22T06:17:39.5709025Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-10-22T06:17:39.5743870Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-10-22T06:17:39.6097198Z Removing HTTP extra header
+2026-10-22T06:17:39.6103042Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-10-22T06:17:39.6139495Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-10-22T06:17:39.6380482Z Removing includeIf entries pointing to credentials config files
+2026-10-22T06:17:39.6387522Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-10-22T06:17:39.6424101Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-10-22T06:17:39.6667575Z [command]/usr/bin/git config --file /home/runner/work/_temp/git-credentials-4fbcb6f1-0ecc-4986-af0a-ef7d1b3dd238.config http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-10-22T06:17:39.6709744Z [command]/usr/bin/git config --local includeIf.gitdir:/home/runner/work/Mk-harness-/Mk-harness-/.git.path /home/runner/work/_temp/git-credentials-4fbcb6f1-0ecc-4986-af0a-ef7d1b3dd238.config
+2026-10-22T06:17:39.6746223Z [command]/usr/bin/git config --local includeIf.gitdir:/home/runner/work/Mk-harness-/Mk-harness-/.git/worktrees/*.path /home/runner/work/_temp/git-credentials-4fbcb6f1-0ecc-4986-af0a-ef7d1b3dd238.config
+2026-10-22T06:17:39.6784391Z [command]/usr/bin/git config --local includeIf.gitdir:/github/workspace/.git.path /github/runner_temp/git-credentials-4fbcb6f1-0ecc-4986-af0a-ef7d1b3dd238.config
+2026-10-22T06:17:39.6817720Z [command]/usr/bin/git config --local includeIf.gitdir:/github/workspace/.git/worktrees/*.path /github/runner_temp/git-credentials-4fbcb6f1-0ecc-4986-af0a-ef7d1b3dd238.config
+2026-10-22T06:17:39.6848644Z ##[endgroup]
+2026-10-22T06:17:39.6849109Z ##[group]Fetching the repository
+2026-10-22T06:17:39.6856164Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +3eac67173e9a4774fcb4bc1128542d39d01e4f2f:refs/remotes/pull/37/merge
+2026-10-22T06:17:40.1548727Z From https://github.com/rblake2320/Mk-harness-
+2026-10-22T06:17:40.1549662Z  * [new ref]         3eac67173e9a4774fcb4bc1128542d39d01e4f2f -> pull/37/merge
+2026-10-22T06:17:40.1557007Z ##[endgroup]
+2026-10-22T06:17:40.1557741Z ##[group]Determining the checkout info
+2026-10-22T06:17:40.1558578Z ##[endgroup]
+2026-10-22T06:17:40.1565215Z [command]/usr/bin/git sparse-checkout disable
+2026-10-22T06:17:40.1623401Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-10-22T06:17:40.1655868Z ##[group]Checking out the ref
+2026-10-22T06:17:40.1661311Z [command]/usr/bin/git checkout --progress --force refs/remotes/pull/37/merge
+2026-10-22T06:17:40.2175473Z Note: switching to 'refs/remotes/pull/37/merge'.
+2026-10-22T06:17:40.2176345Z 
+2026-10-22T06:17:40.2177351Z You are in 'detached HEAD' state. You can look around, make experimental
+2026-10-22T06:17:40.2178203Z changes and commit them, and you can discard any commits you make in this
+2026-10-22T06:17:40.2178946Z state without impacting any branches by switching back to a branch.
+2026-10-22T06:17:40.2179385Z 
+2026-10-22T06:17:40.2179674Z If you want to create a new branch to retain commits you create, you may
+2026-10-22T06:17:40.2180356Z do so (now or later) by using -c with the switch command. Example:
+2026-10-22T06:17:40.2180766Z 
+2026-10-22T06:17:40.2180929Z   git switch -c <new-branch-name>
+2026-10-22T06:17:40.2181211Z 
+2026-10-22T06:17:40.2181372Z Or undo this operation with:
+2026-10-22T06:17:40.2181631Z 
+2026-10-22T06:17:40.2181764Z   git switch -
+2026-10-22T06:17:40.2181984Z 
+2026-10-22T06:17:40.2182304Z Turn off this advice by setting config variable advice.detachedHead to false
+2026-10-22T06:17:40.2182778Z 
+2026-10-22T06:17:40.2183338Z HEAD is now at 3eac671 Merge 026f502497eec7206f1af55ba663c188e59f7b50 into 80e08d0ab9e9f149e0c365d29b60a6311f26f7df
+2026-10-22T06:17:40.2190272Z ##[endgroup]
+2026-10-22T06:17:40.2275467Z [command]/usr/bin/git log -1 --format=%H
+2026-10-22T06:17:40.2290272Z 3eac67173e9a4774fcb4bc1128542d39d01e4f2f
+2026-10-22T06:17:40.2648865Z ##[group]Run dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8
+2026-10-22T06:17:40.2649293Z with:
+2026-10-22T06:17:40.2649483Z   toolchain: 1.97.0
+2026-10-22T06:17:40.2649684Z env:
+2026-10-22T06:17:40.2649869Z   CARGO_TERM_COLOR: always
+2026-10-22T06:17:40.2650099Z   RUSTFLAGS: -D warnings
+2026-10-22T06:17:40.2650316Z ##[endgroup]
+2026-10-22T06:17:40.2719027Z ##[start-action display=Parse toolchain version;id=__dtolnay_rust-toolchain.parse]
+2026-10-22T06:17:40.2777617Z ##[group]Run if [[ -z $toolchain ]]; then
+2026-10-22T06:17:40.2778029Z [36;1mif [[ -z $toolchain ]]; then[0m
+2026-10-22T06:17:40.2778622Z [36;1m  # GitHub does not enforce `required: true` inputs itself. https://github.com/actions/runner/issues/1070[0m
+2026-10-22T06:17:40.2779201Z [36;1m  echo "'toolchain' is a required input" >&2[0m
+2026-10-22T06:17:40.2779500Z [36;1m  exit 1[0m
+2026-10-22T06:17:40.2779883Z [36;1melif [[ $toolchain =~ ^stable' '[0-9]+' '(year|month|week|day)s?' 'ago$ ]]; then[0m
+2026-10-22T06:17:40.2780306Z [36;1m  if [[ Linux == macOS ]]; then[0m
+2026-10-22T06:17:40.2780830Z [36;1m    echo "toolchain=1.$((($(date -v-$(sed 's/stable \([0-9]*\) \(.\).*/\1\2/' <<< $toolchain) +%s)/60/60/24-16569)/7/6))" >> $GITHUB_OUTPUT[0m
+2026-10-22T06:17:40.2781337Z [36;1m  else[0m
+2026-10-22T06:17:40.2781737Z [36;1m    echo "toolchain=1.$((($(date --date "${toolchain#stable }" +%s)/60/60/24-16569)/7/6))" >> $GITHUB_OUTPUT[0m
+2026-10-22T06:17:40.2782186Z [36;1m  fi[0m
+2026-10-22T06:17:40.2782479Z [36;1melif [[ $toolchain =~ ^stable' 'minus' '[0-9]+' 'releases?$ ]]; then[0m
+2026-10-22T06:17:40.2783012Z [36;1m  echo "toolchain=1.$((($(date +%s)/60/60/24-16569)/7/6-${toolchain//[^0-9]/}))" >> $GITHUB_OUTPUT[0m
+2026-10-22T06:17:40.2783475Z [36;1melif [[ $toolchain =~ ^1\.[0-9]+$ ]]; then[0m
+2026-10-22T06:17:40.2784172Z [36;1m  echo "toolchain=1.$((i=${toolchain#1.}, c=($(date +%s)/60/60/24-16569)/7/6, i+9*i*(10*i<=c)+90*i*(100*i<=c)))" >> $GITHUB_OUTPUT[0m
+2026-10-22T06:17:40.2784665Z [36;1melse[0m
+2026-10-22T06:17:40.2784860Z [36;1m  delimiter=EOF[0m
+2026-10-22T06:17:40.2785161Z [36;1m  while [[ $toolchain == *$delimiter* ]]; do delimiter+=_; done[0m
+2026-10-22T06:17:40.2785656Z [36;1m  printf 'toolchain<<%s\n%s\n%s\n' "$delimiter" "$toolchain" "$delimiter" >> $GITHUB_OUTPUT[0m
+2026-10-22T06:17:40.2786067Z [36;1mfi[0m
+2026-10-22T06:17:40.2865573Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-10-22T06:17:40.2865943Z env:
+2026-10-22T06:17:40.2866142Z   CARGO_TERM_COLOR: always
+2026-10-22T06:17:40.2866378Z   RUSTFLAGS: -D warnings
+2026-10-22T06:17:40.2866594Z   toolchain: 1.97.0
+2026-10-22T06:17:40.2866790Z ##[endgroup]
+2026-10-22T06:17:40.2991567Z ##[end-action id=__dtolnay_rust-toolchain.parse;outcome=success;conclusion=success;duration_ms=27]
+2026-10-22T06:17:40.2994493Z ##[start-action display=Set $CARGO_HOME;id=__dtolnay_rust-toolchain.__run]
+2026-10-22T06:17:40.3026985Z ##[group]Run echo CARGO_HOME=${CARGO_HOME:-"$HOME/.cargo"} >> $GITHUB_ENV
+2026-10-22T06:17:40.3027470Z [36;1mecho CARGO_HOME=${CARGO_HOME:-"$HOME/.cargo"} >> $GITHUB_ENV[0m
+2026-10-22T06:17:40.3075945Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-10-22T06:17:40.3076276Z env:
+2026-10-22T06:17:40.3076470Z   CARGO_TERM_COLOR: always
+2026-10-22T06:17:40.3076703Z   RUSTFLAGS: -D warnings
+2026-10-22T06:17:40.3076956Z ##[endgroup]
+2026-10-22T06:17:40.3152952Z ##[end-action id=__dtolnay_rust-toolchain.__run;outcome=success;conclusion=success;duration_ms=15]
+2026-10-22T06:17:40.3155435Z ##[start-action display=Install rustup if needed;id=__dtolnay_rust-toolchain.__run_2]
+2026-10-22T06:17:40.3180650Z ##[group]Run if ! command -v rustup &>/dev/null; then
+2026-10-22T06:17:40.3181007Z [36;1mif ! command -v rustup &>/dev/null; then[0m
+2026-10-22T06:17:40.3181764Z [36;1m  curl --proto '=https' --tlsv1.2 --retry 10 --retry-connrefused --location --silent --show-error --fail https://sh.rustup.rs | sh -s -- --default-toolchain none -y[0m
+2026-10-22T06:17:40.3182676Z [36;1m  echo "$CARGO_HOME/bin" >> $GITHUB_PATH[0m
+2026-10-22T06:17:40.3182977Z [36;1mfi[0m
+2026-10-22T06:17:40.3230077Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-10-22T06:17:40.3230415Z env:
+2026-10-22T06:17:40.3230608Z   CARGO_TERM_COLOR: always
+2026-10-22T06:17:40.3230839Z   RUSTFLAGS: -D warnings
+2026-10-22T06:17:40.3231071Z   CARGO_HOME: /home/runner/.cargo
+2026-10-22T06:17:40.3231312Z ##[endgroup]
+2026-10-22T06:17:40.3307202Z ##[end-action id=__dtolnay_rust-toolchain.__run_2;outcome=success;conclusion=success;duration_ms=15]
+2026-10-22T06:17:40.3309386Z ##[start-action display=Install rustup if needed on windows;id=__dtolnay_rust-toolchain.__run_3]
+2026-10-22T06:17:40.3316539Z ##[end-action id=__dtolnay_rust-toolchain.__run_3;outcome=skipped;conclusion=skipped;duration_ms=0]
+2026-10-22T06:17:40.3330673Z ##[start-action display=rustup toolchain install 1.97.0;id=__dtolnay_rust-toolchain.__run_4]
+2026-10-22T06:17:40.3349423Z ##[group]Run set -f  # split targets and components on commas and whitespace, without glob expansion
+2026-10-22T06:17:40.3350094Z [36;1mset -f  # split targets and components on commas and whitespace, without glob expansion[0m
+2026-10-22T06:17:40.3350526Z [36;1mflags=()[0m
+2026-10-22T06:17:40.3350808Z [36;1mfor t in ${targets//,/ }; do flags+=(--target "$t"); done[0m
+2026-10-22T06:17:40.3351218Z [36;1mfor c in ${components//,/ }; do flags+=(--component "$c"); done[0m
+2026-10-22T06:17:40.3351713Z [36;1mif [[ $toolchain == nightly && -n $components ]]; then flags+=(--allow-downgrade); fi[0m
+2026-10-22T06:17:40.3352136Z [36;1mlog=$(mktemp)[0m
+2026-10-22T06:17:40.3352368Z [36;1mtrap 'rm -f "$log"' EXIT[0m
+2026-10-22T06:17:40.3352625Z [36;1mfor attempt in 1 2 3 4 5; do[0m
+2026-10-22T06:17:40.3353190Z [36;1m  if rustup toolchain install "$toolchain" "${flags[@]}" --profile minimal --no-self-update --force-non-host 2>&1 | tee "$log"; then[0m
+2026-10-22T06:17:40.3354032Z [36;1m    break[0m
+2026-10-22T06:17:40.3354231Z [36;1m  else[0m
+2026-10-22T06:17:40.3354435Z [36;1m    status=$?[0m
+2026-10-22T06:17:40.3354645Z [36;1m  fi[0m
+2026-10-22T06:17:40.3354938Z [36;1m  if [[ $attempt == 5 ]] || ! grep -Fq 'checksum failed for ' "$log" \[0m
+2026-10-22T06:17:40.3355495Z [36;1m      || ! grep -Fq 'this is likely due to an ongoing update of the official release server' "$log"; then[0m
+2026-10-22T06:17:40.3355950Z [36;1m    exit "$status"[0m
+2026-10-22T06:17:40.3356168Z [36;1m  fi[0m
+2026-10-22T06:17:40.3356541Z [36;1m  echo "Retrying rustup toolchain install in 30 seconds (retry $attempt of 4)" >&2[0m
+2026-10-22T06:17:40.3356955Z [36;1m  sleep 30[0m
+2026-10-22T06:17:40.3357157Z [36;1mdone[0m
+2026-10-22T06:17:40.3405406Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-10-22T06:17:40.3405751Z env:
+2026-10-22T06:17:40.3406112Z   CARGO_TERM_COLOR: always
+2026-10-22T06:17:40.3406358Z   RUSTFLAGS: -D warnings
+2026-10-22T06:17:40.3406600Z   CARGO_HOME: /home/runner/.cargo
+2026-10-22T06:17:40.3406842Z   toolchain: 1.97.0
+2026-10-22T06:17:40.3407048Z   targets: 
+2026-10-22T06:17:40.3407240Z   components: 
+2026-10-22T06:17:40.3407446Z   RUSTUP_PERMIT_COPY_RENAME: 1
+2026-10-22T06:17:40.3407677Z ##[endgroup]
+2026-10-22T06:17:40.4387741Z info: syncing channel updates for 1.97.0-x86_64-unknown-linux-gnu
+2026-10-22T06:17:40.6724998Z info: latest update on 2026-07-09 for version 1.97.0 (2d8144b78 2026-07-07)
+2026-10-22T06:17:40.6725582Z info: downloading 3 components
+2026-10-22T06:17:48.5279028Z 
+2026-10-22T06:17:48.5354969Z   1.97.0-x86_64-unknown-linux-gnu installed - rustc 1.97.0 (2d8144b78 2026-07-07)
+2026-10-22T06:17:48.5355473Z 
+2026-10-22T06:17:48.5496528Z ##[end-action id=__dtolnay_rust-toolchain.__run_4;outcome=success;conclusion=success;duration_ms=8216]
+2026-10-22T06:17:48.5504967Z ##[start-action display=rustup default 1.97.0;id=__dtolnay_rust-toolchain.__run_5]
+2026-10-22T06:17:48.5526141Z ##[group]Run rustup default "$toolchain" --force-non-host
+2026-10-22T06:17:48.5526537Z [36;1mrustup default "$toolchain" --force-non-host[0m
+2026-10-22T06:17:48.5576266Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-10-22T06:17:48.5576612Z env:
+2026-10-22T06:17:48.5576808Z   CARGO_TERM_COLOR: always
+2026-10-22T06:17:48.5577048Z   RUSTFLAGS: -D warnings
+2026-10-22T06:17:48.5577290Z   CARGO_HOME: /home/runner/.cargo
+2026-10-22T06:17:48.5577531Z   toolchain: 1.97.0
+2026-10-22T06:17:48.5577731Z ##[endgroup]
+2026-10-22T06:17:48.5690908Z info: using existing install for 1.97.0-x86_64-unknown-linux-gnu
+2026-10-22T06:17:48.5696409Z info: default toolchain set to 1.97.0-x86_64-unknown-linux-gnu
+2026-10-22T06:17:48.5696742Z 
+2026-10-22T06:17:48.5766482Z   1.97.0-x86_64-unknown-linux-gnu unchanged - rustc 1.97.0 (2d8144b78 2026-07-07)
+2026-10-22T06:17:48.5767073Z 
+2026-10-22T06:17:48.5784652Z ##[end-action id=__dtolnay_rust-toolchain.__run_5;outcome=success;conclusion=success;duration_ms=27]
+2026-10-22T06:17:48.5788237Z ##[start-action display=Create cachekey;id=__dtolnay_rust-toolchain.rustc-version]
+2026-10-22T06:17:48.5810165Z ##[group]Run DATE=$(rustc +"$toolchain" --version --verbose | sed -ne 's/^commit-date: \(20[0-9][0-9]\)-\([01][0-9]\)-\([0-3][0-9]\)$/\1\2\3/p')
+2026-10-22T06:17:48.5811169Z [36;1mDATE=$(rustc +"$toolchain" --version --verbose | sed -ne 's/^commit-date: \(20[0-9][0-9]\)-\([01][0-9]\)-\([0-3][0-9]\)$/\1\2\3/p')[0m
+2026-10-22T06:17:48.5829371Z [36;1mHASH=$(rustc +"$toolchain" --version --verbose | sed -ne 's/^commit-hash: //p')[0m
+2026-10-22T06:17:48.5830343Z [36;1mecho "cachekey=$(echo $DATE$HASH | head -c12)" >> $GITHUB_OUTPUT[0m
+2026-10-22T06:17:48.5879271Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-10-22T06:17:48.5879619Z env:
+2026-10-22T06:17:48.5879817Z   CARGO_TERM_COLOR: always
+2026-10-22T06:17:48.5880058Z   RUSTFLAGS: -D warnings
+2026-10-22T06:17:48.5880290Z   CARGO_HOME: /home/runner/.cargo
+2026-10-22T06:17:48.5880545Z   toolchain: 1.97.0
+2026-10-22T06:17:48.5880743Z ##[endgroup]
+2026-10-22T06:17:48.6233225Z ##[end-action id=__dtolnay_rust-toolchain.rustc-version;outcome=success;conclusion=success;duration_ms=44]
+2026-10-22T06:17:48.6236398Z ##[start-action display=Disable incremental compilation;id=__dtolnay_rust-toolchain.__run_6]
+2026-10-22T06:17:48.6258780Z ##[group]Run if [ -z "${CARGO_INCREMENTAL+set}" ]; then
+2026-10-22T06:17:48.6259174Z [36;1mif [ -z "${CARGO_INCREMENTAL+set}" ]; then[0m
+2026-10-22T06:17:48.6259661Z [36;1m  echo CARGO_INCREMENTAL=0 >> $GITHUB_ENV[0m
+2026-10-22T06:17:48.6259945Z [36;1mfi[0m
+2026-10-22T06:17:48.6312157Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-10-22T06:17:48.6312504Z env:
+2026-10-22T06:17:48.6312694Z   CARGO_TERM_COLOR: always
+2026-10-22T06:17:48.6312928Z   RUSTFLAGS: -D warnings
+2026-10-22T06:17:48.6313282Z   CARGO_HOME: /home/runner/.cargo
+2026-10-22T06:17:48.6313655Z ##[endgroup]
+2026-10-22T06:17:48.6388365Z ##[end-action id=__dtolnay_rust-toolchain.__run_6;outcome=success;conclusion=success;duration_ms=15]
+2026-10-22T06:17:48.6390435Z ##[start-action display=Enable colors in Cargo output;id=__dtolnay_rust-toolchain.__run_7]
+2026-10-22T06:17:48.6408880Z ##[group]Run if [ -z "${CARGO_TERM_COLOR+set}" ]; then
+2026-10-22T06:17:48.6409244Z [36;1mif [ -z "${CARGO_TERM_COLOR+set}" ]; then[0m
+2026-10-22T06:17:48.6409571Z [36;1m  echo CARGO_TERM_COLOR=always >> $GITHUB_ENV[0m
+2026-10-22T06:17:48.6409858Z [36;1mfi[0m
+2026-10-22T06:17:48.6456170Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-10-22T06:17:48.6456507Z env:
+2026-10-22T06:17:48.6456700Z   CARGO_TERM_COLOR: always
+2026-10-22T06:17:48.6456934Z   RUSTFLAGS: -D warnings
+2026-10-22T06:17:48.6457166Z   CARGO_HOME: /home/runner/.cargo
+2026-10-22T06:17:48.6457410Z   CARGO_INCREMENTAL: 0
+2026-10-22T06:17:48.6457612Z ##[endgroup]
+2026-10-22T06:17:48.6531064Z ##[end-action id=__dtolnay_rust-toolchain.__run_7;outcome=success;conclusion=success;duration_ms=13]
+2026-10-22T06:17:48.6536547Z ##[start-action display=Enable Cargo sparse registry;id=__dtolnay_rust-toolchain.__run_8]
+2026-10-22T06:17:48.6570177Z ##[group]Run # implemented in 1.66, stabilized in 1.68, made default in 1.70
+2026-10-22T06:17:48.6571256Z [36;1m# implemented in 1.66, stabilized in 1.68, made default in 1.70[0m
+2026-10-22T06:17:48.6572484Z [36;1mif [ -z "${CARGO_REGISTRIES_CRATES_IO_PROTOCOL+set}" -o -f "/home/runner/work/_temp"/.implicit_cargo_registries_crates_io_protocol ]; then[0m
+2026-10-22T06:17:48.6573994Z [36;1m  if rustc +"$toolchain" --version --verbose | grep -q '^release: 1\.6[89]\.'; then[0m
+2026-10-22T06:17:48.6575013Z [36;1m    touch "/home/runner/work/_temp"/.implicit_cargo_registries_crates_io_protocol || true[0m
+2026-10-22T06:17:48.6575948Z [36;1m    echo CARGO_REGISTRIES_CRATES_IO_PROTOCOL=sparse >> $GITHUB_ENV[0m
+2026-10-22T06:17:48.6576853Z [36;1m  elif rustc +"$toolchain" --version --verbose | grep -q '^release: 1\.6[67]\.'; then[0m
+2026-10-22T06:17:48.6577891Z [36;1m    touch "/home/runner/work/_temp"/.implicit_cargo_registries_crates_io_protocol || true[0m
+2026-10-22T06:17:48.6578812Z [36;1m    echo CARGO_REGISTRIES_CRATES_IO_PROTOCOL=git >> $GITHUB_ENV[0m
+2026-10-22T06:17:48.6579411Z [36;1m  fi[0m
+2026-10-22T06:17:48.6579719Z [36;1mfi[0m
+2026-10-22T06:17:48.6647895Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-10-22T06:17:48.6648474Z env:
+2026-10-22T06:17:48.6648828Z   CARGO_TERM_COLOR: always
+2026-10-22T06:17:48.6649221Z   RUSTFLAGS: -D warnings
+2026-10-22T06:17:48.6649599Z   CARGO_HOME: /home/runner/.cargo
+2026-10-22T06:17:48.6650020Z   CARGO_INCREMENTAL: 0
+2026-10-22T06:17:48.6650394Z   toolchain: 1.97.0
+2026-10-22T06:17:48.6650734Z ##[endgroup]
+2026-10-22T06:17:48.7018872Z ##[end-action id=__dtolnay_rust-toolchain.__run_8;outcome=success;conclusion=success;duration_ms=48]
+2026-10-22T06:17:48.7022472Z ##[start-action display=Work around spurious network errors in curl 8.0;id=__dtolnay_rust-toolchain.__run_9]
+2026-10-22T06:17:48.7042266Z ##[group]Run # https://rust-lang.zulipchat.com/#narrow/stream/246057-t-cargo/topic/timeout.20investigation
+2026-10-22T06:17:48.7043025Z [36;1m# https://rust-lang.zulipchat.com/#narrow/stream/246057-t-cargo/topic/timeout.20investigation[0m
+2026-10-22T06:17:48.7044059Z [36;1mif rustc +"$toolchain" --version --verbose | grep -q '^release: 1\.7[01]\.'; then[0m
+2026-10-22T06:17:48.7044552Z [36;1m  echo CARGO_HTTP_MULTIPLEXING=false >> $GITHUB_ENV[0m
+2026-10-22T06:17:48.7044863Z [36;1mfi[0m
+2026-10-22T06:17:48.7093165Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-10-22T06:17:48.7093766Z env:
+2026-10-22T06:17:48.7093987Z   CARGO_TERM_COLOR: always
+2026-10-22T06:17:48.7094224Z   RUSTFLAGS: -D warnings
+2026-10-22T06:17:48.7094454Z   CARGO_HOME: /home/runner/.cargo
+2026-10-22T06:17:48.7094693Z   CARGO_INCREMENTAL: 0
+2026-10-22T06:17:48.7094899Z   toolchain: 1.97.0
+2026-10-22T06:17:48.7095096Z ##[endgroup]
+2026-10-22T06:17:48.7294387Z ##[end-action id=__dtolnay_rust-toolchain.__run_9;outcome=success;conclusion=success;duration_ms=27]
+2026-10-22T06:17:48.7298935Z ##[start-action display=rustc +1.97.0 --version --verbose;id=__dtolnay_rust-toolchain.__run_10]
+2026-10-22T06:17:48.7316732Z ##[group]Run rustc +"$toolchain" --version --verbose
+2026-10-22T06:17:48.7317114Z [36;1mrustc +"$toolchain" --version --verbose[0m
+2026-10-22T06:17:48.7365689Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-10-22T06:17:48.7366027Z env:
+2026-10-22T06:17:48.7366219Z   CARGO_TERM_COLOR: always
+2026-10-22T06:17:48.7366452Z   RUSTFLAGS: -D warnings
+2026-10-22T06:17:48.7366690Z   CARGO_HOME: /home/runner/.cargo
+2026-10-22T06:17:48.7366934Z   CARGO_INCREMENTAL: 0
+2026-10-22T06:17:48.7367144Z   toolchain: 1.97.0
+2026-10-22T06:17:48.7367339Z ##[endgroup]
+2026-10-22T06:17:48.7546120Z rustc 1.97.0 (2d8144b78 2026-07-07)
+2026-10-22T06:17:48.7546715Z binary: rustc
+2026-10-22T06:17:48.7547150Z commit-hash: 2d8144b7880597b6e6d3dfd63a9a9efae3f533d3
+2026-10-22T06:17:48.7547686Z commit-date: 2026-07-07
+2026-10-22T06:17:48.7548112Z host: x86_64-unknown-linux-gnu
+2026-10-22T06:17:48.7548532Z release: 1.97.0
+2026-10-22T06:17:48.7549233Z LLVM version: 22.1.6
+2026-10-22T06:17:48.7564549Z ##[end-action id=__dtolnay_rust-toolchain.__run_10;outcome=success;conclusion=success;duration_ms=26]
+2026-10-22T06:17:48.7645264Z ##[group]Run Swatinem/rust-cache@f13886b937689c021905a6b90929199931d60db1
+2026-10-22T06:17:48.7645671Z with:
+2026-10-22T06:17:48.7645864Z   workspaces: rust
+2026-10-22T06:17:48.7646082Z   key: live-smoke-release
+2026-10-22T06:17:48.7646313Z   prefix-key: v0-rust
+2026-10-22T06:17:48.7646529Z   cache-targets: true
+2026-10-22T06:17:48.7646740Z   cache-all-crates: false
+2026-10-22T06:17:48.7646974Z   cache-workspace-crates: false
+2026-10-22T06:17:48.7647216Z   save-if: true
+2026-10-22T06:17:48.7647409Z   cache-provider: github
+2026-10-22T06:17:48.7647620Z   cache-bin: true
+2026-10-22T06:17:48.7647813Z   lookup-only: false
+2026-10-22T06:17:48.7648011Z env:
+2026-10-22T06:17:48.7648189Z   CARGO_TERM_COLOR: always
+2026-10-22T06:17:48.7648429Z   RUSTFLAGS: -D warnings
+2026-10-22T06:17:48.7648654Z   CARGO_HOME: /home/runner/.cargo
+2026-10-22T06:17:48.7648900Z   CARGO_INCREMENTAL: 0
+2026-10-22T06:17:48.7649104Z ##[endgroup]
+2026-10-22T06:17:48.9783228Z (node:3099) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-10-22T06:17:48.9784979Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-10-22T06:17:49.9156045Z ##[group]Cache Configuration
+2026-10-22T06:17:49.9156721Z Cache Provider:
+2026-10-22T06:17:49.9157188Z     github
+2026-10-22T06:17:49.9157535Z Workspaces:
+2026-10-22T06:17:49.9158013Z     /home/runner/work/Mk-harness-/Mk-harness-/rust
+2026-10-22T06:17:49.9158586Z Cache Paths:
+2026-10-22T06:17:49.9158961Z     /home/runner/.cargo/bin
+2026-10-22T06:17:49.9159379Z     /home/runner/.cargo/.crates.toml
+2026-10-22T06:17:49.9159858Z     /home/runner/.cargo/.crates2.json
+2026-10-22T06:17:49.9160467Z     /home/runner/.cargo/registry
+2026-10-22T06:17:49.9160928Z     /home/runner/.cargo/git
+2026-10-22T06:17:49.9161425Z     /home/runner/work/Mk-harness-/Mk-harness-/rust/target
+2026-10-22T06:17:49.9161949Z Restore Key:
+2026-10-22T06:17:49.9162421Z     v0-rust-live-smoke-release-live-smoke-Linux-x64-bb6fc242
+2026-10-22T06:17:49.9163021Z Cache Key:
+2026-10-22T06:17:49.9163792Z     v0-rust-live-smoke-release-live-smoke-Linux-x64-bb6fc242-8e90eba2
+2026-10-22T06:17:49.9164475Z .. Prefix:
+2026-10-22T06:17:49.9164911Z   - v0-rust-live-smoke-release-live-smoke-Linux-x64
+2026-10-22T06:17:49.9165481Z .. Environment considered:
+2026-10-22T06:17:49.9166159Z   - Rust Version: 1.97.0 x86_64-unknown-linux-gnu (2d8144b7880597b6e6d3dfd63a9a9efae3f533d3)
+2026-10-22T06:17:49.9166898Z   - CARGO_HOME
+2026-10-22T06:17:49.9167275Z   - CARGO_INCREMENTAL
+2026-10-22T06:17:49.9167646Z   - CARGO_TERM_COLOR
+2026-10-22T06:17:49.9167997Z   - RUSTFLAGS
+2026-10-22T06:17:49.9168339Z .. Lockfiles considered:
+2026-10-22T06:17:49.9168845Z   - /home/runner/work/Mk-harness-/Mk-harness-/rust/Cargo.lock
+2026-10-22T06:17:49.9170030Z   - /home/runner/work/Mk-harness-/Mk-harness-/rust/crates/mk-adapters/Cargo.toml
+2026-10-22T06:17:49.9170904Z   - /home/runner/work/Mk-harness-/Mk-harness-/rust/crates/mk-api/Cargo.toml
+2026-10-22T06:17:49.9171762Z   - /home/runner/work/Mk-harness-/Mk-harness-/rust/crates/mk-audit/Cargo.toml
+2026-10-22T06:17:49.9172644Z   - /home/runner/work/Mk-harness-/Mk-harness-/rust/crates/mk-contracts/Cargo.toml
+2026-10-22T06:17:49.9173746Z   - /home/runner/work/Mk-harness-/Mk-harness-/rust/crates/mk-crypto/Cargo.toml
+2026-10-22T06:17:49.9174619Z   - /home/runner/work/Mk-harness-/Mk-harness-/rust/crates/mk-domain/Cargo.toml
+2026-10-22T06:17:49.9175454Z   - /home/runner/work/Mk-harness-/Mk-harness-/rust/crates/mk-mcp/Cargo.toml
+2026-10-22T06:17:49.9176299Z   - /home/runner/work/Mk-harness-/Mk-harness-/rust/crates/mk-policy/Cargo.toml
+2026-10-22T06:17:49.9177168Z   - /home/runner/work/Mk-harness-/Mk-harness-/rust/crates/mk-queue/Cargo.toml
+2026-10-22T06:17:49.9178022Z   - /home/runner/work/Mk-harness-/Mk-harness-/rust/crates/mk-store/Cargo.toml
+2026-10-22T06:17:49.9178879Z   - /home/runner/work/Mk-harness-/Mk-harness-/rust/crates/mk-testkit/Cargo.toml
+2026-10-22T06:17:49.9180076Z   - /home/runner/work/Mk-harness-/Mk-harness-/rust/crates/mk-worker/Cargo.toml
+2026-10-22T06:17:49.9180917Z   - /home/runner/work/Mk-harness-/Mk-harness-/rust/rust-toolchain.toml
+2026-10-22T06:17:49.9181823Z ##[endgroup]
+2026-10-22T06:17:49.9182019Z 
+2026-10-22T06:17:49.9182168Z ... Restoring cache ...
+2026-10-22T06:17:49.9735525Z Cache hit for: v0-rust-live-smoke-release-live-smoke-Linux-x64-bb6fc242-8e90eba2
+2026-10-22T06:17:51.0075092Z Received 184549376 of 516278287 (35.7%), 175.6 MBs/sec
+2026-10-22T06:17:52.0134669Z Received 457179136 of 516278287 (88.6%), 217.7 MBs/sec
+2026-10-22T06:17:52.1820617Z Received 516278287 of 516278287 (100.0%), 226.1 MBs/sec
+2026-10-22T06:17:52.1822358Z Cache Size: ~492 MB (516278287 B)
+2026-10-22T06:17:52.1962287Z [command]/usr/bin/tar -xf /home/runner/work/_temp/184d4bbb-618a-4cd4-a7f0-996ce871d1ce/cache.tzst -P -C /home/runner/work/Mk-harness-/Mk-harness- --use-compress-program unzstd
+2026-10-22T06:17:55.2709191Z Cache restored successfully
+2026-10-22T06:17:55.4108388Z Restored from cache key "v0-rust-live-smoke-release-live-smoke-Linux-x64-bb6fc242-8e90eba2" full match: true.
+2026-10-22T06:17:55.4354442Z ##[group]Run actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+2026-10-22T06:17:55.4355179Z with:
+2026-10-22T06:17:55.4355537Z   python-version: 3.12
+2026-10-22T06:17:55.4355940Z   cache: pip
+2026-10-22T06:17:55.4356368Z   cache-dependency-path: backend/requirements.txt
+2026-10-22T06:17:55.4356916Z   check-latest: false
+2026-10-22T06:17:55.4361960Z   token: ***
+2026-10-22T06:17:55.4362354Z   update-environment: true
+2026-10-22T06:17:55.4362786Z   allow-prereleases: false
+2026-10-22T06:17:55.4363202Z   freethreaded: false
+2026-10-22T06:17:55.4363882Z env:
+2026-10-22T06:17:55.4364213Z   CARGO_TERM_COLOR: always
+2026-10-22T06:17:55.4364618Z   RUSTFLAGS: -D warnings
+2026-10-22T06:17:55.4365055Z   CARGO_HOME: /home/runner/.cargo
+2026-10-22T06:17:55.4365495Z   CARGO_INCREMENTAL: 0
+2026-10-22T06:17:55.4365876Z   CACHE_ON_FAILURE: false
+2026-10-22T06:17:55.4366255Z ##[endgroup]
+2026-10-22T06:17:55.5713972Z ##[group]Installed versions
+2026-10-22T06:17:55.5811897Z Successfully set up CPython (3.12.15)
+2026-10-22T06:17:55.5813028Z ##[endgroup]
+2026-10-22T06:17:55.6176011Z [command]/opt/hostedtoolcache/Python/3.12.15/x64/bin/pip cache dir
+2026-10-22T06:17:57.0724519Z /home/runner/.cache/pip
+2026-10-22T06:17:57.1773920Z Cache hit for: setup-python-Linux-x64-24.04-Ubuntu-python-3.12.15-pip-ab2d70192a4b91efe2f43acae1ac7bef0bf0c76eb5280c699f05481587a4df71
+2026-10-22T06:17:57.5020479Z Received 36516754 of 36516754 (100.0%), 131.9 MBs/sec
+2026-10-22T06:17:57.5021632Z Cache Size: ~35 MB (36516754 B)
+2026-10-22T06:17:57.5047414Z [command]/usr/bin/tar -xf /home/runner/work/_temp/4cc4067c-511a-42b2-9cba-49d480a12a6c/cache.tzst -P -C /home/runner/work/Mk-harness-/Mk-harness- --use-compress-program unzstd
+2026-10-22T06:17:57.6122552Z Cache restored successfully
+2026-10-22T06:17:57.6144989Z Cache restored from key: setup-python-Linux-x64-24.04-Ubuntu-python-3.12.15-pip-ab2d70192a4b91efe2f43acae1ac7bef0bf0c76eb5280c699f05481587a4df71
+2026-10-22T06:17:57.6340957Z ##[group]Run pip install -r backend/requirements.txt pyyaml
+2026-10-22T06:17:57.6341431Z [36;1mpip install -r backend/requirements.txt pyyaml[0m
+2026-10-22T06:17:57.6395957Z shell: /usr/bin/bash -e {0}
+2026-10-22T06:17:57.6396220Z env:
+2026-10-22T06:17:57.6396420Z   CARGO_TERM_COLOR: always
+2026-10-22T06:17:57.6396677Z   RUSTFLAGS: -D warnings
+2026-10-22T06:17:57.6396925Z   CARGO_HOME: /home/runner/.cargo
+2026-10-22T06:17:57.6397184Z   CARGO_INCREMENTAL: 0
+2026-10-22T06:17:57.6397418Z   CACHE_ON_FAILURE: false
+2026-10-22T06:17:57.6397717Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-10-22T06:17:57.6398183Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.15/x64/lib/pkgconfig
+2026-10-22T06:17:57.6398648Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-10-22T06:17:57.6399040Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-10-22T06:17:57.6399441Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-10-22T06:17:57.6399878Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.15/x64/lib
+2026-10-22T06:17:57.6400216Z ##[endgroup]
+2026-10-22T06:17:58.6293815Z Collecting pyyaml
+2026-10-22T06:17:58.6310628Z   Using cached pyyaml-6.0.3-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (2.4 kB)
+2026-10-22T06:17:58.6633483Z Collecting fastapi==0.115.12 (from -r backend/requirements.txt (line 1))
+2026-10-22T06:17:58.6646853Z   Using cached fastapi-0.115.12-py3-none-any.whl.metadata (27 kB)
+2026-10-22T06:17:58.6842639Z Collecting uvicorn==0.34.2 (from uvicorn[standard]==0.34.2->-r backend/requirements.txt (line 2))
+2026-10-22T06:17:58.6860001Z   Using cached uvicorn-0.34.2-py3-none-any.whl.metadata (6.5 kB)
+2026-10-22T06:17:58.9825516Z Collecting sqlalchemy==2.0.41 (from -r backend/requirements.txt (line 3))
+2026-10-22T06:17:58.9839400Z   Using cached sqlalchemy-2.0.41-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (9.6 kB)
+2026-10-22T06:17:58.9972888Z Collecting psycopg==3.2.9 (from psycopg[binary]==3.2.9->-r backend/requirements.txt (line 4))
+2026-10-22T06:17:58.9984336Z   Using cached psycopg-3.2.9-py3-none-any.whl.metadata (4.5 kB)
+2026-10-22T06:17:59.0085356Z Collecting pydantic-settings==2.9.1 (from -r backend/requirements.txt (line 5))
+2026-10-22T06:17:59.0097234Z   Using cached pydantic_settings-2.9.1-py3-none-any.whl.metadata (3.8 kB)
+2026-10-22T06:17:59.0168996Z Collecting email-validator==2.2.0 (from -r backend/requirements.txt (line 6))
+2026-10-22T06:17:59.0182426Z   Using cached email_validator-2.2.0-py3-none-any.whl.metadata (25 kB)
+2026-10-22T06:17:59.0280774Z Collecting PyJWT==2.10.1 (from -r backend/requirements.txt (line 7))
+2026-10-22T06:17:59.0293556Z   Using cached PyJWT-2.10.1-py3-none-any.whl.metadata (4.0 kB)
+2026-10-22T06:17:59.0357105Z Collecting pyotp==2.10.0 (from -r backend/requirements.txt (line 8))
+2026-10-22T06:17:59.0368983Z   Using cached pyotp-2.10.0-py3-none-any.whl.metadata (10 kB)
+2026-10-22T06:17:59.0499496Z Collecting argon2-cffi==23.1.0 (from -r backend/requirements.txt (line 9))
+2026-10-22T06:17:59.0510955Z   Using cached argon2_cffi-23.1.0-py3-none-any.whl.metadata (5.2 kB)
+2026-10-22T06:17:59.0613027Z Collecting httpx==0.28.1 (from -r backend/requirements.txt (line 10))
+2026-10-22T06:17:59.0625002Z   Using cached httpx-0.28.1-py3-none-any.whl.metadata (7.1 kB)
+2026-10-22T06:17:59.0789579Z Collecting redis==5.2.1 (from -r backend/requirements.txt (line 11))
+2026-10-22T06:17:59.0802482Z   Using cached redis-5.2.1-py3-none-any.whl.metadata (9.1 kB)
+2026-10-22T06:17:59.2429810Z Collecting cryptography==44.0.3 (from -r backend/requirements.txt (line 12))
+2026-10-22T06:17:59.2443887Z   Using cached cryptography-44.0.3-cp39-abi3-manylinux_2_34_x86_64.whl.metadata (5.7 kB)
+2026-10-22T06:17:59.2533986Z Collecting python-multipart==0.0.20 (from -r backend/requirements.txt (line 13))
+2026-10-22T06:17:59.2546426Z   Using cached python_multipart-0.0.20-py3-none-any.whl.metadata (1.8 kB)
+2026-10-22T06:17:59.4286924Z Collecting Pillow==11.2.1 (from -r backend/requirements.txt (line 14))
+2026-10-22T06:17:59.4301123Z   Using cached pillow-11.2.1-cp312-cp312-manylinux_2_28_x86_64.whl.metadata (8.9 kB)
+2026-10-22T06:17:59.4501553Z Collecting pytest==8.3.5 (from -r backend/requirements.txt (line 15))
+2026-10-22T06:17:59.4514852Z   Using cached pytest-8.3.5-py3-none-any.whl.metadata (7.6 kB)
+2026-10-22T06:17:59.4627506Z Collecting pytest-asyncio==0.26.0 (from -r backend/requirements.txt (line 16))
+2026-10-22T06:17:59.4640644Z   Using cached pytest_asyncio-0.26.0-py3-none-any.whl.metadata (4.0 kB)
+2026-10-22T06:17:59.4719428Z Collecting respx==0.22.0 (from -r backend/requirements.txt (line 17))
+2026-10-22T06:17:59.4736500Z   Using cached respx-0.22.0-py2.py3-none-any.whl.metadata (4.1 kB)
+2026-10-22T06:17:59.4862435Z Collecting jsonschema==4.23.0 (from jsonschema[format]==4.23.0->-r backend/requirements.txt (line 18))
+2026-10-22T06:17:59.4874119Z   Using cached jsonschema-4.23.0-py3-none-any.whl.metadata (7.9 kB)
+2026-10-22T06:17:59.5067607Z Collecting starlette<0.47.0,>=0.40.0 (from fastapi==0.115.12->-r backend/requirements.txt (line 1))
+2026-10-22T06:17:59.5079095Z   Using cached starlette-0.46.2-py3-none-any.whl.metadata (6.2 kB)
+2026-10-22T06:17:59.6041364Z Collecting pydantic!=1.8,!=1.8.1,!=2.0.0,!=2.0.1,!=2.1.0,<3.0.0,>=1.7.4 (from fastapi==0.115.12->-r backend/requirements.txt (line 1))
+2026-10-22T06:17:59.6055435Z   Using cached pydantic-2.14.1-py3-none-any.whl.metadata (133 kB)
+2026-10-22T06:17:59.6191612Z Collecting typing-extensions>=4.8.0 (from fastapi==0.115.12->-r backend/requirements.txt (line 1))
+2026-10-22T06:17:59.6204264Z   Using cached typing_extensions-4.16.0-py3-none-any.whl.metadata (3.3 kB)
+2026-10-22T06:17:59.6309430Z Collecting click>=7.0 (from uvicorn==0.34.2->uvicorn[standard]==0.34.2->-r backend/requirements.txt (line 2))
+2026-10-22T06:17:59.6320869Z   Using cached click-8.5.0-py3-none-any.whl.metadata (2.6 kB)
+2026-10-22T06:17:59.6366915Z Collecting h11>=0.8 (from uvicorn==0.34.2->uvicorn[standard]==0.34.2->-r backend/requirements.txt (line 2))
+2026-10-22T06:17:59.6378498Z   Using cached h11-0.16.0-py3-none-any.whl.metadata (8.3 kB)
+2026-10-22T06:17:59.7818016Z Collecting greenlet>=1 (from sqlalchemy==2.0.41->-r backend/requirements.txt (line 3))
+2026-10-22T06:17:59.7832712Z   Using cached greenlet-3.5.6-cp312-cp312-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl.metadata (3.8 kB)
+2026-10-22T06:17:59.7987146Z Collecting python-dotenv>=0.21.0 (from pydantic-settings==2.9.1->-r backend/requirements.txt (line 5))
+2026-10-22T06:17:59.8000020Z   Using cached python_dotenv-1.2.4-py3-none-any.whl.metadata (29 kB)
+2026-10-22T06:17:59.8060482Z Collecting typing-inspection>=0.4.0 (from pydantic-settings==2.9.1->-r backend/requirements.txt (line 5))
+2026-10-22T06:17:59.8073025Z   Using cached typing_inspection-0.4.4-py3-none-any.whl.metadata (2.6 kB)
+2026-10-22T06:17:59.8141353Z Collecting dnspython>=2.0.0 (from email-validator==2.2.0->-r backend/requirements.txt (line 6))
+2026-10-22T06:17:59.8153620Z   Using cached dnspython-2.9.0-py3-none-any.whl.metadata (5.7 kB)
+2026-10-22T06:17:59.8250321Z Collecting idna>=2.0.0 (from email-validator==2.2.0->-r backend/requirements.txt (line 6))
+2026-10-22T06:17:59.8262610Z   Using cached idna-3.20-py3-none-any.whl.metadata (7.2 kB)
+2026-10-22T06:17:59.8364273Z Collecting argon2-cffi-bindings (from argon2-cffi==23.1.0->-r backend/requirements.txt (line 9))
+2026-10-22T06:17:59.8377838Z   Using cached argon2_cffi_bindings-26.1.0-cp310-abi3-manylinux_2_26_x86_64.manylinux_2_28_x86_64.whl.metadata (7.5 kB)
+2026-10-22T06:17:59.8500670Z Collecting anyio (from httpx==0.28.1->-r backend/requirements.txt (line 10))
+2026-10-22T06:17:59.8512965Z   Using cached anyio-4.15.1-py3-none-any.whl.metadata (4.7 kB)
+2026-10-22T06:17:59.8634058Z Collecting certifi (from httpx==0.28.1->-r backend/requirements.txt (line 10))
+2026-10-22T06:17:59.8646741Z   Using cached certifi-2026.10.19-py3-none-any.whl.metadata (2.5 kB)
+2026-10-22T06:17:59.8734014Z Collecting httpcore==1.* (from httpx==0.28.1->-r backend/requirements.txt (line 10))
+2026-10-22T06:17:59.8746747Z   Using cached httpcore-1.0.9-py3-none-any.whl.metadata (21 kB)
+2026-10-22T06:17:59.9706171Z Collecting cffi>=1.12 (from cryptography==44.0.3->-r backend/requirements.txt (line 12))
+2026-10-22T06:17:59.9721287Z   Using cached cffi-2.1.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (2.5 kB)
+2026-10-22T06:17:59.9785825Z Collecting iniconfig (from pytest==8.3.5->-r backend/requirements.txt (line 15))
+2026-10-22T06:17:59.9798486Z   Using cached iniconfig-2.3.1-py3-none-any.whl.metadata (2.8 kB)
+2026-10-22T06:17:59.9895975Z Collecting packaging (from pytest==8.3.5->-r backend/requirements.txt (line 15))
+2026-10-22T06:17:59.9910082Z   Using cached packaging-26.3-py3-none-any.whl.metadata (3.5 kB)
+2026-10-22T06:17:59.9970385Z Collecting pluggy<2,>=1.5 (from pytest==8.3.5->-r backend/requirements.txt (line 15))
+2026-10-22T06:17:59.9982975Z   Using cached pluggy-1.7.0-py3-none-any.whl.metadata (5.0 kB)
+2026-10-22T06:18:00.0088888Z Collecting attrs>=22.2.0 (from jsonschema==4.23.0->jsonschema[format]==4.23.0->-r backend/requirements.txt (line 18))
+2026-10-22T06:18:00.0101162Z   Using cached attrs-26.1.0-py3-none-any.whl.metadata (8.8 kB)
+2026-10-22T06:18:00.0162811Z Collecting jsonschema-specifications>=2023.03.6 (from jsonschema==4.23.0->jsonschema[format]==4.23.0->-r backend/requirements.txt (line 18))
+2026-10-22T06:18:00.0175556Z   Using cached jsonschema_specifications-2025.9.1-py3-none-any.whl.metadata (2.9 kB)
+2026-10-22T06:18:00.0304467Z Collecting referencing>=0.28.4 (from jsonschema==4.23.0->jsonschema[format]==4.23.0->-r backend/requirements.txt (line 18))
+2026-10-22T06:18:00.0317112Z   Using cached referencing-0.37.0-py3-none-any.whl.metadata (2.8 kB)
+2026-10-22T06:18:00.3120682Z Collecting rpds-py>=0.7.1 (from jsonschema==4.23.0->jsonschema[format]==4.23.0->-r backend/requirements.txt (line 18))
+2026-10-22T06:18:00.3136021Z   Using cached rpds_py-2026.9.1-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (4.1 kB)
+2026-10-22T06:18:00.3198635Z Collecting fqdn (from jsonschema[format]==4.23.0->-r backend/requirements.txt (line 18))
+2026-10-22T06:18:00.3211430Z   Using cached fqdn-1.6.0-py3-none-any.whl.metadata (9.4 kB)
+2026-10-22T06:18:00.3254007Z Collecting isoduration (from jsonschema[format]==4.23.0->-r backend/requirements.txt (line 18))
+2026-10-22T06:18:00.3266393Z   Using cached isoduration-20.11.0-py3-none-any.whl.metadata (5.7 kB)
+2026-10-22T06:18:00.3332597Z Collecting jsonpointer>1.13 (from jsonschema[format]==4.23.0->-r backend/requirements.txt (line 18))
+2026-10-22T06:18:00.3345057Z   Using cached jsonpointer-3.4-py3-none-any.whl.metadata (2.6 kB)
+2026-10-22T06:18:00.3385399Z Collecting rfc3339-validator (from jsonschema[format]==4.23.0->-r backend/requirements.txt (line 18))
+2026-10-22T06:18:00.3397728Z   Using cached rfc3339_validator-0.1.4-py2.py3-none-any.whl.metadata (1.5 kB)
+2026-10-22T06:18:00.3437607Z Collecting rfc3987 (from jsonschema[format]==4.23.0->-r backend/requirements.txt (line 18))
+2026-10-22T06:18:00.3450821Z   Using cached rfc3987-1.3.8-py2.py3-none-any.whl.metadata (7.5 kB)
+2026-10-22T06:18:00.3491767Z Collecting uri-template (from jsonschema[format]==4.23.0->-r backend/requirements.txt (line 18))
+2026-10-22T06:18:00.3503747Z   Using cached uri_template-1.3.0-py3-none-any.whl.metadata (8.8 kB)
+2026-10-22T06:18:00.3570473Z Collecting webcolors>=1.11 (from jsonschema[format]==4.23.0->-r backend/requirements.txt (line 18))
+2026-10-22T06:18:00.3582659Z   Using cached webcolors-25.10.0-py3-none-any.whl.metadata (2.2 kB)
+2026-10-22T06:18:00.4981737Z Collecting psycopg-binary==3.2.9 (from psycopg[binary]==3.2.9->-r backend/requirements.txt (line 4))
+2026-10-22T06:18:00.4996511Z   Using cached psycopg_binary-3.2.9-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (2.9 kB)
+2026-10-22T06:18:00.5297634Z Collecting httptools>=0.6.3 (from uvicorn[standard]==0.34.2->-r backend/requirements.txt (line 2))
+2026-10-22T06:18:00.5311705Z   Using cached httptools-0.9.0-cp312-cp312-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl.metadata (3.5 kB)
+2026-10-22T06:18:00.5637085Z Collecting uvloop!=0.15.0,!=0.15.1,>=0.14.0 (from uvicorn[standard]==0.34.2->-r backend/requirements.txt (line 2))
+2026-10-22T06:18:00.5650429Z   Using cached uvloop-0.23.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (5.1 kB)
+2026-10-22T06:18:00.6319681Z Collecting watchfiles>=0.13 (from uvicorn[standard]==0.34.2->-r backend/requirements.txt (line 2))
+2026-10-22T06:18:00.6334719Z   Using cached watchfiles-1.3.0-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (4.9 kB)
+2026-10-22T06:18:00.7563336Z Collecting websockets>=10.4 (from uvicorn[standard]==0.34.2->-r backend/requirements.txt (line 2))
+2026-10-22T06:18:00.7577835Z   Using cached websockets-17.3-cp312-cp312-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl.metadata (6.3 kB)
+2026-10-22T06:18:00.7647714Z Collecting annotated-types>=0.6.0 (from pydantic!=1.8,!=1.8.1,!=2.0.0,!=2.0.1,!=2.1.0,<3.0.0,>=1.7.4->fastapi==0.115.12->-r backend/requirements.txt (line 1))
+2026-10-22T06:18:00.7659365Z   Using cached annotated_types-0.8.0-py3-none-any.whl.metadata (15 kB)
+2026-10-22T06:18:01.4588089Z Collecting pydantic-core==2.50.1 (from pydantic!=1.8,!=1.8.1,!=2.0.0,!=2.0.1,!=2.1.0,<3.0.0,>=1.7.4->fastapi==0.115.12->-r backend/requirements.txt (line 1))
+2026-10-22T06:18:01.4603427Z   Using cached pydantic_core-2.50.1-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (6.5 kB)
+2026-10-22T06:18:01.4755942Z Collecting pycparser (from cffi>=1.12->cryptography==44.0.3->-r backend/requirements.txt (line 12))
+2026-10-22T06:18:01.4768643Z   Using cached pycparser-3.11-py3-none-any.whl.metadata (8.2 kB)
+2026-10-22T06:18:01.5074102Z Collecting arrow>=0.15.0 (from isoduration->jsonschema[format]==4.23.0->-r backend/requirements.txt (line 18))
+2026-10-22T06:18:01.5086652Z   Using cached arrow-1.4.0-py3-none-any.whl.metadata (7.7 kB)
+2026-10-22T06:18:01.5172988Z Collecting python-dateutil>=2.7.0 (from arrow>=0.15.0->isoduration->jsonschema[format]==4.23.0->-r backend/requirements.txt (line 18))
+2026-10-22T06:18:01.5185608Z   Using cached python_dateutil-3.0.0-py2.py3-none-any.whl.metadata (8.2 kB)
+2026-10-22T06:18:01.5271120Z Collecting tzdata (from arrow>=0.15.0->isoduration->jsonschema[format]==4.23.0->-r backend/requirements.txt (line 18))
+2026-10-22T06:18:01.5283140Z   Using cached tzdata-2026.5-py2.py3-none-any.whl.metadata (1.4 kB)
+2026-10-22T06:18:01.5356969Z Collecting six>=1.6 (from python-dateutil>=2.7.0->arrow>=0.15.0->isoduration->jsonschema[format]==4.23.0->-r backend/requirements.txt (line 18))
+2026-10-22T06:18:01.5368537Z   Using cached six-1.17.0-py2.py3-none-any.whl.metadata (1.7 kB)
+2026-10-22T06:18:01.5442162Z Using cached fastapi-0.115.12-py3-none-any.whl (95 kB)
+2026-10-22T06:18:01.5454360Z Using cached uvicorn-0.34.2-py3-none-any.whl (62 kB)
+2026-10-22T06:18:01.5466650Z Using cached sqlalchemy-2.0.41-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (3.3 MB)
+2026-10-22T06:18:01.5491556Z Using cached psycopg-3.2.9-py3-none-any.whl (202 kB)
+2026-10-22T06:18:01.5505611Z Using cached pydantic_settings-2.9.1-py3-none-any.whl (44 kB)
+2026-10-22T06:18:01.5517549Z Using cached email_validator-2.2.0-py3-none-any.whl (33 kB)
+2026-10-22T06:18:01.5529432Z Using cached PyJWT-2.10.1-py3-none-any.whl (22 kB)
+2026-10-22T06:18:01.5540932Z Using cached pyotp-2.10.0-py3-none-any.whl (13 kB)
+2026-10-22T06:18:01.5552361Z Using cached argon2_cffi-23.1.0-py3-none-any.whl (15 kB)
+2026-10-22T06:18:01.8505772Z Using cached httpx-0.28.1-py3-none-any.whl (73 kB)
+2026-10-22T06:18:01.8585480Z Using cached redis-5.2.1-py3-none-any.whl (261 kB)
+2026-10-22T06:18:01.8604374Z Using cached cryptography-44.0.3-cp39-abi3-manylinux_2_34_x86_64.whl (4.2 MB)
+2026-10-22T06:18:01.8634320Z Using cached python_multipart-0.0.20-py3-none-any.whl (24 kB)
+2026-10-22T06:18:01.8654376Z Using cached pillow-11.2.1-cp312-cp312-manylinux_2_28_x86_64.whl (4.6 MB)
+2026-10-22T06:18:01.8668117Z Using cached pytest-8.3.5-py3-none-any.whl (343 kB)
+2026-10-22T06:18:01.8683207Z Using cached pytest_asyncio-0.26.0-py3-none-any.whl (19 kB)
+2026-10-22T06:18:01.8696388Z Using cached respx-0.22.0-py2.py3-none-any.whl (25 kB)
+2026-10-22T06:18:01.8708367Z Using cached jsonschema-4.23.0-py3-none-any.whl (88 kB)
+2026-10-22T06:18:01.8720623Z Using cached psycopg_binary-3.2.9-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (4.4 MB)
+2026-10-22T06:18:01.8749749Z Using cached httpcore-1.0.9-py3-none-any.whl (78 kB)
+2026-10-22T06:18:01.8761860Z Using cached pluggy-1.7.0-py3-none-any.whl (27 kB)
+2026-10-22T06:18:01.8773673Z Using cached pydantic-2.14.1-py3-none-any.whl (488 kB)
+2026-10-22T06:18:01.8787911Z Using cached pydantic_core-2.50.1-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (2.2 MB)
+2026-10-22T06:18:01.8807580Z Using cached starlette-0.46.2-py3-none-any.whl (72 kB)
+2026-10-22T06:18:01.8819384Z Using cached anyio-4.15.1-py3-none-any.whl (132 kB)
+2026-10-22T06:18:01.8832230Z Using cached pyyaml-6.0.3-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (807 kB)
+2026-10-22T06:18:01.8847198Z Using cached annotated_types-0.8.0-py3-none-any.whl (13 kB)
+2026-10-22T06:18:01.8859651Z Using cached attrs-26.1.0-py3-none-any.whl (67 kB)
+2026-10-22T06:18:01.8872543Z Using cached cffi-2.1.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (221 kB)
+2026-10-22T06:18:01.8890056Z Using cached click-8.5.0-py3-none-any.whl (125 kB)
+2026-10-22T06:18:01.8907134Z Using cached dnspython-2.9.0-py3-none-any.whl (354 kB)
+2026-10-22T06:18:01.8927909Z Using cached greenlet-3.5.6-cp312-cp312-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl (621 kB)
+2026-10-22T06:18:01.8939594Z Using cached h11-0.16.0-py3-none-any.whl (37 kB)
+2026-10-22T06:18:01.8952088Z Using cached httptools-0.9.0-cp312-cp312-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl (552 kB)
+2026-10-22T06:18:01.8977328Z Using cached idna-3.20-py3-none-any.whl (69 kB)
+2026-10-22T06:18:01.8979960Z Using cached jsonpointer-3.4-py3-none-any.whl (9.0 kB)
+2026-10-22T06:18:01.8995795Z Using cached jsonschema_specifications-2025.9.1-py3-none-any.whl (18 kB)
+2026-10-22T06:18:01.9006919Z Using cached python_dotenv-1.2.4-py3-none-any.whl (23 kB)
+2026-10-22T06:18:01.9018517Z Using cached referencing-0.37.0-py3-none-any.whl (26 kB)
+2026-10-22T06:18:01.9030281Z Using cached rpds_py-2026.9.1-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (371 kB)
+2026-10-22T06:18:01.9042812Z Using cached typing_extensions-4.16.0-py3-none-any.whl (45 kB)
+2026-10-22T06:18:01.9054468Z Using cached typing_inspection-0.4.4-py3-none-any.whl (14 kB)
+2026-10-22T06:18:01.9066689Z Using cached uvloop-0.23.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (4.5 MB)
+2026-10-22T06:18:01.9094838Z Using cached watchfiles-1.3.0-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (458 kB)
+2026-10-22T06:18:01.9107615Z Using cached webcolors-25.10.0-py3-none-any.whl (14 kB)
+2026-10-22T06:18:01.9119568Z Using cached websockets-17.3-cp312-cp312-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl (225 kB)
+2026-10-22T06:18:01.9131815Z Using cached argon2_cffi_bindings-26.1.0-cp310-abi3-manylinux_2_26_x86_64.manylinux_2_28_x86_64.whl (26 kB)
+2026-10-22T06:18:01.9142961Z Using cached certifi-2026.10.19-py3-none-any.whl (136 kB)
+2026-10-22T06:18:01.9154744Z Using cached fqdn-1.6.0-py3-none-any.whl (12 kB)
+2026-10-22T06:18:01.9166140Z Using cached iniconfig-2.3.1-py3-none-any.whl (7.6 kB)
+2026-10-22T06:18:01.9177496Z Using cached isoduration-20.11.0-py3-none-any.whl (11 kB)
+2026-10-22T06:18:01.9188844Z Using cached arrow-1.4.0-py3-none-any.whl (68 kB)
+2026-10-22T06:18:01.9200456Z Using cached python_dateutil-3.0.0-py2.py3-none-any.whl (94 kB)
+2026-10-22T06:18:01.9211958Z Using cached six-1.17.0-py2.py3-none-any.whl (11 kB)
+2026-10-22T06:18:01.9223214Z Using cached packaging-26.3-py3-none-any.whl (129 kB)
+2026-10-22T06:18:01.9235343Z Using cached pycparser-3.11-py3-none-any.whl (51 kB)
+2026-10-22T06:18:01.9247159Z Using cached rfc3339_validator-0.1.4-py2.py3-none-any.whl (3.5 kB)
+2026-10-22T06:18:01.9258086Z Using cached rfc3987-1.3.8-py2.py3-none-any.whl (13 kB)
+2026-10-22T06:18:01.9269502Z Using cached tzdata-2026.5-py2.py3-none-any.whl (347 kB)
+2026-10-22T06:18:01.9282020Z Using cached uri_template-1.3.0-py3-none-any.whl (11 kB)
+2026-10-22T06:18:02.4660297Z Installing collected packages: rfc3987, websockets, webcolors, uvloop, uri-template, tzdata, typing-extensions, six, rpds-py, redis, pyyaml, python-multipart, python-dotenv, pyotp, PyJWT, pycparser, psycopg-binary, pluggy, Pillow, packaging, jsonpointer, iniconfig, idna, httptools, h11, greenlet, fqdn, dnspython, click, certifi, attrs, annotated-types, uvicorn, typing-inspection, sqlalchemy, rfc3339-validator, referencing, python-dateutil, pytest, pydantic-core, psycopg, httpcore, email-validator, cffi, anyio, watchfiles, starlette, pytest-asyncio, pydantic, jsonschema-specifications, httpx, cryptography, arrow, argon2-cffi-bindings, respx, pydantic-settings, jsonschema, isoduration, fastapi, argon2-cffi
+2026-10-22T06:18:07.1872952Z 
+2026-10-22T06:18:07.1928343Z Successfully installed Pillow-11.2.1 PyJWT-2.10.1 annotated-types-0.8.0 anyio-4.15.1 argon2-cffi-23.1.0 argon2-cffi-bindings-26.1.0 arrow-1.4.0 attrs-26.1.0 certifi-2026.10.19 cffi-2.1.1 click-8.5.0 cryptography-44.0.3 dnspython-2.9.0 email-validator-2.2.0 fastapi-0.115.12 fqdn-1.6.0 greenlet-3.5.6 h11-0.16.0 httpcore-1.0.9 httptools-0.9.0 httpx-0.28.1 idna-3.20 iniconfig-2.3.1 isoduration-20.11.0 jsonpointer-3.4 jsonschema-4.23.0 jsonschema-specifications-2025.9.1 packaging-26.3 pluggy-1.7.0 psycopg-3.2.9 psycopg-binary-3.2.9 pycparser-3.11 pydantic-2.14.1 pydantic-core-2.50.1 pydantic-settings-2.9.1 pyotp-2.10.0 pytest-8.3.5 pytest-asyncio-0.26.0 python-dateutil-3.0.0 python-dotenv-1.2.4 python-multipart-0.0.20 pyyaml-6.0.3 redis-5.2.1 referencing-0.37.0 respx-0.22.0 rfc3339-validator-0.1.4 rfc3987-1.3.8 rpds-py-2026.9.1 six-1.17.0 sqlalchemy-2.0.41 starlette-0.46.2 typing-extensions-4.16.0 typing-inspection-0.4.4 tzdata-2026.5 uri-template-1.3.0 uvicorn-0.34.2 uvloop-0.23.0 watchfiles-1.3.0 webcolors-25.10.0 websockets-17.3
+2026-10-22T06:18:07.1940373Z 
+2026-10-22T06:18:07.1940685Z [notice] A new release of pip is available: 26.2.1 -> 26.2.2
+2026-10-22T06:18:07.1941216Z [notice] To update, run: pip install --upgrade pip
+2026-10-22T06:18:07.3886711Z ##[group]Run sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client redis-tools
+2026-10-22T06:18:07.3887883Z [36;1msudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client redis-tools[0m
+2026-10-22T06:18:07.3956601Z shell: /usr/bin/bash -e {0}
+2026-10-22T06:18:07.3956875Z env:
+2026-10-22T06:18:07.3957081Z   CARGO_TERM_COLOR: always
+2026-10-22T06:18:07.3957343Z   RUSTFLAGS: -D warnings
+2026-10-22T06:18:07.3957596Z   CARGO_HOME: /home/runner/.cargo
+2026-10-22T06:18:07.3957872Z   CARGO_INCREMENTAL: 0
+2026-10-22T06:18:07.3958104Z   CACHE_ON_FAILURE: false
+2026-10-22T06:18:07.3958399Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-10-22T06:18:07.3958839Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.15/x64/lib/pkgconfig
+2026-10-22T06:18:07.3959279Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-10-22T06:18:07.3959669Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-10-22T06:18:07.3960104Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-10-22T06:18:07.3960498Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.15/x64/lib
+2026-10-22T06:18:07.3960825Z ##[endgroup]
+2026-10-22T06:18:16.3388968Z Selecting previously unselected package libjemalloc2:amd64.
+2026-10-22T06:18:16.3806949Z (Reading database ... 
+2026-10-22T06:18:16.3807568Z (Reading database ... 5%
+2026-10-22T06:18:16.3808091Z (Reading database ... 10%
+2026-10-22T06:18:16.3808596Z (Reading database ... 15%
+2026-10-22T06:18:16.3809524Z (Reading database ... 20%
+2026-10-22T06:18:16.3810011Z (Reading database ... 25%
+2026-10-22T06:18:16.3810501Z (Reading database ... 30%
+2026-10-22T06:18:16.3811000Z (Reading database ... 35%
+2026-10-22T06:18:16.3812057Z (Reading database ... 40%
+2026-10-22T06:18:16.3812871Z (Reading database ... 45%
+2026-10-22T06:18:16.3813403Z (Reading database ... 50%
+2026-10-22T06:18:16.4322191Z (Reading database ... 55%
+2026-10-22T06:18:16.7058187Z (Reading database ... 60%
+2026-10-22T06:18:16.9680505Z (Reading database ... 65%
+2026-10-22T06:18:17.1318375Z (Reading database ... 70%
+2026-10-22T06:18:17.3965545Z (Reading database ... 75%
+2026-10-22T06:18:17.8212048Z (Reading database ... 80%
+2026-10-22T06:18:18.4928604Z (Reading database ... 85%
+2026-10-22T06:18:19.1797388Z (Reading database ... 90%
+2026-10-22T06:18:19.8066954Z (Reading database ... 95%
+2026-10-22T06:18:19.8067384Z (Reading database ... 100%
+2026-10-22T06:18:19.8067897Z (Reading database ... 214410 files and directories currently installed.)
+2026-10-22T06:18:19.8112650Z Preparing to unpack .../libjemalloc2_5.3.0-2build1_amd64.deb ...
+2026-10-22T06:18:19.8183783Z Unpacking libjemalloc2:amd64 (5.3.0-2build1) ...
+2026-10-22T06:18:19.8494222Z Selecting previously unselected package liblzf1:amd64.
+2026-10-22T06:18:19.8635628Z Preparing to unpack .../liblzf1_3.6-4_amd64.deb ...
+2026-10-22T06:18:19.8643972Z Unpacking liblzf1:amd64 (3.6-4) ...
+2026-10-22T06:18:19.8873387Z Selecting previously unselected package postgresql-client.
+2026-10-22T06:18:19.9016096Z Preparing to unpack .../postgresql-client_16+257build1.1_all.deb ...
+2026-10-22T06:18:19.9023033Z Unpacking postgresql-client (16+257build1.1) ...
+2026-10-22T06:18:19.9244808Z Selecting previously unselected package redis-tools.
+2026-10-22T06:18:19.9387746Z Preparing to unpack .../redis-tools_5%3a7.0.15-1ubuntu0.24.04.5_amd64.deb ...
+2026-10-22T06:18:19.9394195Z Unpacking redis-tools (5:7.0.15-1ubuntu0.24.04.5) ...
+2026-10-22T06:18:20.0194473Z Setting up postgresql-client (16+257build1.1) ...
+2026-10-22T06:18:20.0213222Z Setting up libjemalloc2:amd64 (5.3.0-2build1) ...
+2026-10-22T06:18:20.0230001Z Setting up liblzf1:amd64 (3.6-4) ...
+2026-10-22T06:18:20.0248519Z Setting up redis-tools (5:7.0.15-1ubuntu0.24.04.5) ...
+2026-10-22T06:18:20.1559271Z Processing triggers for man-db (2.12.0-4build2) ...
+2026-10-22T06:18:20.1618205Z Not building database; man-db/auto-update is not 'true'.
+2026-10-22T06:18:20.1632862Z Processing triggers for libc-bin (2.39-0ubuntu8.9) ...
+2026-10-22T06:18:21.4564164Z 
+2026-10-22T06:18:21.4565137Z Running kernel seems to be up-to-date.
+2026-10-22T06:18:21.4565492Z 
+2026-10-22T06:18:21.4565667Z No services need to be restarted.
+2026-10-22T06:18:21.4565932Z 
+2026-10-22T06:18:21.4574697Z No containers need to be restarted.
+2026-10-22T06:18:21.4575055Z 
+2026-10-22T06:18:21.4575293Z No user sessions are running outdated binaries.
+2026-10-22T06:18:21.4575667Z 
+2026-10-22T06:18:21.4575991Z No VM guests are running outdated hypervisor (qemu) binaries on this host.
+2026-10-22T06:18:22.5494666Z ##[group]Run WORK="$RUNNER_TEMP/smoke" bash scripts/kernel-live-smoke.sh
+2026-10-22T06:18:22.5495234Z [36;1mWORK="$RUNNER_TEMP/smoke" bash scripts/kernel-live-smoke.sh[0m
+2026-10-22T06:18:22.5545322Z shell: /usr/bin/bash -e {0}
+2026-10-22T06:18:22.5545590Z env:
+2026-10-22T06:18:22.5545798Z   CARGO_TERM_COLOR: always
+2026-10-22T06:18:22.5546052Z   RUSTFLAGS: 
+2026-10-22T06:18:22.5546278Z   CARGO_HOME: /home/runner/.cargo
+2026-10-22T06:18:22.5546546Z   CARGO_INCREMENTAL: 0
+2026-10-22T06:18:22.5546788Z   CACHE_ON_FAILURE: false
+2026-10-22T06:18:22.5547097Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-10-22T06:18:22.5547556Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.15/x64/lib/pkgconfig
+2026-10-22T06:18:22.5548005Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-10-22T06:18:22.5548406Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-10-22T06:18:22.5548814Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-10-22T06:18:22.5549469Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.15/x64/lib
+2026-10-22T06:18:22.5550063Z   PGURL: ***127.0.0.1:5432/mk_kernel_smoke
+2026-10-22T06:18:22.5550374Z   REDIS_URL: redis://127.0.0.1:6379
+2026-10-22T06:18:22.5550662Z ##[endgroup]
+2026-10-22T06:18:22.5798150Z [1;36m[smoke][0m building release binaries
+2026-10-22T06:20:01.4124136Z [1;36m[smoke][0m fresh database
+2026-10-22T06:20:01.5621679Z NOTICE:  database "mk_kernel_smoke" does not exist, skipping
+2026-10-22T06:20:01.9670541Z [1;36m[smoke][0m creating per-process database identities
+2026-10-22T06:20:02.0820002Z [1;36m[smoke][0m starting kernel api / relay / worker (each as its own DB login)
+2026-10-22T06:20:02.1615785Z [1;36m[smoke][0m starting FastAPI with the kernel wired in (no Python fallback)
+2026-10-22T06:20:05.1187232Z [1;36m[smoke][0m approver registers a passkey through the kernel ceremony (software authenticator = test equipment)
+2026-10-22T06:20:05.3337807Z [1;36m[smoke][0m kernel health through the app
+2026-10-22T06:20:05.3667586Z [1;36m[smoke][0m register the device agent (tenant_admin via app)
+2026-10-22T06:20:05.4336146Z [1;36m[smoke][0m starting the ADB device agent in dry-run
+2026-10-22T06:20:06.1149868Z [1;36m[smoke][0m gate 2: suppressed contact is refused at proposal
+2026-10-22T06:20:06.3587535Z [1;36m[smoke][0m   403 suppressed
+2026-10-22T06:20:06.3588954Z [1;36m[smoke][0m gate 5: idempotent proposal + shared jti
+2026-10-22T06:20:06.6151335Z [1;36m[smoke][0m gate 3: revoked approval is never dispatched
+2026-10-22T06:20:12.9360250Z [1;36m[smoke][0m   state after revoke: cancelled
+2026-10-22T06:20:12.9361494Z [1;36m[smoke][0m gate 4: tenant kill switch blocks dispatch (flipped AFTER proposal, BEFORE approval)
+2026-10-22T06:20:13.1671604Z [1;36m[smoke][0m   approve under kill switch → 200
+2026-10-22T06:20:19.3136074Z [1;36m[smoke][0m   state under kill switch: cancelled
+2026-10-22T06:20:19.3484812Z [1;36m[smoke][0m gate 8: approval authority is the human's authenticator, not the proxy's assertion key
+2026-10-22T06:20:19.6939443Z [1;36m[smoke][0m   unbound → 403, unregistered key → 403, burned/transplanted challenge → 409
+2026-10-22T06:20:20.9398183Z [1;36m[smoke][0m gate 1: approved action reaches the device agent; signed callback accepted
+2026-10-22T06:20:20.9400206Z [1;36m[smoke][0m   terminal state: failed_final (dry-run agent reports failed/dry_run_no_device — honest, no device)
+2026-10-22T06:20:20.9815254Z   agent evidence chain ok, head 7fe12b6a7f71633f
+2026-10-22T06:20:20.9862117Z [1;36m[smoke][0m gate 6: kernel audit chain verifies (read-only identity)
+2026-10-22T06:20:21.0194800Z {"timestamp":"2026-10-22T06:20:21.015481Z","level":"INFO","fields":{"message":"chain ok","tenant":"9138fad2-11a7-4bfc-94ad-67c7abe5420d","events":52,"root":"sha256:bb2dcc2ae243467a3356e41e9a09d41402d2d3c26c2ee52e24f58b0bfa75ca97"},"target":"mk_audit_verifier"}
+2026-10-22T06:20:21.0197463Z [1;36m[smoke][0m gate 7: identities are least-privilege (API cannot claim outbox; relay cannot read approvals; readonly cannot write)
+2026-10-22T06:20:21.1865841Z [1;36m[smoke][0m worker log clean under its restricted login (housekeeping under mk_kernel_worker is proven by mk-store::postgres::worker_role_can_discover_tenants_and_purge_nonces_across_tenants)
+2026-10-22T06:20:21.1884204Z [1;36m[smoke][0m gate 9: session revocation blocks the approver's next request and any live approval
+2026-10-22T06:20:24.5139090Z [1;36m[smoke][0m   revoked session → 401 PRINCIPAL_REVOKED; its live approval → cancelled
+2026-10-22T06:20:24.5140416Z [1;36m[smoke][0m gate 10: production SMS path — registered sender, provider submission, authenticated status callbacks, inbound STOP
+2026-10-22T06:20:34.4261278Z [1;36m[smoke][0m   provider_accepted → sent → delivered via signed callbacks; forged → 403; STOP → suppressed, proposal refused, processed once
+2026-10-22T06:20:34.4263228Z [1;36m[smoke][0m gate 11: envelope key rotation under load of real rows, then the restore gate (report mode)
+2026-10-22T06:20:38.3721273Z [1;36m[smoke][0m   v1 → v2 rotated, re-sealed, v1 retired; webhooks/sends still authenticate; restore gate reports FAIL-while-enabled with all recoverability checks green
+2026-10-22T06:20:38.3722994Z [1;36m[smoke][0m no PII in kernel/agent logs
+2026-10-22T06:20:38.3739014Z [1;36m[smoke][0m gate 8: production pre-flight passes against this stack (and refuses --for-enable without an acceptance record)
+2026-10-22T06:20:39.8735260Z == 1. liveness
+2026-10-22T06:20:39.8736172Z   [32mPASS[0m kernel /health/ready is 200
+2026-10-22T06:20:39.8736944Z   [32mPASS[0m kernel /metrics served
+2026-10-22T06:20:39.8737737Z   [32mPASS[0m kernel internal API not reachable without assertion (401)
+2026-10-22T06:20:39.8738749Z == 2. FastAPI ↔ kernel assertion pairing
+2026-10-22T06:20:39.8739502Z   [32mPASS[0m app login
+2026-10-22T06:20:39.8740249Z   [31mFAIL[0m app → kernel health 200 (kernel configured in app)
+2026-10-22T06:20:39.8741320Z   [31mFAIL[0m app-minted assertion accepted by kernel (GET pending → 200)
+2026-10-22T06:20:39.8742446Z   [31mFAIL[0m app never falls back: bogus action id → kernel 404, not 200
+2026-10-22T06:20:39.8743195Z == 3. schema at head
+2026-10-22T06:20:39.8744073Z   [32mPASS[0m migrations applied: 16/16
+2026-10-22T06:20:39.8744745Z   [32mPASS[0m no failed migration rows
+2026-10-22T06:20:39.8745546Z == 4. per-process identities (least privilege, RLS enforced)
+2026-10-22T06:20:39.8746558Z   [32mPASS[0m mk_api_login → exactly mk_kernel_api; no superuser/bypassrls
+2026-10-22T06:20:39.8747663Z   [32mPASS[0m mk_worker_login → exactly mk_kernel_worker; no superuser/bypassrls
+2026-10-22T06:20:39.8748741Z   [32mPASS[0m mk_relay_login → exactly mk_kernel_relay; no superuser/bypassrls
+2026-10-22T06:20:39.8749897Z   [32mPASS[0m mk_readonly_login → exactly mk_kernel_readonly; no superuser/bypassrls
+2026-10-22T06:20:39.8750830Z   [32mPASS[0m api cannot claim outbox rows
+2026-10-22T06:20:39.8751568Z   [32mPASS[0m api cannot delete audit events
+2026-10-22T06:20:39.8752404Z   [32mPASS[0m api cannot delete assertion jtis
+2026-10-22T06:20:39.8753113Z   [32mPASS[0m relay cannot read approvals
+2026-10-22T06:20:39.8754206Z   [32mPASS[0m relay cannot read actions payloads
+2026-10-22T06:20:39.8754992Z   [32mPASS[0m readonly cannot write kill switches
+2026-10-22T06:20:39.8755996Z   [32mPASS[0m worker can discover tenants (RLS policy present)
+2026-10-22T06:20:39.8756980Z   [32mPASS[0m RLS enabled AND forced on every tenant-scoped table (16+)
+2026-10-22T06:20:39.8758049Z   [32mPASS[0m tenant_directory holds tenant ids only (no tenant data outside RLS)
+2026-10-22T06:20:39.8758870Z   [32mPASS[0m no runtime login owns kernel tables
+2026-10-22T06:20:39.8759361Z == 5. kill switches
+2026-10-22T06:20:39.8759928Z   [32mPASS[0m global kill switch row present (dispatch_enabled=t)
+2026-10-22T06:20:39.8760519Z      tenant switches off: 0
+2026-10-22T06:20:39.8760899Z == 6. audit chain
+2026-10-22T06:20:39.8761505Z   [32mPASS[0m audit chain verifies for every tenant (read-only identity)
+2026-10-22T06:20:39.8762455Z == 7. configuration hygiene
+2026-10-22T06:20:39.8763420Z   [32mPASS[0m compose: no private key in kernel services, no published kernel ports, all hardened, verifier keyless
+2026-10-22T06:20:39.8769039Z   [32mPASS[0m MK_EGRESS_AUTHORITIES set (127.0.0.1:8787)
+2026-10-22T06:20:39.8769697Z   [32mPASS[0m MK_MOBILE_INTAKE_URL is https
+2026-10-22T06:20:39.8770170Z == 8. enable gate
+2026-10-22T06:20:39.8770700Z      (run with --for-enable before setting RUST_ACTION_KERNEL_ENABLED=1)
+2026-10-22T06:20:39.8771236Z 
+2026-10-22T06:20:39.8771456Z pre-flight: 25 passed, 3 failed
+2026-10-22T06:20:39.8796102Z [1;31m[smoke FAIL][0m pre-flight failed
+2026-10-22T06:20:39.8829334Z ##[error]Process completed with exit code 1.
+2026-10-22T06:20:39.8955159Z ##[group]Run actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+2026-10-22T06:20:39.8955582Z with:
+2026-10-22T06:20:39.8955777Z   name: live-smoke
+2026-10-22T06:20:39.8956018Z   path: /home/runner/work/_temp/smoke/*.log
+2026-10-22T06:20:39.8956309Z   if-no-files-found: ignore
+2026-10-22T06:20:39.8956747Z   compression-level: 6
+2026-10-22T06:20:39.8956969Z   overwrite: false
+2026-10-22T06:20:39.8957190Z   include-hidden-files: false
+2026-10-22T06:20:39.8957434Z env:
+2026-10-22T06:20:39.8957627Z   CARGO_TERM_COLOR: always
+2026-10-22T06:20:39.8957863Z   RUSTFLAGS: -D warnings
+2026-10-22T06:20:39.8958107Z   CARGO_HOME: /home/runner/.cargo
+2026-10-22T06:20:39.8958367Z   CARGO_INCREMENTAL: 0
+2026-10-22T06:20:39.8958599Z   CACHE_ON_FAILURE: false
+2026-10-22T06:20:39.8958888Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-10-22T06:20:39.8959319Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.15/x64/lib/pkgconfig
+2026-10-22T06:20:39.8959780Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-10-22T06:20:39.8960215Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-10-22T06:20:39.8960612Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-10-22T06:20:39.8961009Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.15/x64/lib
+2026-10-22T06:20:39.8961346Z ##[endgroup]
+2026-10-22T06:20:40.0856377Z (node:6746) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-10-22T06:20:40.0857682Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-10-22T06:20:40.0927919Z With the provided path, there will be 9 files uploaded
+2026-10-22T06:20:40.0933850Z Artifact name is valid!
+2026-10-22T06:20:40.0934517Z Root directory input is valid!
+2026-10-22T06:20:40.2868843Z Beginning upload of artifact content to blob storage
+2026-10-22T06:20:40.3209191Z (node:6746) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+2026-10-22T06:20:40.3650649Z Uploaded bytes 5566
+2026-10-22T06:20:40.3833732Z Finished uploading artifact content to blob storage!
+2026-10-22T06:20:40.3835167Z SHA256 digest of uploaded artifact zip is 66f6967567c0eac03dd647d9eee02ea6004997bd99cb82a11491020f7f9f1842
+2026-10-22T06:20:40.3836958Z Finalizing artifact upload
+2026-10-22T06:20:40.8110824Z Artifact live-smoke.zip successfully finalized. Artifact ID 12406345842
+2026-10-22T06:20:40.8112012Z Artifact live-smoke has been successfully uploaded! Final size is 5566 bytes. Artifact ID is 12406345842
+2026-10-22T06:20:40.8119332Z Artifact download URL: https://github.com/rblake2320/Mk-harness-/actions/runs/39732644405/artifacts/12406345842
+2026-10-22T06:20:40.8353904Z Post job cleanup.
+2026-10-22T06:20:40.9221137Z [command]/usr/bin/git version
+2026-10-22T06:20:40.9297366Z git version 2.55.0
+2026-10-22T06:20:40.9334210Z Temporarily overriding HOME='/home/runner/work/_temp/67744953-7573-4b69-8d7c-84c848e94b8b' before making global git config changes
+2026-10-22T06:20:40.9335550Z Adding repository directory to the temporary git global config as a safe directory
+2026-10-22T06:20:40.9339390Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/Mk-harness-/Mk-harness-
+2026-10-22T06:20:40.9374988Z Removing SSH command configuration
+2026-10-22T06:20:40.9381558Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-10-22T06:20:40.9420117Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-10-22T06:20:40.9658938Z Removing HTTP extra header
+2026-10-22T06:20:40.9664099Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-10-22T06:20:40.9702525Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-10-22T06:20:40.9944176Z Removing includeIf entries pointing to credentials config files
+2026-10-22T06:20:40.9951319Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-10-22T06:20:40.9986139Z includeif.gitdir:/home/runner/work/Mk-harness-/Mk-harness-/.git.path
+2026-10-22T06:20:40.9987118Z includeif.gitdir:/home/runner/work/Mk-harness-/Mk-harness-/.git/worktrees/*.path
+2026-10-22T06:20:40.9988019Z includeif.gitdir:/github/workspace/.git.path
+2026-10-22T06:20:40.9988693Z includeif.gitdir:/github/workspace/.git/worktrees/*.path
+2026-10-22T06:20:40.9996673Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/home/runner/work/Mk-harness-/Mk-harness-/.git.path
+2026-10-22T06:20:41.0022724Z /home/runner/work/_temp/git-credentials-4fbcb6f1-0ecc-4986-af0a-ef7d1b3dd238.config
+2026-10-22T06:20:41.0033394Z [command]/usr/bin/git config --local --unset includeif.gitdir:/home/runner/work/Mk-harness-/Mk-harness-/.git.path /home/runner/work/_temp/git-credentials-4fbcb6f1-0ecc-4986-af0a-ef7d1b3dd238.config
+2026-10-22T06:20:41.0072745Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/home/runner/work/Mk-harness-/Mk-harness-/.git/worktrees/*.path
+2026-10-22T06:20:41.0106312Z /home/runner/work/_temp/git-credentials-4fbcb6f1-0ecc-4986-af0a-ef7d1b3dd238.config
+2026-10-22T06:20:41.0117716Z [command]/usr/bin/git config --local --unset includeif.gitdir:/home/runner/work/Mk-harness-/Mk-harness-/.git/worktrees/*.path /home/runner/work/_temp/git-credentials-4fbcb6f1-0ecc-4986-af0a-ef7d1b3dd238.config
+2026-10-22T06:20:41.0154182Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/github/workspace/.git.path
+2026-10-22T06:20:41.0180679Z /github/runner_temp/git-credentials-4fbcb6f1-0ecc-4986-af0a-ef7d1b3dd238.config
+2026-10-22T06:20:41.0191439Z [command]/usr/bin/git config --local --unset includeif.gitdir:/github/workspace/.git.path /github/runner_temp/git-credentials-4fbcb6f1-0ecc-4986-af0a-ef7d1b3dd238.config
+2026-10-22T06:20:41.0229186Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/github/workspace/.git/worktrees/*.path
+2026-10-22T06:20:41.0254228Z /github/runner_temp/git-credentials-4fbcb6f1-0ecc-4986-af0a-ef7d1b3dd238.config
+2026-10-22T06:20:41.0262133Z [command]/usr/bin/git config --local --unset includeif.gitdir:/github/workspace/.git/worktrees/*.path /github/runner_temp/git-credentials-4fbcb6f1-0ecc-4986-af0a-ef7d1b3dd238.config
+2026-10-22T06:20:41.0305965Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-10-22T06:20:41.0573876Z Removing credentials config '/home/runner/work/_temp/git-credentials-4fbcb6f1-0ecc-4986-af0a-ef7d1b3dd238.config'
+2026-10-22T06:20:41.0701399Z Print service container logs: 976d37b2229648d5a6fffd424d72ff7a_postgres16alpine_f1033f
+2026-10-22T06:20:41.0706570Z ##[command]/usr/bin/docker logs --details e939d1542d5f1ed31205c495645998ffadec15afb09a15cca034e3cebc52b487
+2026-10-22T06:20:41.0862842Z  The files belonging to this database system will be owned by user "postgres".
+2026-10-22T06:20:41.0864907Z  sh: locale: not found
+2026-10-22T06:20:41.0865967Z  This user must also own the server process.
+2026-10-22T06:20:41.0866788Z  2026-10-22 06:17:32.155 UTC [34] WARNING:  no usable system locales were found
+2026-10-22T06:20:41.0867623Z  initdb: warning: enabling "trust" authentication for local connections
+2026-10-22T06:20:41.0868447Z  initdb: hint: You can change this by editing pg_hba.conf or using the option -A, or --auth-local and --auth-host, the next time you run initdb.
+2026-10-22T06:20:41.0869472Z  2026-10-22 06:17:33.131 UTC [1] LOG:  starting PostgreSQL 16.15 on x86_64-pc-linux-musl, compiled by gcc (Alpine 15.2.0) 15.2.0, 64-bit
+2026-10-22T06:20:41.0870126Z  2026-10-22 06:17:33.131 UTC [1] LOG:  listening on IPv4 address "0.0.0.0", port 5432
+2026-10-22T06:20:41.0870621Z  2026-10-22 06:17:33.131 UTC [1] LOG:  listening on IPv6 address "::", port 5432
+2026-10-22T06:20:41.0871148Z  2026-10-22 06:17:33.132 UTC [1] LOG:  listening on Unix socket "/var/run/postgresql/.s.PGSQL.5432"
+2026-10-22T06:20:41.0871723Z  2026-10-22 06:17:33.135 UTC [54] LOG:  database system was shut down at 2026-10-22 06:17:33 UTC
+2026-10-22T06:20:41.0872544Z  2026-10-22 06:17:33.139 UTC [1] LOG:  database system is ready to accept connections
+2026-10-22T06:20:41.0873057Z  2026-10-22 06:20:20.211 UTC [264] ERROR:  permission denied for table adapter_registrations
+2026-10-22T06:20:41.0874300Z  2026-10-22 06:20:20.211 UTC [264] STATEMENT:  UPDATE kernel.adapter_registrations SET last_used_at = $3 WHERE tenant_id = $1 AND adapter_id = $2
+2026-10-22T06:20:41.0875068Z  2026-10-22 06:20:20.250 UTC [265] ERROR:  permission denied for table adapter_registrations
+2026-10-22T06:20:41.0875780Z  2026-10-22 06:20:20.250 UTC [265] STATEMENT:  UPDATE kernel.adapter_registrations SET last_used_at = $3 WHERE tenant_id = $1 AND adapter_id = $2
+2026-10-22T06:20:41.0876517Z  2026-10-22 06:20:21.015 UTC [300] LOG:  unexpected EOF on client connection with an open transaction
+2026-10-22T06:20:41.0877063Z  2026-10-22 06:20:21.057 UTC [301] ERROR:  permission denied for table outbox_events
+2026-10-22T06:20:41.0877622Z  2026-10-22 06:20:21.057 UTC [301] STATEMENT:  UPDATE kernel.outbox_events SET leased_by='x' WHERE false
+2026-10-22T06:20:41.0878176Z  2026-10-22 06:20:21.100 UTC [302] ERROR:  permission denied for table approvals
+2026-10-22T06:20:41.0878653Z  2026-10-22 06:20:21.100 UTC [302] STATEMENT:  SELECT 1 FROM kernel.approvals LIMIT 1
+2026-10-22T06:20:41.0879209Z  2026-10-22 06:20:21.141 UTC [303] ERROR:  permission denied for table kill_switches
+2026-10-22T06:20:41.0880065Z  2026-10-22 06:20:21.141 UTC [303] STATEMENT:  INSERT INTO kernel.kill_switches (scope,tenant_id,dispatch_enabled,changed_by) VALUES ('tenant','9138fad2-11a7-4bfc-94ad-67c7abe5420d',false,'x')
+2026-10-22T06:20:41.0880896Z  2026-10-22 06:20:21.184 UTC [304] ERROR:  permission denied for table audit_events
+2026-10-22T06:20:41.0881404Z  2026-10-22 06:20:21.184 UTC [304] STATEMENT:  DELETE FROM kernel.audit_events WHERE false
+2026-10-22T06:20:41.0881907Z  2026-10-22 06:20:39.008 UTC [360] ERROR:  permission denied for table outbox_events
+2026-10-22T06:20:41.0882461Z  2026-10-22 06:20:39.008 UTC [360] STATEMENT:  UPDATE kernel.outbox_events SET leased_by='x' WHERE false
+2026-10-22T06:20:41.0883014Z  2026-10-22 06:20:39.050 UTC [361] ERROR:  permission denied for table outbox_events
+2026-10-22T06:20:41.0883816Z  2026-10-22 06:20:39.050 UTC [361] STATEMENT:  UPDATE kernel.outbox_events SET leased_by='x' WHERE false
+2026-10-22T06:20:41.0884385Z  2026-10-22 06:20:39.095 UTC [362] ERROR:  permission denied for table audit_events
+2026-10-22T06:20:41.0885150Z  2026-10-22 06:20:39.095 UTC [362] STATEMENT:  DELETE FROM kernel.audit_events WHERE false
+2026-10-22T06:20:41.0886011Z  2026-10-22 06:20:39.137 UTC [363] ERROR:  permission denied for table audit_events
+2026-10-22T06:20:41.0887110Z  2026-10-22 06:20:39.137 UTC [363] STATEMENT:  DELETE FROM kernel.audit_events WHERE false
+2026-10-22T06:20:41.0888025Z  2026-10-22 06:20:39.179 UTC [364] ERROR:  permission denied for table assertion_jtis
+2026-10-22T06:20:41.0888908Z  2026-10-22 06:20:39.179 UTC [364] STATEMENT:  DELETE FROM kernel.assertion_jtis WHERE false
+2026-10-22T06:20:41.0889818Z  2026-10-22 06:20:39.221 UTC [365] ERROR:  permission denied for table assertion_jtis
+2026-10-22T06:20:41.0890695Z  2026-10-22 06:20:39.221 UTC [365] STATEMENT:  DELETE FROM kernel.assertion_jtis WHERE false
+2026-10-22T06:20:41.0891563Z  2026-10-22 06:20:39.265 UTC [366] ERROR:  permission denied for table approvals
+2026-10-22T06:20:41.0892390Z  2026-10-22 06:20:39.265 UTC [366] STATEMENT:  SELECT 1 FROM kernel.approvals LIMIT 1
+2026-10-22T06:20:41.0893216Z  2026-10-22 06:20:39.308 UTC [367] ERROR:  permission denied for table approvals
+2026-10-22T06:20:41.0894208Z  2026-10-22 06:20:39.308 UTC [367] STATEMENT:  SELECT 1 FROM kernel.approvals LIMIT 1
+2026-10-22T06:20:41.0894693Z  2026-10-22 06:20:39.352 UTC [368] ERROR:  permission denied for table actions
+2026-10-22T06:20:41.0895168Z  2026-10-22 06:20:39.352 UTC [368] STATEMENT:  SELECT 1 FROM kernel.actions LIMIT 1
+2026-10-22T06:20:41.0895641Z  2026-10-22 06:20:39.398 UTC [369] ERROR:  permission denied for table actions
+2026-10-22T06:20:41.0896402Z  2026-10-22 06:20:39.398 UTC [369] STATEMENT:  SELECT 1 FROM kernel.actions LIMIT 1
+2026-10-22T06:20:41.0896886Z  2026-10-22 06:20:39.440 UTC [370] ERROR:  permission denied for table kill_switches
+2026-10-22T06:20:41.0897627Z  2026-10-22 06:20:39.440 UTC [370] STATEMENT:  INSERT INTO kernel.kill_switches (scope,tenant_id,dispatch_enabled,changed_by) VALUES ('global',NULL,false,'x')
+2026-10-22T06:20:41.0898360Z  2026-10-22 06:20:39.482 UTC [371] ERROR:  permission denied for table kill_switches
+2026-10-22T06:20:41.0899102Z  2026-10-22 06:20:39.482 UTC [371] STATEMENT:  INSERT INTO kernel.kill_switches (scope,tenant_id,dispatch_enabled,changed_by) VALUES ('global',NULL,false,'x')
+2026-10-22T06:20:41.0899895Z  2026-10-22 06:20:39.813 UTC [380] LOG:  unexpected EOF on client connection with an open transaction
+2026-10-22T06:20:41.0900358Z  
+2026-10-22T06:20:41.0900653Z  The database cluster will be initialized with locale "en_US.utf8".
+2026-10-22T06:20:41.0901114Z  The default database encoding has accordingly been set to "UTF8".
+2026-10-22T06:20:41.0901560Z  The default text search configuration will be set to "english".
+2026-10-22T06:20:41.0901895Z  
+2026-10-22T06:20:41.0902100Z  Data page checksums are disabled.
+2026-10-22T06:20:41.0902357Z  
+2026-10-22T06:20:41.0902661Z  fixing permissions on existing directory /var/lib/postgresql/data ... ok
+2026-10-22T06:20:41.0903070Z  creating subdirectories ... ok
+2026-10-22T06:20:41.0903395Z  selecting dynamic shared memory implementation ... posix
+2026-10-22T06:20:41.0904025Z  selecting default max_connections ... 100
+2026-10-22T06:20:41.0904343Z  selecting default shared_buffers ... 128MB
+2026-10-22T06:20:41.0904640Z  selecting default time zone ... UTC
+2026-10-22T06:20:41.0904927Z  creating configuration files ... ok
+2026-10-22T06:20:41.0905203Z  running bootstrap script ... ok
+2026-10-22T06:20:41.0905513Z  performing post-bootstrap initialization ... ok
+2026-10-22T06:20:41.0905826Z  syncing data to disk ... ok
+2026-10-22T06:20:41.0906075Z  
+2026-10-22T06:20:41.0906256Z  
+2026-10-22T06:20:41.0906492Z  Success. You can now start the database server using:
+2026-10-22T06:20:41.0906797Z  
+2026-10-22T06:20:41.0907040Z      pg_ctl -D /var/lib/postgresql/data -l logfile start
+2026-10-22T06:20:41.0907350Z  
+2026-10-22T06:20:41.0907911Z  waiting for server to start....2026-10-22 06:17:32.907 UTC [40] LOG:  starting PostgreSQL 16.15 on x86_64-pc-linux-musl, compiled by gcc (Alpine 15.2.0) 15.2.0, 64-bit
+2026-10-22T06:20:41.0908881Z  2026-10-22 06:17:32.908 UTC [40] LOG:  listening on Unix socket "/var/run/postgresql/.s.PGSQL.5432"
+2026-10-22T06:20:41.0909480Z  2026-10-22 06:17:32.911 UTC [43] LOG:  database system was shut down at 2026-10-22 06:17:32 UTC
+2026-10-22T06:20:41.0909996Z  2026-10-22 06:17:32.918 UTC [40] LOG:  database system is ready to accept connections
+2026-10-22T06:20:41.0910389Z   done
+2026-10-22T06:20:41.0910590Z  server started
+2026-10-22T06:20:41.0910794Z  
+2026-10-22T06:20:41.0911131Z  /usr/local/bin/docker-entrypoint.sh: ignoring /docker-entrypoint-initdb.d/*
+2026-10-22T06:20:41.0911532Z  
+2026-10-22T06:20:41.0911899Z  waiting for server to shut down....2026-10-22 06:17:33.006 UTC [40] LOG:  received fast shutdown request
+2026-10-22T06:20:41.0912433Z  2026-10-22 06:17:33.006 UTC [40] LOG:  aborting any active transactions
+2026-10-22T06:20:41.0913019Z  2026-10-22 06:17:33.009 UTC [40] LOG:  background worker "logical replication launcher" (PID 46) exited with exit code 1
+2026-10-22T06:20:41.0913810Z  2026-10-22 06:17:33.011 UTC [41] LOG:  shutting down
+2026-10-22T06:20:41.0914213Z  2026-10-22 06:17:33.011 UTC [41] LOG:  checkpoint starting: shutdown immediate
+2026-10-22T06:20:41.0915258Z  2026-10-22 06:17:33.013 UTC [41] LOG:  checkpoint complete: wrote 3 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.001 s, sync=0.001 s, total=0.003 s; sync files=2, longest=0.001 s, average=0.001 s; distance=0 kB, estimate=0 kB; lsn=0/14F7180, redo lsn=0/14F7180
+2026-10-22T06:20:41.0916285Z  2026-10-22 06:17:33.018 UTC [40] LOG:  database system is shut down
+2026-10-22T06:20:41.0916752Z   done
+2026-10-22T06:20:41.0916954Z  server stopped
+2026-10-22T06:20:41.0917157Z  
+2026-10-22T06:20:41.0917404Z  PostgreSQL init process complete; ready for start up.
+2026-10-22T06:20:41.0917719Z  
+2026-10-22T06:20:41.0924112Z Stop and remove container: 976d37b2229648d5a6fffd424d72ff7a_postgres16alpine_f1033f
+2026-10-22T06:20:41.0928872Z ##[command]/usr/bin/docker rm --force e939d1542d5f1ed31205c495645998ffadec15afb09a15cca034e3cebc52b487
+2026-10-22T06:20:41.2296943Z e939d1542d5f1ed31205c495645998ffadec15afb09a15cca034e3cebc52b487
+2026-10-22T06:20:41.2334257Z Print service container logs: 02fd235ac3d24267a6ca6df27ab7560f_redis7alpine_01d29c
+2026-10-22T06:20:41.2335551Z ##[command]/usr/bin/docker logs --details e6e9b615f6dc2f25788072ec68b88a49bec011fe098224c04ec462983d847bcd
+2026-10-22T06:20:41.2495780Z  1:C 22 Oct 2026 06:17:32.925 # WARNING Memory overcommit must be enabled! Without it, a background save or replication may fail under low memory condition. Being disabled, it can also cause failures without low memory condition, see https://github.com/jemalloc/jemalloc/issues/1328. To fix this issue add 'vm.overcommit_memory = 1' to /etc/sysctl.conf and then reboot or run the command 'sysctl vm.overcommit_memory=1' for this to take effect.
+2026-10-22T06:20:41.2497549Z  1:C 22 Oct 2026 06:17:32.926 * oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo
+2026-10-22T06:20:41.2512657Z  1:C 22 Oct 2026 06:17:32.926 * Redis version=7.4.11, bits=64, commit=00000000, modified=0, pid=1, just started
+2026-10-22T06:20:41.2514170Z  1:C 22 Oct 2026 06:17:32.926 # Warning: no config file specified, using the default config. In order to specify a config file use redis-server /path/to/redis.conf
+2026-10-22T06:20:41.2515173Z  1:M 22 Oct 2026 06:17:32.926 * monotonic clock: POSIX clock_gettime
+2026-10-22T06:20:41.2515725Z  1:M 22 Oct 2026 06:17:32.927 * Running mode=standalone, port=6379.
+2026-10-22T06:20:41.2516225Z  1:M 22 Oct 2026 06:17:32.927 * Server initialized
+2026-10-22T06:20:41.2516718Z  1:M 22 Oct 2026 06:17:32.927 * Ready to accept connections tcp
+2026-10-22T06:20:41.2517187Z  1:M 22 Oct 2026 06:20:01.618 * DB saved on disk
+2026-10-22T06:20:41.2518565Z Stop and remove container: 02fd235ac3d24267a6ca6df27ab7560f_redis7alpine_01d29c
+2026-10-22T06:20:41.2519615Z ##[command]/usr/bin/docker rm --force e6e9b615f6dc2f25788072ec68b88a49bec011fe098224c04ec462983d847bcd
+2026-10-22T06:20:41.3694037Z e6e9b615f6dc2f25788072ec68b88a49bec011fe098224c04ec462983d847bcd
+2026-10-22T06:20:41.3722536Z Remove container network: github_network_5d925d6623c9421ab22e25605ee6f85f
+2026-10-22T06:20:41.3728760Z ##[command]/usr/bin/docker network rm github_network_5d925d6623c9421ab22e25605ee6f85f
+2026-10-22T06:20:41.4576863Z github_network_5d925d6623c9421ab22e25605ee6f85f
+2026-10-22T06:20:41.4656609Z Cleaning up orphan processes
+2026-10-22T06:20:41.4958103Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02, Swatinem/rust-cache@f13886b937689c021905a6b90929199931d60db1. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/

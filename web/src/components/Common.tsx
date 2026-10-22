@@ -1,4 +1,5 @@
 import { ApiError } from '../../../packages/sdk/src/index.ts';
+import { MESSAGE_STATE_DEFINITIONS } from '../../../packages/sdk/src/message-states.ts';
 
 /**
  * Plain-language errors with a recovery step (contract: "plain-language errors
@@ -6,6 +7,12 @@ import { ApiError } from '../../../packages/sdk/src/index.ts';
  * to what happened and what the person can do next — never a raw code alone.
  */
 const EXPLANATIONS: Record<string, { what: string; next: string }> = {
+  MFA_REQUIRED: { what: 'Second-factor verification is required.', next: 'Complete the authenticator sign-in, or sign out and sign in again.' },
+  ROLE_INVALID: { what: 'Your account has an unrecognized role.', next: 'Ask a tenant administrator to correct your account access.' },
+  ROLE_FORBIDDEN: { what: 'Your role does not permit this action.', next: 'Ask a tenant administrator if you need different access.' },
+  MFA_INVALID: { what: 'The password or second-factor code is invalid or already used.', next: 'Check the password and use the next authenticator code, or a different one-use recovery code.' },
+  MFA_LOCKED: { what: 'Second-factor verification is temporarily locked.', next: 'Wait 15 minutes, then sign in again. New sessions do not bypass this protection.' },
+  STEP_UP_REQUIRED: { what: 'This change needs a fresh identity check.', next: 'Confirm your password and a fresh authenticator or recovery code, then retry.' },
   WEBAUTHN_REQUIRED: { what: 'Approving needs your passkey.', next: 'Register a passkey in Settings, then approve again.' },
   NO_APPROVAL_CREDENTIAL: { what: 'You have no passkey registered for approvals.', next: 'Open Settings → Approval passkeys and add one.' },
   WEBAUTHN_CREDENTIAL_MISMATCH: { what: 'That passkey is not registered to your account.', next: 'Use a passkey you registered here, or add this one in Settings.' },
@@ -30,6 +37,8 @@ const EXPLANATIONS: Record<string, { what: string; next: string }> = {
   KERNEL_NOT_CONFIGURED: { what: 'Governed actions are not enabled in this environment.', next: 'An operator must configure the kernel connection.' },
   UNAPPROVED_CLAIM_LANGUAGE: { what: 'Your edit contains a product claim that is not in the approved list.', next: 'Keep product statements to the approved wording, or ask your admin to add the claim.' },
   CONTEXT_LEAK: { what: 'Your edit references another customer or private notes.', next: 'Remove the reference and save again.' },
+  DRAFT_INVALIDATION_UNCONFIRMED: { what: 'Withdrawal of the old version was not confirmed. Your edit was not saved.', next: 'Check the earlier message in Approvals or its status view. It may still be queued or in flight; do not assume it was cancelled.' },
+  DRAFT_ALREADY_IN_FLIGHT: { what: 'An earlier message is in flight, submitted or awaiting reconciliation. Your edit was not saved.', next: 'Check its status and resolve any uncertain submission before creating a replacement.' },
   INBOUND_PAUSED: { what: 'Sending is paused because inbound messages cannot be received right now.', next: 'Messages stay queued and resume when the inbound path is healthy.' },
 };
 
@@ -74,16 +83,16 @@ export function HumanSteps({ steps }: { steps: string[] }) {
 }
 
 export const STATE_LABEL: Record<string, string> = {
-  proposed: 'Proposed', awaiting_approval: 'Awaiting your approval', approved: 'Approved', queued: 'Queued',
-  dispatch_authorized: 'Authorized to send', submission_started: 'Submitting', provider_accepted: 'Accepted by provider',
-  sent: 'Sent', delivered: 'Delivered', failed: 'Failed', delivery_unknown: 'Delivery unknown', submission_unknown: 'Submission unknown — needs a person',
-  cancelled: 'Cancelled', denied: 'Denied by policy', expired: 'Expired',
+  proposed: 'proposed', awaiting_approval: 'awaiting_approval', approved: 'approved', queued: 'queued',
+  dispatch_authorized: 'dispatch_authorized', submission_started: 'submission_started', provider_accepted: 'provider_accepted',
+  sent: 'sent', delivered: 'delivered', failed: 'failed', delivery_unknown: 'delivery_unknown', submission_unknown: 'submission_unknown',
+  cancelled: 'cancelled', denied: 'denied', expired: 'expired',
 };
 
 export function StateBadge({ state, definitions }: { state: string | null | undefined; definitions?: Record<string, string> }) {
   if (!state) return null;
-  const title = definitions?.[state];
-  return <span className={`badge state-${state}`} title={title}>{STATE_LABEL[state] ?? state}</span>;
+  const title = definitions?.[state] ?? MESSAGE_STATE_DEFINITIONS[state as keyof typeof MESSAGE_STATE_DEFINITIONS];
+  return <span className={`badge state-${state}`} title={title} aria-label={title ? `${state}: ${title}` : state}>{STATE_LABEL[state] ?? state}</span>;
 }
 
 export function fmtWhen(iso: string | null | undefined) {

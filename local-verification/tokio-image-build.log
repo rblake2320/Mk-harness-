@@ -1,0 +1,130 @@
+#0 building with "desktop-linux" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 2.42kB done
+#1 DONE 0.0s
+
+#2 resolve image config for docker-image://docker.io/docker/dockerfile:1.7
+#2 ...
+
+#3 [auth] docker/dockerfile:pull token for registry-1.docker.io
+#3 DONE 0.0s
+
+#2 resolve image config for docker-image://docker.io/docker/dockerfile:1.7
+#2 DONE 0.6s
+
+#4 docker-image://docker.io/docker/dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
+#4 resolve docker.io/docker/dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e 0.0s done
+#4 CACHED
+
+#5 [internal] load metadata for docker.io/library/rust:1.97.0-bookworm@sha256:8fa55b2f3ddf97471ab6a767bfa3f37e6bad0986ba823e75fea57e2a2a5c3073
+#5 ...
+
+#6 [auth] library/debian:pull token for registry-1.docker.io
+#6 DONE 0.0s
+
+#7 [auth] library/rust:pull token for registry-1.docker.io
+#7 DONE 0.0s
+
+#8 [internal] load metadata for gcr.io/distroless/cc-debian13:nonroot@sha256:83b9b50586253821cf63ffcec87d3d94265a093ad30da232039af962dd8f4edf
+#8 DONE 0.3s
+
+#5 [internal] load metadata for docker.io/library/rust:1.97.0-bookworm@sha256:8fa55b2f3ddf97471ab6a767bfa3f37e6bad0986ba823e75fea57e2a2a5c3073
+#5 DONE 0.3s
+
+#9 [internal] load metadata for docker.io/library/debian:bookworm-slim@sha256:7ff6ba31527b9e336162fa061746c366c4b2032f4d2cff2078bea43f78efe3f8
+#9 DONE 0.3s
+
+#10 [internal] load .dockerignore
+#10 transferring context: 2B done
+#10 DONE 0.0s
+
+#11 [builder 1/7] FROM docker.io/library/rust:1.97.0-bookworm@sha256:8fa55b2f3ddf97471ab6a767bfa3f37e6bad0986ba823e75fea57e2a2a5c3073
+#11 resolve docker.io/library/rust:1.97.0-bookworm@sha256:8fa55b2f3ddf97471ab6a767bfa3f37e6bad0986ba823e75fea57e2a2a5c3073 0.1s done
+#11 DONE 0.1s
+
+#12 [stage-2 1/3] FROM gcr.io/distroless/cc-debian13:nonroot@sha256:83b9b50586253821cf63ffcec87d3d94265a093ad30da232039af962dd8f4edf
+#12 resolve gcr.io/distroless/cc-debian13:nonroot@sha256:83b9b50586253821cf63ffcec87d3d94265a093ad30da232039af962dd8f4edf 0.1s done
+#12 DONE 0.1s
+
+#13 [cabundle 1/2] FROM docker.io/library/debian:bookworm-slim@sha256:7ff6ba31527b9e336162fa061746c366c4b2032f4d2cff2078bea43f78efe3f8
+#13 resolve docker.io/library/debian:bookworm-slim@sha256:7ff6ba31527b9e336162fa061746c366c4b2032f4d2cff2078bea43f78efe3f8 0.1s done
+#13 DONE 0.1s
+
+#14 [internal] load build context
+#14 transferring context: 106.83kB 0.0s done
+#14 DONE 0.0s
+
+#15 [builder 2/7] WORKDIR /src
+#15 CACHED
+
+#16 [builder 3/7] COPY rust/ rust/
+#16 DONE 0.1s
+
+#17 [builder 4/7] COPY contracts/ contracts/
+#17 DONE 0.1s
+
+#18 [builder 5/7] COPY migrations/ migrations/
+#18 DONE 0.1s
+
+#19 [builder 6/7] WORKDIR /src/rust
+#19 DONE 0.1s
+
+#20 [builder 7/7] RUN --mount=type=cache,target=/usr/local/cargo/registry     --mount=type=cache,target=/src/rust/target     cargo build --release --locked --bins  && mkdir -p /out  && cp target/release/mk-action-api target/release/mk-outbox-relay target/release/mk-action-worker target/release/mk-audit-verifier target/release/mk-mcp-server target/release/mk-keyctl target/release/mk-restore-gate target/release/mk-healthcheck target/release/mk-privacy-ledger /out/
+#20 0.288 info: syncing channel updates for 1.97.0-x86_64-unknown-linux-gnu
+#20 0.596 info: latest update on 2026-07-09 for version 1.97.0 (2d8144b78 2026-07-07)
+#20 0.608 info: downloading component clippy
+#20 1.894  Downloading crates ...
+#20 2.214   Downloaded tokio v1.54.1
+#20 2.304    Compiling tokio v1.54.1
+#20 4.620    Compiling tokio-util v0.7.20
+#20 4.620    Compiling tokio-stream v0.1.19
+#20 4.620    Compiling tokio-rustls v0.26.6
+#20 4.859    Compiling sqlx-core v0.9.0
+#20 5.074    Compiling h2 v0.4.20
+#20 5.087    Compiling tower v0.5.3
+#20 5.114    Compiling combine v4.6.9
+#20 5.117    Compiling rmcp v3.6.0
+#20 5.401    Compiling tower-http v0.6.11
+#20 6.148    Compiling sqlx-postgres v0.9.0
+#20 7.331    Compiling redis v0.29.5
+#20 7.446    Compiling hyper v1.12.0
+#20 8.527    Compiling hyper-util v0.1.21
+#20 8.602    Compiling sqlx v0.9.0
+#20 8.650    Compiling mk-store v0.1.0 (/src/rust/crates/mk-store)
+#20 9.934    Compiling hyper-rustls v0.27.10
+#20 9.934    Compiling axum v0.8.9
+#20 10.44    Compiling reqwest v0.12.28
+#20 11.99    Compiling mk-testkit v0.1.0 (/src/rust/crates/mk-testkit)
+#20 12.23    Compiling mk-mcp v0.1.0 (/src/rust/crates/mk-mcp)
+#20 13.18    Compiling mk-queue v0.1.0 (/src/rust/crates/mk-queue)
+#20 13.89    Compiling mk-adapters v0.1.0 (/src/rust/crates/mk-adapters)
+#20 14.96    Compiling mk-worker v0.1.0 (/src/rust/crates/mk-worker)
+#20 15.01    Compiling mk-api v0.1.0 (/src/rust/crates/mk-api)
+#20 39.34     Finished `release` profile [optimized] target(s) in 35.50s
+#20 DONE 39.5s
+
+#12 [stage-2 1/3] FROM gcr.io/distroless/cc-debian13:nonroot@sha256:83b9b50586253821cf63ffcec87d3d94265a093ad30da232039af962dd8f4edf
+#12 CACHED
+
+#21 [cabundle 2/2] RUN apt-get update -q && apt-get install -y -q --no-install-recommends ca-certificates curl >/dev/null  && test -n "90a6f1a7978a1b1b096dca6c57511ca48d3b8cf052f8e704baf358f34ea2f21b"  && curl -fsSL -o /rds-global-bundle.pem "https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem"  && echo "90a6f1a7978a1b1b096dca6c57511ca48d3b8cf052f8e704baf358f34ea2f21b  /rds-global-bundle.pem" | sha256sum -c -
+#21 CACHED
+
+#22 [stage-2 2/3] COPY --from=builder /out/ /usr/local/bin/
+#22 DONE 0.1s
+
+#23 [stage-2 3/3] COPY --from=cabundle /rds-global-bundle.pem /etc/mk/rds-global-bundle.pem
+#23 DONE 0.1s
+
+#24 exporting to image
+#24 exporting layers
+#24 exporting layers 1.9s done
+#24 exporting manifest sha256:30936277130a8ea397169e41551599dceecd1b33b514aa1418cfc6dce42d553b 0.0s done
+#24 exporting config sha256:e0547068020d7aaf8fc5f9870d846d6d7c361392236a0ffe2fd78ba1fc87d9cd 0.0s done
+#24 exporting attestation manifest sha256:780952ed9b636c385447b8886201821c1d969572fdb439e32fc73c319a54e6c2 0.0s done
+#24 exporting manifest list sha256:57914862e1b88af0ad7f3efabfc49c987b0170dd0d3e47a3ef09518ae2ce3aa0
+#24 exporting manifest list sha256:57914862e1b88af0ad7f3efabfc49c987b0170dd0d3e47a3ef09518ae2ce3aa0 0.0s done
+#24 naming to docker.io/library/mk-kernel-acceptance:tokio-patched done
+#24 unpacking to docker.io/library/mk-kernel-acceptance:tokio-patched
+#24 unpacking to docker.io/library/mk-kernel-acceptance:tokio-patched 0.4s done
+#24 DONE 2.5s

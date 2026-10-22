@@ -1,0 +1,9 @@
+   Compiling mk-api v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-api)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 4.41s
+     Running tests/http_e2e.rs (/tmp/mk-release-acceptance-target/debug/deps/http_e2e-05ff1a20f14da3a3)
+
+running 1 test
+test session_outbox_authority_is_narrow_and_revokes_real_queued_approval ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 15 filtered out; finished in 0.47s
+

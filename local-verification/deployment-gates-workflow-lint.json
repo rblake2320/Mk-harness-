@@ -1,0 +1,10 @@
+{
+  "source": "b313897304a50629a27c65a390573e288f48c44e",
+  "tool": "actionlint",
+  "exit": 0,
+  "files": [
+    ".github/workflows/deploy.yml",
+    ".github/workflows/ci.yml",
+    ".github/workflows/kernel-ci.yml"
+  ]
+}

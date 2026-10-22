@@ -1,0 +1,74 @@
+{
+  "scope": "author-run shipped container, real PostgreSQL, real HTTP; synthetic fixtures only",
+  "image_id": "sha256:b78bbc13a90269a5e7ad8a1265150c3cad7445ea428f3ca0c2e2ca159b8d511f",
+  "bootstrap": "Application roles/schema bootstrapped; run upgrade as mk_app_migrator",
+  "migration": "Application migrations applied: 0001_initial.sql, 0002_seal_write_fence.sql, 0003_erasure_ledger.sql",
+  "migration_repeat": "Application migrations applied: 0001_initial.sql, 0002_seal_write_fence.sql, 0003_erasure_ledger.sql",
+  "owner_runtime_refused": true,
+  "runtime": {
+    "user": "65532:65532",
+    "read_only": true,
+    "cap_drop": [
+      "ALL"
+    ]
+  },
+  "password_only_customer_status": 403,
+  "customer_created_status": 201,
+  "export_before_step_up": 403,
+  "export_after_step_up": 200,
+  "shipped_healthcheck_exit": 0,
+  "published_port_changed_after_restart": true,
+  "after_restart_customer_status": 200,
+  "pre_erasure_backup": {
+    "sha256": "3eae0b07c55284d688031750f4cc7b9d0442d726e5af7fadc9feb33f79c2c9ad",
+    "bytes": 140845
+  },
+  "deletion_status": 202,
+  "downstream_pending": [
+    "backup_expiry",
+    "customer_request",
+    "kernel_account",
+    "restore_ledger_anchor"
+  ],
+  "deleted_session_status": 401,
+  "unauthenticated_receipt_status": 200,
+  "external_ledger": {
+    "sha256": "7e834db7f5b7300e89c773149580996f46ff365e6fa28c663f2af541222d6601",
+    "bytes": 819,
+    "requests": 2
+  },
+  "restored_before_ledger": {
+    "customers": 1,
+    "customer_destinations": 1,
+    "provider_keys": 1,
+    "auth_factors": 1,
+    "erasure_requests": 0
+  },
+  "restore_erasure_replay": {
+    "applied": true,
+    "requests": 2,
+    "active_store_replayed": 2,
+    "downstream_receipts_required": true
+  },
+  "restored_after_ledger": {
+    "customers": 0,
+    "customer_destinations": 0,
+    "provider_keys": 0,
+    "auth_factors": 0,
+    "erasure_requests": 2
+  },
+  "restore_erasure_repeat": {
+    "applied": true,
+    "requests": 2,
+    "active_store_replayed": 1,
+    "downstream_receipts_required": true
+  },
+  "database_identity": [
+    "mk_app_login",
+    "mk_app_login"
+  ],
+  "retained_customers": 0,
+  "audit_records": 10,
+  "outcome": "Worked",
+  "owned_targets_removed": true
+}

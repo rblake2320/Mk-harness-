@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react';
 import { client } from '../App.tsx';
+import type { AuthSession } from '../../../packages/sdk/src/index.ts';
+import { MfaScreen } from '../components/Mfa.tsx';
+import MemberAccess from '../components/MemberAccess.tsx';
 
 const PROVIDERS = ['anthropic', 'openai', 'gemini', 'ollama'] as const;
 
@@ -14,11 +17,21 @@ export default function SettingsView({ role }: { role: string }) {
   const [usage, setUsage] = useState<any[]>([]);
   const [teamUsage, setTeamUsage] = useState<any[]>([]);
   const [invite, setInvite] = useState({ email: '', password: '' });
+  const [inviteRole, setInviteRole] = useState('consultant');
+  const [sessions, setSessions] = useState<AuthSession[]>([]);
+  const [revoking, setRevoking] = useState<string | null>(null);
+  const [mfaStatus, setMfaStatus] = useState<{ enrolled: boolean; recovery_codes_remaining: number } | null>(null);
+  const [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
+  const [replacingFactor, setReplacingFactor] = useState(false);
 
   function refresh() {
-    client.keyStatus().then(setStatus).catch(e => setErr(e.message));
-    client.myUsage().then(setUsage).catch(() => {});
-    if (role === 'admin') client.tenantUsage().then(setTeamUsage).catch(() => {});
+    if (role !== 'auditor') {
+      client.keyStatus().then(setStatus).catch(e => setErr(e.message));
+      client.myUsage().then(setUsage).catch(() => {});
+    }
+    client.sessions().then(setSessions).catch(e => setErr(e.message));
+    client.mfaStatus().then(setMfaStatus).catch(() => {});
+    if (role === 'admin' || role === 'manager') client.tenantUsage().then(setTeamUsage).catch(() => {});
   }
   useEffect(refresh, []);
 
@@ -36,11 +49,15 @@ export default function SettingsView({ role }: { role: string }) {
   async function sendInvite() {
     setErr(''); setMsg('');
     try {
-      await client.addMember(invite.email, invite.password);
+      await client.addMember(invite.email, invite.password, inviteRole);
       setMsg(`Added ${invite.email}. Share their starting password securely.`);
       setInvite({ email: '', password: '' });
     } catch (e: any) { setErr(e.message); }
   }
+
+  if (replacingFactor && client.tokens) return <MfaScreen client={client} tokens={{ ...client.tokens, mfa_state: 'enrollment_required' }}
+    onVerified={tokens => { client.tokens = tokens; client.onTokensChanged?.(tokens); setReplacingFactor(false); refresh(); }}
+    onSignOut={async () => { try { await client.logout(); } catch { client.tokens = null; client.onTokensChanged?.(null); } }} />;
 
   return (
     <div>
@@ -48,6 +65,43 @@ export default function SettingsView({ role }: { role: string }) {
       {msg && <div style={{ color: 'var(--ok)', margin: '8px 0' }}>{msg}</div>}
       {err && <div className="error" role="alert" style={{ margin: '8px 0' }}>{err}</div>}
 
+      <section className="card" aria-label="Second-factor security" style={{ maxWidth: 720, marginBottom: 18 }}>
+        <h2>Second-factor security</h2>
+        <p>{mfaStatus?.enrolled ? `Authenticator enrolled. ${mfaStatus.recovery_codes_remaining} recovery codes remain.` : 'Checking authenticator status…'}</p>
+        <p>Replacing the authenticator revokes all old sessions and recovery codes. Keep this session open until you save the replacements.</p>
+        <button className="btn ghost" onClick={() => setReplacingFactor(true)}>Replace authenticator</button>{' '}
+        <button className="btn ghost" disabled={recoveryCodes.length > 0} onClick={async () => {
+          try { setRecoveryCodes((await client.rotateRecoveryCodes()).recovery_codes); refresh(); }
+          catch (e: any) { setErr(e.message); }
+        }}>Replace recovery codes</button>
+        {recoveryCodes.length > 0 && <div role="region" aria-label="New recovery codes">
+          <p>Old recovery codes no longer work. Save these one-use codes now; they will not be shown again.</p>
+          <ul className="recovery-codes">{recoveryCodes.map(code => <li key={code}><code>{code}</code></li>)}</ul>
+          <button className="btn" onClick={() => setRecoveryCodes([])}>I saved the new codes</button>
+        </div>}
+      </section>
+
+      <section className="card" aria-label="Signed-in sessions" style={{ maxWidth: 720, marginBottom: 18 }}>
+        <h2>Signed-in sessions</h2>
+        <p>Revoke a lost or unused session. Use Sign out for this session.</p>
+        {sessions.map(session => <div key={session.id} className="row" style={{ marginBottom: 12 }}>
+          <span>{session.current ? 'This session' : 'Other session'} · {new Date(session.created_at).toLocaleString()}
+            {session.revoked_at ? ' · Revoked' : ''}</span>
+          {!session.current && !session.revoked_at && <button className="btn ghost" disabled={revoking !== null}
+            aria-label={`Revoke session started ${new Date(session.created_at).toLocaleString()}`}
+            onClick={async () => {
+              setRevoking(session.id); setErr(''); setMsg('');
+              try {
+                const result = await client.revokeSession(session.id);
+                setMsg(result.kernel_revocation === 'confirmed' ? 'Session and pending approvals revoked.'
+                  : 'App session revoked. Kernel approval revocation is pending delivery.');
+                setSessions(await client.sessions());
+              } catch (e: any) { setErr(e.message); } finally { setRevoking(null); }
+            }}>Revoke</button>}
+        </div>)}
+      </section>
+
+      {role !== 'auditor' && <>
       <div className="card" style={{ maxWidth: 720 }}>
         <h3 style={{ marginTop: 0 }}>AI engines</h3>
         <p className="muted">
@@ -119,7 +173,7 @@ export default function SettingsView({ role }: { role: string }) {
         )}
       </div>
 
-      {role === 'admin' && (
+      {(role === 'admin' || role === 'manager') && (
         <>
           <div className="card" style={{ maxWidth: 720, marginTop: 18 }}>
             <h3 style={{ marginTop: 0 }}>Team usage</h3>
@@ -138,7 +192,7 @@ export default function SettingsView({ role }: { role: string }) {
             )}
           </div>
 
-          <div className="card" style={{ maxWidth: 720, marginTop: 18, display: 'grid', gap: 10 }}>
+          {role === 'admin' && <div className="card" style={{ maxWidth: 720, marginTop: 18, display: 'grid', gap: 10 }}>
             <h3 style={{ margin: 0 }}>Add a team member</h3>
             <div className="row">
               <input placeholder="Email" style={{ flex: 1 }} value={invite.email}
@@ -146,12 +200,17 @@ export default function SettingsView({ role }: { role: string }) {
               <input placeholder="Starting password (10+ chars)" type="password" style={{ flex: 1 }}
                      value={invite.password}
                      onChange={e => setInvite({ ...invite, password: e.target.value })} />
+              <select aria-label="New member role" value={inviteRole} onChange={e => setInviteRole(e.target.value)} style={{ maxWidth: 160 }}>
+                {['consultant', 'manager', 'auditor', 'admin'].map(role => <option key={role}>{role}</option>)}
+              </select>
               <button className="btn" onClick={sendInvite}
                       disabled={!invite.email || invite.password.length < 10}>Add</button>
             </div>
-          </div>
+          </div>}
+          {role === 'admin' && <MemberAccess />}
         </>
       )}
+      </>}
     </div>
   );
 }

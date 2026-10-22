@@ -1,17 +1,18 @@
-# Deployment gates (contract O8). STATUS: Implemented, never run — no AWS
-# account, OIDC role or ECR registry exists yet (see infra/terraform/README.md).
+# Deployment gates (contract O8). No live deployment is claimed. Cloud accounts,
+# environments, roles and spending limits require explicit operator approval.
 #
 # Gate order, each a hard stop:
-#   1. CI green on the exact commit (kernel-ci + ci workflows) — enforced by
-#      branch protection on main, not re-checked here.
+#   1. Read-only GitHub verification of protected main ancestry, independent PR
+#      approval and fresh successful exact-commit CI, before any cloud token.
 #   2. Images built once, pushed by DIGEST, signed (cosign keyless, GitHub OIDC)
 #      with SLSA provenance attestations; the digest is the only thing later
 #      stages may reference (Terraform rejects tags).
 #   3. Staging: terraform plan → apply with those digests; pre-flight
 #      (`scripts/kernel-preflight.sh --for-enable`) and the live smoke run
 #      against the deployed environment; the restore gate runs in report mode.
-#   4. Production: a protected GitHub environment with required reviewers (the
-#      release owner) → terraform plan is posted for review → apply. Dispatch
+#   4. Production: a read-only role plans and seals the exact binary; the release
+#      owner reviews it privately before protected-environment approval. Apply
+#      accepts only that fresh, same-run, source/image/toolchain-bound plan. Dispatch
 #      stays DISABLED after apply; enabling is the operator's passkey step in
 #      deploy/kernel/README.md and is never done by this workflow.
 name: Deploy
@@ -19,33 +20,64 @@ on:
   workflow_dispatch:
     inputs:
       ref:
-        description: commit SHA that passed CI
+        description: Full main SHA used to dispatch this workflow; must have fresh CI and independent PR approval
         required: true
       target:
         description: staging | production
+        type: choice
+        options: [staging, production]
         required: true
         default: staging
 
 permissions:
   contents: read
-  id-token: write      # cosign keyless + AWS OIDC
-  attestations: write
-  packages: write
+
+concurrency:
+  group: mk-release-deployment
+  cancel-in-progress: false
 
 env:
   AWS_REGION: us-east-1
 
 jobs:
-  build-sign:
+  validate-source:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with: { ref: "${{ github.workflow_sha }}" }
+      - name: Verify source approval and exact-commit CI without cloud credentials
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED_REF: ${{ inputs.ref }}
+          RELEASE_TARGET: ${{ inputs.target }}
+          WORKFLOW_REF: ${{ github.ref }}
+          WORKFLOW_SHA: ${{ github.sha }}
+        run: python3 tools/release/deployment_source.py --repo "$GITHUB_REPOSITORY" --sha "$REQUESTED_REF" --target "$RELEASE_TARGET" --workflow-ref "$WORKFLOW_REF" --workflow-sha "$WORKFLOW_SHA" --output deployment-source.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: deployment-source-gate
+          path: deployment-source.json
+          if-no-files-found: error
+
+  build-sign:
+    needs: [validate-source]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
     outputs:
       kernel_digest: ${{ steps.kernel.outputs.digest }}
       app_digest: ${{ steps.app.outputs.digest }}
+      registry: ${{ steps.ecr.outputs.registry }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with: { ref: "${{ inputs.ref }}" }
-      - name: Refuse a ref that is not a full SHA
-        run: '[[ "${{ inputs.ref }}" =~ ^[0-9a-f]{40}$ ]] || { echo "ref must be a 40-char commit SHA"; exit 1; }'
       - uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502 # v4.0.2
         with:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}   # OIDC; no long-lived keys
@@ -53,12 +85,17 @@ jobs:
       - uses: aws-actions/amazon-ecr-login@062b18b96a7aff071d4dc91bc00c4c1a7945b076 # v2.0.1
         id: ecr
       - uses: docker/setup-buildx-action@c47758b77c9736f4b2ef4073d4d51994fabfe349 # v3.7.1
+      - name: Require operator-pinned database trust anchor
+        env:
+          RDS_CA_BUNDLE_SHA256: ${{ vars.RDS_CA_BUNDLE_SHA256 }}
+        run: '[[ "$RDS_CA_BUNDLE_SHA256" =~ ^[0-9a-f]{64}$ ]] || { echo "Set the reviewed RDS_CA_BUNDLE_SHA256 repository variable"; exit 1; }'
       - name: Build + push kernel image by digest
         id: kernel
         uses: docker/build-push-action@4f58ea79222b3b9dc2c8bbdd6debcef730109a75 # v6.9.0
         with:
           context: .
           file: deploy/kernel/Dockerfile
+          build-args: RDS_CA_BUNDLE_SHA256=${{ vars.RDS_CA_BUNDLE_SHA256 }}
           push: true
           provenance: mode=max
           sbom: true
@@ -68,11 +105,33 @@ jobs:
         uses: docker/build-push-action@4f58ea79222b3b9dc2c8bbdd6debcef730109a75 # v6.9.0
         with:
           context: backend
+          build-args: RDS_CA_BUNDLE_SHA256=${{ vars.RDS_CA_BUNDLE_SHA256 }}
           push: true
           provenance: mode=max
           sbom: true
           tags: ${{ steps.ecr.outputs.registry }}/mk-app:${{ inputs.ref }}
-      - uses: sigstore/cosign-installer@dc72c7d5c4d10cd6bcb8cf6e3fd625a9e5e537da # v3.7.0
+      - name: Scan the exact published kernel digest before signing
+        env:
+          IMAGE: ${{ steps.ecr.outputs.registry }}/mk-action-kernel@${{ steps.kernel.outputs.digest }}
+        run: |
+          set -euo pipefail
+          docker pull "$IMAGE"
+          python3 tools/verification/image_security.py --image "$IMAGE" --cache "$RUNNER_TEMP/trivy" --output release-image-security/kernel
+      - name: Scan the exact published application digest before signing
+        env:
+          IMAGE: ${{ steps.ecr.outputs.registry }}/mk-app@${{ steps.app.outputs.digest }}
+        run: |
+          set -euo pipefail
+          docker pull "$IMAGE"
+          python3 tools/verification/image_security.py --image "$IMAGE" --cache "$RUNNER_TEMP/trivy" --output release-image-security/app
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: release-image-security
+          path: release-image-security
+          if-no-files-found: error
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with: { cosign-release: v3.1.4 }
       - name: Sign both images (keyless) and attest provenance
         run: |
           set -euo pipefail
@@ -86,10 +145,19 @@ jobs:
           subject-name: ${{ steps.ecr.outputs.registry }}/mk-action-kernel
           subject-digest: ${{ steps.kernel.outputs.digest }}
           push-to-registry: true
+      - uses: actions/attest-build-provenance@7668571508540a607bdfd90a87a560489fe372eb # v2.1.0
+        with:
+          subject-name: ${{ steps.ecr.outputs.registry }}/mk-app
+          subject-digest: ${{ steps.app.outputs.digest }}
+          push-to-registry: true
 
   staging:
     needs: build-sign
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      attestations: read
     environment: staging
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -99,25 +167,29 @@ jobs:
           role-to-assume: ${{ secrets.AWS_STAGING_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
       - uses: opentofu/setup-opentofu@592200bd4b9bbf4772ace78f887668b1aee8f716 # v1.0.5
-        with: { tofu_version: 1.10.6 }
-      - name: Verify image signatures before deploying them
-        uses: sigstore/cosign-installer@dc72c7d5c4d10cd6bcb8cf6e3fd625a9e5e537da # v3.7.0
-      - run: |
-          set -euo pipefail
-          REG="${{ secrets.ECR_REGISTRY }}"
-          for img in "mk-action-kernel@${{ needs.build-sign.outputs.kernel_digest }}" "mk-app@${{ needs.build-sign.outputs.app_digest }}"; do
-            cosign verify "$REG/$img" \
-              --certificate-identity-regexp "^https://github.com/${{ github.repository }}/.github/workflows/deploy.yml@" \
-              --certificate-oidc-issuer https://token.actions.githubusercontent.com >/dev/null
-          done
+        with: { tofu_version: 1.10.6, tofu_wrapper: false }
+      - uses: aws-actions/amazon-ecr-login@062b18b96a7aff071d4dc91bc00c4c1a7945b076
+        with: { registries: "${{ vars.ARTIFACT_ACCOUNT_ID }}" }
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with: { cosign-release: v3.1.4 }
+      - name: Verify both image signatures and exact-source SLSA provenance
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED_REF: ${{ inputs.ref }}
+          KERNEL_IMAGE: ${{ needs.build-sign.outputs.registry }}/mk-action-kernel@${{ needs.build-sign.outputs.kernel_digest }}
+          APP_IMAGE: ${{ needs.build-sign.outputs.registry }}/mk-app@${{ needs.build-sign.outputs.app_digest }}
+        run: python3 tools/release/image_provenance.py --repo "$GITHUB_REPOSITORY" --sha "$REQUESTED_REF" --kernel-image "$KERNEL_IMAGE" --app-image "$APP_IMAGE" --output staging-provenance
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with: { name: staging-image-provenance, path: staging-provenance, if-no-files-found: error }
       - name: Plan + apply staging with digest-pinned images
         working-directory: infra/terraform/envs/staging
         run: |
           set -euo pipefail
           tofu init -input=false
           tofu plan -input=false -out plan.bin \
-            -var "kernel_image=${{ secrets.ECR_REGISTRY }}/mk-action-kernel@${{ needs.build-sign.outputs.kernel_digest }}" \
-            -var "app_image=${{ secrets.ECR_REGISTRY }}/mk-app@${{ needs.build-sign.outputs.app_digest }}" \
+            -var "kernel_image=${{ needs.build-sign.outputs.registry }}/mk-action-kernel@${{ needs.build-sign.outputs.kernel_digest }}" \
+            -var "app_image=${{ needs.build-sign.outputs.registry }}/mk-app@${{ needs.build-sign.outputs.app_digest }}" \
             -var "alert_email=${{ secrets.ALERT_EMAIL }}"
           tofu apply -input=false plan.bin
       - name: Pre-flight + live smoke against staging + restore gate (report mode)
@@ -127,34 +199,132 @@ jobs:
           echo "the smoke currently assumes a local stack — adapting it to a remote target is part of the first real staging run."
           exit 1   # deliberately failing until the remote-target smoke exists: this gate must not pass by omission
 
-  production:
+  production-plan:
     needs: [build-sign, staging]
     if: inputs.target == 'production'
     runs-on: ubuntu-latest
-    environment: production      # protected: required reviewer = release owner; wait timer
+    permissions:
+      contents: read
+      id-token: write
+    environment: production-plan
+    outputs:
+      artifact_id: ${{ steps.plan-artifact.outputs.artifact-id }}
+      envelope_sha256: ${{ steps.seal.outputs.envelope_sha256 }}
+    env:
+      REQUESTED_REF: ${{ inputs.ref }}
+      KERNEL_IMAGE: ${{ needs.build-sign.outputs.registry }}/mk-action-kernel@${{ needs.build-sign.outputs.kernel_digest }}
+      APP_IMAGE: ${{ needs.build-sign.outputs.registry }}/mk-app@${{ needs.build-sign.outputs.app_digest }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with: { ref: "${{ inputs.ref }}" }
+      - uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502
+        with:
+          role-to-assume: ${{ secrets.AWS_PRODUCTION_PLAN_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - uses: opentofu/setup-opentofu@592200bd4b9bbf4772ace78f887668b1aee8f716
+        with: { tofu_version: 1.10.6, tofu_wrapper: false }
+      - name: Install hash-locked plan encryption dependencies
+        run: |
+          python3 -m venv "$RUNNER_TEMP/plan-venv"
+          "$RUNNER_TEMP/plan-venv/bin/pip" install --require-hashes -r tools/release/requirements.txt
+      - name: Plan only with a separate read-only production role
+        env:
+          ALERT_EMAIL: ${{ secrets.ALERT_EMAIL }}
+          AUDIT_ROOT_BUCKET_ARN: ${{ secrets.AUDIT_ROOT_BUCKET_ARN }}
+          AUDIT_ROOT_KMS_KEY_ARN: ${{ secrets.AUDIT_ROOT_KMS_KEY_ARN }}
+        run: |
+          set -euo pipefail
+          cp infra/terraform/modules/kernel-platform/.terraform.lock.hcl infra/terraform/envs/production/.terraform.lock.hcl
+          tofu -chdir=infra/terraform/envs/production init -input=false -lockfile=readonly
+          tofu -chdir=infra/terraform/envs/production plan -input=false -out "$RUNNER_TEMP/production.plan" \
+            -var "kernel_image=$KERNEL_IMAGE" -var "app_image=$APP_IMAGE" \
+            -var "alert_email=$ALERT_EMAIL" -var "audit_root_bucket_arn=$AUDIT_ROOT_BUCKET_ARN" \
+            -var "audit_root_kms_key_arn=$AUDIT_ROOT_KMS_KEY_ARN" > "$RUNNER_TEMP/production-plan.log" 2>&1
+      - name: Seal exact plan for private review before approval
+        id: seal
+        env:
+          PLAN_PUBLIC_KEY: ${{ vars.PRODUCTION_PLAN_PUBLIC_KEY }}
+        run: |
+          "$RUNNER_TEMP/plan-venv/bin/python" tools/release/production_plan.py seal \
+            --repo "$GITHUB_REPOSITORY" --sha "$REQUESTED_REF" --run-id "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
+            --kernel-image "$KERNEL_IMAGE" --app-image "$APP_IMAGE" \
+            --lock-file infra/terraform/envs/production/.terraform.lock.hcl \
+            --plan "$RUNNER_TEMP/production.plan" --output production-plan-package
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        id: plan-artifact
+        with:
+          name: production-plan
+          path: production-plan-package
+          if-no-files-found: error
+          retention-days: 1
+
+  production:
+    needs: [build-sign, staging, production-plan]
+    if: inputs.target == 'production'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+      attestations: read
+    environment: production      # protected reviewer approves the already-produced plan
+    env:
+      REQUESTED_REF: ${{ inputs.ref }}
+      KERNEL_IMAGE: ${{ needs.build-sign.outputs.registry }}/mk-action-kernel@${{ needs.build-sign.outputs.kernel_digest }}
+      APP_IMAGE: ${{ needs.build-sign.outputs.registry }}/mk-app@${{ needs.build-sign.outputs.app_digest }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with: { ref: "${{ inputs.ref }}" }
+      - name: Recheck source gates after protected-environment approval
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TARGET: ${{ inputs.target }}
+          WORKFLOW_REF: ${{ github.ref }}
+          WORKFLOW_SHA: ${{ github.sha }}
+        run: python3 tools/release/deployment_source.py --repo "$GITHUB_REPOSITORY" --sha "$REQUESTED_REF" --target "$RELEASE_TARGET" --workflow-ref "$WORKFLOW_REF" --workflow-sha "$WORKFLOW_SHA" --output production-source.json
+      - name: Install hash-locked plan decryption dependencies
+        run: |
+          python3 -m venv "$RUNNER_TEMP/plan-venv"
+          "$RUNNER_TEMP/plan-venv/bin/pip" install --require-hashes -r tools/release/requirements.txt
+          cp infra/terraform/modules/kernel-platform/.terraform.lock.hcl infra/terraform/envs/production/.terraform.lock.hcl
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          artifact-ids: ${{ needs.production-plan.outputs.artifact_id }}
+          path: production-plan-package
+          merge-multiple: true
       - uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502 # v4.0.2
         with:
           role-to-assume: ${{ secrets.AWS_PRODUCTION_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
       - uses: opentofu/setup-opentofu@592200bd4b9bbf4772ace78f887668b1aee8f716 # v1.0.5
-        with: { tofu_version: 1.10.6 }
-      - name: Plan production (reviewed as a job artifact before apply)
+        with: { tofu_version: 1.10.6, tofu_wrapper: false }
+      - uses: aws-actions/amazon-ecr-login@062b18b96a7aff071d4dc91bc00c4c1a7945b076
+        with: { registries: "${{ vars.ARTIFACT_ACCOUNT_ID }}" }
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with: { cosign-release: v3.1.4 }
+      - name: Reverify both exact-source images before production apply
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED_REF: ${{ inputs.ref }}
+          KERNEL_IMAGE: ${{ needs.build-sign.outputs.registry }}/mk-action-kernel@${{ needs.build-sign.outputs.kernel_digest }}
+          APP_IMAGE: ${{ needs.build-sign.outputs.registry }}/mk-app@${{ needs.build-sign.outputs.app_digest }}
+        run: python3 tools/release/image_provenance.py --repo "$GITHUB_REPOSITORY" --sha "$REQUESTED_REF" --kernel-image "$KERNEL_IMAGE" --app-image "$APP_IMAGE" --output production-provenance
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with: { name: production-image-provenance, path: production-provenance, if-no-files-found: error }
+      - name: Initialize the exact reviewed provider lock
         working-directory: infra/terraform/envs/production
+        run: tofu init -input=false -lockfile=readonly
+      - name: Open only the approved fresh exact same-run plan immediately before apply
+        env:
+          PLAN_PRIVATE_KEY: ${{ secrets.PRODUCTION_PLAN_PRIVATE_KEY }}
+          PLAN_ENVELOPE_SHA256: ${{ needs.production-plan.outputs.envelope_sha256 }}
         run: |
-          set -euo pipefail
-          tofu init -input=false
-          tofu plan -input=false -out plan.bin \
-            -var "kernel_image=${{ secrets.ECR_REGISTRY }}/mk-action-kernel@${{ needs.build-sign.outputs.kernel_digest }}" \
-            -var "app_image=${{ secrets.ECR_REGISTRY }}/mk-app@${{ needs.build-sign.outputs.app_digest }}" \
-            -var "alert_email=${{ secrets.ALERT_EMAIL }}" \
-            -var "audit_root_bucket_arn=${{ secrets.AUDIT_ROOT_BUCKET_ARN }}" \
-            -var "audit_root_kms_key_arn=${{ secrets.AUDIT_ROOT_KMS_KEY_ARN }}"
-          tofu show -no-color plan.bin > plan.txt
-      - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
-        with: { name: production-plan, path: infra/terraform/envs/production/plan.txt }
-      - name: Apply (dispatch remains disabled; enabling is the operator's passkey step)
+          "$RUNNER_TEMP/plan-venv/bin/python" tools/release/production_plan.py open \
+            --repo "$GITHUB_REPOSITORY" --sha "$REQUESTED_REF" --run-id "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
+            --kernel-image "$KERNEL_IMAGE" --app-image "$APP_IMAGE" \
+            --lock-file infra/terraform/envs/production/.terraform.lock.hcl \
+            --package production-plan-package --output private-production-plan
+      - name: Apply the reviewed binary without replanning (dispatch remains disabled)
         working-directory: infra/terraform/envs/production
-        run: tofu apply -input=false plan.bin
+        run: tofu apply -input=false "$GITHUB_WORKSPACE/private-production-plan/plan.bin" > "$RUNNER_TEMP/production-apply.log" 2>&1

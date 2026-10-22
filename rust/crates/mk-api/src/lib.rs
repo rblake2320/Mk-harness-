@@ -26,7 +26,12 @@ pub const MAX_BODY_BYTES: usize = 256 * 1024;
 
 pub fn router(state: AppState) -> Router {
     let internal = Router::new()
+        .route("/privacy/erase", post(routes::privacy::erase))
         .route("/actions", post(routes::actions::propose))
+        .route(
+            "/drafts/{draft_id}/invalidate",
+            post(routes::drafts::invalidate),
+        )
         .route("/actions/{action_id}", get(routes::actions::get))
         .route("/actions/{action_id}/cancel", post(routes::actions::cancel))
         .route("/actions/{action_id}/replay", post(routes::actions::replay))
@@ -102,6 +107,18 @@ pub fn router(state: AppState) -> Router {
             post(routes::messaging::set_registration),
         )
         .route("/inbound/pending", get(routes::messaging::inbound_pending))
+        .route(
+            "/actions/{action_id}/resolution-challenge",
+            post(routes::reconciliation::challenge),
+        )
+        .route(
+            "/actions/{action_id}/resolve-submission",
+            post(routes::reconciliation::resolve),
+        )
+        .route(
+            "/deliveries/exceptions",
+            get(routes::messaging::delivery_exceptions),
+        )
         .route(
             "/inbound/{event_id}/processed",
             post(routes::messaging::inbound_processed),

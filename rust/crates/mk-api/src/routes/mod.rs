@@ -3,9 +3,12 @@ pub mod adapters;
 pub mod approvals;
 pub mod callbacks;
 pub mod consent;
+pub mod drafts;
 pub mod human_approval;
 pub mod messaging;
 pub mod ops;
+pub mod privacy;
+pub mod reconciliation;
 
 use mk_audit::ActorType;
 use mk_crypto::MasterKey;

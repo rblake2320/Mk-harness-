@@ -1,0 +1,109 @@
+{
+  "scope": "read-only source preflight; not deployment or independent release qualification",
+  "source_sha": "d40e7ff22ff7a4df8f0f15504f2ec5f271ce2ebf",
+  "repository": "rblake2320/Mk-harness-",
+  "target": "staging",
+  "verdict": "REFUSED",
+  "checks": [
+    {
+      "check": "bounded_main_workflow_inputs",
+      "ok": true
+    },
+    {
+      "check": "main_is_protected",
+      "ok": false
+    },
+    {
+      "check": "source_is_on_main",
+      "ok": false
+    },
+    {
+      "check": "main_requires_fresh_human_review",
+      "ok": false
+    },
+    {
+      "check": "main_requires_trusted_ci_checks",
+      "ok": false
+    },
+    {
+      "check": "main_disallows_delete_and_force_push",
+      "ok": false
+    },
+    {
+      "check": "exact_source_has_independent_merged_pr_approval",
+      "ok": false
+    },
+    {
+      "check": "ci.yml:active_definition",
+      "ok": true
+    },
+    {
+      "check": "ci.yml:exact_main_push",
+      "ok": false
+    },
+    {
+      "check": "ci.yml:successful_run",
+      "ok": false
+    },
+    {
+      "check": "ci.yml:fresh_run",
+      "ok": false
+    },
+    {
+      "check": "ci.yml:all_required_jobs",
+      "ok": false
+    },
+    {
+      "check": "kernel-ci.yml:active_definition",
+      "ok": true
+    },
+    {
+      "check": "kernel-ci.yml:exact_main_push",
+      "ok": false
+    },
+    {
+      "check": "kernel-ci.yml:successful_run",
+      "ok": false
+    },
+    {
+      "check": "kernel-ci.yml:fresh_run",
+      "ok": false
+    },
+    {
+      "check": "kernel-ci.yml:all_required_jobs",
+      "ok": false
+    }
+  ],
+  "evidence": {
+    "branch": {
+      "name": "main",
+      "protected": false
+    },
+    "comparison": {
+      "status": "behind",
+      "merge_base_sha": "80e08d0ab9e9f149e0c365d29b60a6311f26f7df"
+    },
+    "rules": [],
+    "pull_requests": [],
+    "workflows": {
+      "ci.yml": {
+        "definition": {
+          "id": 295193055,
+          "path": ".github/workflows/ci.yml",
+          "state": "active"
+        },
+        "runs": [],
+        "jobs": []
+      },
+      "kernel-ci.yml": {
+        "definition": {
+          "id": 390535077,
+          "path": ".github/workflows/kernel-ci.yml",
+          "state": "active"
+        },
+        "runs": [],
+        "jobs": []
+      }
+    }
+  }
+}

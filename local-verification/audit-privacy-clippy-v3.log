@@ -1,0 +1,18 @@
+    Checking mk-store v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-store)
+    Checking mk-queue v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-queue)
+    Checking mk-adapters v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-adapters)
+    Checking mk-worker v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-worker)
+    Checking mk-api v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-api)
+error: redundant closure
+   --> crates/mk-api/src/routes/messaging.rs:222:88
+    |
+222 | ...ap(|stat...str()),
+    |       ^^^^^...^^^^^ help: replace the closure with the method itself: `mk_adapters::twilio::DeliveryState::as_str`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#redundant_closure_for_method_calls
+    = note: `-D clippy::redundant-closure-for-method-calls` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::redundant_closure_for_method_calls)]`
+
+error: could not compile `mk-api` (lib) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `mk-api` (lib test) due to 1 previous error

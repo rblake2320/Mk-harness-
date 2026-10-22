@@ -235,6 +235,7 @@ pub fn is_safety_control(method: &axum::http::Method, path: &str) -> bool {
             | ["suppressions" | "revocations"]
             | ["inbound", "pause"]
             | ["actions", _, "cancel"]
+            | ["drafts", _, "invalidate"]
             | ["approvals" | "approval-credentials", _, "revoke"]
             | ["contacts", _, "permissions", _, "revoke"]
     ) && method == axum::http::Method::POST
@@ -405,6 +406,7 @@ mod tests {
             "/revocations",
             "/inbound/pause",
             "/actions/abc/cancel",
+            "/drafts/abc/invalidate",
             "/approvals/abc/revoke",
             "/approval-credentials/abc/revoke",
             "/contacts/c/permissions/p/revoke",
@@ -415,6 +417,7 @@ mod tests {
             (Method::GET, "/kill-switch/global"),
             (Method::POST, "/actions"),
             (Method::POST, "/actions/abc/approve"),
+            (Method::POST, "/drafts/abc/propose"),
             (Method::POST, "/inbound/resume"),
             (Method::POST, "/contacts/c/permissions"),
             (Method::POST, "/suppressions/extra"),

@@ -1,0 +1,29 @@
+{
+  "scope": "author-run built kernel image; synthetic fixtures; no provider calls",
+  "image_id": "sha256:6be6b56caade9abec3b12af0f7358b0d803f80618506cf00c1aaf03acfff13cd",
+  "migration_count": 19,
+  "user": "65532:65532",
+  "read_only_root": true,
+  "dropped_capabilities": [
+    "ALL"
+  ],
+  "active_content_erased": true,
+  "erased_read_status": 410,
+  "reintake_status": 410,
+  "service_cross_route_status": 403,
+  "provider_cleanup": {
+    "deletes": 2,
+    "sends": 0,
+    "auth_failures": 0,
+    "present": false,
+    "redis_unavailable": true,
+    "sigkill_after_external_effect": true,
+    "restart_recovered_lease": true,
+    "active_receipts": 1,
+    "backup_pending": true,
+    "restricted_worker_role": true,
+    "worker_user": "65532:65532",
+    "worker_read_only": true
+  },
+  "owned_targets_removed": true
+}

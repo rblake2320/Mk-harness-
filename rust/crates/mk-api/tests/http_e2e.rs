@@ -795,7 +795,17 @@ async fn full_governed_path_over_http() {
     assert!(
         !metrics.contains(&h.tenant.to_string())
             && !metrics.contains(&action_id)
-            && !metrics.contains("0100")
+            && !metrics.contains("+1 (555) 555-0100")
+            && !metrics.contains("+15555550100")
+    );
+    // PII belongs in neither names nor label values. Four digits alone may
+    // occur in an ordinary histogram measurement and are not an identifier.
+    assert!(
+        !metrics
+            .lines()
+            .filter_map(|line| line.split_once('}'))
+            .any(|(labels, _)| labels.contains("0100")),
+        "{metrics}"
     );
     // Request metrics are keyed by the matched route template, with latency histograms (O3/O6).
     assert!(
@@ -1381,7 +1391,7 @@ async fn provider_rig(h: &Harness, mode: mk_adapters::twilio_sim::TwilioSimMode)
     .await
     .unwrap_or_else(|e| panic!("{e}"));
     // A number belongs to exactly one business (UNIQUE across tenants): mint one per rig.
-    let from_number = format!("+1500555{:04}", u64::from(rand::random::<u16>()) % 10000);
+    let from_number = format!("+1800{:011}", Uuid::new_v4().as_u128() % 100_000_000_000);
     // Register the business's sender through the API (credentials sealed in the kernel).
     let (s, v) = h.call("POST", "/internal/v1/senders", Some(&h.token(admin, &["tenant_admin"])), Some(json!({
         "owner_user_id": manager, "display_name": "Angela's MK Business", "account_sid": ACCOUNT_SID,
@@ -1486,16 +1496,1763 @@ async fn run_dispatch(r: &ProviderRig, tenant: TenantId, aid: &str) -> DispatchO
     .unwrap_or_else(|e| panic!("{e:?}"))
 }
 
-async fn health_ok(h: &Harness, admin: UserId) {
+#[tokio::test]
+async fn approval_preview_binds_sender_schedule_and_current_self_policy() {
+    let h = harness().await.expect("real Postgres required");
+    let mut r = provider_rig(&h, mk_adapters::twilio_sim::TwilioSimMode::Accept).await;
+    let scheduled = (chrono::Utc::now() + chrono::Duration::minutes(2))
+        .to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+    let mut req = provider_proposal(
+        r.contact,
+        r.sender_id,
+        "Scheduled check-in. Reply STOP to opt out.",
+        "+15555550100",
+    );
+    req["arguments"]["scheduled_for"] = json!(scheduled);
+    req["origin"] = json!({"type":"human", "session_id":"own-human"});
+    let (s, result) = h
+        .call(
+            "POST",
+            "/internal/v1/actions",
+            Some(&h.token(r.manager, &["consultant"])),
+            Some(req),
+        )
+        .await;
+    assert_eq!(s, StatusCode::ACCEPTED, "{result}");
+    let aid = result["result"]["action_id"].as_str().unwrap();
+    for (i, allowed) in [false, true, false, true].into_iter().enumerate() {
+        let mut tx = h.state.store.begin(h.tenant).await.unwrap();
+        let (mut policy, _) = mk_store::policy::load(&mut tx).await.unwrap();
+        policy.allow_self_approval = allowed;
+        policy.approval_ttl_secs = 300;
+        mk_store::policy::write(&mut tx, &format!("preview-policy-{i}"), &policy, 0)
+            .await
+            .unwrap();
+        tx.commit().await.unwrap();
+        let (s, rows) = h
+            .call(
+                "GET",
+                "/internal/v1/approvals/pending",
+                Some(&h.token(r.manager, &["consultant"])),
+                None,
+            )
+            .await;
+        assert_eq!(s, StatusCode::OK);
+        let display = &rows[0]["display"];
+        assert_eq!(display["sender_identity_id"], json!(r.sender_id));
+        assert_eq!(display["scheduled_for"], scheduled);
+        assert_eq!(display["self_approval"], true);
+        assert_eq!(display["can_approve"], allowed);
+        assert_eq!(display["approval_ttl_seconds"], 300);
+        assert_eq!(
+            display["approval_denial"],
+            if allowed {
+                Value::Null
+            } else {
+                json!("self_approval_forbidden")
+            }
+        );
+    }
+    for roles in [vec!["agent"], vec!["agent", "unknown"], vec!["viewer"]] {
+        assert_eq!(
+            h.call(
+                "GET",
+                "/internal/v1/approvals/pending",
+                Some(&h.token(r.manager, &roles)),
+                None
+            )
+            .await
+            .0,
+            StatusCode::FORBIDDEN
+        );
+    }
+    // The last displayed preview permits approval. Changing policy afterwards
+    // must still refuse the signed gesture; the UI observation is not authority.
+    let mut tx = h.state.store.begin(h.tenant).await.unwrap();
+    let (mut policy, _) = mk_store::policy::load(&mut tx).await.unwrap();
+    policy.allow_self_approval = false;
+    mk_store::policy::write(&mut tx, "changed-after-preview", &policy, 0)
+        .await
+        .unwrap();
+    tx.commit().await.unwrap();
+    let wa = h
+        .sign_approval(r.manager, &["consultant"], aid, &mut r.mgr_key)
+        .await;
+    let (s, _) = h
+        .call(
+            "POST",
+            &format!("/internal/v1/actions/{aid}/approve"),
+            Some(&h.token(r.manager, &["consultant"])),
+            Some(json!({"action_digest":result["result"]["action_digest"], "webauthn":wa})),
+        )
+        .await;
+    assert_eq!(s, StatusCode::FORBIDDEN);
+    let mut tx = h.state.store.begin(h.tenant).await.unwrap();
+    policy.allow_self_approval = true;
+    mk_store::policy::write(&mut tx, "self-approval-permitted", &policy, 0)
+        .await
+        .unwrap();
+    tx.commit().await.unwrap();
+    let wa = h
+        .sign_approval(r.manager, &["consultant"], aid, &mut r.mgr_key)
+        .await;
+    let (s, approved) = h
+        .call(
+            "POST",
+            &format!("/internal/v1/actions/{aid}/approve"),
+            Some(&h.token(r.manager, &["consultant"])),
+            Some(json!({"action_digest":result["result"]["action_digest"], "webauthn":wa})),
+        )
+        .await;
+    assert_eq!(s, StatusCode::OK, "{approved}");
+    assert_eq!(approved["result"]["state"], "queued");
+    assert_eq!(
+        r.sim.calls(),
+        0,
+        "preview and approval never execute provider calls"
+    );
+}
+
+#[tokio::test]
+async fn privacy_erasure_removes_queued_content_and_blocks_dispatch_and_reintake() {
+    use mk_adapters::twilio_sim::TwilioSimMode;
+    let h = harness()
+        .await
+        .expect("privacy acceptance requires actual PostgreSQL and migrations");
+    let mut r = provider_rig(&h, TwilioSimMode::Accept).await;
+    let private_text = "Synthetic erasure acceptance message. Reply STOP to opt out.";
+    let (aid, digest) = approved_action(&h, &mut r, private_text, "+15555550100").await;
+    let request_id = Uuid::new_v4();
+    let body =
+        json!({"request_id": request_id, "subject_kind": "contact", "subject_id": r.contact});
+    let (status, erased) = h
+        .call(
+            "POST",
+            "/internal/v1/privacy/erase",
+            Some(&h.token(UserId::new(), &["privacy_eraser"])),
+            Some(body.clone()),
+        )
+        .await;
+    assert_eq!(status, StatusCode::CREATED, "{erased}");
+    assert_eq!(erased["request_id"], request_id.to_string());
+    assert_eq!(erased["subject_id"], r.contact.to_string());
+    assert_eq!(erased["active_content_erased"], true);
+    assert_eq!(erased["pending_provider_deletions"], 0);
+    let mut tx = h.state.store.begin(h.tenant).await.unwrap();
+    let stored: (Vec<u8>, String, String) = sqlx::query_as(
+        "SELECT canonical_request,action_digest,state FROM kernel.actions WHERE tenant_id=$1 AND action_id=$2")
+        .bind(h.tenant.0).bind(aid.parse::<Uuid>().unwrap()).fetch_one(tx.raw_conn()).await.unwrap();
+    assert!(stored.0.is_empty());
+    assert_eq!(stored.1, digest.as_str().unwrap());
+    assert_eq!(stored.2, "cancelled");
+    mk_store::audit::verify_tenant(&mut tx).await.unwrap();
+    tx.commit().await.unwrap();
+    health_ok(&h, r.admin).await;
+    assert!(matches!(
+        run_dispatch(&r, h.tenant, &aid).await,
+        DispatchOutcome::Skipped { ack: true, .. }
+    ));
+    assert_eq!(r.sim.calls(), 0);
+    assert_eq!(
+        h.call(
+            "GET",
+            &format!("/internal/v1/actions/{aid}"),
+            Some(&h.token(r.manager, &["manager"])),
+            None
+        )
+        .await
+        .0,
+        StatusCode::GONE
+    );
+    let (status, denied) = h
+        .call(
+            "POST",
+            "/internal/v1/actions",
+            Some(&h.token(r.admin, &["agent"])),
+            Some(provider_proposal(
+                r.contact,
+                r.sender_id,
+                private_text,
+                "+15555550100",
+            )),
+        )
+        .await;
+    assert_eq!(status, StatusCode::GONE, "{denied}");
+    assert_eq!(
+        h.call(
+            "POST",
+            "/internal/v1/privacy/erase",
+            Some(&h.token(UserId::new(), &["privacy_eraser"])),
+            Some(body)
+        )
+        .await
+        .0,
+        StatusCode::CREATED
+    );
+}
+
+async fn privacy_webhook(h: &Harness, path: &str, form: Vec<(String, String)>) -> StatusCode {
+    let signature = mk_adapters::twilio::twilio_signature(
+        &AdapterSecret::new(TOKEN),
+        &format!("{WEBHOOK_BASE}{path}"),
+        &form,
+    );
+    let body = url::form_urlencoded::Serializer::new(String::new())
+        .extend_pairs(&form)
+        .finish();
+    let request = Request::builder()
+        .method("POST")
+        .uri(path)
+        .header("content-type", "application/x-www-form-urlencoded")
+        .header("x-twilio-signature", signature)
+        .body(Body::from(body))
+        .unwrap();
+    h.app.clone().oneshot(request).await.unwrap().status()
+}
+
+async fn privacy_inbound(h: &Harness, r: &ProviderRig, sid: &str, body: &str) -> StatusCode {
+    privacy_webhook(
+        h,
+        &format!("/webhooks/twilio/inbound/{}", r.sender_id),
+        vec![
+            ("MessageSid".into(), sid.into()),
+            ("AccountSid".into(), ACCOUNT_SID.into()),
+            ("From".into(), "+15555550100".into()),
+            ("To".into(), r.from_number.clone()),
+            ("Body".into(), body.into()),
+            ("NumMedia".into(), "0".into()),
+        ],
+    )
+    .await
+}
+
+#[tokio::test]
+async fn privacy_erasure_authority_rls_and_legacy_writes_fail_closed() {
+    let mut h = harness().await.expect("actual PostgreSQL required");
+    let mut r = provider_rig(&h, mk_adapters::twilio_sim::TwilioSimMode::Accept).await;
+    let (aid, _) = approved_action(
+        &h,
+        &mut r,
+        "Private fixture. Reply STOP to opt out.",
+        "+15555550100",
+    )
+    .await;
+    let pool = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(1)
+        .after_connect(|conn, _| {
+            Box::pin(async move {
+                sqlx::query("SET ROLE mk_kernel_api").execute(conn).await?;
+                Ok(())
+            })
+        })
+        .connect(&mk_testkit::test_database_url().unwrap())
+        .await
+        .unwrap();
+    let runtime = Store::from_pool(pool);
+    let mut state = h.state.clone();
+    state.store = runtime.clone();
+    h.app = router(state);
+    let rid = Uuid::new_v4();
+    let body = json!({"request_id":rid,"subject_kind":"contact","subject_id":r.contact});
+    for roles in [
+        vec!["tenant_admin"],
+        vec!["manager"],
+        vec!["privacy_eraser", "tenant_admin"],
+        vec!["session_revoker"],
+    ] {
+        assert_eq!(
+            h.call(
+                "POST",
+                "/internal/v1/privacy/erase",
+                Some(&h.token(UserId::new(), &roles)),
+                Some(body.clone())
+            )
+            .await
+            .0,
+            StatusCode::FORBIDDEN
+        );
+    }
+    for (method, path) in [
+        ("GET", "/internal/v1/senders"),
+        ("POST", "/internal/v1/actions"),
+        ("POST", "/internal/v1/approval-credentials/register/begin"),
+    ] {
+        assert_eq!(
+            h.call(
+                method,
+                path,
+                Some(&h.token(UserId::new(), &["privacy_eraser"])),
+                Some(json!({}))
+            )
+            .await
+            .0,
+            StatusCode::FORBIDDEN
+        );
+    }
+    let (status, receipt) = h
+        .call(
+            "POST",
+            "/internal/v1/privacy/erase",
+            Some(&h.token(UserId::new(), &["privacy_eraser"])),
+            Some(body.clone()),
+        )
+        .await;
+    assert_eq!(status, StatusCode::CREATED, "{receipt}");
+    assert_eq!(receipt["active_content_erased"], true);
+    let mut foreign = runtime.begin(TenantId::new()).await.unwrap();
+    for table in [
+        "privacy_erasure_requests",
+        "privacy_provider_deletions",
+        "privacy_destination_fences",
+    ] {
+        let n: i64 = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
+            "SELECT count(*) FROM kernel.{table}"
+        )))
+        .fetch_one(foreign.raw_conn())
+        .await
+        .unwrap();
+        assert_eq!(n, 0, "{table}");
+    }
+    foreign.commit().await.unwrap();
+    let mut changed = body;
+    changed["subject_id"] = json!(Uuid::new_v4());
+    assert_eq!(
+        h.call(
+            "POST",
+            "/internal/v1/privacy/erase",
+            Some(&h.token(UserId::new(), &["privacy_eraser"])),
+            Some(changed)
+        )
+        .await
+        .0,
+        StatusCode::CONFLICT
+    );
+    for sql in [
+        "UPDATE kernel.actions SET canonical_request='reintroduced'::bytea WHERE action_id=$1",
+        "UPDATE kernel.actions SET content_erased_at=NULL WHERE action_id=$1",
+        "UPDATE kernel.actions SET state='queued' WHERE action_id=$1",
+    ] {
+        let mut tx = runtime.begin(h.tenant).await.unwrap();
+        let error = sqlx::query(sql)
+            .bind(aid.parse::<Uuid>().unwrap())
+            .execute(tx.raw_conn())
+            .await
+            .unwrap_err();
+        assert_eq!(
+            error.as_database_error().unwrap().code().as_deref(),
+            Some("23514")
+        );
+        tx.rollback().await.unwrap();
+    }
+    let mut tx = runtime.begin(h.tenant).await.unwrap();
+    assert!(
+        sqlx::query("DELETE FROM kernel.privacy_erasure_requests")
+            .execute(tx.raw_conn())
+            .await
+            .is_err()
+    );
+    tx.rollback().await.unwrap();
+    // A new customer UUID cannot bypass the erased destination fence.
+    let (s, v) = h
+        .call(
+            "POST",
+            "/internal/v1/actions",
+            Some(&h.token(r.admin, &["agent"])),
+            Some(provider_proposal(
+                ContactId::new(),
+                r.sender_id,
+                "Blocked. Reply STOP to opt out.",
+                "+15555550100",
+            )),
+        )
+        .await;
+    assert_eq!(s, StatusCode::GONE, "{v}");
+    let keys = mk_store::fingerprint::FingerprintKeys::parse(
+        "k2=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=,m0=master",
+        &h.state.master,
+    )
+    .unwrap();
+    let status = mk_store::fingerprint::status(h.state.store.pool(), &keys, Some(h.tenant))
+        .await
+        .unwrap();
+    assert!(
+        status
+            .iter()
+            .any(|s| s.table == "privacy_destination_fences" && s.lacking_current > 0),
+        "hash-only erasure fences must block blind key retirement"
+    );
+}
+
+#[tokio::test]
+async fn privacy_erasure_clears_inbound_and_late_webhooks_without_false_provider_receipts() {
+    let h = harness().await.expect("actual PostgreSQL required");
+    let mut r = provider_rig(&h, mk_adapters::twilio_sim::TwilioSimMode::Accept).await;
+    let (aid, _) = approved_action(
+        &h,
+        &mut r,
+        "Private outbound. Reply STOP to opt out.",
+        "+15555550100",
+    )
+    .await;
+    let sid = format!("SM{}", Uuid::new_v4().simple());
+    assert_eq!(
+        privacy_inbound(&h, &r, &sid, "Synthetic private inbound canary").await,
+        StatusCode::OK
+    );
+    let request =
+        json!({"request_id":Uuid::new_v4(),"subject_kind":"contact","subject_id":r.contact});
+    let (s, v) = h
+        .call(
+            "POST",
+            "/internal/v1/privacy/erase",
+            Some(&h.token(UserId::new(), &["privacy_eraser"])),
+            Some(request.clone()),
+        )
+        .await;
+    assert_eq!(s, StatusCode::CREATED, "{v}");
+    assert_eq!(v["active_content_erased"], true);
+    assert_eq!(v["pending_provider_deletions"], 1);
+    let late = format!("SM{}", Uuid::new_v4().simple());
+    assert_eq!(
+        privacy_inbound(&h, &r, &late, "Another synthetic private inbound canary").await,
+        StatusCode::OK
+    );
+    assert_eq!(
+        privacy_inbound(&h, &r, &late, "Another synthetic private inbound canary").await,
+        StatusCode::OK
+    );
+    let mut tx = h.state.store.begin(h.tenant).await.unwrap();
+    let n:i64=sqlx::query_scalar("SELECT count(*) FROM kernel.inbound_events WHERE tenant_id=$1 AND content_erased_at IS NOT NULL AND octet_length(content_sealed)=0 AND destination_sealed IS NULL AND processed_at IS NOT NULL")
+        .bind(h.tenant.0).fetch_one(tx.raw_conn()).await.unwrap();
+    assert_eq!(n, 2);
+    assert!(
+        mk_store::messaging::pending_inbound(&mut tx, &h.state.keyring, 100)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    let unsafe_tasks: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM kernel.outbox_events WHERE tenant_id=$1 AND payload::text LIKE $2",
+    )
+    .bind(h.tenant.0)
+    .bind(format!("%{late}%"))
+    .fetch_one(tx.raw_conn())
+    .await
+    .unwrap();
+    assert_eq!(unsafe_tasks, 0);
+    mk_store::audit::verify_tenant(&mut tx).await.unwrap();
+    tx.commit().await.unwrap();
+    let (_, v) = h
+        .call(
+            "POST",
+            "/internal/v1/privacy/erase",
+            Some(&h.token(UserId::new(), &["privacy_eraser"])),
+            Some(request),
+        )
+        .await;
+    assert_eq!(
+        v["pending_provider_deletions"], 2,
+        "a duplicate webhook must not multiply deletion jobs"
+    );
+    assert!(matches!(
+        run_dispatch(&r, h.tenant, &aid).await,
+        DispatchOutcome::Skipped { ack: true, .. }
+    ));
+    assert_eq!(r.sim.calls(), 0);
+}
+
+#[tokio::test]
+async fn privacy_erasure_blocks_uncertain_submission_until_authenticated_resolution() {
+    let h = harness().await.expect("actual PostgreSQL required");
+    let mut r = provider_rig(
+        &h,
+        mk_adapters::twilio_sim::TwilioSimMode::AcceptButDropResponse,
+    )
+    .await;
+    health_ok(&h, r.admin).await;
+    let (aid, _) = approved_action(
+        &h,
+        &mut r,
+        "Uncertain fixture. Reply STOP to opt out.",
+        "+15555550100",
+    )
+    .await;
+    assert_eq!(
+        run_dispatch(&r, h.tenant, &aid).await,
+        DispatchOutcome::ReconciliationRequired
+    );
+    let request =
+        json!({"request_id":Uuid::new_v4(),"subject_kind":"contact","subject_id":r.contact});
+    let (s, v) = h
+        .call(
+            "POST",
+            "/internal/v1/privacy/erase",
+            Some(&h.token(UserId::new(), &["privacy_eraser"])),
+            Some(request.clone()),
+        )
+        .await;
+    assert_eq!(s, StatusCode::CREATED, "{v}");
+    assert_eq!(v["active_content_erased"], false);
+    assert_eq!(v["blocked_actions"], 1);
+    let mut tx = h.state.store.begin(h.tenant).await.unwrap();
+    let retained:bool=sqlx::query_scalar("SELECT octet_length(canonical_request)>0 AND content_erased_at IS NULL FROM kernel.actions WHERE tenant_id=$1 AND action_id=$2")
+        .bind(h.tenant.0).bind(aid.parse::<Uuid>().unwrap()).fetch_one(tx.raw_conn()).await.unwrap();
+    assert!(retained);
+    tx.commit().await.unwrap();
+    assert!(matches!(
+        run_dispatch(&r, h.tenant, &aid).await,
+        DispatchOutcome::Skipped { .. }
+    ));
+    assert_eq!(r.sim.calls(), 1);
+}
+
+#[tokio::test]
+async fn privacy_erasure_completed_delivery_accepts_late_receipts() {
+    let h = harness().await.expect("actual PostgreSQL required");
+    let mut r = provider_rig(&h, mk_adapters::twilio_sim::TwilioSimMode::Accept).await;
+    health_ok(&h, r.admin).await;
+    let (aid, _) = approved_action(
+        &h,
+        &mut r,
+        "Delivered fixture. Reply STOP to opt out.",
+        "+15555550100",
+    )
+    .await;
+    assert!(matches!(
+        run_dispatch(&r, h.tenant, &aid).await,
+        DispatchOutcome::Dispatched { .. }
+    ));
+    let sid = r.sim.created_messages().await[0]["sid"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let status_form = |status: &str| {
+        vec![
+            ("MessageSid".into(), sid.clone()),
+            ("MessageStatus".into(), status.into()),
+            ("AccountSid".into(), ACCOUNT_SID.into()),
+        ]
+    };
+    let path = format!("/webhooks/twilio/status/{}", r.sender_id);
+    assert_eq!(
+        privacy_webhook(&h, &path, status_form("delivered")).await,
+        StatusCode::OK
+    );
+    let request =
+        json!({"request_id":Uuid::new_v4(),"subject_kind":"contact","subject_id":r.contact});
+    let (s, v) = h
+        .call(
+            "POST",
+            "/internal/v1/privacy/erase",
+            Some(&h.token(UserId::new(), &["privacy_eraser"])),
+            Some(request),
+        )
+        .await;
+    assert_eq!(s, StatusCode::CREATED, "{v}");
+    assert_eq!(v["active_content_erased"], true);
+    assert_eq!(v["pending_provider_deletions"], 1);
+    assert_eq!(
+        privacy_webhook(&h, &path, status_form("sent")).await,
+        StatusCode::OK
+    );
+    assert_eq!(
+        privacy_webhook(&h, &path, status_form("delivered")).await,
+        StatusCode::OK
+    );
+    assert_eq!(r.sim.calls(), 1);
+    let mut tx = h.state.store.begin(h.tenant).await.unwrap();
+    mk_store::audit::verify_tenant(&mut tx).await.unwrap();
+    tx.commit().await.unwrap();
+}
+
+#[tokio::test]
+async fn privacy_erasure_serializes_before_dispatch_intake_and_inbound() {
+    use mk_audit::ActorType;
+    let h = harness().await.expect("actual PostgreSQL required");
+    let mut r = provider_rig(&h, mk_adapters::twilio_sim::TwilioSimMode::Accept).await;
+    health_ok(&h, r.admin).await;
+    let (aid, _) = approved_action(
+        &h,
+        &mut r,
+        "Racing fixture. Reply STOP to opt out.",
+        "+15555550100",
+    )
+    .await;
+    let separate = Store::connect(&mk_testkit::test_database_url().unwrap(), 2)
+        .await
+        .unwrap();
+    let mut deletion = separate.begin_erasure(h.tenant).await.unwrap();
+    let receipt = mk_store::privacy::erase(
+        &mut deletion,
+        Uuid::new_v4(),
+        mk_store::privacy::SubjectKind::Contact,
+        r.contact.0,
+        UserId::new(),
+        mk_store::actions::Actor {
+            actor_type: ActorType::System,
+            actor_id: "privacy-race",
+            trace_id: None,
+            policy_version: mk_policy::POLICY_VERSION.0,
+        },
+        chrono::Utc::now(),
+    )
+    .await
+    .unwrap();
+    assert!(receipt.active_content_erased);
+    let mut dispatch = Box::pin(run_dispatch(&r, h.tenant, &aid));
+    assert!(
+        tokio::time::timeout(Duration::from_millis(100), &mut dispatch)
+            .await
+            .is_err()
+    );
+    // Observe the actual database wait, not only a slow async future.
+    let waiting:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND wait_event='advisory' AND query LIKE '%privacy_tenant_lock%')")
+        .fetch_one(separate.pool()).await.unwrap();
+    assert!(waiting);
+    deletion.commit().await.unwrap();
+    assert!(matches!(
+        dispatch.await,
+        DispatchOutcome::Skipped { ack: true, .. }
+    ));
+    assert_eq!(r.sim.calls(), 0);
+    let mut deletion = separate.begin_erasure(h.tenant).await.unwrap();
+    let token = h.token(r.admin, &["agent"]);
+    let mut intake = Box::pin(h.call(
+        "POST",
+        "/internal/v1/actions",
+        Some(&token),
+        Some(provider_proposal(
+            r.contact,
+            r.sender_id,
+            "Late proposal. Reply STOP to opt out.",
+            "+15555550100",
+        )),
+    ));
+    assert!(
+        tokio::time::timeout(Duration::from_millis(100), &mut intake)
+            .await
+            .is_err()
+    );
+    deletion.commit().await.unwrap();
+    assert_eq!(intake.await.0, StatusCode::GONE);
+    deletion = separate.begin_erasure(h.tenant).await.unwrap();
+    let sid = format!("SM{}", Uuid::new_v4().simple());
+    let mut inbound = Box::pin(privacy_inbound(
+        &h,
+        &r,
+        &sid,
+        "Private content arriving during erasure",
+    ));
+    assert!(
+        tokio::time::timeout(Duration::from_millis(100), &mut inbound)
+            .await
+            .is_err()
+    );
+    deletion.commit().await.unwrap();
+    assert_eq!(inbound.await, StatusCode::OK);
+    let erased:bool=sqlx::query_scalar("SELECT content_erased_at IS NOT NULL AND octet_length(content_sealed)=0 AND destination_sealed IS NULL FROM kernel.inbound_events WHERE tenant_id=$1 AND provider_event_id=$2")
+        .bind(h.tenant.0).bind(sid).fetch_one(separate.pool()).await.unwrap();
+    assert!(erased);
+}
+
+#[tokio::test]
+async fn privacy_account_erasure_revokes_sessions_approvals_and_reports_sender_cleanup() {
+    let h = harness().await.expect("actual PostgreSQL required");
+    let mut r = provider_rig(&h, mk_adapters::twilio_sim::TwilioSimMode::Accept).await;
+    let (aid, _) = approved_action(
+        &h,
+        &mut r,
+        "Owner erasure. Reply STOP to opt out.",
+        "+15555550100",
+    )
+    .await;
+    let request =
+        json!({"request_id":Uuid::new_v4(),"subject_kind":"account","subject_id":r.manager});
+    let (s, v) = h
+        .call(
+            "POST",
+            "/internal/v1/privacy/erase",
+            Some(&h.token(UserId::new(), &["privacy_eraser"])),
+            Some(request.clone()),
+        )
+        .await;
+    assert_eq!(s, StatusCode::CREATED, "{v}");
+    assert_eq!(v["active_content_erased"], false);
+    assert_eq!(v["pending_sender_cleanup"], 1);
+    assert_eq!(
+        h.call(
+            "GET",
+            "/internal/v1/senders",
+            Some(&h.token(r.manager, &["manager"])),
+            None
+        )
+        .await
+        .0,
+        StatusCode::UNAUTHORIZED
+    );
+    assert!(matches!(
+        run_dispatch(&r, h.tenant, &aid).await,
+        DispatchOutcome::Skipped { ack: true, .. }
+    ));
+    assert_eq!(r.sim.calls(), 0);
+    let mut tx = h.state.store.begin(h.tenant).await.unwrap();
+    let disabled:bool=sqlx::query_scalar("SELECT status='disabled' FROM kernel.sender_identities WHERE tenant_id=$1 AND sender_identity_id=$2")
+        .bind(h.tenant.0).bind(r.sender_id).fetch_one(tx.raw_conn()).await.unwrap();
+    assert!(disabled);
+    mk_store::audit::verify_tenant(&mut tx).await.unwrap();
+    tx.commit().await.unwrap();
+    assert_eq!(
+        h.call(
+            "POST",
+            "/internal/v1/privacy/erase",
+            Some(&h.token(UserId::new(), &["privacy_eraser"])),
+            Some(request)
+        )
+        .await
+        .0,
+        StatusCode::CREATED
+    );
+    let request =
+        json!({"request_id":Uuid::new_v4(),"subject_kind":"account","subject_id":r.admin});
+    let (s, v) = h
+        .call(
+            "POST",
+            "/internal/v1/privacy/erase",
+            Some(&h.token(UserId::new(), &["privacy_eraser"])),
+            Some(request),
+        )
+        .await;
+    assert_eq!(s, StatusCode::CREATED, "{v}");
+    assert_eq!(v["active_content_erased"], true);
+}
+
+#[tokio::test]
+async fn session_outbox_authority_is_narrow_and_revokes_real_queued_approval() {
+    let Some(h) = harness().await else {
+        eprintln!("skipping");
+        return;
+    };
+    let mut r = provider_rig(&h, mk_adapters::twilio_sim::TwilioSimMode::Accept).await;
+    health_ok(&h, r.admin).await;
+    let (aid, _) = approved_action(
+        &h,
+        &mut r,
+        "Session test. Reply STOP to opt out.",
+        "+15555550100",
+    )
+    .await;
+    let service = UserId::new();
+    for (method, path) in [
+        ("GET", "/internal/v1/approval-credentials".to_string()),
+        (
+            "POST",
+            "/internal/v1/approval-credentials/register/begin".to_string(),
+        ),
+        ("POST", "/internal/v1/actions".to_string()),
+        (
+            "POST",
+            format!("/internal/v1/actions/{aid}/approval-challenge"),
+        ),
+        ("POST", "/internal/v1/kill-switch/tenant".to_string()),
+    ] {
+        let (s, v) = h
+            .call(
+                method,
+                &path,
+                Some(&h.token(service, &["session_revoker"])),
+                Some(json!({})),
+            )
+            .await;
+        assert_eq!(s, StatusCode::FORBIDDEN, "{path}: {v}");
+        assert_eq!(v["code"], "REVOCATION_ONLY");
+    }
+    let (s, v) = h
+        .call(
+            "POST",
+            "/internal/v1/revocations",
+            Some(&h.token(service, &["session_revoker", "tenant_admin"])),
+            Some(json!({"user_id": r.manager, "session_id": "sess"})),
+        )
+        .await;
+    assert_eq!(s, StatusCode::FORBIDDEN, "{v}");
+    let (s, v) = h
+        .call(
+            "POST",
+            "/internal/v1/revocations",
+            Some(&h.token(service, &["session_revoker"])),
+            Some(json!({"user_id": r.manager})),
+        )
+        .await;
+    assert_eq!(s, StatusCode::FORBIDDEN, "{v}");
+    for expected_count in [1, 0] {
+        // Lost-response retry still works after the target's own assertion is dead.
+        let (s, v) = h
+            .call(
+                "POST",
+                "/internal/v1/revocations",
+                Some(&h.token(service, &["session_revoker"])),
+                Some(json!({"user_id": r.manager, "session_id": "sess"})),
+            )
+            .await;
+        assert_eq!(s, StatusCode::CREATED, "{v}");
+        assert_eq!(v["approvals_revoked"], expected_count);
+    }
+    let (s, v) = h
+        .call(
+            "GET",
+            &format!("/internal/v1/actions/{aid}"),
+            Some(&h.token(r.admin, &["tenant_admin"])),
+            None,
+        )
+        .await;
+    assert_eq!(s, StatusCode::OK, "{v}");
+    assert_eq!(v["state"], "cancelled");
+    let out = run_dispatch(&r, h.tenant, &aid).await;
+    assert!(matches!(out, DispatchOutcome::Skipped { .. }), "{out:?}");
+    assert_eq!(r.sim.calls(), 0);
+    let (s, v) = h
+        .call(
+            "GET",
+            &format!("/internal/v1/actions/{aid}"),
+            Some(&h.token(r.manager, &["manager"])),
+            None,
+        )
+        .await;
+    assert_eq!(s, StatusCode::UNAUTHORIZED, "{v}");
+    let mut tx = h.state.store.begin(h.tenant).await.unwrap();
+    assert!(
+        mk_store::human_approval::approver_revoked_since(
+            &mut tx,
+            r.manager,
+            Some("jwt:legacy-hash"),
+            chrono::Utc::now()
+        )
+        .await
+        .unwrap()
+    );
+    tx.commit().await.unwrap();
+    assert!(
+        mk_store::human_approval::is_revoked(
+            h.state.store.pool(),
+            h.tenant,
+            UserId::new(),
+            "jwt:legacy-hash"
+        )
+        .await
+        .unwrap()
+    );
+}
+
+#[tokio::test]
+async fn session_revocation_before_approval_timestamp_still_blocks_dispatch() {
+    let Some(h) = harness().await else {
+        eprintln!("skipping");
+        return;
+    };
+    let mut r = provider_rig(&h, mk_adapters::twilio_sim::TwilioSimMode::Accept).await;
+    health_ok(&h, r.admin).await;
+    let (aid, _) = approved_action(
+        &h,
+        &mut r,
+        "Race test. Reply STOP to opt out.",
+        "+15555550100",
+    )
+    .await;
+    // Model a request authenticated before revocation but inserting its approval
+    // afterwards. No cascade is run: the dispatch consumption check is decisive.
+    let mut tx = h.state.store.begin(h.tenant).await.unwrap();
+    mk_store::human_approval::revoke(
+        &mut tx,
+        mk_store::human_approval::RevocationTarget::Session(r.manager, "sess"),
+        r.admin,
+        "synthetic authorization race",
+        chrono::Utc::now() - chrono::Duration::minutes(1),
+    )
+    .await
+    .unwrap();
+    tx.commit().await.unwrap();
+    let outcome = run_dispatch(&r, h.tenant, &aid).await;
+    assert!(
+        !matches!(outcome, DispatchOutcome::Dispatched { .. }),
+        "{outcome:?}"
+    );
+    assert_eq!(
+        r.sim.calls(),
+        0,
+        "an irrevocably dead session cannot authorize delivery"
+    );
+}
+
+#[tokio::test]
+async fn legacy_stateless_approval_is_retired_at_dispatch_on_session_rollout() {
+    let Some(h) = harness().await else {
+        eprintln!("skipping");
+        return;
+    };
+    let mut r = provider_rig(&h, mk_adapters::twilio_sim::TwilioSimMode::Accept).await;
+    health_ok(&h, r.admin).await;
+    let (aid, _) = approved_action(
+        &h,
+        &mut r,
+        "Legacy test. Reply STOP to opt out.",
+        "+15555550100",
+    )
+    .await;
+    // Restore the old binary's stored session shape, without a revocation row.
+    sqlx::query("UPDATE kernel.approvals SET session_id = 'jwt:old-token-hash' WHERE tenant_id = $1 AND action_id = $2")
+        .bind(h.tenant.0).bind(aid.parse::<Uuid>().unwrap()).execute(h.state.store.pool()).await.unwrap();
+    let outcome = run_dispatch(&r, h.tenant, &aid).await;
+    assert!(
+        matches!(outcome, DispatchOutcome::Blocked { .. }),
+        "{outcome:?}"
+    );
+    assert_eq!(r.sim.calls(), 0);
+}
+
+#[tokio::test]
+async fn editing_draft_fences_queued_and_future_proposals() {
+    let mut h = harness().await.expect("real Postgres required");
+    let mut r = provider_rig(&h, mk_adapters::twilio_sim::TwilioSimMode::Accept).await;
+    let pool = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(1)
+        .after_connect(|conn, _| {
+            Box::pin(async move {
+                sqlx::query("SET ROLE mk_kernel_api").execute(conn).await?;
+                Ok(())
+            })
+        })
+        .connect(&mk_testkit::test_database_url().unwrap())
+        .await
+        .unwrap();
+    let mut state = h.state.clone();
+    state.store = Store::from_pool(pool);
+    h.app = router(state.clone());
+    let draft_id = Uuid::new_v4();
+    let text = "Draft version one. Reply STOP to opt out.";
+    let mut req = provider_proposal(r.contact, r.sender_id, text, "+15555550100");
+    req["evidence"] = json!([{"type":"document", "id":format!("draft:{}", draft_id.simple()), "digest":mk_crypto::Digest::of(text.as_bytes()).to_string()}]);
+    let (s, proposal) = h
+        .call(
+            "POST",
+            "/internal/v1/actions",
+            Some(&h.token(r.admin, &["agent"])),
+            Some(req.clone()),
+        )
+        .await;
+    assert_eq!(s, StatusCode::ACCEPTED);
+    let aid = proposal["result"]["action_id"].as_str().unwrap();
+    let wa = h
+        .sign_approval(r.manager, &["manager"], aid, &mut r.mgr_key)
+        .await;
+    let (s, approved) = h
+        .call(
+            "POST",
+            &format!("/internal/v1/actions/{aid}/approve"),
+            Some(&h.token(r.manager, &["manager"])),
+            Some(json!({"action_digest":proposal["result"]["action_digest"], "webauthn":wa})),
+        )
+        .await;
+    assert_eq!(s, StatusCode::OK);
+    let path = format!("/internal/v1/drafts/{draft_id}/invalidate");
+    for (user, roles, expected) in [
+        (r.admin, vec!["agent"], StatusCode::FORBIDDEN),
+        (r.admin, vec!["unknown"], StatusCode::FORBIDDEN),
+        (r.manager, vec!["manager"], StatusCode::NOT_FOUND),
+    ] {
+        assert_eq!(
+            h.call("POST", &path, Some(&h.token(user, &roles)), None)
+                .await
+                .0,
+            expected
+        );
+    }
+    let mut other = state.store.begin(TenantId::new()).await.unwrap();
+    let invisible: i64 = sqlx::query_scalar("SELECT count(*) FROM kernel.draft_action_refs")
+        .fetch_one(other.raw_conn())
+        .await
+        .unwrap();
+    assert_eq!(
+        invisible, 0,
+        "forced RLS hides other businesses' draft links"
+    );
+    other.commit().await.unwrap();
+    let (s, invalidated) = h
+        .call(
+            "POST",
+            &path,
+            Some(&h.token(r.admin, &["consultant"])),
+            Some(json!({})),
+        )
+        .await;
+    assert_eq!(s, StatusCode::OK, "{invalidated}");
+    assert_eq!(invalidated["edit_permitted"], true);
+    assert_eq!(invalidated["cancelled_actions"], 1);
+    let (_, action) = h
+        .call(
+            "GET",
+            &format!("/internal/v1/actions/{aid}"),
+            Some(&h.token(r.admin, &["consultant"])),
+            None,
+        )
+        .await;
+    assert_eq!(action["state"], "cancelled");
+    let revoked: bool = sqlx::query_scalar(
+        "SELECT revoked_at IS NOT NULL FROM kernel.approvals WHERE approval_id=$1",
+    )
+    .bind(
+        approved["approval"]["approval_id"]
+            .as_str()
+            .unwrap()
+            .parse::<Uuid>()
+            .unwrap(),
+    )
+    .fetch_one(h.state.store.pool())
+    .await
+    .unwrap();
+    assert!(revoked);
+    health_ok(&h, r.admin).await;
+    assert!(!matches!(
+        run_dispatch(&r, h.tenant, aid).await,
+        DispatchOutcome::Dispatched { .. }
+    ));
+    assert_eq!(r.sim.calls(), 0);
+    assert_eq!(
+        h.call(
+            "POST",
+            "/internal/v1/actions",
+            Some(&h.token(r.admin, &["agent"])),
+            Some(req.clone())
+        )
+        .await
+        .0,
+        StatusCode::CONFLICT,
+        "old idempotency replay is fenced too"
+    );
+    assert_eq!(
+        h.call(
+            "POST",
+            &format!("/internal/v1/actions/{aid}/replay"),
+            Some(&h.token(r.admin, &["tenant_admin"])),
+            None
+        )
+        .await
+        .0,
+        StatusCode::CONFLICT,
+        "operator replay cannot bypass the version fence"
+    );
+    req["idempotency_key"] = json!(format!("new-key-{}", Uuid::new_v4()));
+    let (s, _) = h
+        .call(
+            "POST",
+            "/internal/v1/actions",
+            Some(&h.token(r.admin, &["agent"])),
+            Some(req.clone()),
+        )
+        .await;
+    assert_eq!(
+        s,
+        StatusCode::CONFLICT,
+        "a new idempotency key cannot resurrect the edited version"
+    );
+    let (s, again) = h
+        .call(
+            "POST",
+            &path,
+            Some(&h.token(r.admin, &["consultant"])),
+            Some(json!({})),
+        )
+        .await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(again["edit_permitted"], true);
+    // Emulate an old binary's direct INSERT: it never calls the new Rust
+    // intake guard or registers refs. The database must enforce both halves.
+    for fenced in [true, false] {
+        let mut legacy_req = req.clone();
+        let legacy_draft = if fenced { draft_id } else { Uuid::new_v4() };
+        legacy_req["evidence"][0]["id"] = json!(format!("draft:{legacy_draft}"));
+        legacy_req["idempotency_key"] = json!(format!("legacy-{}", Uuid::new_v4()));
+        let legacy_id = mk_domain::ActionId::new();
+        let bound = mk_contracts::ActionRequest::from_value(&legacy_req)
+            .unwrap()
+            .bound_to(h.tenant, r.admin, legacy_id);
+        let canonical = bound.canonical_bytes().unwrap();
+        let mut tx = state.store.begin(h.tenant).await.unwrap();
+        let result = sqlx::query(
+            "INSERT INTO kernel.actions
+            SELECT (jsonb_populate_record(NULL::kernel.actions, to_jsonb(a) || jsonb_build_object(
+                'action_id',$2::uuid,'canonical_request',$3::bytea,'action_digest',$4::text,
+                'idempotency_key',$5::text,'state','draft','attempt',0,'error_code',NULL))).*
+            FROM kernel.actions a WHERE tenant_id=$1 AND action_id=$6",
+        )
+        .bind(h.tenant.0)
+        .bind(legacy_id.0)
+        .bind(&canonical)
+        .bind(mk_crypto::Digest::of(&canonical).to_string())
+        .bind(&bound.idempotency_key)
+        .bind(aid.parse::<Uuid>().unwrap())
+        .execute(tx.raw_conn())
+        .await;
+        if fenced {
+            assert!(
+                result
+                    .unwrap_err()
+                    .to_string()
+                    .contains("draft version was invalidated")
+            );
+            tx.rollback().await.unwrap();
+        } else {
+            assert_eq!(result.unwrap().rows_affected(), 1);
+            let refs: i64 = sqlx::query_scalar(
+                "SELECT count(*) FROM kernel.draft_action_refs WHERE action_id=$1",
+            )
+            .bind(legacy_id.0)
+            .fetch_one(tx.raw_conn())
+            .await
+            .unwrap();
+            assert_eq!(refs, 1, "legacy intake is indexed by the database trigger");
+            tx.commit().await.unwrap();
+            let (s, cancelled) = h
+                .call(
+                    "POST",
+                    &format!("/internal/v1/drafts/{legacy_draft}/invalidate"),
+                    Some(&h.token(r.admin, &["consultant"])),
+                    None,
+                )
+                .await;
+            assert_eq!(s, StatusCode::OK);
+            assert_eq!(cancelled["cancelled_actions"], 1);
+        }
+    }
+    let new_id = Uuid::new_v4();
+    req["arguments"]["rendered_text"] = json!("Draft version two. Reply STOP to opt out.");
+    req["evidence"][0]["id"] = json!(format!("draft:{new_id}"));
+    req["evidence"][0]["digest"] =
+        json!(mk_crypto::Digest::of(b"Draft version two. Reply STOP to opt out.").to_string());
+    let (s, fresh) = h
+        .call(
+            "POST",
+            "/internal/v1/actions",
+            Some(&h.token(r.admin, &["agent"])),
+            Some(req),
+        )
+        .await;
+    assert_eq!(s, StatusCode::ACCEPTED, "{fresh}");
+    assert_eq!(fresh["result"]["state"], "approval_required");
+    assert_ne!(
+        fresh["result"]["action_digest"],
+        proposal["result"]["action_digest"]
+    );
+    let fresh_aid = fresh["result"]["action_id"].as_str().unwrap();
+    assert!(!matches!(
+        run_dispatch(&r, h.tenant, fresh_aid).await,
+        DispatchOutcome::Dispatched { .. }
+    ));
+    assert_eq!(
+        r.sim.calls(),
+        0,
+        "old approval cannot authorize the replacement"
+    );
+    let wa = h
+        .sign_approval(r.manager, &["manager"], fresh_aid, &mut r.mgr_key)
+        .await;
+    let (s, _) = h
+        .call(
+            "POST",
+            &format!("/internal/v1/actions/{fresh_aid}/approve"),
+            Some(&h.token(r.manager, &["manager"])),
+            Some(json!({"action_digest":fresh["result"]["action_digest"],"webauthn":wa})),
+        )
+        .await;
+    assert_eq!(s, StatusCode::OK);
+    assert!(matches!(
+        run_dispatch(&r, h.tenant, fresh_aid).await,
+        DispatchOutcome::Dispatched { .. }
+    ));
+    assert_eq!(r.sim.calls(), 1);
+    let (_, late) = h
+        .call(
+            "POST",
+            &format!("/internal/v1/drafts/{new_id}/invalidate"),
+            Some(&h.token(r.admin, &["consultant"])),
+            None,
+        )
+        .await;
+    assert_eq!(
+        late["edit_permitted"], false,
+        "a submitted message cannot be claimed withdrawn"
+    );
+    assert_eq!(late["blocked_actions"], json!([fresh_aid]));
+    let (_, action) = h
+        .call(
+            "GET",
+            &format!("/internal/v1/actions/{fresh_aid}"),
+            Some(&h.token(r.admin, &["consultant"])),
+            None,
+        )
+        .await;
+    assert_eq!(
+        action["state"], "dispatching",
+        "provider acceptance awaits delivery callback"
+    );
+    let mut tx = state.store.begin(h.tenant).await.unwrap();
+    assert!(
+        sqlx::query("DELETE FROM kernel.invalidated_drafts WHERE tenant_id=$1")
+            .bind(h.tenant.0)
+            .execute(tx.raw_conn())
+            .await
+            .is_err()
+    );
+    tx.rollback().await.unwrap();
+}
+
+#[tokio::test]
+async fn editing_draft_serializes_with_concurrent_intake() {
+    let mut h = harness().await.expect("real Postgres required");
+    let r = provider_rig(&h, mk_adapters::twilio_sim::TwilioSimMode::Accept).await;
+    let pool = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(4)
+        .after_connect(|conn, _| {
+            Box::pin(async move {
+                sqlx::query("SET ROLE mk_kernel_api").execute(conn).await?;
+                Ok(())
+            })
+        })
+        .connect(&mk_testkit::test_database_url().unwrap())
+        .await
+        .unwrap();
+    let mut state = h.state.clone();
+    state.store = Store::from_pool(pool);
+    h.app = router(state);
+    for _ in 0..16 {
+        let draft = Uuid::new_v4();
+        let mut req = provider_proposal(
+            r.contact,
+            r.sender_id,
+            "Racing edit. Reply STOP to opt out.",
+            "+15555550100",
+        );
+        req["evidence"] = json!([{"type":"document","id":format!("draft:{}", draft.simple()),"digest":mk_crypto::Digest::of(b"Racing edit. Reply STOP to opt out.").to_string()}]);
+        let propose_token = h.token(r.admin, &["agent"]);
+        let edit_token = h.token(r.admin, &["consultant"]);
+        let path = format!("/internal/v1/drafts/{draft}/invalidate");
+        let ((ps, proposal), (es, edit)) = tokio::join!(
+            h.call(
+                "POST",
+                "/internal/v1/actions",
+                Some(&propose_token),
+                Some(req.clone())
+            ),
+            h.call("POST", &path, Some(&edit_token), None)
+        );
+        assert_eq!(es, StatusCode::OK, "{edit}");
+        assert_eq!(edit["edit_permitted"], true);
+        assert!(
+            matches!(ps, StatusCode::ACCEPTED | StatusCode::CONFLICT),
+            "{proposal}"
+        );
+        if ps == StatusCode::ACCEPTED {
+            let aid = proposal["result"]["action_id"].as_str().unwrap();
+            let (_, a) = h
+                .call(
+                    "GET",
+                    &format!("/internal/v1/actions/{aid}"),
+                    Some(&h.token(r.admin, &["consultant"])),
+                    None,
+                )
+                .await;
+            assert_eq!(a["state"], "cancelled");
+        }
+        assert_eq!(
+            h.call(
+                "POST",
+                "/internal/v1/actions",
+                Some(&h.token(r.admin, &["agent"])),
+                Some(req)
+            )
+            .await
+            .0,
+            StatusCode::CONFLICT
+        );
+    }
+    assert_eq!(r.sim.calls(), 0);
+}
+
+#[tokio::test]
+async fn editing_draft_serializes_with_human_approval() {
+    let mut h = harness().await.expect("real Postgres required");
+    let mut r = provider_rig(&h, mk_adapters::twilio_sim::TwilioSimMode::Accept).await;
+    let pool = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(4)
+        .after_connect(|conn, _| {
+            Box::pin(async move {
+                sqlx::query("SET ROLE mk_kernel_api").execute(conn).await?;
+                Ok(())
+            })
+        })
+        .connect(&mk_testkit::test_database_url().unwrap())
+        .await
+        .unwrap();
+    let mut state = h.state.clone();
+    state.store = Store::from_pool(pool);
+    h.app = router(state);
+    for _ in 0..8 {
+        let draft = Uuid::new_v4();
+        let mut req = provider_proposal(
+            r.contact,
+            r.sender_id,
+            "Approval race. Reply STOP to opt out.",
+            "+15555550100",
+        );
+        req["evidence"] = json!([{"type":"document","id":format!("draft:{draft}"),"digest":mk_crypto::Digest::of(b"Approval race. Reply STOP to opt out.").to_string()}]);
+        let (s, proposal) = h
+            .call(
+                "POST",
+                "/internal/v1/actions",
+                Some(&h.token(r.admin, &["agent"])),
+                Some(req),
+            )
+            .await;
+        assert_eq!(s, StatusCode::ACCEPTED);
+        let aid = proposal["result"]["action_id"].as_str().unwrap();
+        let wa = h
+            .sign_approval(r.manager, &["manager"], aid, &mut r.mgr_key)
+            .await;
+        let approval_token = h.token(r.manager, &["manager"]);
+        let edit_token = h.token(r.admin, &["consultant"]);
+        let approval_path = format!("/internal/v1/actions/{aid}/approve");
+        let edit_path = format!("/internal/v1/drafts/{draft}/invalidate");
+        let ((s, decision), (es, edit)) = tokio::join!(
+            h.call(
+                "POST",
+                &approval_path,
+                Some(&approval_token),
+                Some(json!({"action_digest":proposal["result"]["action_digest"],"webauthn":wa}))
+            ),
+            h.call("POST", &edit_path, Some(&edit_token), None)
+        );
+        assert_eq!(es, StatusCode::OK, "{edit}");
+        assert_eq!(edit["edit_permitted"], true);
+        assert!(
+            matches!(s, StatusCode::OK | StatusCode::CONFLICT),
+            "{decision}"
+        );
+        let (_, a) = h
+            .call(
+                "GET",
+                &format!("/internal/v1/actions/{aid}"),
+                Some(&h.token(r.admin, &["consultant"])),
+                None,
+            )
+            .await;
+        assert_eq!(a["state"], "cancelled");
+        let live: i64 = sqlx::query_scalar("SELECT count(*) FROM kernel.approvals WHERE action_id=$1 AND consumed_at IS NULL AND revoked_at IS NULL")
+            .bind(aid.parse::<Uuid>().unwrap()).fetch_one(h.state.store.pool()).await.unwrap();
+        assert_eq!(live, 0);
+        assert!(!matches!(
+            run_dispatch(&r, h.tenant, aid).await,
+            DispatchOutcome::Dispatched { .. }
+        ));
+    }
+    assert_eq!(r.sim.calls(), 0);
+}
+
+async fn health_ok(h: &Harness, _admin: UserId) {
+    // Fixture for tests of other boundaries, not C8 health evidence. The C8
+    // test below exercises the real network probe with restricted process roles.
+    let mut tx = h.state.store.begin(h.tenant).await.unwrap();
+    sqlx::query("INSERT INTO kernel.inbound_probes (tenant_id, sender_identity_id, last_ok_at)
+        SELECT tenant_id, sender_identity_id, now() FROM kernel.sender_identities WHERE tenant_id = $1
+        ON CONFLICT (tenant_id, sender_identity_id) DO UPDATE SET last_ok_at = now()")
+        .bind(h.tenant.0).execute(tx.raw_conn()).await.unwrap();
+    mk_store::messaging::inbound_ok(&mut tx, chrono::Utc::now())
+        .await
+        .unwrap();
+    tx.commit().await.unwrap();
+}
+
+#[tokio::test]
+async fn public_inbound_probes_require_committed_receipts_and_drain_before_recovery() {
+    use mk_worker::inbound_probe::InboundProbe;
+    use std::sync::atomic::{AtomicU8, Ordering};
+    let mut h = harness().await.expect("real Postgres required");
+    let mut r = provider_rig(&h, mk_adapters::twilio_sim::TwilioSimMode::Accept).await;
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let authority = listener.local_addr().unwrap().to_string();
+    let base = format!("http://{authority}");
+    let api_pool = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(1)
+        .after_connect(|conn, _| {
+            Box::pin(async move {
+                sqlx::query("SET ROLE mk_kernel_api").execute(conn).await?;
+                Ok(())
+            })
+        })
+        .connect(&mk_testkit::test_database_url().unwrap())
+        .await
+        .unwrap();
+    let worker_pool = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(1)
+        .after_connect(|conn, _| {
+            Box::pin(async move {
+                sqlx::query("SET ROLE mk_kernel_worker")
+                    .execute(conn)
+                    .await?;
+                Ok(())
+            })
+        })
+        .connect(&mk_testkit::test_database_url().unwrap())
+        .await
+        .unwrap();
+    let mut state = h.state.clone();
+    state.store = Store::from_pool(api_pool);
+    state.public_webhook_base = Some(base.clone());
+    h.app = router(state);
+    let mode = Arc::new(AtomicU8::new(1));
+    let switch = mode.clone();
+    let network = h.app.clone().layer(axum::middleware::from_fn(
+        move |mut request: axum::extract::Request, next: axum::middleware::Next| {
+            let switch = switch.clone();
+            async move {
+                use axum::response::IntoResponse as _;
+                match switch.load(Ordering::SeqCst) {
+                    1 => StatusCode::OK.into_response(), // transport acceptance only
+                    2 => {
+                        request
+                            .headers_mut()
+                            .insert("x-twilio-signature", "invalid".parse().unwrap());
+                        next.run(request).await
+                    }
+                    3 => (StatusCode::FOUND, [("location", "/health/ready")]).into_response(),
+                    _ => next.run(request).await,
+                }
+            }
+        },
+    ));
+    let server = tokio::spawn(async move {
+        axum::serve(listener, network).await.unwrap();
+    });
+    let worker_store = Store::from_pool(worker_pool);
+    let probe = InboundProbe::new(
+        worker_store.clone(),
+        h.state.keyring.clone(),
+        EgressAllowlist::new([authority.as_str()], true),
+        &base,
+    )
+    .unwrap();
+    assert!(
+        InboundProbe::new(
+            worker_store.clone(),
+            h.state.keyring.clone(),
+            EgressAllowlist::default(),
+            &base
+        )
+        .is_err()
+    );
     let (s, _) = h
         .call(
             "POST",
             "/internal/v1/inbound/health",
-            Some(&h.token(admin, &["tenant_admin"])),
-            Some(json!({"ok": true})),
+            Some(&h.token(r.admin, &["tenant_admin"])),
+            Some(json!({"ok":true})),
         )
         .await;
-    assert_eq!(s, StatusCode::NO_CONTENT);
+    assert_eq!(
+        s,
+        StatusCode::FORBIDDEN,
+        "caller assertion cannot forge health"
+    );
+    let (aid, _) = approved_action(
+        &h,
+        &mut r,
+        "Probe gate. Reply STOP to opt out.",
+        "+15555550100",
+    )
+    .await;
+    assert_eq!(
+        run_dispatch(&r, h.tenant, &aid).await,
+        DispatchOutcome::Deferred {
+            reason: "inbound_unverified"
+        }
+    );
+    for setting in [1, 2, 3, 0] {
+        // Fault injection advances only the claim watermark, not health proof.
+        sqlx::query("UPDATE kernel.inbound_probes SET issued_at = now() - interval '20 seconds' WHERE tenant_id = $1")
+            .bind(h.tenant.0).execute(h.state.store.pool()).await.unwrap();
+        mode.store(setting, Ordering::SeqCst);
+        let stats = probe.run_once(&[h.tenant]).await.unwrap();
+        assert_eq!(stats.checked, 1);
+        assert_eq!(stats.confirmed, usize::from(setting == 0));
+        assert_eq!(stats.failed, usize::from(setting != 0));
+    }
+    let (_, health) = h
+        .call(
+            "GET",
+            "/internal/v1/inbound/health",
+            Some(&h.token(r.admin, &["tenant_admin"])),
+            None,
+        )
+        .await;
+    assert!(health["dispatch_blocked"].is_null(), "{health}");
+    assert_eq!(
+        health["pending_events"], 0,
+        "probes never create customer work"
+    );
+    // A signed replay of the exact completed generation cannot refresh health.
+    let probe_id: Uuid = sqlx::query_scalar(
+        "SELECT probe_id FROM kernel.inbound_probes WHERE tenant_id=$1 AND sender_identity_id=$2",
+    )
+    .bind(h.tenant.0)
+    .bind(r.sender_id)
+    .fetch_one(h.state.store.pool())
+    .await
+    .unwrap();
+    let form = vec![
+        ("AccountSid".to_owned(), ACCOUNT_SID.to_owned()),
+        ("MkHealthProbe".to_owned(), probe_id.to_string()),
+        ("To".to_owned(), r.from_number.clone()),
+    ];
+    let path = format!("/webhooks/twilio/inbound/{}", r.sender_id);
+    let sig = mk_adapters::twilio::twilio_signature(
+        &AdapterSecret::new(TOKEN),
+        &format!("{base}{path}"),
+        &form,
+    );
+    let req = Request::builder()
+        .method("POST")
+        .uri(&path)
+        .header("x-twilio-signature", sig)
+        .body(Body::from(
+            url::form_urlencoded::Serializer::new(String::new())
+                .extend_pairs(&form)
+                .finish(),
+        ))
+        .unwrap();
+    assert_eq!(
+        h.app.clone().oneshot(req).await.unwrap().status(),
+        StatusCode::FORBIDDEN
+    );
+    // A second active sender must earn its own receipt; first sender cannot mask it.
+    let number2 = format!("+1600{:07}", rand::random::<u32>() % 10_000_000);
+    let (s, _) = h.call("POST", "/internal/v1/senders", Some(&h.token(r.admin, &["tenant_admin"])), Some(json!({
+        "owner_user_id":r.manager,"display_name":"Second route","account_sid":ACCOUNT_SID,"auth_token":TOKEN,"from_number":number2}))).await;
+    assert_eq!(s, StatusCode::CREATED);
+    let (_, health) = h
+        .call(
+            "GET",
+            "/internal/v1/inbound/health",
+            Some(&h.token(r.admin, &["tenant_admin"])),
+            None,
+        )
+        .await;
+    assert_eq!(health["dispatch_blocked"], "inbound_stale");
+    assert_eq!(probe.run_once(&[h.tenant]).await.unwrap().confirmed, 1);
+    // Real inbound event remains pending across a simulated monitor outage.
+    let form = vec![
+        ("AccountSid".to_owned(), ACCOUNT_SID.to_owned()),
+        (
+            "MessageSid".to_owned(),
+            format!("SM{}", Uuid::new_v4().simple()),
+        ),
+        ("From".to_owned(), "+15555550100".to_owned()),
+        ("To".to_owned(), r.from_number.clone()),
+        ("Body".to_owned(), "Can we talk tomorrow?".to_owned()),
+    ];
+    let sig = mk_adapters::twilio::twilio_signature(
+        &AdapterSecret::new(TOKEN),
+        &format!("{base}{path}"),
+        &form,
+    );
+    let req = Request::builder()
+        .method("POST")
+        .uri(&path)
+        .header("x-twilio-signature", sig)
+        .body(Body::from(
+            url::form_urlencoded::Serializer::new(String::new())
+                .extend_pairs(&form)
+                .finish(),
+        ))
+        .unwrap();
+    assert_eq!(
+        h.app.clone().oneshot(req).await.unwrap().status(),
+        StatusCode::OK
+    );
+    sqlx::query("UPDATE kernel.inbound_probes SET last_ok_at = now() - interval '61 seconds', issued_at = now() - interval '20 seconds' WHERE tenant_id=$1")
+        .bind(h.tenant.0).execute(h.state.store.pool()).await.unwrap();
+    // No failure report is present: monitor silence alone must pause.
+    sqlx::query("UPDATE kernel.inbound_health SET last_failure_at = NULL, last_ok_at = now() - interval '61 seconds' WHERE tenant_id=$1")
+        .bind(h.tenant.0).execute(h.state.store.pool()).await.unwrap();
+    let (_, health) = h
+        .call(
+            "GET",
+            "/internal/v1/inbound/health",
+            Some(&h.token(r.admin, &["tenant_admin"])),
+            None,
+        )
+        .await;
+    assert_eq!(health["dispatch_blocked"], "inbound_stale");
+    let stats = probe.run_once(&[h.tenant]).await.unwrap();
+    assert_eq!(stats.confirmed, 2);
+    assert_eq!(
+        run_dispatch(&r, h.tenant, &aid).await,
+        DispatchOutcome::Deferred {
+            reason: "inbound_recovery_pending"
+        }
+    );
+    let event: Uuid = sqlx::query_scalar(
+        "SELECT event_id FROM kernel.inbound_events WHERE tenant_id=$1 AND processed_at IS NULL",
+    )
+    .bind(h.tenant.0)
+    .fetch_one(h.state.store.pool())
+    .await
+    .unwrap();
+    for roles in [
+        vec!["agent"],
+        vec!["agent", "unknown"],
+        vec![],
+        vec!["viewer"],
+    ] {
+        let token = h.token(r.manager, &roles);
+        let denied = if roles.is_empty() {
+            StatusCode::UNAUTHORIZED
+        } else {
+            StatusCode::FORBIDDEN
+        };
+        assert_eq!(
+            h.call("GET", "/internal/v1/inbound/pending", Some(&token), None)
+                .await
+                .0,
+            denied,
+            "non-human role cannot read the inbound backlog: {roles:?}"
+        );
+        assert_eq!(
+            h.call(
+                "POST",
+                &format!("/internal/v1/inbound/{event}/processed"),
+                Some(&token),
+                Some(json!({}))
+            )
+            .await
+            .0,
+            denied,
+            "non-human role cannot clear the recovery backlog: {roles:?}"
+        );
+    }
+    assert_eq!(
+        h.call(
+            "POST",
+            &format!("/internal/v1/inbound/{event}/processed"),
+            Some(&h.token(r.manager, &["consultant"])),
+            Some(json!({}))
+        )
+        .await
+        .0,
+        StatusCode::NO_CONTENT
+    );
+    probe.run_once(&[h.tenant]).await.unwrap();
+    assert!(matches!(
+        run_dispatch(&r, h.tenant, &aid).await,
+        DispatchOutcome::Dispatched { .. }
+    ));
+    assert_eq!(
+        r.sim.calls(),
+        1,
+        "only the approved action contacts the provider"
+    );
+    let mut tx = h.state.store.begin(TenantId::new()).await.unwrap();
+    assert_eq!(
+        mk_store::messaging::inbound_dispatch_block(&mut tx, chrono::Utc::now())
+            .await
+            .unwrap(),
+        None
+    );
+    tx.commit().await.unwrap();
+    // Capacity subscenario: real HTTP receipts for 1,000 distinct businesses,
+    // restricted API/worker roles and one connection each. One broken tenant
+    // must not stop the rest of the fleet. This is not the production load soak.
+    let mut fleet = Vec::new();
+    for _ in 0..1_000 {
+        let tenant = TenantId::new();
+        let mut tx = h.state.store.begin(tenant).await.unwrap();
+        let owner = UserId::new();
+        let number = format!("+1800{:011}", Uuid::new_v4().as_u128() % 100_000_000_000);
+        mk_store::messaging::register_sender(
+            &mut tx,
+            &h.state.keyring,
+            owner,
+            "Probe fleet fixture",
+            ACCOUNT_SID,
+            &secrecy::SecretString::from(TOKEN.to_owned()),
+            Some(&number),
+            None,
+            owner,
+            chrono::Utc::now(),
+        )
+        .await
+        .unwrap();
+        tx.commit().await.unwrap();
+        fleet.push(tenant);
+    }
+    let broken_tenant = TenantId::new();
+    let mut tx = h.state.store.begin(broken_tenant).await.unwrap();
+    let wrong_keys = mk_crypto::Keyring::legacy(&MasterKey::generate());
+    let owner = UserId::new();
+    let number = format!("+1800{:011}", Uuid::new_v4().as_u128() % 100_000_000_000);
+    mk_store::messaging::register_sender(
+        &mut tx,
+        &wrong_keys,
+        owner,
+        "Broken key fixture",
+        ACCOUNT_SID,
+        &secrecy::SecretString::from(TOKEN.to_owned()),
+        Some(&number),
+        None,
+        owner,
+        chrono::Utc::now(),
+    )
+    .await
+    .unwrap();
+    tx.commit().await.unwrap();
+    fleet.insert(0, broken_tenant);
+    let started = std::time::Instant::now();
+    let stats = probe.run_once(&fleet).await.unwrap();
+    let elapsed = started.elapsed();
+    println!(
+        "C8 fleet: businesses=1000 broken_tenants=1 elapsed_ms={} checked={} confirmed={} failed={} tenant_failures={} api_pool=1 worker_pool=1 tenant_concurrency=16 network_limit=32",
+        elapsed.as_millis(),
+        stats.checked,
+        stats.confirmed,
+        stats.failed,
+        stats.tenant_failures
+    );
+    assert_eq!(stats.checked, 1_000);
+    assert_eq!(stats.confirmed, 1_000);
+    assert_eq!(stats.failed, 0);
+    assert_eq!(stats.tenant_failures, 1);
+    assert!(
+        elapsed < Duration::from_secs(45),
+        "cycle plus 15s scheduling delay must fit the 60s health window: {elapsed:?}"
+    );
+    let ids: Vec<Uuid> = fleet.iter().skip(1).map(|t| t.0).collect();
+    let fresh: i64 = sqlx::query_scalar("SELECT count(*) FROM kernel.inbound_probes WHERE tenant_id = ANY($1) AND last_ok_at >= now() - interval '60 seconds' AND confirmed_at IS NOT NULL")
+        .bind(&ids).fetch_one(h.state.store.pool()).await.unwrap();
+    assert_eq!(
+        fresh, 1_000,
+        "every business retains its own committed receipt"
+    );
+    // The API role cannot confirm a receipt or mint a generation itself.
+    let mut tx = worker_store.begin(h.tenant).await.unwrap();
+    sqlx::query("SET LOCAL ROLE mk_kernel_api")
+        .execute(tx.raw_conn())
+        .await
+        .unwrap();
+    assert!(
+        sqlx::query("UPDATE kernel.inbound_probes SET last_ok_at = now() WHERE tenant_id=$1")
+            .bind(h.tenant.0)
+            .execute(tx.raw_conn())
+            .await
+            .is_err()
+    );
+    server.abort();
 }
 
 #[tokio::test]
@@ -2072,6 +3829,109 @@ async fn ambiguous_submission_becomes_submission_unknown_and_inbound_pause_defer
     assert!(matches!(out, DispatchOutcome::Skipped { .. }), "{out:?}");
     assert_eq!(r.sim.created_messages().await.len(), 1);
 
+    let (_, exceptions) = h
+        .call(
+            "GET",
+            "/internal/v1/deliveries/exceptions?limit=1",
+            Some(&h.token(r.manager, &["consultant"])),
+            None,
+        )
+        .await;
+    assert_eq!(exceptions["items"][0]["action_id"], aid);
+    let (status, private) = h
+        .call(
+            "GET",
+            "/internal/v1/deliveries/exceptions",
+            Some(&h.token(UserId::new(), &["consultant"])),
+            None,
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(private["items"], json!([]));
+    let (status, _) = h
+        .call(
+            "GET",
+            "/internal/v1/deliveries/exceptions",
+            Some(&h.token(r.admin, &["agent"])),
+            None,
+        )
+        .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+
+    let stats = mk_worker::reconciliation::run_once(
+        &r.ctx,
+        &[h.tenant],
+        chrono::Utc::now() + chrono::Duration::seconds(31),
+    )
+    .await
+    .unwrap_or_else(|e| panic!("{e:?}"));
+    assert_eq!(
+        stats.checked, 0,
+        "no recorded SID: do not promote a body/date candidate"
+    );
+
+    // Signed attempt URL recovers the SID even when the POST response was lost.
+    let message = r.sim.created_messages().await.remove(0);
+    let public = message["status_callback"].as_str().unwrap_or_default();
+    let parsed = url::Url::parse(public).unwrap_or_else(|e| panic!("{e}"));
+    let path = format!("{}?{}", parsed.path(), parsed.query().unwrap_or_default());
+    assert!(path.contains(&format!("mk_action={aid}")));
+    let form = vec![
+        ("AccountSid".to_owned(), ACCOUNT_SID.to_owned()),
+        (
+            "MessageSid".to_owned(),
+            message["sid"].as_str().unwrap_or_default().to_owned(),
+        ),
+        ("MessageStatus".to_owned(), "delivered".to_owned()),
+    ];
+    let sig = mk_adapters::twilio::twilio_signature(&AdapterSecret::new(TOKEN), public, &form);
+    let body = url::form_urlencoded::Serializer::new(String::new())
+        .extend_pairs(&form)
+        .finish();
+    for (target, expected) in [
+        (
+            path.replace("mk_attempt=1", "mk_attempt=2"),
+            StatusCode::FORBIDDEN,
+        ),
+        (path.clone(), StatusCode::OK),
+        (path.clone(), StatusCode::OK),
+    ] {
+        let request = Request::builder()
+            .method("POST")
+            .uri(&target)
+            .header("content-type", "application/x-www-form-urlencoded")
+            .header("x-twilio-signature", &sig)
+            .body(Body::from(body.clone()))
+            .unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!(
+            h.app
+                .clone()
+                .oneshot(request)
+                .await
+                .unwrap_or_else(|e| panic!("{e}"))
+                .status(),
+            expected
+        );
+    }
+    let (_, exceptions) = h
+        .call(
+            "GET",
+            "/internal/v1/deliveries/exceptions",
+            Some(&h.token(r.manager, &["consultant"])),
+            None,
+        )
+        .await;
+    assert_eq!(exceptions["items"][0]["delivery_state"], "delivered");
+    assert_eq!(
+        exceptions["items"][0]["provider_message_id"],
+        message["sid"]
+    );
+    assert!(matches!(
+        run_dispatch(&r, h.tenant, &aid).await,
+        DispatchOutcome::Skipped { .. }
+    ));
+    assert_eq!(r.sim.calls(), 1, "recovery never creates a replacement");
+
     // C8: pause → defer; resume refused while a check is stale or events pending; resume after ok.
     let (s, _) = h
         .call(
@@ -2144,6 +4004,507 @@ async fn ambiguous_submission_becomes_submission_unknown_and_inbound_pause_defer
         ),
         "{out:?}"
     );
+}
+
+#[tokio::test]
+async fn automatic_provider_reconciliation_recovers_missing_callbacks_without_resending() {
+    let Some(h) = harness().await else {
+        panic!("MK_TEST_DATABASE_URL is required");
+    };
+    let mut r = provider_rig(&h, mk_adapters::twilio_sim::TwilioSimMode::Accept).await;
+    health_ok(&h, r.admin).await;
+    // Exercise the real worker role with RLS and one connection, not an owner
+    // identity that masks missing migration grants or nested-pool deadlocks.
+    let worker_pool = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(1)
+        .after_connect(|conn, _| {
+            Box::pin(async move {
+                sqlx::query("SET ROLE mk_kernel_worker")
+                    .execute(conn)
+                    .await?;
+                Ok(())
+            })
+        })
+        .connect(&mk_testkit::test_database_url().unwrap_or_default())
+        .await
+        .unwrap_or_else(|e| panic!("{e}"));
+    r.ctx.store = Store::from_pool(worker_pool);
+    r.ctx.registry.twilio = Some(
+        mk_adapters::twilio::TwilioAdapter::new(
+            EgressAllowlist::new([r.sim.authority().as_str()], true),
+            &r.sim.api_base(),
+            Box::new(StoreSenderRes(r.ctx.store.clone(), h.state.keyring.clone())),
+        )
+        .unwrap_or_else(|e| panic!("{e}")),
+    );
+    let (aid, _) = approved_action(
+        &h,
+        &mut r,
+        "Reconcile. Reply STOP to opt out.",
+        "+15555550100",
+    )
+    .await;
+    assert!(matches!(
+        run_dispatch(&r, h.tenant, &aid).await,
+        DispatchOutcome::Dispatched {
+            pending_callback: true
+        }
+    ));
+    let messages = r.sim.created_messages().await;
+    let sid = messages[0]["sid"].as_str().unwrap_or_default();
+    r.sim.set_message_status(sid, "delivered").await;
+    let now = chrono::Utc::now() + chrono::Duration::seconds(31);
+    let stats = mk_worker::reconciliation::run_once(&r.ctx, &[h.tenant], now)
+        .await
+        .unwrap_or_else(|e| panic!("{e:?}"));
+    assert_eq!(
+        (stats.checked, stats.observed, stats.unavailable),
+        (1, 1, 0)
+    );
+    let (_, result) = h
+        .call(
+            "GET",
+            &format!("/internal/v1/actions/{aid}"),
+            Some(&h.token(r.manager, &["manager"])),
+            None,
+        )
+        .await;
+    assert_eq!(result["message_state"], "delivered");
+    assert_eq!(result["state"], "completed");
+    assert_eq!(result["read_status"], "unknown");
+    r.sim.set_message_status(sid, "queued").await;
+    let stats = mk_worker::reconciliation::run_once(
+        &r.ctx,
+        &[h.tenant],
+        now + chrono::Duration::seconds(61),
+    )
+    .await
+    .unwrap_or_else(|e| panic!("{e:?}"));
+    assert_eq!(
+        stats.checked, 0,
+        "terminal evidence is not polled or regressed"
+    );
+    assert!(matches!(
+        run_dispatch(&r, h.tenant, &aid).await,
+        DispatchOutcome::Skipped { .. }
+    ));
+    assert_eq!(r.sim.calls(), 1);
+}
+
+async fn signed_provider_observation(h: &Harness, message: &Value, status: &str) {
+    let public = message["status_callback"].as_str().unwrap();
+    let parsed = url::Url::parse(public).unwrap();
+    let path = format!("{}?{}", parsed.path(), parsed.query().unwrap_or_default());
+    let form = vec![
+        ("AccountSid".to_owned(), ACCOUNT_SID.to_owned()),
+        (
+            "MessageSid".to_owned(),
+            message["sid"].as_str().unwrap().to_owned(),
+        ),
+        ("MessageStatus".to_owned(), status.to_owned()),
+    ];
+    let sig = mk_adapters::twilio::twilio_signature(&AdapterSecret::new(TOKEN), public, &form);
+    let body = url::form_urlencoded::Serializer::new(String::new())
+        .extend_pairs(&form)
+        .finish();
+    let req = Request::builder()
+        .method("POST")
+        .uri(path)
+        .header("content-type", "application/x-www-form-urlencoded")
+        .header("x-twilio-signature", sig)
+        .body(Body::from(body))
+        .unwrap();
+    assert_eq!(
+        h.app.clone().oneshot(req).await.unwrap().status(),
+        StatusCode::OK
+    );
+}
+
+fn sign_resolution(ch: &Value, auth: &mut SoftAuthenticator) -> Value {
+    let challenge = mk_crypto::webauthn::b64url_decode(ch["challenge"].as_str().unwrap()).unwrap();
+    let (cdj, ad, sig) = auth.assert(&challenge, RP_ID, ORIGIN);
+    json!({"decision":ch["decision"],"operation_digest":ch["operation_digest"],"webauthn":{
+        "credential_id":b64url(&auth.credential_id),"client_data_json":b64url(&cdj),
+        "authenticator_data":b64url(&ad),"signature":b64url(&sig)}})
+}
+
+#[tokio::test]
+async fn uncertainty_gate_and_passkey_resolution_enforce_provider_evidence_and_no_replay() {
+    let mut h = harness().await.expect("real Postgres required");
+    let mut r = provider_rig(
+        &h,
+        mk_adapters::twilio_sim::TwilioSimMode::AcceptButDropResponse,
+    )
+    .await;
+    health_ok(&h, r.admin).await;
+    // Exercise every HTTP write as the restricted API role, not database owner.
+    let pool = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(1)
+        .after_connect(|conn, _| {
+            Box::pin(async move {
+                sqlx::query("SET ROLE mk_kernel_api").execute(conn).await?;
+                Ok(())
+            })
+        })
+        .connect(&mk_testkit::test_database_url().unwrap())
+        .await
+        .unwrap();
+    let mut state = h.state.clone();
+    state.store = Store::from_pool(pool);
+    h.app = router(state);
+    let mut key = h.register_passkey(r.admin, &["tenant_admin"]).await;
+    let (aid, _) = approved_action(
+        &h,
+        &mut r,
+        "Original. Reply STOP to opt out.",
+        "+15555550100",
+    )
+    .await;
+    assert_eq!(
+        run_dispatch(&r, h.tenant, &aid).await,
+        DispatchOutcome::ReconciliationRequired
+    );
+    let challenge_path = format!("/internal/v1/actions/{aid}/resolution-challenge");
+    let resolve_path = format!("/internal/v1/actions/{aid}/resolve-submission");
+    let replay_path = format!("/internal/v1/actions/{aid}/replay");
+    let close = json!({"decision":"closed_no_replacement"});
+    let permit = json!({"decision":"replacement_permitted"});
+    // Even an administrator cannot turn no evidence into permission.
+    assert_eq!(
+        h.call(
+            "POST",
+            &challenge_path,
+            Some(&h.token(r.admin, &["tenant_admin"])),
+            Some(permit.clone())
+        )
+        .await
+        .0,
+        StatusCode::CONFLICT
+    );
+    assert_eq!(
+        h.call(
+            "POST",
+            &replay_path,
+            Some(&h.token(r.admin, &["tenant_admin"])),
+            Some(json!({}))
+        )
+        .await
+        .0,
+        StatusCode::CONFLICT
+    );
+    let (replacement, _) = approved_action(
+        &h,
+        &mut r,
+        "New id, same destination. Reply STOP to opt out.",
+        "+15555550100",
+    )
+    .await;
+    assert_eq!(
+        run_dispatch(&r, h.tenant, &replacement).await,
+        DispatchOutcome::Deferred {
+            reason: "unresolved_submission"
+        }
+    );
+    assert_eq!(r.sim.calls(), 1);
+    {
+        let mut tx = h.state.store.begin(h.tenant).await.unwrap();
+        assert!(
+            mk_store::approvals::live_for_action_locked(&mut tx, replacement.parse().unwrap())
+                .await
+                .unwrap()
+                .is_some(),
+            "deferral must not consume human approval"
+        );
+        let a = mk_store::actions::get(&mut tx, aid.parse().unwrap())
+            .await
+            .unwrap();
+        // Rotation aliases still match, even when the new primary differs.
+        let mut aliases = a.destination_fingerprints_set().unwrap();
+        aliases.primary = "a".repeat(64);
+        aliases.tagged.insert(0, format!("k2:{}", aliases.primary));
+        assert!(
+            mk_store::resolutions::blocks_destination(
+                &mut tx,
+                replacement.parse().unwrap(),
+                "sms",
+                &aliases
+            )
+            .await
+            .unwrap()
+        );
+        assert!(
+            !mk_store::resolutions::blocks_destination(
+                &mut tx,
+                replacement.parse().unwrap(),
+                "sms",
+                &mk_store::fingerprint::Fingerprints::legacy(&"b".repeat(64))
+            )
+            .await
+            .unwrap()
+        );
+        tx.commit().await.unwrap();
+    }
+    let message = r.sim.created_messages().await.remove(0);
+    signed_provider_observation(&h, &message, "sent").await;
+    assert_eq!(
+        h.call(
+            "POST",
+            &challenge_path,
+            Some(&h.token(r.manager, &["manager"])),
+            Some(close.clone())
+        )
+        .await
+        .0,
+        StatusCode::FORBIDDEN
+    );
+    let (status, ch) = h
+        .call(
+            "POST",
+            &challenge_path,
+            Some(&h.token(r.admin, &["tenant_admin"])),
+            Some(close.clone()),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{ch}");
+    let stale = sign_resolution(&ch, &mut key);
+    signed_provider_observation(&h, &message, "delivered").await;
+    assert_eq!(
+        h.call(
+            "POST",
+            &resolve_path,
+            Some(&h.token(r.admin, &["tenant_admin"])),
+            Some(stale.clone())
+        )
+        .await
+        .0,
+        StatusCode::CONFLICT
+    );
+    assert_ne!(
+        h.call(
+            "POST",
+            &resolve_path,
+            Some(&h.token(r.admin, &["tenant_admin"])),
+            Some(stale)
+        )
+        .await
+        .0,
+        StatusCode::OK,
+        "stale challenge burned"
+    );
+    assert_eq!(
+        h.call(
+            "POST",
+            &challenge_path,
+            Some(&h.token(r.admin, &["tenant_admin"])),
+            Some(permit.clone())
+        )
+        .await
+        .0,
+        StatusCode::CONFLICT,
+        "delivered cannot permit replacement"
+    );
+    let (_, ch) = h
+        .call(
+            "POST",
+            &challenge_path,
+            Some(&h.token(r.admin, &["tenant_admin"])),
+            Some(close.clone()),
+        )
+        .await;
+    let valid = sign_resolution(&ch, &mut key);
+    let mut forged = valid.clone();
+    forged["webauthn"]["signature"] = json!("AA");
+    assert_eq!(
+        h.call(
+            "POST",
+            &resolve_path,
+            Some(&h.token(r.admin, &["tenant_admin"])),
+            Some(forged)
+        )
+        .await
+        .0,
+        StatusCode::FORBIDDEN
+    );
+    assert_ne!(
+        h.call(
+            "POST",
+            &resolve_path,
+            Some(&h.token(r.admin, &["tenant_admin"])),
+            Some(valid)
+        )
+        .await
+        .0,
+        StatusCode::OK,
+        "bad signature burns challenge"
+    );
+    let (_, ch) = h
+        .call(
+            "POST",
+            &challenge_path,
+            Some(&h.token(r.admin, &["tenant_admin"])),
+            Some(close.clone()),
+        )
+        .await;
+    let valid = sign_resolution(&ch, &mut key);
+    let (status, result) = h
+        .call(
+            "POST",
+            &resolve_path,
+            Some(&h.token(r.admin, &["tenant_admin"])),
+            Some(valid.clone()),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{result}");
+    assert_ne!(
+        h.call(
+            "POST",
+            &resolve_path,
+            Some(&h.token(r.admin, &["tenant_admin"])),
+            Some(valid)
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    assert_eq!(
+        h.call(
+            "POST",
+            &replay_path,
+            Some(&h.token(r.admin, &["tenant_admin"])),
+            Some(json!({}))
+        )
+        .await
+        .0,
+        StatusCode::CONFLICT,
+        "no-replacement cannot be replayed"
+    );
+    let (_, view) = h
+        .call(
+            "GET",
+            &format!("/internal/v1/actions/{aid}"),
+            Some(&h.token(r.manager, &["manager"])),
+            None,
+        )
+        .await;
+    assert_eq!(
+        view["state"], "reconciliation_required",
+        "terminal action history is immutable"
+    );
+    assert_eq!(view["message_state"], "delivered");
+    assert_eq!(view["read_status"], "unknown");
+    let (_, queue) = h
+        .call(
+            "GET",
+            "/internal/v1/deliveries/exceptions",
+            Some(&h.token(r.admin, &["tenant_admin"])),
+            None,
+        )
+        .await;
+    assert_eq!(queue["items"], json!([]));
+    assert_eq!(r.sim.calls(), 1, "resolution itself never sends");
+    // DB evidence cannot be overwritten or erased even through owner credentials.
+    for sql in [
+        "UPDATE kernel.submission_resolutions SET decision = 'replacement_permitted' WHERE tenant_id = $1",
+        "DELETE FROM kernel.submission_resolutions WHERE tenant_id = $1",
+    ] {
+        let mut tx = h.state.store.begin(h.tenant).await.unwrap();
+        assert!(
+            sqlx::query(sql)
+                .bind(h.tenant.0)
+                .execute(tx.raw_conn())
+                .await
+                .is_err()
+        );
+    }
+    // Old queued approvals cannot spring back to life after a human resolution.
+    assert!(matches!(
+        run_dispatch(&r, h.tenant, &replacement).await,
+        DispatchOutcome::Blocked { .. }
+    ));
+    assert_eq!(r.sim.calls(), 1);
+    let (replacement, _) = approved_action(
+        &h,
+        &mut r,
+        "Freshly reviewed. Reply STOP to opt out.",
+        "+15555550100",
+    )
+    .await;
+    // A fresh ambiguous attempt later gets a terminal failure; only then can
+    // a passkey permit a separately approved replacement. This is not a resend.
+    assert_eq!(
+        run_dispatch(&r, h.tenant, &replacement).await,
+        DispatchOutcome::ReconciliationRequired
+    );
+    let message2 = r.sim.created_messages().await.remove(1);
+    signed_provider_observation(&h, &message2, "failed").await;
+    let path2 = format!("/internal/v1/actions/{replacement}/resolution-challenge");
+    let (_, ch) = h
+        .call(
+            "POST",
+            &path2,
+            Some(&h.token(r.admin, &["tenant_admin"])),
+            Some(permit),
+        )
+        .await;
+    let valid = sign_resolution(&ch, &mut key);
+    // Transplant to the first action is refused and burns the challenge.
+    assert_ne!(
+        h.call(
+            "POST",
+            &resolve_path,
+            Some(&h.token(r.admin, &["tenant_admin"])),
+            Some(valid.clone())
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    let resolve2 = format!("/internal/v1/actions/{replacement}/resolve-submission");
+    assert_ne!(
+        h.call(
+            "POST",
+            &resolve2,
+            Some(&h.token(r.admin, &["tenant_admin"])),
+            Some(valid)
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    let (_, ch) = h
+        .call(
+            "POST",
+            &path2,
+            Some(&h.token(r.admin, &["tenant_admin"])),
+            Some(json!({"decision":"replacement_permitted"})),
+        )
+        .await;
+    let valid = sign_resolution(&ch, &mut key);
+    let (status, result) = h
+        .call(
+            "POST",
+            &resolve2,
+            Some(&h.token(r.admin, &["tenant_admin"])),
+            Some(valid),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{result}");
+    let (status, replay) = h
+        .call(
+            "POST",
+            &format!("/internal/v1/actions/{replacement}/replay"),
+            Some(&h.token(r.admin, &["tenant_admin"])),
+            Some(json!({})),
+        )
+        .await;
+    assert_eq!(status, StatusCode::CREATED, "{replay}");
+    assert_eq!(
+        replay["state"], "draft",
+        "resolution never bypasses new approval"
+    );
+    assert_eq!(r.sim.calls(), 2);
+    let mut tx = h.state.store.begin(h.tenant).await.unwrap();
+    assert!(mk_store::audit::verify_tenant(&mut tx).await.unwrap() > 0);
 }
 
 /// O2: per-tenant limits refuse with 429 + Retry-After after the assertion

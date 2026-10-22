@@ -1,0 +1,64 @@
+{
+  "environment": "built UI with explicit API fixtures; real Chromium virtual passkey, ES256 verified",
+  "checks": [
+    "unknown has no resolution control",
+    "changed evidence aborts before signing",
+    "kernel rejection retains exception",
+    "successful resolution refreshes queue, no send",
+    "user-presence and user-verification flags",
+    "360px no overflow"
+  ],
+  "verified_assertions": 2,
+  "browser_errors": [],
+  "provider_calls": 0,
+  "requests": [
+    {
+      "method": "GET",
+      "path": "/api/brief"
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/me"
+    },
+    {
+      "method": "GET",
+      "path": "/api/delivery-exceptions"
+    },
+    {
+      "method": "GET",
+      "path": "/api/exceptions"
+    },
+    {
+      "method": "GET",
+      "path": "/api/agent-ops/inbound/health"
+    },
+    {
+      "method": "POST",
+      "path": "/api/agent-ops/actions/0191f6f0-0000-4000-8000-000000000102/resolution-challenge"
+    },
+    {
+      "method": "POST",
+      "path": "/api/agent-ops/actions/0191f6f0-0000-4000-8000-000000000102/resolution-challenge"
+    },
+    {
+      "method": "POST",
+      "path": "/api/agent-ops/actions/0191f6f0-0000-4000-8000-000000000102/resolve-submission"
+    },
+    {
+      "method": "POST",
+      "path": "/api/agent-ops/actions/0191f6f0-0000-4000-8000-000000000102/resolution-challenge"
+    },
+    {
+      "method": "POST",
+      "path": "/api/agent-ops/actions/0191f6f0-0000-4000-8000-000000000102/resolve-submission"
+    },
+    {
+      "method": "GET",
+      "path": "/api/delivery-exceptions"
+    }
+  ],
+  "width_360": {
+    "viewport": 360,
+    "document": 360
+  }
+}

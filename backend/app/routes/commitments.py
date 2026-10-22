@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 
 from ..commitments import (
     EXTRACTOR_SYSTEM, KINDS, OUTCOME_KINDS, RELATIVE_WINDOWS, brief_for, confirm, create_draft, defer,
-    generate_brief, parse_extractor_output, record_outcome,
+    generate_brief, parse_extractor_output, permission_snapshot, record_outcome,
 )
 from ..db import get_db
 from ..foundation import audit, own_customer, unseal, utcnow
@@ -171,6 +171,7 @@ def list_commitments(customer_id: str | None = None, status: str | None = None,
 # --------------------------------------------------------------------------- #
 def _item_view(db: Session, it: BriefItem) -> dict:
     cust = db.get(Customer, it.customer_id)
+    permission, checked_at = permission_snapshot(db, it.tenant_id, cust) if cust else ("none", utcnow())
     src = None
     if it.source_type == "commitment":
         c = db.get(Commitment, it.source_reference)
@@ -179,11 +180,12 @@ def _item_view(db: Session, it: BriefItem) -> dict:
             "rule": it.rule, "rank_category": it.rank_category, "source_type": it.source_type,
             "source_reference": it.source_reference, "source": src,
             "due_at": it.due_at.isoformat() if it.due_at else None, "state": it.state,
-            "permission_state": it.permission_state,
-            "permission_checked_at": it.permission_checked_at.isoformat() if it.permission_checked_at else None,
+            "permission_state": permission,
+            "permission_checked_at": checked_at.isoformat(),
             "permission_note": "historical observation; execution re-checks the kernel",
-            "suggested_step": it.suggested_step, "draft_version_id": it.draft_version_id,
-            "controls": ["approve", "edit", "defer", "resolve", "skip"]}
+            "suggested_step": "Outreach is blocked. Review the suppression before any contact." if permission == "suppressed" else it.suggested_step,
+            "draft_version_id": it.draft_version_id,
+            "controls": (["approve", "edit"] if permission == "active" else []) + ["defer", "resolve", "skip"]}
 
 
 @router.get("/brief")

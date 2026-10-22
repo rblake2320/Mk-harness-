@@ -1,0 +1,11 @@
+**/node_modules
+**/dist
+**/test-results
+**/playwright-report
+.git
+.venv
+.local-tools
+local-verification
+**/.env
+**/.env.*
+!**/.env.example

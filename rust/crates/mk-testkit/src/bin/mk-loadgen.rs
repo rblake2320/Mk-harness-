@@ -276,15 +276,23 @@ impl Rig {
             .as_str()
             .unwrap_or_default()
             .parse()?;
-        let (s, _) = self
-            .call(
-                reqwest::Method::POST,
-                "/internal/v1/inbound/health",
-                &self.token(id, admin, &["tenant_admin"]),
-                Some(json!({"ok": true})),
-            )
-            .await?;
-        anyhow::ensure!(s == 204, "inbound health {s}");
+        let mut healthy = false;
+        for _ in 0..40 {
+            let (s, health) = self
+                .call(
+                    reqwest::Method::GET,
+                    "/internal/v1/inbound/health",
+                    &self.token(id, admin, &["tenant_admin"]),
+                    None,
+                )
+                .await?;
+            if s == 200 && health.get("dispatch_blocked").is_some_and(Value::is_null) {
+                healthy = true;
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(500)).await;
+        }
+        anyhow::ensure!(healthy, "no committed public inbound probe");
         // Passkey for the approver.
         let mut auth = SoftAuthenticator::new_es256();
         let (s, begin) = self

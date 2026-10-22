@@ -1,0 +1,56 @@
+ Downloading crates ...
+  Downloaded darling_core v0.24.1
+  Downloaded darling v0.24.1
+  Downloaded darling_macro v0.24.1
+  Downloaded pastey v0.2.3
+  Downloaded futures v0.3.34
+  Downloaded rmcp-macros v3.6.0
+  Downloaded ident_case v1.0.1
+  Downloaded rmcp v3.6.0
+    Checking indexmap v2.14.2
+   Compiling futures-macro v0.3.34
+   Compiling ident_case v1.0.1
+   Compiling serde_core v1.0.229
+   Compiling strsim v0.11.1
+   Compiling serde_json v1.0.154
+   Compiling zmij v1.0.23
+   Compiling memchr v2.8.3
+   Compiling itoa v1.0.18
+   Compiling rmcp v3.6.0
+   Compiling pastey v0.2.3
+   Compiling darling_core v0.24.1
+    Checking h2 v0.4.20
+    Checking futures-util v0.3.34
+    Checking schemars v1.2.3
+    Checking referencing v0.33.0
+    Checking tracing-subscriber v0.3.23
+    Checking jsonschema v0.33.0
+    Checking mk-domain v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-domain)
+    Checking mk-crypto v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-crypto)
+   Compiling darling_macro v0.24.1
+   Compiling darling v0.24.1
+    Checking mk-audit v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-audit)
+    Checking mk-contracts v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-contracts)
+    Checking tower v0.5.3
+    Checking sqlx-core v0.9.0
+    Checking redis v0.29.5
+    Checking futures-executor v0.3.34
+    Checking futures v0.3.34
+   Compiling rmcp-macros v3.6.0
+    Checking tower-http v0.6.11
+    Checking hyper v1.12.0
+    Checking mk-policy v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-policy)
+    Checking hyper-util v0.1.21
+    Checking sqlx-postgres v0.9.0
+    Checking hyper-rustls v0.27.10
+    Checking axum v0.8.9
+    Checking reqwest v0.12.28
+    Checking sqlx v0.9.0
+    Checking mk-store v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-store)
+    Checking mk-testkit v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-testkit)
+    Checking mk-queue v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-queue)
+    Checking mk-adapters v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-adapters)
+    Checking mk-worker v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-worker)
+    Checking mk-api v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-api)
+    Checking mk-mcp v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-mcp)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 10.94s

@@ -1,0 +1,11 @@
+2026-10-22T12:36:59Z	INFO	[vuln] Vulnerability scanning is enabled
+2026-10-22T12:37:09Z	INFO	Detected OS	family="alpine" version="3.24.3"
+2026-10-22T12:37:09Z	INFO	[alpine] Detecting vulnerabilities...	os_version="3.24" repository="3.24" pkg_num=29
+2026-10-22T12:37:09Z	INFO	Number of language-specific files	num=1
+2026-10-22T12:37:09Z	INFO	[python-pkg] Detecting vulnerabilities...
+
+📣 [34mNotices:[0m
+  - Version 0.76.1 of Trivy is now available, current version is 0.76.0
+
+To suppress version checks, run Trivy scans with the --skip-version-check flag
+

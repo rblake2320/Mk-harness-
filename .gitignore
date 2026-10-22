@@ -25,3 +25,6 @@ backend/.env
 
 # Local Redis snapshots (never tracked)
 *.rdb
+
+# Downloaded local verification runtimes, not product dependencies
+.local-tools/

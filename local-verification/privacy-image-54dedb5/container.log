@@ -1,0 +1,61 @@
+INFO:     192.168.240.1:40480 - "GET /api/health/ready HTTP/1.1" 200 OK
+INFO:     192.168.240.1:40480 - "POST /api/auth/signup HTTP/1.1" 201 Created
+INFO:     192.168.240.1:40480 - "GET /api/customers HTTP/1.1" 403 Forbidden
+INFO:     192.168.240.1:40480 - "POST /api/auth/mfa/enroll HTTP/1.1" 200 OK
+INFO:     192.168.240.1:40480 - "POST /api/auth/mfa/confirm HTTP/1.1" 200 OK
+INFO:     192.168.240.1:40480 - "POST /api/customers HTTP/1.1" 201 Created
+INFO:     192.168.240.1:40480 - "GET /api/customers/export.csv HTTP/1.1" 403 Forbidden
+INFO:     192.168.240.1:40480 - "POST /api/auth/step-up HTTP/1.1" 200 OK
+INFO:     192.168.240.1:40480 - "GET /api/customers/export.csv HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52844 - "GET /api/health HTTP/1.1" 200 OK
+INFO:     192.168.240.1:49500 - "GET /api/health/ready HTTP/1.1" 200 OK
+INFO:     192.168.240.1:49500 - "GET /api/customers/4042fcf336c64f248461517bc988860d HTTP/1.1" 200 OK
+INFO:     192.168.240.1:49500 - "POST /api/customers/4042fcf336c64f248461517bc988860d/destinations HTTP/1.1" 201 Created
+INFO:     192.168.240.1:49500 - "PUT /api/keys/mine HTTP/1.1" 200 OK
+INFO:     192.168.240.1:49506 - "GET /api/brief?date=2026-10-22 HTTP/1.1" 200 OK
+INFO:     192.168.240.1:49520 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:     192.168.240.1:49506 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:     192.168.240.1:49520 - "GET /api/auth/members HTTP/1.1" 200 OK
+INFO:     192.168.240.1:49578 - "GET /api/usage/tenant HTTP/1.1" 200 OK
+INFO:     192.168.240.1:49566 - "GET /api/auth/mfa/status HTTP/1.1" 200 OK
+INFO:     192.168.240.1:49536 - "GET /api/keys/status HTTP/1.1" 200 OK
+INFO:     192.168.240.1:49542 - "GET /api/usage/me HTTP/1.1" 200 OK
+INFO:     192.168.240.1:49600 - "GET /api/agent-ops/approval-credentials HTTP/1.1" 503 Service Unavailable
+INFO:     192.168.240.1:49606 - "GET /api/agent-ops/senders HTTP/1.1" 503 Service Unavailable
+INFO:     192.168.240.1:49612 - "GET /api/agent-ops/inbound/health HTTP/1.1" 503 Service Unavailable
+INFO:     192.168.240.1:49590 - "GET /api/agent-ops/health HTTP/1.1" 503 Service Unavailable
+INFO:     192.168.240.1:49550 - "GET /api/auth/sessions HTTP/1.1" 200 OK
+INFO:     192.168.240.1:49550 - "DELETE /api/account HTTP/1.1" 202 Accepted
+INFO:     192.168.240.1:49500 - "GET /api/customers HTTP/1.1" 401 Unauthorized
+INFO:     192.168.240.1:49500 - "POST /api/account/erasure-status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:38774 - "GET /api/health HTTP/1.1" 200 OK
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     Started parent process [1]
+INFO:     Started server process [9]
+INFO:     Waiting for application startup.
+INFO:     Started server process [8]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Application startup complete.
+INFO:     Received SIGTERM, exiting.
+INFO:     Terminated child process [8]
+INFO:     Terminated child process [9]
+INFO:     Waiting for child process [8]
+INFO:     Shutting down
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [9]
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [8]
+INFO:     Waiting for child process [9]
+INFO:     Stopping parent process [1]
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     Started parent process [1]
+INFO:     Started server process [9]
+INFO:     Waiting for application startup.
+INFO:     Started server process [8]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Application startup complete.

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="2" time="1.470" timestamp="2026-10-22T06:14:16.806123-05:00" hostname="DESKTOP-CM6G60N"><testcase classname="tests.test_billing_restore" name="test_post_backup_billing_identity_survives_pinned_erasure_replay[False]" time="0.449"><failure message="AssertionError: post-backup billing intent was lost&#10;assert None is not None">backend/tests/test_billing_restore.py:46: in test_post_backup_billing_identity_survives_pinned_erasure_replay
+    assert row is not None, "post-backup billing intent was lost"
+E   AssertionError: post-backup billing intent was lost
+E   assert None is not None</failure></testcase><testcase classname="tests.test_billing_restore" name="test_post_backup_billing_identity_survives_pinned_erasure_replay[True]" time="0.442"><failure message="AssertionError: accepted provider binding was lost&#10;assert None == 'cus_AcceptedAfterBackup'&#10; +  where None = &lt;app.models.BillingProvision object at 0x70a09bd7a1b0&gt;.stripe_customer_id">backend/tests/test_billing_restore.py:47: in test_post_backup_billing_identity_survives_pinned_erasure_replay
+    assert row.stripe_customer_id == "cus_AcceptedAfterBackup", "accepted provider binding was lost"
+E   AssertionError: accepted provider binding was lost
+E   assert None == 'cus_AcceptedAfterBackup'
+E    +  where None = &lt;app.models.BillingProvision object at 0x70a09bd7a1b0&gt;.stripe_customer_id</failure></testcase></testsuite></testsuites>

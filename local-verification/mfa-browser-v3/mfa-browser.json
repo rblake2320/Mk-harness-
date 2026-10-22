@@ -1,0 +1,194 @@
+{
+  "scope": "author-run real loopback app/kernel/Postgres, synthetic authenticator; no response mocks",
+  "outcomes": {
+    "password_only_customers": 403,
+    "old_password_bearer": 401,
+    "verified_customers": 200,
+    "export_before_stepup": 403,
+    "export_after_stepup": 200,
+    "replayed_recovery": 401,
+    "new_session_needs_own_stepup": 403,
+    "old_session_after_factor_replacement": 401
+  },
+  "mfa_mobile_width": {
+    "viewport": 360,
+    "document": 360
+  },
+  "page_errors": [],
+  "requests": [
+    {
+      "method": "POST",
+      "path": "/api/auth/signup"
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/mfa/enroll"
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/mfa/confirm"
+    },
+    {
+      "method": "GET",
+      "path": "/api/brief"
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/me"
+    },
+    {
+      "method": "GET",
+      "path": "/api/keys/status"
+    },
+    {
+      "method": "GET",
+      "path": "/api/usage/me"
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/sessions"
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/mfa/status"
+    },
+    {
+      "method": "GET",
+      "path": "/api/usage/tenant"
+    },
+    {
+      "method": "GET",
+      "path": "/api/agent-ops/health"
+    },
+    {
+      "method": "GET",
+      "path": "/api/agent-ops/approval-credentials"
+    },
+    {
+      "method": "GET",
+      "path": "/api/agent-ops/senders"
+    },
+    {
+      "method": "GET",
+      "path": "/api/agent-ops/inbound/health"
+    },
+    {
+      "method": "GET",
+      "path": "/api/account/export"
+    },
+    {
+      "method": "GET",
+      "path": "/api/account/export"
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/step-up"
+    },
+    {
+      "method": "GET",
+      "path": "/api/account/export"
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/logout"
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/login"
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/mfa/verify"
+    },
+    {
+      "method": "GET",
+      "path": "/api/brief"
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/me"
+    },
+    {
+      "method": "GET",
+      "path": "/api/keys/status"
+    },
+    {
+      "method": "GET",
+      "path": "/api/usage/me"
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/sessions"
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/mfa/status"
+    },
+    {
+      "method": "GET",
+      "path": "/api/usage/tenant"
+    },
+    {
+      "method": "GET",
+      "path": "/api/agent-ops/health"
+    },
+    {
+      "method": "GET",
+      "path": "/api/agent-ops/approval-credentials"
+    },
+    {
+      "method": "GET",
+      "path": "/api/agent-ops/senders"
+    },
+    {
+      "method": "GET",
+      "path": "/api/agent-ops/inbound/health"
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/mfa/enroll"
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/step-up"
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/mfa/enroll"
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/mfa/confirm"
+    },
+    {
+      "method": "GET",
+      "path": "/api/keys/status"
+    },
+    {
+      "method": "GET",
+      "path": "/api/usage/me"
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/sessions"
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/mfa/status"
+    },
+    {
+      "method": "GET",
+      "path": "/api/usage/tenant"
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/me"
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/logout"
+    }
+  ],
+  "secrets": "in-memory only; recovery screenshots masked",
+  "download_content_validated": true
+}

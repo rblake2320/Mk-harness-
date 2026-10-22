@@ -455,44 +455,61 @@ pub async fn revoke(
     Ok(id)
 }
 
-/// Pool-level (pre-tenant-context) check used while authenticating a request:
-/// is this `(tenant, user, session)` revoked? A user revocation covers every
-/// session; a session revocation covers that session only.
+/// Domain-separated recovery identity; raw session IDs never enter the ledger.
+pub fn session_revocation_digest(tenant: TenantId, user: UserId, session_id: &str) -> String {
+    let mut input = b"mk-session-revocation-v1\0".to_vec();
+    input.extend_from_slice(tenant.0.as_bytes());
+    input.extend_from_slice(user.0.as_bytes());
+    input.extend_from_slice(session_id.as_bytes());
+    Digest::of(&input).to_string()
+}
+
+/// Pool-level authentication check. User revocations cover every session;
+/// session revocations cover only the same tenant, user and session.
 pub async fn is_revoked(
     pool: &PgPool,
     tenant: TenantId,
     user: UserId,
     session_id: &str,
 ) -> Result<bool, StoreError> {
+    // Pre-persistent-session app tokens used a per-JWT hash. They have no
+    // revocable session row, so the S2 rollout retires their authority outright.
+    if session_id.starts_with("jwt:") {
+        return Ok(true);
+    }
     let n: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM kernel.revocations
-         WHERE tenant_id = $1 AND user_id = $2 AND (kind = 'user' OR (kind = 'session' AND session_id = $3))",
+         WHERE tenant_id = $1 AND user_id = $2 AND (kind = 'user' OR (kind = 'session' AND (session_id = $3 OR session_digest = $4)))",
     )
     .bind(tenant.0)
     .bind(user.0)
     .bind(session_id)
+    .bind(session_revocation_digest(tenant, user, session_id))
     .fetch_one(pool)
     .await?;
     Ok(n > 0)
 }
 
-/// Transaction-level check at dispatch: was the approver (user or the session
-/// that approved) revoked at or after the approval was recorded?
+/// Transaction-level check at dispatch. Revocation is irreversible, including
+/// an approval committed by an already-authenticated request after revocation.
 pub async fn approver_revoked_since(
     tx: &mut TenantTx<'_>,
     approver: UserId,
     session_id: Option<&str>,
-    approved_at: DateTime<Utc>,
+    _approved_at: DateTime<Utc>,
 ) -> Result<bool, StoreError> {
+    if session_id.is_some_and(|s| s.starts_with("jwt:")) {
+        return Ok(true);
+    }
     let n: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM kernel.revocations
-         WHERE tenant_id = $1 AND user_id = $2 AND revoked_at >= $4
-           AND (kind = 'user' OR (kind = 'session' AND session_id = $3))",
+         WHERE tenant_id = $1 AND user_id = $2
+           AND (kind = 'user' OR (kind = 'session' AND (session_id = $3 OR session_digest = $4)))",
     )
     .bind(tx.tenant().0)
     .bind(approver.0)
     .bind(session_id)
-    .bind(approved_at)
+    .bind(session_id.map(|sid| session_revocation_digest(tx.tenant(), approver, sid)))
     .fetch_one(tx.conn())
     .await?;
     Ok(n > 0)

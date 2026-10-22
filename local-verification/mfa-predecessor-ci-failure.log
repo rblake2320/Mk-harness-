@@ -1,0 +1,52 @@
+live-smoke	Live smoke (8 gates) + production pre-flight	﻿2026-10-22T06:01:50.0979835Z ##[group]Run WORK="$RUNNER_TEMP/smoke" bash scripts/kernel-live-smoke.sh
+live-smoke	Live smoke (8 gates) + production pre-flight	2026-10-22T06:01:50.0980578Z ^[[36;1mWORK="$RUNNER_TEMP/smoke" bash scripts/kernel-live-smoke.sh^[[0m
+live-smoke	Live smoke (8 gates) + production pre-flight	2026-10-22T06:01:50.1031230Z shell: /usr/bin/bash -e {0}
+live-smoke	Live smoke (8 gates) + production pre-flight	2026-10-22T06:01:50.1031527Z env:
+live-smoke	Live smoke (8 gates) + production pre-flight	2026-10-22T06:01:50.1031770Z   CARGO_TERM_COLOR: always
+live-smoke	Live smoke (8 gates) + production pre-flight	2026-10-22T06:01:50.1032051Z   RUSTFLAGS: 
+live-smoke	Live smoke (8 gates) + production pre-flight	2026-10-22T06:01:50.1032293Z   CARGO_HOME: /home/runner/.cargo
+live-smoke	Live smoke (8 gates) + production pre-flight	2026-10-22T06:01:50.1032593Z   CARGO_INCREMENTAL: 0
+live-smoke	Live smoke (8 gates) + production pre-flight	2026-10-22T06:01:50.1032864Z   CACHE_ON_FAILURE: false
+live-smoke	Live smoke (8 gates) + production pre-flight	2026-10-22T06:01:50.1033451Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.15/x64
+live-smoke	Live smoke (8 gates) + production pre-flight	2026-10-22T06:01:50.1033993Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.15/x64/lib/pkgconfig
+live-smoke	Live smoke (8 gates) + production pre-flight	2026-10-22T06:01:50.1034507Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+live-smoke	Live smoke (8 gates) + production pre-flight	2026-10-22T06:01:50.1034986Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+live-smoke	Live smoke (8 gates) + production pre-flight	2026-10-22T06:01:50.1035692Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+live-smoke	Live smoke (8 gates) + production pre-flight	2026-10-22T06:01:50.1036193Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.15/x64/lib
+live-smoke	Live smoke (8 gates) + production pre-flight	2026-10-22T06:01:50.1036877Z   PGURL: ***127.0.0.1:5432/mk_kernel_smoke
+live-smoke	Live smoke (8 gates) + production pre-flight	2026-10-22T06:01:50.1037226Z   REDIS_URL: redis://127.0.0.1:6379
+live-smoke	Live smoke (8 gates) + production pre-flight	2026-10-22T06:01:50.1037528Z ##[endgroup]
+live-smoke	Live smoke (8 gates) + production pre-flight	2026-10-22T06:01:50.1289883Z ^[[1;36m[smoke]^[[0m building release binaries
+live-smoke	Live smoke (8 gates) + production pre-flight	2026-10-22T06:03:22.5855701Z ^[[1;36m[smoke]^[[0m fresh database
+live-smoke	Live smoke (8 gates) + production pre-flight	2026-10-22T06:03:22.7850495Z NOTICE:  database "mk_kernel_smoke" does not exist, skipping
+live-smoke	Live smoke (8 gates) + production pre-flight	2026-10-22T06:03:23.1774028Z ^[[1;36m[smoke]^[[0m creating per-process database identities
+live-smoke	Live smoke (8 gates) + production pre-flight	2026-10-22T06:03:23.2797374Z ^[[1;36m[smoke]^[[0m starting kernel api / relay / worker (each as its own DB login)
+live-smoke	Live smoke (8 gates) + production pre-flight	2026-10-22T06:03:23.3484262Z ^[[1;36m[smoke]^[[0m starting FastAPI with the kernel wired in (no Python fallback)
+live-smoke	Live smoke (8 gates) + production pre-flight	2026-10-22T06:03:25.7908946Z ^[[1;36m[smoke]^[[0m approver registers a passkey through the kernel ceremony (software authenticator = test equipment)
+live-smoke	Live smoke (8 gates) + production pre-flight	2026-10-22T06:03:26.0088287Z ^[[1;36m[smoke]^[[0m kernel health through the app
+live-smoke	Live smoke (8 gates) + production pre-flight	2026-10-22T06:03:26.0415243Z ^[[1;36m[smoke]^[[0m register the device agent (tenant_admin via app)
+live-smoke	Live smoke (8 gates) + production pre-flight	2026-10-22T06:03:26.1031513Z ^[[1;36m[smoke]^[[0m starting the ADB device agent in dry-run
+live-smoke	Live smoke (8 gates) + production pre-flight	2026-10-22T06:03:26.7711854Z ^[[1;36m[smoke]^[[0m gate 2: suppressed contact is refused at proposal
+live-smoke	Live smoke (8 gates) + production pre-flight	2026-10-22T06:03:26.9999199Z ^[[1;36m[smoke]^[[0m   403 suppressed
+live-smoke	Live smoke (8 gates) + production pre-flight	2026-10-22T06:03:27.0000400Z ^[[1;36m[smoke]^[[0m gate 5: idempotent proposal + shared jti
+live-smoke	Live smoke (8 gates) + production pre-flight	2026-10-22T06:03:27.2509792Z ^[[1;36m[smoke]^[[0m gate 3: revoked approval is never dispatched
+live-smoke	Live smoke (8 gates) + production pre-flight	2026-10-22T06:03:33.5802455Z ^[[1;36m[smoke]^[[0m   state after revoke: cancelled
+live-smoke	Live smoke (8 gates) + production pre-flight	2026-10-22T06:03:33.5803914Z ^[[1;36m[smoke]^[[0m gate 4: tenant kill switch blocks dispatch (flipped AFTER proposal, BEFORE approval)
+live-smoke	Live smoke (8 gates) + production pre-flight	2026-10-22T06:03:33.8142863Z ^[[1;36m[smoke]^[[0m   approve under kill switch → 200
+live-smoke	Live smoke (8 gates) + production pre-flight	2026-10-22T06:03:39.9630616Z ^[[1;36m[smoke]^[[0m   state under kill switch: cancelled
+live-smoke	Live smoke (8 gates) + production pre-flight	2026-10-22T06:03:39.9984519Z ^[[1;36m[smoke]^[[0m gate 8: approval authority is the human's authenticator, not the proxy's assertion key
+live-smoke	Live smoke (8 gates) + production pre-flight	2026-10-22T06:03:40.3391314Z ^[[1;36m[smoke]^[[0m   unbound → 403, unregistered key → 403, burned/transplanted challenge → 409
+live-smoke	Live smoke (8 gates) + production pre-flight	2026-10-22T06:03:40.3392527Z ^[[1;36m[smoke]^[[0m gate 1: approved action reaches the device agent; signed callback accepted
+live-smoke	Live smoke (8 gates) + production pre-flight	2026-10-22T06:03:41.5830997Z ^[[1;36m[smoke]^[[0m   terminal state: failed_final (dry-run agent reports failed/dry_run_no_device — honest, no device)
+live-smoke	Live smoke (8 gates) + production pre-flight	2026-10-22T06:03:41.6240580Z   agent evidence chain ok, head 625813564f565cbd
+live-smoke	Live smoke (8 gates) + production pre-flight	2026-10-22T06:03:41.6290247Z ^[[1;36m[smoke]^[[0m gate 6: kernel audit chain verifies (read-only identity)
+live-smoke	Live smoke (8 gates) + production pre-flight	2026-10-22T06:03:41.6637814Z {"timestamp":"2026-10-22T06:03:41.662610Z","level":"INFO","fields":{"message":"chain ok","tenant":"1161e4f6-897d-4c07-a316-0c69d4c80e18","events":50,"root":"sha256:e446c379b80c985dd92f18719c3ad600b22d704658cc4e0324087728139aee9d"},"target":"mk_audit_verifier"}
+live-smoke	Live smoke (8 gates) + production pre-flight	2026-10-22T06:03:41.6641742Z ^[[1;36m[smoke]^[[0m gate 7: identities are least-privilege (API cannot claim outbox; relay cannot read approvals; readonly cannot write)
+live-smoke	Live smoke (8 gates) + production pre-flight	2026-10-22T06:03:41.8361068Z ^[[1;36m[smoke]^[[0m worker log clean under its restricted login (housekeeping under mk_kernel_worker is proven by mk-store::postgres::worker_role_can_discover_tenants_and_purge_nonces_across_tenants)
+live-smoke	Live smoke (8 gates) + production pre-flight	2026-10-22T06:03:41.8379224Z ^[[1;36m[smoke]^[[0m gate 9: session revocation blocks the approver's next request and any live approval
+live-smoke	Live smoke (8 gates) + production pre-flight	2026-10-22T06:03:42.1135966Z Traceback (most recent call last):
+live-smoke	Live smoke (8 gates) + production pre-flight	2026-10-22T06:03:42.1145347Z   File "<string>", line 1, in <module>
+live-smoke	Live smoke (8 gates) + production pre-flight	2026-10-22T06:03:42.1146292Z   File "<string>", line 1, in <module>
+live-smoke	Live smoke (8 gates) + production pre-flight	2026-10-22T06:03:42.1147357Z KeyError: 'code'
+live-smoke	Live smoke (8 gates) + production pre-flight	2026-10-22T06:03:42.1178535Z ^[[1;31m[smoke FAIL]^[[0m revoked session still accepted (401)
+live-smoke	Live smoke (8 gates) + production pre-flight	2026-10-22T06:03:42.1275035Z ##[error]Process completed with exit code 1.

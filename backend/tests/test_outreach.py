@@ -73,9 +73,15 @@ def test_draft_to_proposal_to_approval_screen(client, kernel_env):
     assert any(e["digest"] == d["text_digest"] for e in req["evidence"])
 
     # Approval screen: every H1 field present.
+    wrong_sender = {**senders[0], "sender_identity_id": str(uuid.uuid4()),
+                    "display_name": "Another sending identity", "from_number": "+15005550007"}
+    respx.get(f"{KERNEL}/internal/v1/senders").mock(return_value=httpx.Response(200, json=[wrong_sender, *senders]))
     pending = [{"result": {"action_id": aid, "state": "approval_required", "message_state": "awaiting_approval", "action_digest": "sha256:" + "a" * 64},
                 "display": {"rendered_text": d["text"], "destination_redacted": "********8001", "channel": "sms", "workflow": "customer_follow_up",
                             "purpose": "customer_requested_follow_up", "risk": "high", "evidence_count": 2, "expires_at": "2026-10-21T00:00:00Z",
+                            "sender_identity_id": sender_id, "scheduled_for": "2026-10-20T22:00:00Z",
+                            "can_approve": False, "approval_denial": "self_approval_forbidden", "self_approval": True,
+                            "approval_ttl_seconds": 300,
                             "action_digest": "sha256:" + "a" * 64}}]
     respx.get(f"{KERNEL}/internal/v1/approvals/pending").mock(return_value=httpx.Response(200, json=pending))
     r = client.get("/api/approvals/pending", headers=h)
@@ -85,8 +91,17 @@ def test_draft_to_proposal_to_approval_screen(client, kernel_env):
               "scheduled_for", "approval_expires_at", "action_digest", "approval_lifetime_minutes", "human_steps"):
         assert k in item, k
     assert item["customer"]["id"] == cid and item["sending_business"]["from_number"] == "+15005550006"
+    assert item["sending_business"]["sender_identity_id"] == sender_id
+    assert item["scheduled_for"] == "2026-10-20T22:00:00Z"
+    assert item["can_approve"] is False and item["approval_denial"] == "self_approval_forbidden"
+    assert item["self_approval"] is True and item["approval_lifetime_minutes"] == 5
+    assert item["permission"]["state"] == "none", "permission is observed even without a brief link"
     assert item["supporting"]["commitment"]["id"] == cm["id"] and item["supporting"]["draft_version_id"] == d["id"]
     assert item["exact_text"] == d["text"] and item["destination_masked"].endswith("8001")
+    # Losing the selected identity must not substitute another owned number.
+    respx.get(f"{KERNEL}/internal/v1/senders").mock(return_value=httpx.Response(200, json=[wrong_sender]))
+    missing = client.get("/api/approvals/pending", headers=h).json()[0]
+    assert missing["sending_business"] is None
 
     # Status view: contract vocabulary + verbatim definitions.
     respx.get(f"{KERNEL}/internal/v1/actions/{aid}").mock(return_value=httpx.Response(200, json={"action_id": aid, "state": "queued", "message_state": "queued"}))
@@ -95,15 +110,66 @@ def test_draft_to_proposal_to_approval_screen(client, kernel_env):
     assert r.json()["message_state_definitions"]["sent"] == "Provider reports outbound network submission."
     assert len(r.json()["message_state_definitions"]) == 15
 
-    # W5: editing produces a new version/digest; the pending approval's digest no longer matches.
+    # H2/W5: old version withdrawal must be confirmed before committing an edit.
+    withdrawal = respx.post(f"{KERNEL}/internal/v1/drafts/{d['id']}/invalidate").mock(
+        return_value=httpx.Response(200, json={"draft_id": str(uuid.UUID(d["id"])), "edit_permitted": True}))
     e = client.post(f"/api/drafts/{d['id']}/edit", json={"text": d["text"].replace("Hi Angela!", "Hi Angela —")}, headers=h).json()
     assert e["text_digest"] != d["text_digest"] and e["version"] == 2
+    assert withdrawal.call_count == 1
     assert item["action_digest"] != e["text_digest"]
 
     # Cross-tenant: another tenant cannot propose this draft or see this action.
     h2, _ = _user(client)
     assert client.post(f"/api/drafts/{d['id']}/propose", json={}, headers=h2).status_code == 404
     assert client.get(f"/api/drafts/{d['id']}/propose").status_code in (401, 405)
+
+
+@respx.mock
+def test_edit_requires_confirmed_kernel_withdrawal_even_without_local_action_link(client, kernel_env):
+    from sqlalchemy import func, select
+    from sqlalchemy.orm import Session
+    from app.models import DraftVersion, ActionLink
+    from .conftest import engine
+    h, me = _user(client)
+    cid, _, _ = _customer(client, h, phone="+15555558012")
+    respx.post("https://api.anthropic.com/v1/messages").mock(return_value=_model("Hi Angela! Reply STOP to opt out.", []))
+    draft = client.post("/api/drafts", json={"customer_id": cid, "provider": "anthropic"}, headers=h).json()["draft"]
+    path = f"/api/drafts/{draft['id']}/edit"
+    route = respx.post(f"{KERNEL}/internal/v1/drafts/{draft['id']}/invalidate")
+    text = "Hi Angela! How is your week? Reply STOP to opt out."
+    with Session(engine) as db:
+        assert db.scalar(select(func.count()).select_from(ActionLink).where(ActionLink.draft_version_id == draft["id"])) == 0
+    for response, expected in [
+        (httpx.Response(503, json={"code": "OVER_CAPACITY"}), 503),
+        (httpx.Response(403, json={"code": "FORBIDDEN"}), 403),
+        (httpx.Response(200, json={"draft_id": str(uuid.UUID(draft["id"])), "edit_permitted": False, "blocked_actions": ["in-flight"]}), 409),
+        (httpx.Response(200, json={"draft_id": str(uuid.uuid4()), "edit_permitted": True}), 502),
+        (httpx.Response(200, json={"draft_id": str(uuid.UUID(draft["id"])), "edit_permitted": "true"}), 502),
+        (httpx.Response(200, json={}), 502),
+    ]:
+        route.mock(return_value=response)
+        result = client.post(path, json={"text": text}, headers=h)
+        assert result.status_code == expected, result.text
+        with Session(engine) as db:
+            assert db.scalar(select(func.count()).select_from(DraftVersion).where(DraftVersion.customer_id == cid)) == 1
+        assert client.get(f"/api/drafts/{draft['id']}", headers=h).json()["text_digest"] == draft["text_digest"]
+    route.mock(side_effect=httpx.ReadTimeout("synthetic lost withdrawal response"))
+    assert client.post(path, json={"text": text}, headers=h).status_code == 503
+    assert route.call_count == 7, "writes are not retried after an ambiguous response"
+    other, _ = _user(client)
+    assert client.post(path, json={"text": text}, headers=other).status_code == 404
+    assert route.call_count == 7, "tenant ownership is checked before invalidation"
+    def acknowledge(request):
+        claims = verify_assertion(request)
+        assert claims["sub"].replace("-", "") == me
+        assert "tenant_admin" in claims["roles"]
+        return httpx.Response(200, json={"draft_id": str(uuid.UUID(draft["id"])), "edit_permitted": True})
+    route.mock(side_effect=acknowledge)
+    result = client.post(path, json={"text": text}, headers=h)
+    assert result.status_code == 201, result.text
+    assert result.json()["id"] != draft["id"] and result.json()["version"] == 2
+    with Session(engine) as db:
+        assert db.scalar(select(func.count()).select_from(DraftVersion).where(DraftVersion.customer_id == cid)) == 2
 
 
 def test_propose_requires_timezone_destination_and_sender(client, kernel_env):

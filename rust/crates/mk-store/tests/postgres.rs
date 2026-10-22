@@ -25,8 +25,12 @@ use secrecy::ExposeSecret;
 /// `migrate` is idempotent and takes a Postgres advisory lock internally.
 async fn store() -> Option<Store> {
     let url = mk_testkit::test_database_url()?;
-    let s = Store::connect(&url, 12).await.ok()?;
-    s.migrate().await.ok()?;
+    let s = Store::connect(&url, 12)
+        .await
+        .expect("configured PostgreSQL must connect");
+    s.migrate()
+        .await
+        .expect("configured PostgreSQL must migrate");
     Some(s)
 }
 
@@ -66,6 +70,59 @@ const ACTOR: Actor<'static> = Actor {
     trace_id: Some("trace-1"),
     policy_version: "mk-policy/test",
 };
+
+#[tokio::test]
+async fn recovered_session_revocation_is_scoped_at_authentication_and_dispatch() {
+    use mk_store::human_approval::{approver_revoked_since, is_revoked, session_revocation_digest};
+    let s = require_db!();
+    let tenant = TenantId::new();
+    let user = UserId::new();
+    let session = "private-recovered-session";
+    let digest = session_revocation_digest(tenant, user, session);
+    assert_ne!(
+        digest,
+        session_revocation_digest(TenantId::new(), user, session)
+    );
+    assert_ne!(
+        digest,
+        session_revocation_digest(tenant, UserId::new(), session)
+    );
+    let mut tx = s.begin(tenant).await.unwrap();
+    sqlx::query("INSERT INTO kernel.revocations(tenant_id,user_id,kind,session_digest,revoked_by,reason,revoked_at) VALUES($1,$2,'session',$3,$2,'recovery',$4)")
+        .bind(tenant.0).bind(user.0).bind(&digest).bind(t0()).execute(tx.raw_conn()).await.unwrap();
+    tx.commit().await.unwrap();
+    for (candidate_tenant, candidate_user, candidate_session, expected) in [
+        (tenant, user, session, true),
+        (tenant, user, "other-session", false),
+        (tenant, UserId::new(), session, false),
+        (TenantId::new(), user, session, false),
+    ] {
+        assert_eq!(
+            is_revoked(
+                s.pool(),
+                candidate_tenant,
+                candidate_user,
+                candidate_session
+            )
+            .await
+            .unwrap(),
+            expected
+        );
+        let mut tx = s.begin(candidate_tenant).await.unwrap();
+        // Even an approval created after the revocation cannot restore authority.
+        assert_eq!(
+            approver_revoked_since(
+                &mut tx,
+                candidate_user,
+                Some(candidate_session),
+                t0() + Duration::days(1)
+            )
+            .await
+            .unwrap(),
+            expected
+        );
+    }
+}
 
 #[tokio::test]
 async fn full_lifecycle_with_verified_audit_chain() {
@@ -1111,7 +1168,9 @@ async fn worker_role_can_discover_tenants_and_purge_nonces_across_tenants() {
         tx.rollback().await.unwrap();
     }
     // The worker can see expired leases across tenants too (existing policy).
-    let _ = outbox::expired_leases(&worker, now, 10).await.unwrap();
+    let _ = outbox::expired_leases(&worker, &tenants, now, 10)
+        .await
+        .unwrap();
     // But it cannot write audit heads for a tenant it is not inside.
     let bad = sqlx::query(
         "INSERT INTO kernel.audit_heads (tenant_id, last_hash, count) VALUES ($1, 'x', 0)",

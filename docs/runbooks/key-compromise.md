@@ -48,5 +48,11 @@ row is not under the current key or any suppression maps to no destination
 (test `test_app_fingerprint_key_rotation_never_orphans_suppressions`). Run the
 app `rekey` together with the kernel's `fingerprint-rekey` (step 4) and remove the
 old kid from **both** lists only when both `status` commands are clean.
-Not demonstrated: rotation of the application's *sealing* key (`MASTER_KEY` for
-`seal()`), which needs its own decrypt/re-encrypt job. This blocks S10 from *Independently verified*.
+Application sealing rotation is implemented separately as `APP_SEAL_KEYS` and
+`python -m app.tools.reseal status|activate|rekey`, with PostgreSQL old-writer
+fencing, all nine encrypted fields, bounded audited compare-and-swap batches,
+SIGKILL/resume and built-image MFA verification. Follow
+`application-sealing.md`; remove `m0` only after the database fence and both
+pre/post-removal scans pass. This does not rotate fingerprint material or the
+kernel's legacy key. Independent staging containment and controlled restore
+qualification remain release gates.

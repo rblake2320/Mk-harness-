@@ -1,0 +1,13 @@
+{
+  "outcome": "Worked",
+  "reason": "PowerShell-to-WSL wrapper lost temporary-directory variable; venv created in checkout",
+  "generated_targets": [
+    "D:\\projects\\mk-release-acceptance-20261021\\bin",
+    "D:\\projects\\mk-release-acceptance-20261021\\include",
+    "D:\\projects\\mk-release-acceptance-20261021\\lib",
+    "D:\\projects\\mk-release-acceptance-20261021\\lib64",
+    "D:\\projects\\mk-release-acceptance-20261021\\pyvenv.cfg"
+  ],
+  "recoverable_at": "D:\\projects\\mk-release-acceptance-20261021\\.local-tools\\recovered-venv-wrapper-20261022",
+  "retry": "Explicit /tmp/mk-plan-tools-20261022-b313897 virtualenv, hash-locked install and pip check passed"
+}

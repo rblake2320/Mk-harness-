@@ -1,0 +1,14 @@
+FF                                                                       [100%]
+=================================== FAILURES ===================================
+_________ test_late_runtime_sql_cannot_revive_or_rebind_erased_billing _________
+tools/verification/test_app_billing_privacy.py:43: in test_late_runtime_sql_cannot_revive_or_rebind_erased_billing
+    with pytest.raises(psycopg.errors.CheckViolation, match="PRIVACY_BILLING_FROZEN"):
+E   Failed: DID NOT RAISE CheckViolation
+___ test_erased_billing_only_allows_terminal_cleanup_not_new_business_fields ___
+tools/verification/test_app_billing_privacy.py:63: in test_erased_billing_only_allows_terminal_cleanup_not_new_business_fields
+    with pytest.raises(psycopg.errors.CheckViolation, match="PRIVACY_WRITE_REQUIRES_READ_COMMITTED"):
+E   Failed: DID NOT RAISE CheckViolation
+=========================== short test summary info ============================
+FAILED tools/verification/test_app_billing_privacy.py::test_late_runtime_sql_cannot_revive_or_rebind_erased_billing
+FAILED tools/verification/test_app_billing_privacy.py::test_erased_billing_only_allows_terminal_cleanup_not_new_business_fields
+2 failed in 3.55s

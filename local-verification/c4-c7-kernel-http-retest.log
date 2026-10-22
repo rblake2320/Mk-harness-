@@ -1,0 +1,21 @@
+   Compiling mk-store v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-store)
+   Compiling mk-queue v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-queue)
+   Compiling mk-adapters v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-adapters)
+   Compiling mk-api v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-api)
+   Compiling mk-worker v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-worker)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 6.08s
+     Running tests/http_e2e.rs (/tmp/mk-release-acceptance-target/debug/deps/http_e2e-18de0e99f101486d)
+
+running 9 tests
+test oversized_and_malformed_bodies_are_rejected_before_policy ... ok
+test per_tenant_limits_and_graceful_rejection_above_capacity ... ok
+test automatic_provider_reconciliation_recovers_missing_callbacks_without_resending ... ok
+test provider_sms_path_with_authenticated_callbacks_and_monotonic_states ... ok
+test lease_expiry_completes_provider_accepted_and_reconciles_only_the_unknown ... ok
+test ambiguous_submission_becomes_submission_unknown_and_inbound_pause_defers_dispatch ... ok
+test full_governed_path_over_http ... ok
+test human_approval_authority_resists_forgery_replay_transplant_and_revocation ... ok
+test inbound_stop_suppresses_cancels_and_dedupes_and_the_control_path_is_serialized ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.06s
+

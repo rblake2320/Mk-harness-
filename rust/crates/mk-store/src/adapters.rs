@@ -89,7 +89,7 @@ pub async fn register(
             actor_id: actor.actor_id,
             action_id: None,
             event_type: EventType::AdapterRegistered,
-            payload_redacted: json!({"adapter_id": adapter_id, "agent_id": agent_id, "platform": platform, "capabilities": capabilities, "callback_authority": callback_authority}),
+            payload_redacted: json!({"adapter_id": adapter_id, "capability_count": capabilities.len(), "allowed_action_count": allowed_actions.len()}),
             trace_id: actor.trace_id,
             policy_version: actor.policy_version,
         },

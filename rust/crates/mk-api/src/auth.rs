@@ -90,6 +90,41 @@ impl FromRequestParts<AppState> for Principal {
             )
             .with_request_id(&parts.headers)
         })?;
+        // Application outbox authority is not a human role. Constrain it before
+        // every handler, including reads and passkey registration. Combining it
+        // with another role never escalates its authority.
+        if assertion.roles.iter().any(|r| r == "privacy_eraser")
+            && (assertion.roles.len() != 1
+                || parts.method != axum::http::Method::POST
+                || parts
+                    .extensions
+                    .get::<axum::extract::OriginalUri>()
+                    .map_or(parts.uri.path(), |uri| uri.0.path())
+                    != "/internal/v1/privacy/erase")
+        {
+            return Err(ApiError::new(
+                StatusCode::FORBIDDEN,
+                "PRIVACY_ONLY",
+                "Privacy delivery authority is restricted to erasure",
+            )
+            .with_request_id(&parts.headers));
+        }
+        if assertion.roles.iter().any(|r| r == "session_revoker")
+            && (assertion.roles.len() != 1
+                || parts.method != axum::http::Method::POST
+                || parts
+                    .extensions
+                    .get::<axum::extract::OriginalUri>()
+                    .map_or(parts.uri.path(), |uri| uri.0.path())
+                    != "/internal/v1/revocations")
+        {
+            return Err(ApiError::new(
+                StatusCode::FORBIDDEN,
+                "REVOCATION_ONLY",
+                "Session delivery authority is restricted to revocation",
+            )
+            .with_request_id(&parts.headers));
+        }
         // O2: the tenant's bucket is charged only after the signature verified (no
         // one else can spend it). Reads are charged here; writes are charged after
         // the single-use jti is consumed, so a replayed captured assertion is

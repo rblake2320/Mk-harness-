@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="2" time="3.659" timestamp="2026-10-22T01:58:14.397252-05:00" hostname="DESKTOP-CM6G60N"><testcase classname="tools.verification.test_app_privacy" name="test_linked_customer_deletion_works_under_foreign_keys" time="1.358"><failure message="sqlalchemy.exc.IntegrityError: (psycopg.errors.ForeignKeyViolation) update or delete on table &quot;customers&quot; violates foreign key constraint &quot;customer_destinations_customer_id_fkey&quot; on table &quot;customer_destinations&quot;&#10;DETAIL:  Key (id)=(fixture) is still referenced from table &quot;customer_destinations&quot;.&#10;[SQL: DELETE FROM customers WHERE customers.id = %(id)s::VARCHAR]&#10;[SQL parameters hidden due to hide_parameters=True]&#10;(Background on this error at: https://sqlalche.me/e/20/gkpj)">/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1963: in _exec_single_context
+    self.dialect.do_execute(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/default.py:943: in do_execute
+    cursor.execute(statement, parameters)
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/psycopg/cursor.py:97: in execute
+    raise ex.with_traceback(None)
+E   psycopg.errors.ForeignKeyViolation: update or delete on table "customers" violates foreign key constraint "customer_destinations_customer_id_fkey" on table "customer_destinations"
+E   DETAIL:  Key (id)=(fixture) is still referenced from table "customer_destinations".
+
+The above exception was the direct cause of the following exception:
+tools/verification/test_app_privacy.py:41: in test_linked_customer_deletion_works_under_foreign_keys
+    result = delete_customer(cid, records[User], session)
+backend/app/routes/customers.py:111: in delete_customer
+    db.commit()
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/orm/session.py:2032: in commit
+    trans.commit(_to_root=True)
+&lt;string&gt;:2: in commit
+    ???
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/orm/state_changes.py:139: in _go
+    ret_value = fn(self, *arg, **kw)
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/orm/session.py:1313: in commit
+    self._prepare_impl()
+&lt;string&gt;:2: in _prepare_impl
+    ???
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/orm/state_changes.py:139: in _go
+    ret_value = fn(self, *arg, **kw)
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/orm/session.py:1288: in _prepare_impl
+    self.session.flush()
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/orm/session.py:4345: in flush
+    self._flush(objects)
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/orm/session.py:4480: in _flush
+    with util.safe_reraise():
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/util/langhelpers.py:224: in __exit__
+    raise exc_value.with_traceback(exc_tb)
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/orm/session.py:4441: in _flush
+    flush_context.execute()
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/orm/unitofwork.py:466: in execute
+    rec.execute(self)
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/orm/unitofwork.py:679: in execute
+    util.preloaded.orm_persistence.delete_obj(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/orm/persistence.py:193: in delete_obj
+    _emit_delete_statements(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/orm/persistence.py:1465: in _emit_delete_statements
+    c = connection.execute(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1415: in execute
+    return meth(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/sql/elements.py:523: in _execute_on_connection
+    return connection._execute_clauseelement(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1637: in _execute_clauseelement
+    ret = self._execute_context(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1842: in _execute_context
+    return self._exec_single_context(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1982: in _exec_single_context
+    self._handle_dbapi_exception(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2351: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1963: in _exec_single_context
+    self.dialect.do_execute(
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/sqlalchemy/engine/default.py:943: in do_execute
+    cursor.execute(statement, parameters)
+/tmp/mk-release-python-20261021/lib/python3.12/site-packages/psycopg/cursor.py:97: in execute
+    raise ex.with_traceback(None)
+E   sqlalchemy.exc.IntegrityError: (psycopg.errors.ForeignKeyViolation) update or delete on table "customers" violates foreign key constraint "customer_destinations_customer_id_fkey" on table "customer_destinations"
+E   DETAIL:  Key (id)=(fixture) is still referenced from table "customer_destinations".
+E   [SQL: DELETE FROM customers WHERE customers.id = %(id)s::VARCHAR]
+E   [SQL parameters hidden due to hide_parameters=True]
+E   (Background on this error at: https://sqlalche.me/e/20/gkpj)</failure></testcase><testcase classname="tools.verification.test_app_privacy" name="test_account_deletion_erases_owned_provider_credential" time="1.282"><failure message="AssertionError: assert &lt;app.models.ProviderKey object at 0x708a590da570&gt; is None&#10; +  where &lt;app.models.ProviderKey object at 0x708a590da570&gt; = scalar(&lt;sqlalchemy.sql.selectable.Select object at 0x708a5901f530&gt;)&#10; +    where scalar = &lt;sqlalchemy.orm.session.Session object at 0x708a59afa810&gt;.scalar&#10; +    and   &lt;sqlalchemy.sql.selectable.Select object at 0x708a5901f530&gt; = where(&lt;sqlalchemy.orm.attributes.InstrumentedAttribute object at 0x708a5bdd6340&gt; == 'fixture')&#10; +      where where = &lt;sqlalchemy.sql.selectable.Select object at 0x708a5901cd40&gt;.where&#10; +        where &lt;sqlalchemy.sql.selectable.Select object at 0x708a5901cd40&gt; = select(ProviderKey)&#10; +      and   &lt;sqlalchemy.orm.attributes.InstrumentedAttribute object at 0x708a5bdd6340&gt; = ProviderKey.user_id&#10; +      and   'fixture' = &lt;app.models.User object at 0x708a590daed0&gt;.id">tools/verification/test_app_privacy.py:57: in test_account_deletion_erases_owned_provider_credential
+    assert session.scalar(select(ProviderKey).where(ProviderKey.user_id == records[User].id)) is None
+E   AssertionError: assert &lt;app.models.ProviderKey object at 0x708a590da570&gt; is None
+E    +  where &lt;app.models.ProviderKey object at 0x708a590da570&gt; = scalar(&lt;sqlalchemy.sql.selectable.Select object at 0x708a5901f530&gt;)
+E    +    where scalar = &lt;sqlalchemy.orm.session.Session object at 0x708a59afa810&gt;.scalar
+E    +    and   &lt;sqlalchemy.sql.selectable.Select object at 0x708a5901f530&gt; = where(&lt;sqlalchemy.orm.attributes.InstrumentedAttribute object at 0x708a5bdd6340&gt; == 'fixture')
+E    +      where where = &lt;sqlalchemy.sql.selectable.Select object at 0x708a5901cd40&gt;.where
+E    +        where &lt;sqlalchemy.sql.selectable.Select object at 0x708a5901cd40&gt; = select(ProviderKey)
+E    +      and   &lt;sqlalchemy.orm.attributes.InstrumentedAttribute object at 0x708a5bdd6340&gt; = ProviderKey.user_id
+E    +      and   'fixture' = &lt;app.models.User object at 0x708a590daed0&gt;.id</failure></testcase></testsuite></testsuites>

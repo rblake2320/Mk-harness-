@@ -1,0 +1,66 @@
+{
+  "source_commit": "e568336c17eccba2b6a7726dfff740b8216411bc",
+  "files": [
+    {
+      "path": "local-verification/preflight-mfa-targeted.xml",
+      "sha256": "a32d3224151060c1a2698203033058a1ce02558e1f9d0bd5e4447e179b6a0405",
+      "bytes": 915
+    },
+    {
+      "path": "local-verification/rbac-browser-e568336/rbac-browser.json",
+      "sha256": "71be3e94351941f8f9580c6f4ab00f581a8df94000254b8a81b42f664b4d1150",
+      "bytes": 2355
+    },
+    {
+      "path": "local-verification/rbac-browser-v1/rbac-browser.json",
+      "sha256": "270d7a8c988c34e28e846624f65a44958e5dc97ddf90ff0cda37a5e451c9ebe4",
+      "bytes": 2355
+    },
+    {
+      "path": "local-verification/rbac-initial-red.xml",
+      "sha256": "cd7b639225f24b5201079892f19ac4e600cbf0704a54340581d63b6a8c208416",
+      "bytes": 3400
+    },
+    {
+      "path": "local-verification/rbac-prior-ci-smoke-failure.log",
+      "sha256": "9f4ac68e3c1efe368089ef86f15f81362a51ccfb7db8fe0b0bb0d7c0f22c196e",
+      "bytes": 102819
+    },
+    {
+      "path": "local-verification/rbac-python-e568336.xml",
+      "sha256": "da95722f3c55d38f8d23817afb87e608bd1ae58a57e14e0042185a5b58138c46",
+      "bytes": 37783
+    },
+    {
+      "path": "local-verification/rbac-python-v1.xml",
+      "sha256": "620fb3b8c9189213e39b87de6761a29e542d97418580dc23a149d43beebfa1f9",
+      "bytes": 36856
+    },
+    {
+      "path": "local-verification/rbac-python-v2.xml",
+      "sha256": "bbcb2354ed49e057d8eb29d9d0b24658afd5eff891e7b8c6e551708f4f04b2e4",
+      "bytes": 37783
+    },
+    {
+      "path": "local-verification/rbac-races-v1.xml",
+      "sha256": "870d69e0a1d2fa296ba9924cc6c95443ae73b2c0dbab4f0a8eaea44d5144188b",
+      "bytes": 963
+    },
+    {
+      "path": "local-verification/rbac-security-batch.md",
+      "sha256": "5ba1dfb0e96582f45745afc445efac00ba58574936cba834b95da829023f33ab",
+      "bytes": 2816
+    },
+    {
+      "path": "local-verification/rbac-targeted-v1.xml",
+      "sha256": "493ee8df54e3431e7cec9e5c0168a27de6246e74ceadb099eb32ccaa17eac446",
+      "bytes": 2461
+    },
+    {
+      "path": "local-verification/rbac-web-v1.json",
+      "sha256": "d4795f4d5c40472475ad00941e4727b3e059dbed49249583a38432282bbfb524",
+      "bytes": 28842
+    }
+  ],
+  "scope": "author-run local tenant RBAC engineering verification"
+}

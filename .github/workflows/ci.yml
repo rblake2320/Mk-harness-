@@ -8,16 +8,32 @@ on:
 jobs:
   backend-tests:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.12", "3.13"]
     defaults: { run: { working-directory: backend } }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python-version }}
           cache: pip
           cache-dependency-path: backend/requirements.txt
       - run: sudo apt-get update -q && sudo apt-get install -y -q redis-server
-      - run: pip install -r requirements.txt
+      - run: pip install --require-hashes -r requirements.txt
+      - name: Image report gate refuses missing and substituted evidence
+        working-directory: .
+        run: python -m pytest tools/verification/test_image_security.py tools/release/test_deployment_source.py tools/release/test_deployment_workflow.py tools/release/test_image_provenance.py tools/release/test_production_plan.py -q
+      - uses: opentofu/setup-opentofu@592200bd4b9bbf4772ace78f887668b1aee8f716
+        if: matrix.python-version == '3.12'
+        with: { tofu_version: 1.10.6, tofu_wrapper: false }
+      - name: Actual local plan sealing, exact-byte apply and stale-plan refusal
+        if: matrix.python-version == '3.12'
+        working-directory: .
+        run: python tools/verification/production_plan_control.py --tofu "$(command -v tofu)" --output deployment-plan-control
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always() && matrix.python-version == '3.12'
+        with: { name: deployment-plan-control, path: deployment-plan-control, if-no-files-found: error }
       - name: pytest
         run: |
           set +e -o pipefail   # GitHub runs bash -e: keep going after the pipeline fails so diagnostics print
@@ -38,8 +54,10 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: web/package.json
-      - run: npm install
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - name: Locked web dependency vulnerability gate
+        run: npm audit --audit-level=moderate
       - name: npm run build (tsc -b strict typecheck + vite production build)
         run: |
           set +e -o pipefail   # GitHub runs bash -e: keep going after the pipeline fails so diagnostics print
@@ -74,5 +92,69 @@ jobs:
     needs: [backend-tests, web-build]
     steps:
       - uses: actions/checkout@v4
-      - run: docker build -t mk-harness-api ./backend
+      - name: Build application image with recorded official RDS trust bundle
+        run: |
+          curl -fsSL https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem -o /tmp/app-rds-ca.pem
+          digest=$(sha256sum /tmp/app-rds-ca.pem | cut -d' ' -f1)
+          echo "RDS CA SHA256: $digest"
+          docker build --build-arg RDS_CA_BUNDLE_SHA256="$digest" -t mk-harness-api ./backend
       - run: docker build -t mk-harness-web -f web/Dockerfile .
+      - name: Actual web proxy request and failure privacy
+        run: python3 tools/verification/web_privacy_image.py --image mk-harness-web --output web-proxy-privacy
+      - name: Scan application runtime and retain CycloneDX inventory
+        run: python3 tools/verification/image_security.py --image mk-harness-api --cache "$RUNNER_TEMP/trivy" --output image-security/app
+      - name: Scan web runtime and retain CycloneDX inventory
+        if: success() || failure()
+        run: python3 tools/verification/image_security.py --image mk-harness-web --cache "$RUNNER_TEMP/trivy" --output image-security/web
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: app-web-image-security
+          path: image-security
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: web-proxy-privacy
+          path: web-proxy-privacy
+
+  app-postgres-boundary:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: isolated-ci-app-test-only
+          POSTGRES_DB: mk_app_test_admin
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres -d mk_app_test_admin"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install -r backend/requirements.txt
+      - name: Actual runtime role, migration, retained-data upgrade and MFA transactions
+        run: python -m pytest tools/verification/test_app_database.py tools/verification/test_app_privacy.py tools/verification/test_app_billing_privacy.py -q --tb=short --junitxml=app-postgres.xml
+        env:
+          MK_APP_TEST_ADMIN_URL: postgresql+psycopg://postgres:isolated-ci-app-test-only@127.0.0.1:5432/mk_app_test_admin
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1, pinned Rust compiler
+        with: {toolchain: "1.97.0"}
+      - uses: Swatinem/rust-cache@f13886b937689c021905a6b90929199931d60db1 # v2.8.1
+        with: {workspaces: rust, key: privacy-bridge}
+      - name: Build actual kernel for cross-service erasure acceptance
+        run: cargo build --locked --manifest-path rust/Cargo.toml --bin mk-action-api --bin mk-action-worker --bin mk-restore-gate --bin mk-privacy-ledger
+      - name: Real application-runtime to kernel-runtime erasure and identity formats
+        run: python -m pytest tools/verification/test_privacy_bridge.py tools/verification/test_privacy_process.py tools/verification/test_kernel_privacy_restore.py tools/verification/test_kernel_audit_privacy.py tools/verification/test_app_security_restore.py -q --tb=short --junitxml=privacy-bridge.xml
+        env:
+          MK_APP_TEST_ADMIN_URL: postgresql+psycopg://postgres:isolated-ci-app-test-only@127.0.0.1:5432/mk_app_test_admin
+          MK_PRIVACY_KERNEL_BINARY: rust/target/debug/mk-action-api
+          MK_PRIVACY_TEST_POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: app-postgres-boundary
+          path: |
+            app-postgres.xml
+            privacy-bridge.xml

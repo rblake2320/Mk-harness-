@@ -1,0 +1,12 @@
+INFO:     192.168.240.1:47462 - "GET /api/health/ready HTTP/1.1" 200 OK
+INFO:     192.168.240.1:47462 - "GET /api/customers/9ab86962e44a40d398f14504e41ded46 HTTP/1.1" 200 OK
+INFO:     192.168.240.1:47462 - "POST /api/auth/login HTTP/1.1" 200 OK
+INFO:     192.168.240.1:47462 - "POST /api/auth/mfa/verify HTTP/1.1" 200 OK
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     Started parent process [1]
+INFO:     Started server process [9]
+INFO:     Waiting for application startup.
+INFO:     Started server process [8]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Application startup complete.

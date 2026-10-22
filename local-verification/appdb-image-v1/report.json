@@ -1,0 +1,21 @@
+{
+  "scope": "author-run shipped container, real PostgreSQL, real HTTP; synthetic fixtures only",
+  "image_id": "sha256:2eba618866d0aadf24106faaab37f1f03e685541ee8ca39673e3dee99b469335",
+  "bootstrap": "Application roles/schema bootstrapped; run upgrade as mk_app_migrator",
+  "migration": "Application migrations applied: 0001_initial.sql",
+  "migration_repeat": "Application migrations applied: 0001_initial.sql",
+  "owner_runtime_refused": true,
+  "runtime": {
+    "user": "65532:65532",
+    "read_only": true,
+    "cap_drop": [
+      "ALL"
+    ]
+  },
+  "password_only_customer_status": 403,
+  "customer_created_status": 201,
+  "export_before_step_up": 403,
+  "export_after_step_up": 200,
+  "shipped_healthcheck_exit": 0,
+  "owned_targets_removed": true
+}

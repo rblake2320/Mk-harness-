@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="4" skipped="0" tests="4" time="18.896" timestamp="2026-10-22T07:08:48.852507-05:00" hostname="DESKTOP-CM6G60N"><testcase classname="tools.verification.test_app_security_restore" name="test_application_access_withdrawal_survives_backup_restore[logout]" time="4.739"><failure message="AssertionError: restoration reauthorized a revoked application session&#10;assert 200 == 401">tools/verification/test_app_security_restore.py:46: in test_application_access_withdrawal_survives_backup_restore
+    assert restored_status==401, "restoration reauthorized a revoked application session"
+E   AssertionError: restoration reauthorized a revoked application session
+E   assert 200 == 401</failure></testcase><testcase classname="tools.verification.test_app_security_restore" name="test_application_access_withdrawal_survives_backup_restore[password]" time="4.253"><failure message="AssertionError: restoration reauthorized a revoked application session&#10;assert 200 == 401">tools/verification/test_app_security_restore.py:46: in test_application_access_withdrawal_survives_backup_restore
+    assert restored_status==401, "restoration reauthorized a revoked application session"
+E   AssertionError: restoration reauthorized a revoked application session
+E   assert 200 == 401</failure></testcase><testcase classname="tools.verification.test_app_security_restore" name="test_application_access_withdrawal_survives_backup_restore[demote]" time="4.424"><failure message="AssertionError: restoration reauthorized a revoked application session&#10;assert 200 == 401">tools/verification/test_app_security_restore.py:46: in test_application_access_withdrawal_survives_backup_restore
+    assert restored_status==401, "restoration reauthorized a revoked application session"
+E   AssertionError: restoration reauthorized a revoked application session
+E   assert 200 == 401</failure></testcase><testcase classname="tools.verification.test_app_security_restore" name="test_application_access_withdrawal_survives_backup_restore[disable]" time="4.320"><failure message="AssertionError: restoration reauthorized a revoked application session&#10;assert 200 == 401">tools/verification/test_app_security_restore.py:46: in test_application_access_withdrawal_survives_backup_restore
+    assert restored_status==401, "restoration reauthorized a revoked application session"
+E   AssertionError: restoration reauthorized a revoked application session
+E   assert 200 == 401</failure></testcase></testsuite></testsuites>

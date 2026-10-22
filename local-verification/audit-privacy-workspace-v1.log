@@ -1,0 +1,156 @@
+   Compiling mk-store v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-store)
+   Compiling mk-audit v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-audit)
+   Compiling mk-queue v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-queue)
+   Compiling mk-adapters v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-adapters)
+   Compiling mk-worker v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-worker)
+   Compiling mk-api v0.1.0 (/mnt/d/projects/mk-release-acceptance-20261021/rust/crates/mk-api)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 8.88s
+     Running unittests src/lib.rs (/tmp/mk-release-acceptance-target/debug/deps/mk_adapters-bc6330f7ccf3fec8)
+
+running 8 tests
+test egress::tests::allowlisted_https_passes ... ok
+test egress::tests::ssrf_and_shape_rejections ... ok
+test twilio::tests::classification_is_conservative ... ok
+test twilio::tests::delivery_state_is_monotonic_and_never_time_upgraded ... ok
+test twilio::tests::form_requires_exactly_one_sender_and_e164 ... ok
+test twilio::tests::kernel_detector_agrees_with_the_a4_synthetic_set ... ok
+test twilio::tests::opt_out_detection_separates_explicit_from_possible ... ok
+test twilio::tests::signature_matches_twilio_documented_example ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running unittests src/bin/simulator.rs (/tmp/mk-release-acceptance-target/debug/deps/mk_simulator-e5bdfd048068be27)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/twilio_sim.rs (/tmp/mk-release-acceptance-target/debug/deps/mk_twilio_sim-94cb57dce02232fd)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/mobile_simulator.rs (/tmp/mk-release-acceptance-target/debug/deps/mobile_simulator-4ea059bf86054917)
+
+running 4 tests
+test accept_mode_delivers_valid_signed_order ... ok
+test retry_classification_by_status ... ok
+test unreachable_agent_is_transient_and_bad_inputs_are_permanent ... ok
+test wrong_secret_is_rejected_by_simulator ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.16s
+
+     Running tests/twilio_simulator.rs (/tmp/mk-release-acceptance-target/debug/deps/twilio_simulator-18730991c1228932)
+
+running 13 tests
+test accept_returns_provider_message_id_and_pending_callback ... ok
+test ambiguous_submission_search_returns_candidates_not_identity_proof ... ok
+test egress_outside_allowlist_is_refused_at_construction ... ok
+test observation_requires_recorded_id_and_matching_tenant_sender_destination ... ok
+test privacy_delete_binds_inbound_to_the_receiving_sender ... ok
+test privacy_delete_binds_tenant_sender_resource_and_rejects_path_injection ... ok
+test privacy_delete_refuses_false_success_proxy_errors_auth_and_rate_limits ... ok
+test privacy_delete_requires_absent_readback_and_is_idempotent ... ok
+test privacy_delete_retries_after_provider_deleted_but_response_was_lost ... ok
+test provider_opt_out_and_invalid_destination_are_permanent_and_distinct ... ok
+test rate_limit_is_classified_with_backoff ... ok
+test server_error_and_lost_response_are_ambiguous_never_retried_blindly ... ok
+test wrong_tenant_or_unknown_sender_is_refused_before_any_network_call ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running unittests src/lib.rs (/tmp/mk-release-acceptance-target/debug/deps/mk_api-411c4d75b13cbd6e)
+
+running 12 tests
+test limits::tests::a_tenant_cannot_hold_more_than_its_share_of_inflight_permits ... ok
+test limits::tests::bucket_map_is_bounded ... ok
+test limits::tests::burst_then_refuse_then_refill ... ok
+test limits::tests::clock_going_backwards_never_mints_tokens ... ok
+test limits::tests::config_rejects_nonsense ... ok
+test limits::tests::eviction_judges_each_bucket_by_its_own_class ... ok
+test limits::tests::inflight_cap_refuses_without_queueing ... ok
+test limits::tests::retry_after_reflects_the_refill_time ... ok
+test limits::tests::safety_controls_are_recognised_only_for_their_exact_shapes ... ok
+test limits::tests::tenants_and_classes_are_isolated ... ok
+test routes::actions::tests::agent_cannot_claim_human_or_system_origin ... ok
+test routes::tests::destination_hash_matches_python_vector ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+
+     Running unittests src/bin/api.rs (/tmp/mk-release-acceptance-target/debug/deps/mk_action_api-28fafd2bc732695b)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/http_e2e.rs (/tmp/mk-release-acceptance-target/debug/deps/http_e2e-cea9334c31c36bee)
+
+running 25 tests
+test ambiguous_submission_becomes_submission_unknown_and_inbound_pause_defers_dispatch ... FAILED
+test approval_preview_binds_sender_schedule_and_current_self_policy ... ok
+test automatic_provider_reconciliation_recovers_missing_callbacks_without_resending ... ok
+test editing_draft_fences_queued_and_future_proposals ... ok
+test editing_draft_serializes_with_concurrent_intake ... ok
+test editing_draft_serializes_with_human_approval ... ok
+test full_governed_path_over_http ... ok
+test human_approval_authority_resists_forgery_replay_transplant_and_revocation ... ok
+test inbound_stop_suppresses_cancels_and_dedupes_and_the_control_path_is_serialized ... ok
+test lease_expiry_completes_provider_accepted_and_reconciles_only_the_unknown ... ok
+test legacy_stateless_approval_is_retired_at_dispatch_on_session_rollout ... ok
+test oversized_and_malformed_bodies_are_rejected_before_policy ... ok
+test per_tenant_limits_and_graceful_rejection_above_capacity ... ok
+test privacy_account_erasure_revokes_sessions_approvals_and_reports_sender_cleanup ... ok
+test privacy_erasure_authority_rls_and_legacy_writes_fail_closed ... ok
+test privacy_erasure_blocks_uncertain_submission_until_authenticated_resolution ... ok
+test privacy_erasure_clears_inbound_and_late_webhooks_without_false_provider_receipts ... ok
+test privacy_erasure_completed_delivery_accepts_late_receipts ... FAILED
+test privacy_erasure_removes_queued_content_and_blocks_dispatch_and_reintake ... ok
+test privacy_erasure_serializes_before_dispatch_intake_and_inbound ... ok
+test provider_sms_path_with_authenticated_callbacks_and_monotonic_states ... FAILED
+test public_inbound_probes_require_committed_receipts_and_drain_before_recovery ... ok
+test session_outbox_authority_is_narrow_and_revokes_real_queued_approval ... ok
+test session_revocation_before_approval_timestamp_still_blocks_dispatch ... ok
+test uncertainty_gate_and_passkey_resolution_enforce_provider_evidence_and_no_replay ... FAILED
+
+failures:
+
+---- ambiguous_submission_becomes_submission_unknown_and_inbound_pause_defers_dispatch stdout ----
+
+thread 'ambiguous_submission_becomes_submission_unknown_and_inbound_pause_defers_dispatch' (1588632) panicked at crates/mk-api/tests/http_e2e.rs:3906:9:
+assertion `left == right` failed
+  left: 500
+ right: 200
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- privacy_erasure_completed_delivery_accepts_late_receipts stdout ----
+
+thread 'privacy_erasure_completed_delivery_accepts_late_receipts' (1588966) panicked at crates/mk-api/tests/http_e2e.rs:2037:5:
+assertion `left == right` failed
+  left: 500
+ right: 200
+
+---- provider_sms_path_with_authenticated_callbacks_and_monotonic_states stdout ----
+
+thread 'provider_sms_path_with_authenticated_callbacks_and_monotonic_states' (1589056) panicked at crates/mk-api/tests/http_e2e.rs:3395:5:
+assertion `left == right` failed: {"type":"urn:mk:error:audit_error","title":"Internal error","status":500,"code":"AUDIT_ERROR","request_id":"6e3561c7-940c-47de-8f73-aafdffc6c95e"}
+  left: 500
+ right: 200
+
+---- uncertainty_gate_and_passkey_resolution_enforce_provider_evidence_and_no_replay stdout ----
+
+thread 'uncertainty_gate_and_passkey_resolution_enforce_provider_evidence_and_no_replay' (1589847) panicked at crates/mk-api/tests/http_e2e.rs:4117:5:
+assertion `left == right` failed
+  left: 500
+ right: 200
+
+
+failures:
+    ambiguous_submission_becomes_submission_unknown_and_inbound_pause_defers_dispatch
+    privacy_erasure_completed_delivery_accepts_late_receipts
+    provider_sms_path_with_authenticated_callbacks_and_monotonic_states
+    uncertainty_gate_and_passkey_resolution_enforce_provider_evidence_and_no_replay
+
+test result: FAILED. 21 passed; 4 failed; 0 ignored; 0 measured; 0 filtered out; finished in 35.75s
+
+error: test failed, to rerun pass `-p mk-api --test http_e2e`

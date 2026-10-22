@@ -1,0 +1,5 @@
+{
+  "verdict": "REFUSED",
+  "source_sha": "d40e7ff22ff7a4df8f0f15504f2ec5f271ce2ebf",
+  "error": "Expected repository, full lowercase SHA matching workflow commit, closed target and main workflow"
+}

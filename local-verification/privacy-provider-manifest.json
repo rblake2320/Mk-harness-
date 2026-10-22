@@ -1,0 +1,156 @@
+{
+  "source": "e08a51d3486f7f2d10be9d29264d8b788e4315ef",
+  "scope": "Author-run provider erasure with simulator; no release row closure",
+  "artifacts": [
+    {
+      "path": "privacy-provider-adapter-v1.log",
+      "sha256": "906bc7cff4729014bd48d1a12043074bfaf384c867141f7521daad73bcf638bc",
+      "bytes": 1375
+    },
+    {
+      "path": "privacy-provider-app-image-build-e08a51d.log",
+      "sha256": "f74d618ebfc3bf1531f2574a54347627bb8c538a02c6f4943b4c9991429a5130",
+      "bytes": 2111
+    },
+    {
+      "path": "privacy-provider-app-image-e08a51d/container.log",
+      "sha256": "3d6db2fb523c04f1fcc29ea2bff87497349e629bf756a865bbe7bcd6c5e42e9a",
+      "bytes": 2690
+    },
+    {
+      "path": "privacy-provider-app-image-e08a51d/report.json",
+      "sha256": "c90df717585be50a82c5d8ea03a2e0a4eb098f673dcc994293f95ceb0a30fe9a",
+      "bytes": 2287
+    },
+    {
+      "path": "privacy-provider-app-v1.xml",
+      "sha256": "5f28a36110dfd42d8bb9316a3d5976df3f8f9fc7f49e469fd5e67a8a89e8f77d",
+      "bytes": 42368
+    },
+    {
+      "path": "privacy-provider-batch.md",
+      "sha256": "c962ef23a9c86addbce2fd8a3a48ba94783a111df01d7377a3be0e33748bd726",
+      "bytes": 5131
+    },
+    {
+      "path": "privacy-provider-bridge-process-v3.xml",
+      "sha256": "950e1b61ded8a6e0150225215c73ee07d601b838eb089102f8efd319c17ab162",
+      "bytes": 958
+    },
+    {
+      "path": "privacy-provider-clippy-v1.log",
+      "sha256": "f2de2c2c55ece3687445bd7c4d16b36bf43d1935882507c559ac6c35d333e47b",
+      "bytes": 3039
+    },
+    {
+      "path": "privacy-provider-clippy-v2.log",
+      "sha256": "5162d7895a10dbdeb70f1a0c6a4c4b3c246b70692cfa54efdbf375f028f0a5d4",
+      "bytes": 1308
+    },
+    {
+      "path": "privacy-provider-clippy-v3.log",
+      "sha256": "485b7b6613de5d39ee9f2bfd97861cf4c923261f61e707bfe2d6cd69d6f0808b",
+      "bytes": 268
+    },
+    {
+      "path": "privacy-provider-clippy-v4.log",
+      "sha256": "37f8ad9f2031e85b9619849c75ca2eb1141f9c7f1f55a8add4062ae47f31ab38",
+      "bytes": 173
+    },
+    {
+      "path": "privacy-provider-clippy-v5.log",
+      "sha256": "1e18391d53d3f9a75dc4c38f135f011b81dcf43a3c8c69eef1b25c4a148cab00",
+      "bytes": 571
+    },
+    {
+      "path": "privacy-provider-evidence-secret-scan.json",
+      "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+      "bytes": 3
+    },
+    {
+      "path": "privacy-provider-forged-insert-red.log",
+      "sha256": "112755a7ce0159219c9c2a27f755a5a93350cc5480dc415511d3dd0827d96bcf",
+      "bytes": 909
+    },
+    {
+      "path": "privacy-provider-image-build-e08a51d.log",
+      "sha256": "09e2d1d27614386e779e02fb08899713fe1320a991650370f1638b559ada7725",
+      "bytes": 5254
+    },
+    {
+      "path": "privacy-provider-kernel-image-e08a51d-v2/report.json",
+      "sha256": "d15bca0673a5fb65d7620e189b8b995f82a92c175eacd65254c21d373cdbf7ad",
+      "bytes": 854
+    },
+    {
+      "path": "privacy-provider-kernel-image-e08a51d-v3/report.json",
+      "sha256": "971d9d79f8a018e5f0df2104de4a87b828ab3cc7075c2553e942c36979d4d855",
+      "bytes": 917
+    },
+    {
+      "path": "privacy-provider-kernel-image-e08a51d/report.json",
+      "sha256": "3c4ed07ae2e29228c4f9a0b1ce987df401cee15471e72c745381759dc620b53a",
+      "bytes": 213
+    },
+    {
+      "path": "privacy-provider-postgres-v1.xml",
+      "sha256": "e5c9f266db66114d7bd2a4f1f86a1e8cee5b4b1381410ea48ec23af55988a6a7",
+      "bytes": 5144
+    },
+    {
+      "path": "privacy-provider-process-red.xml",
+      "sha256": "f82be70ea9590b30cc036f0ada8c87b0c7ac38bd5961a44df7784c2ebf78c3e1",
+      "bytes": 1136
+    },
+    {
+      "path": "privacy-provider-process-v1.xml",
+      "sha256": "f962776e9beeb6c52579dcfb0612a880bfd98f8ccbebc6453c39f67a89e9483a",
+      "bytes": 1136
+    },
+    {
+      "path": "privacy-provider-process-v2.xml",
+      "sha256": "315abe83b38ccd1d2ec4a03fd862f53dd27bcf22a0f2e641ce327d9f1f34f38a",
+      "bytes": 732
+    },
+    {
+      "path": "privacy-provider-readiness.json",
+      "sha256": "075299b3473caa1cf55e4209c317b69c26ca7aa986490cbf2cc5c91afe276ba0",
+      "bytes": 30957
+    },
+    {
+      "path": "privacy-provider-red.log",
+      "sha256": "4e23449774a4838b286d2f44a3f76fdfb2322dc3269c9141f326a93524331552",
+      "bytes": 2027
+    },
+    {
+      "path": "privacy-provider-source-secret-scan.json",
+      "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+      "bytes": 3
+    },
+    {
+      "path": "privacy-provider-worker-v1.log",
+      "sha256": "62068b2ad9b779bc1e8211a4e24983eb8fd4519ee6d4fbed322530da6a254446",
+      "bytes": 4476
+    },
+    {
+      "path": "privacy-provider-worker-v2.log",
+      "sha256": "8a2c03fbf8ef203349533d1c6ed7d5b5bbf3642bfbac4a1c172a74f13fbbce09",
+      "bytes": 1012
+    },
+    {
+      "path": "privacy-provider-worker-v3.log",
+      "sha256": "6fd63ba8c790e4cc5e6d30f5f93b5d226b7f255591119202b98a98eba55ebcf7",
+      "bytes": 1086
+    },
+    {
+      "path": "privacy-provider-workspace-v1.log",
+      "sha256": "34600fae73de1af95154cbb9bb95bb9119b4667b49b7245f25a8f73f8865ef57",
+      "bytes": 24899
+    },
+    {
+      "path": "privacy-provider-workspace-v2.log",
+      "sha256": "27308b459e7aa2ed57dc21d5fbd1d7db11ad804f3efb94f51ed3bc962361db80",
+      "bytes": 24874
+    }
+  ]
+}

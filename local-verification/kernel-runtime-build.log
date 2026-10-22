@@ -1,0 +1,91 @@
+#0 building with "desktop-linux" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 2.28kB done
+#1 DONE 0.0s
+
+#2 resolve image config for docker-image://docker.io/docker/dockerfile:1.7
+#2 ...
+
+#3 [auth] docker/dockerfile:pull token for registry-1.docker.io
+#3 DONE 0.0s
+
+#2 resolve image config for docker-image://docker.io/docker/dockerfile:1.7
+#2 DONE 0.5s
+
+#4 docker-image://docker.io/docker/dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
+#4 resolve docker.io/docker/dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e 0.0s done
+#4 CACHED
+
+#5 [internal] load metadata for gcr.io/distroless/cc-debian12:nonroot@sha256:9dac0a79194e45a7da0158a9c6da57b217585af0786db3845d1f0ec1a0dd182f
+#5 DONE 0.2s
+
+#6 [auth] library/debian:pull token for registry-1.docker.io
+#6 DONE 0.0s
+
+#7 [auth] library/rust:pull token for registry-1.docker.io
+#7 DONE 0.0s
+
+#8 [internal] load metadata for docker.io/library/rust:1.97.0-bookworm
+#8 DONE 0.3s
+
+#9 [internal] load metadata for docker.io/library/debian:bookworm-slim
+#9 DONE 0.3s
+
+#10 [internal] load .dockerignore
+#10 transferring context: 2B done
+#10 DONE 0.0s
+
+#11 [cabundle 1/2] FROM docker.io/library/debian:bookworm-slim@sha256:7ff6ba31527b9e336162fa061746c366c4b2032f4d2cff2078bea43f78efe3f8
+#11 resolve docker.io/library/debian:bookworm-slim@sha256:7ff6ba31527b9e336162fa061746c366c4b2032f4d2cff2078bea43f78efe3f8 0.1s done
+#11 DONE 0.1s
+
+#12 [builder 1/7] FROM docker.io/library/rust:1.97.0-bookworm@sha256:8fa55b2f3ddf97471ab6a767bfa3f37e6bad0986ba823e75fea57e2a2a5c3073
+#12 resolve docker.io/library/rust:1.97.0-bookworm@sha256:8fa55b2f3ddf97471ab6a767bfa3f37e6bad0986ba823e75fea57e2a2a5c3073 0.1s done
+#12 DONE 0.1s
+
+#13 [stage-2 1/3] FROM gcr.io/distroless/cc-debian12:nonroot@sha256:9dac0a79194e45a7da0158a9c6da57b217585af0786db3845d1f0ec1a0dd182f
+#13 resolve gcr.io/distroless/cc-debian12:nonroot@sha256:9dac0a79194e45a7da0158a9c6da57b217585af0786db3845d1f0ec1a0dd182f 0.1s done
+#13 DONE 0.1s
+
+#14 [internal] load build context
+#14 transferring context: 1.59MB 0.1s done
+#14 DONE 0.1s
+
+#15 [builder 2/7] WORKDIR /src
+#15 CACHED
+
+#16 [builder 5/7] COPY migrations/ migrations/
+#16 CACHED
+
+#17 [builder 4/7] COPY contracts/ contracts/
+#17 CACHED
+
+#18 [builder 6/7] WORKDIR /src/rust
+#18 CACHED
+
+#19 [builder 7/7] RUN --mount=type=cache,target=/usr/local/cargo/registry     --mount=type=cache,target=/src/rust/target     cargo build --release --locked --bins  && mkdir -p /out  && cp target/release/mk-action-api target/release/mk-outbox-relay target/release/mk-action-worker target/release/mk-audit-verifier target/release/mk-mcp-server target/release/mk-keyctl target/release/mk-restore-gate target/release/mk-healthcheck target/release/mk-privacy-ledger /out/
+#19 CACHED
+
+#20 [stage-2 2/3] COPY --from=builder /out/ /usr/local/bin/
+#20 CACHED
+
+#21 [builder 3/7] COPY rust/ rust/
+#21 CACHED
+
+#22 [cabundle 2/2] RUN apt-get update -q && apt-get install -y -q --no-install-recommends ca-certificates curl >/dev/null  && test -n "90a6f1a7978a1b1b096dca6c57511ca48d3b8cf052f8e704baf358f34ea2f21b"  && curl -fsSL -o /rds-global-bundle.pem "https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem"  && echo "90a6f1a7978a1b1b096dca6c57511ca48d3b8cf052f8e704baf358f34ea2f21b  /rds-global-bundle.pem" | sha256sum -c -
+#22 CACHED
+
+#23 [stage-2 3/3] COPY --from=cabundle /rds-global-bundle.pem /etc/mk/rds-global-bundle.pem
+#23 CACHED
+
+#24 exporting to image
+#24 exporting layers done
+#24 exporting manifest sha256:5b4f8bb90389e2aa808fea655c6b56efc30e578c0ff62cd267dcf9849189a344 done
+#24 exporting config sha256:92fd080bbacc7041e225cfed0c8a40c0b860be2e5d38ada9f4ce02ed5094657c done
+#24 exporting attestation manifest sha256:61b24a8a7ea30b7a42d1e847510ed4086ba85cf5cd445d7b2cf9bf9952f97167 0.0s done
+#24 exporting manifest list sha256:50a8b42bf9a94367fa2ca675fc8687edf126377738699cd26e860c23c7eda211
+#24 exporting manifest list sha256:50a8b42bf9a94367fa2ca675fc8687edf126377738699cd26e860c23c7eda211 0.0s done
+#24 naming to docker.io/library/mk-kernel-acceptance:scanned-runtime done
+#24 unpacking to docker.io/library/mk-kernel-acceptance:scanned-runtime 0.0s done
+#24 DONE 0.2s

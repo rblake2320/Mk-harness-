@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..models import UsageRecord, User
-from ..security import get_current_user, require_admin
+from ..security import get_current_user, require_team_reviewer
 
 router = APIRouter(prefix="/usage", tags=["usage"])
 
@@ -24,7 +24,7 @@ def my_usage(user: User = Depends(get_current_user), db: Session = Depends(get_d
 
 
 @router.get("/tenant")
-def tenant_usage(admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+def tenant_usage(admin: User = Depends(require_team_reviewer), db: Session = Depends(get_db)):
     rows = db.execute(
         select(User.email, UsageRecord.provider, UsageRecord.key_scope,
                func.sum(UsageRecord.cost_usd), func.count())
