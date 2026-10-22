@@ -137,7 +137,7 @@ async fn rate_limit_is_classified_with_backoff() {
 }
 
 #[tokio::test]
-async fn ambiguous_submission_reconciles_to_exactly_one_provider_message() {
+async fn ambiguous_submission_search_returns_candidates_not_identity_proof() {
     let (sim, adapter, action, tenant, sid) = setup(TwilioSimMode::AcceptButDropResponse).await;
     let _ = adapter.execute(&action).await.unwrap_err();
     let today = chrono::Utc::now().date_naive();
@@ -222,5 +222,60 @@ async fn egress_outside_allowlist_is_refused_at_construction() {
             Box::new(OneSender(tenant, sender))
         )
         .is_err()
+    );
+}
+
+#[tokio::test]
+async fn observation_requires_recorded_id_and_matching_tenant_sender_destination() {
+    let (sim, adapter, action, tenant, sender) = setup(TwilioSimMode::Accept).await;
+    let receipt = adapter.execute(&action).await.unwrap();
+    let sid = receipt.external_ref.unwrap();
+    sim.set_message_status(&sid, "delivered").await;
+    let found = adapter
+        .observe_message(tenant, sender, &sid, "+15555550100")
+        .await
+        .unwrap();
+    assert_eq!(found.status, "delivered");
+    assert_eq!(
+        adapter
+            .observe_message(tenant, sender, &sid, "+15555550101")
+            .await
+            .unwrap_err()
+            .code,
+        "provider_resource_mismatch"
+    );
+    assert_eq!(
+        adapter
+            .observe_message(TenantId::new(), sender, &sid, "+15555550100")
+            .await
+            .unwrap_err()
+            .code,
+        "sender_not_registered"
+    );
+    assert_eq!(
+        adapter
+            .observe_message(tenant, sender, "../../Messages", "+15555550100")
+            .await
+            .unwrap_err()
+            .code,
+        "message_sid_invalid"
+    );
+    assert_eq!(
+        adapter
+            .observe_message(
+                tenant,
+                sender,
+                "SM00000000000000000000000000000000",
+                "+15555550100"
+            )
+            .await
+            .unwrap_err()
+            .code,
+        "provider_fetch_failed"
+    );
+    assert_eq!(
+        sim.calls(),
+        1,
+        "GET reconciliation must never create a replacement"
     );
 }

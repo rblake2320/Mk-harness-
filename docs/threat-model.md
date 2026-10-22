@@ -103,6 +103,23 @@ MFA/passkeys; recovery flows with step-up and audit (N, WP06/WP09 S2).
 ### T14 Uncertain external sends (not an attacker — a failure mode the contract names)
 Crash after provider submission before durable confirmation. Control: persist `submission_started` before the call, stable provider id, `submission_unknown` on uncertain response, reconciliation by provider ids/callbacks, no blind retry, human resolution before replacement (N, WP07 C4; fault tests O5).
 
+2026-10-21 author implementation addendum (independent review still pending):
+
+- Same-body/day collisions and incomplete provider list pages: list matches are advisory;
+  automatic reconciliation only fetches a recorded SID and verifies account, sender and destination.
+- Lost POST response: callback URL carries action/attempt, covered by the provider signature;
+  a pre-existing tenant/sender-bound submission record is required before binding a SID.
+  Altered URL binding is rejected; repeated callback and dispatch do not create another message.
+- Callback vs reconciler races: re-read under action-then-delivery locks after network IO,
+  preserve monotonic terminal evidence, append redacted observation digests.
+- Multi-worker or one-connection-pool starvation: bounded claimed work, durable retry watermark,
+  commit before credential resolution/provider GET; test the real restricted worker role.
+- Uncertainty hiding: owner-scoped read-only queue, no generic dismiss as delivered, and visible
+  stale/error state when refresh fails. Operator step-up resolution and dispatch replacement
+  gating remain an open implementation item; UI text alone is not that security boundary.
+- False inbound health: outbound status callbacks no longer refresh inbound-reply health;
+  scheduled end-to-end inbound probing remains an open implementation item.
+
 ## 3. Decisions taken by this model
 
 1. **Separate approval authority (H6).** Approval of consequential actions requires a WebAuthn/passkey assertion from the human's registered credential whose challenge is the action digest; the kernel verifies it. FastAPI's assertion key establishes *who is asking*; it can no longer establish *human approval*. Until implemented, the matrix carries H6 as Not demonstrated and the release is blocked.

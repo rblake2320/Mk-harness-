@@ -103,6 +103,10 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/inbound/pending", get(routes::messaging::inbound_pending))
         .route(
+            "/deliveries/exceptions",
+            get(routes::messaging::delivery_exceptions),
+        )
+        .route(
             "/inbound/{event_id}/processed",
             post(routes::messaging::inbound_processed),
         )

@@ -29,6 +29,7 @@ export async function mockApi(page: Page, permission: 'active' | 'none' | 'suppr
       scheduled_for: null, approval_expires_at: '2026-10-21T15:00:00Z', approval_lifetime_minutes: 15,
       human_steps: ['Your passkey signs this exact text.', 'Approval is single-use and expires.'] }]);
     if (p === '/api/exceptions') return json([{ id: 'x1', customer_id: 'c1', kind: 'product_concern', state: 'open', source_reference: 'inbound:SM1', detail: 'rash — this gave me a rash', created_at: '2026-10-21T09:00:00Z', resolved_at: null }]);
+    if (p === '/api/delivery-exceptions') return json({ items: [], next_cursor: null });
     if (p === '/api/agent-ops/inbound/health') return json({ health: { last_ok_at: '2026-10-21T09:00:00Z' }, dispatch_blocked: null, pending_events: 0, stale_after_secs: 60 });
     if (p === '/api/agent-ops/health') return json({ status: 'ok' });
     if (p === '/api/agent-ops/approval-credentials') return json([{ credential_row_id: 'r1', label: 'my phone', alg: 'ES256', created_at: '2026-10-20T00:00:00Z', last_used_at: null, revoked_at: null }]);

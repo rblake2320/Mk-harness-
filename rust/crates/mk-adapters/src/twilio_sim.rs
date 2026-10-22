@@ -14,7 +14,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use axum::Router;
 use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
-use axum::routing::post;
+use axum::routing::{get, post};
 use base64::Engine as _;
 use mk_crypto::AdapterSecret;
 use serde_json::{Value, json};
@@ -144,6 +144,7 @@ async fn create_message(
         "status_callback": form.get("StatusCallback").cloned().unwrap_or_default(),
         "date_created": chrono::Utc::now().to_rfc2822(), "error_code": null, "num_segments": "1",
         "account_sid": st.account_sid,
+        "messaging_service_sid": form.get("MessagingServiceSid"),
     });
     st.messages.lock().await.push(msg.clone());
     if st.mode == TwilioSimMode::AcceptButDropResponse {
@@ -186,6 +187,23 @@ async fn list_messages(
     axum::Json(json!({"messages": out, "page_size": 50})).into_response()
 }
 
+async fn fetch_message(
+    State(st): State<Arc<SimState>>,
+    Path((account, resource)): Path<(String, String)>,
+    headers: HeaderMap,
+) -> axum::response::Response {
+    use axum::response::IntoResponse as _;
+    if account != st.account_sid || !basic_ok(&headers, &st.account_sid, &st.auth_token) {
+        return (StatusCode::UNAUTHORIZED, "").into_response();
+    }
+    let sid = resource.strip_suffix(".json").unwrap_or_default();
+    let messages = st.messages.lock().await;
+    match messages.iter().find(|m| m["sid"] == sid) {
+        Some(m) => axum::Json(m.clone()).into_response(),
+        None => (StatusCode::NOT_FOUND, "").into_response(),
+    }
+}
+
 impl TwilioSimulator {
     pub async fn start(
         account_sid: &str,
@@ -213,6 +231,10 @@ impl TwilioSimulator {
                 "/2010-04-01/Accounts/{account}/Messages.json",
                 post(create_message).get(list_messages),
             )
+            .route(
+                "/2010-04-01/Accounts/{account}/Messages/{resource}",
+                get(fetch_message),
+            )
             .with_state(state.clone());
         let listener = tokio::net::TcpListener::bind(bind).await?;
         let addr = listener.local_addr()?;
@@ -238,6 +260,15 @@ impl TwilioSimulator {
 
     pub async fn created_messages(&self) -> Vec<Value> {
         self.state.messages.lock().await.clone()
+    }
+
+    /// Inject authoritative provider state independently of callback delivery.
+    pub async fn set_message_status(&self, sid: &str, status: &str) {
+        for message in self.state.messages.lock().await.iter_mut() {
+            if message["sid"] == sid {
+                message["status"] = json!(status);
+            }
+        }
     }
 
     /// Mark a created message as having had its callbacks posted (standalone binary bookkeeping).
@@ -267,7 +298,13 @@ impl TwilioSimulator {
             .unwrap_or_default()
             .to_owned();
         let path = url::Url::parse(&public)
-            .map(|u| u.path().to_owned())
+            .map(|u| {
+                format!(
+                    "{}{}",
+                    u.path(),
+                    u.query().map_or(String::new(), |q| format!("?{q}"))
+                )
+            })
             .unwrap_or_default();
         let deliver = format!("{}{}", deliver_base.trim_end_matches('/'), path);
         let form: Vec<(String, String)> = vec![

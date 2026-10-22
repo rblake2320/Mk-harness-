@@ -60,7 +60,7 @@ pub async fn run_once(
         }
         tx.commit().await?;
     }
-    for (tenant, action_id) in outbox::expired_leases(store.pool(), now, 200).await? {
+    for (tenant, action_id) in outbox::expired_leases(store.pool(), tenants, now, 200).await? {
         let mut tx = store.begin(tenant).await?;
         let a = actions::get_for_update(&mut tx, action_id).await?;
         // A provider-accepted submission whose status callbacks are slower than

@@ -582,3 +582,15 @@ class ApprovedClaim(Base):
     version: Mapped[int] = mapped_column(Integer, default=1)
     audit_ref: Mapped[str] = mapped_column(String(32), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class ClaimFact(Base):
+    """Reviewer-authored, normalized product assertions (P2), not model inference.
+
+    A separate additive table keeps existing claim rows readable. Legacy claims
+    without facts are withheld until an explicit review supplies them.
+    """
+    __tablename__ = "claim_facts"
+    claim_row_id: Mapped[str] = mapped_column(ForeignKey("approved_claims.id", ondelete="CASCADE"), primary_key=True)
+    name: Mapped[str] = mapped_column(String(100), primary_key=True)
+    value: Mapped[str] = mapped_column(String(120))

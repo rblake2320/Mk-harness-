@@ -145,6 +145,16 @@ pub fn migrator() -> sqlx::migrate::Migrator {
             "tenant directory",
             include_str!("../../../../migrations/kernel/0009_tenant_directory.sql"),
         ),
+        (
+            10,
+            "reconciliation check watermark",
+            include_str!("../../../../migrations/kernel/0010_reconciliation_checks.sql"),
+        ),
+        (
+            11,
+            "worker reconciliation evidence grant",
+            include_str!("../../../../migrations/kernel/0011_reconciliation_event_grant.sql"),
+        ),
     ];
     let migrations: Vec<Migration> = FILES
         .iter()

@@ -61,7 +61,7 @@ async fn main() -> anyhow::Result<()> {
             }),
         )?)
     };
-    let ctx = WorkerContext {
+    let ctx = Arc::new(WorkerContext {
         store: store.clone(),
         registry: AdapterRegistry {
             internal: InternalRecordAdapter,
@@ -72,6 +72,30 @@ async fn main() -> anyhow::Result<()> {
         worker_id: cfg.worker_id.clone(),
         lease_ttl: Duration::from_secs(cfg.lease_secs),
         retry: RetryPolicy::default(),
+    });
+
+    // Independent of queue traffic and Redis availability. No DB transaction is
+    // held over a provider GET; the watermark makes concurrent replicas safe.
+    let reconciliation_task = {
+        let ctx = ctx.clone();
+        tokio::spawn(async move {
+            loop {
+                match mk_store::audit::all_tenants(ctx.store.pool()).await {
+                    Ok(tenants) => match mk_worker::reconciliation::run_once(
+                        &ctx,
+                        &tenants,
+                        chrono::Utc::now(),
+                    )
+                    .await
+                    {
+                        Ok(stats) => tracing::info!(?stats, "provider reconciliation"),
+                        Err(e) => tracing::warn!(error = %e, "provider reconciliation failed"),
+                    },
+                    Err(e) => tracing::warn!(error = %e, "reconciliation tenant listing failed"),
+                }
+                tokio::time::sleep(Duration::from_secs(30)).await;
+            }
+        })
     };
 
     let metrics = Arc::new(mk_worker::metrics::WorkerMetrics::new());
@@ -182,5 +206,6 @@ async fn main() -> anyhow::Result<()> {
         }
     }
     tracing::info!("worker stopped");
+    reconciliation_task.abort();
     Ok(())
 }

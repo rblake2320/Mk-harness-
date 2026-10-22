@@ -1111,7 +1111,9 @@ async fn worker_role_can_discover_tenants_and_purge_nonces_across_tenants() {
         tx.rollback().await.unwrap();
     }
     // The worker can see expired leases across tenants too (existing policy).
-    let _ = outbox::expired_leases(&worker, now, 10).await.unwrap();
+    let _ = outbox::expired_leases(&worker, &tenants, now, 10)
+        .await
+        .unwrap();
     // But it cannot write audit heads for a tenant it is not inside.
     let bad = sqlx::query(
         "INSERT INTO kernel.audit_heads (tenant_id, last_hash, count) VALUES ($1, 'x', 0)",

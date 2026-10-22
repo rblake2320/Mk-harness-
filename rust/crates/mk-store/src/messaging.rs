@@ -303,6 +303,43 @@ fn row_to_delivery(r: &sqlx::postgres::PgRow) -> Result<DeliveryRecord, StoreErr
 
 const DCOLS: &str = "delivery_id, action_id, attempt, sender_identity_id, provider_message_id, state, provider_error_code, read_status, submission_started_at, last_event_at, reconciled_at";
 
+/// Open uncertain attempts, scoped to the authenticated sender owner (or a
+/// tenant administrator). Keyset pagination cannot hide older uncertain sends.
+pub async fn delivery_exceptions(
+    tx: &mut TenantTx<'_>,
+    user: UserId,
+    admin: bool,
+    after: Option<Uuid>,
+    limit: i64,
+) -> Result<Vec<serde_json::Value>, StoreError> {
+    let rows = sqlx::query("SELECT d.delivery_id, d.action_id, d.state AS delivery_state,
+        d.provider_message_id, d.read_status, d.submission_started_at, d.reconciled_at,
+        a.state AS action_state
+        FROM kernel.message_deliveries d
+        JOIN kernel.actions a ON a.tenant_id = d.tenant_id AND a.action_id = d.action_id
+        JOIN kernel.sender_identities s ON s.tenant_id = d.tenant_id AND s.sender_identity_id = d.sender_identity_id
+        WHERE d.tenant_id = $1 AND ($2 OR s.owner_user_id = $3)
+          AND (a.state = 'reconciliation_required' OR d.state IN ('submission_unknown','delivery_unknown'))
+          AND ($4::uuid IS NULL OR d.delivery_id > $4)
+        ORDER BY d.delivery_id LIMIT $5")
+        .bind(tx.tenant().0).bind(admin).bind(user.0).bind(after).bind(limit.clamp(1, 101))
+        .fetch_all(tx.conn()).await?;
+    rows.iter()
+        .map(|r| {
+            Ok(json!({
+                "delivery_id": r.try_get::<Uuid, _>("delivery_id")?,
+                "action_id": r.try_get::<Uuid, _>("action_id")?,
+                "delivery_state": r.try_get::<String, _>("delivery_state")?,
+                "action_state": r.try_get::<String, _>("action_state")?,
+                "provider_message_id": r.try_get::<Option<String>, _>("provider_message_id")?,
+                "read_status": r.try_get::<String, _>("read_status")?,
+                "created_at": r.try_get::<DateTime<Utc>, _>("submission_started_at")?,
+                "reconciled_at": r.try_get::<Option<DateTime<Utc>>, _>("reconciled_at")?,
+            }))
+        })
+        .collect()
+}
+
 /// Record that submission is starting (C4 step 3), *before* the provider
 /// request. Idempotent per (action, attempt).
 pub async fn record_submission_started(
@@ -432,6 +469,66 @@ pub async fn delivery_by_provider_id(
     r.as_ref().map(row_to_delivery).transpose()
 }
 
+/// Only an authenticated callback may bind a lost provider id. The signed URL
+/// identifies the exact pre-recorded attempt, not a guessed body/date match.
+/// Lock action before delivery, matching dispatch/reconciliation lock order.
+pub async fn delivery_for_callback(
+    tx: &mut TenantTx<'_>,
+    provider_message_id: &str,
+    sender: Uuid,
+    binding: Option<(ActionId, i32)>,
+) -> Result<Option<DeliveryRecord>, StoreError> {
+    let q = format!(
+        "SELECT {DCOLS} FROM kernel.message_deliveries
+        WHERE tenant_id = $1 AND provider = 'twilio' AND
+        (($2::uuid IS NOT NULL AND action_id = $2 AND attempt = $3) OR
+         ($2::uuid IS NULL AND provider_message_id = $4))"
+    );
+    let row = sqlx::query(sqlx::AssertSqlSafe(q))
+        .bind(tx.tenant().0)
+        .bind(binding.map(|b| b.0.0))
+        .bind(binding.map(|b| b.1))
+        .bind(provider_message_id)
+        .fetch_optional(tx.conn())
+        .await?;
+    let Some(row) = row else {
+        return Ok(None);
+    };
+    let preliminary = row_to_delivery(&row)?;
+    crate::actions::get_for_update(tx, preliminary.action_id).await?;
+    let q = format!(
+        "SELECT {DCOLS} FROM kernel.message_deliveries
+        WHERE tenant_id = $1 AND delivery_id = $2 FOR UPDATE"
+    );
+    let row = sqlx::query(sqlx::AssertSqlSafe(q))
+        .bind(tx.tenant().0)
+        .bind(preliminary.delivery_id)
+        .fetch_one(tx.conn())
+        .await?;
+    let mut delivery = row_to_delivery(&row)?;
+    if delivery.sender_identity_id != sender
+        || delivery
+            .provider_message_id
+            .as_deref()
+            .is_some_and(|id| id != provider_message_id)
+    {
+        return Err(StoreError::Conflict("callback attempt binding mismatch"));
+    }
+    if delivery.provider_message_id.is_none() {
+        sqlx::query(
+            "UPDATE kernel.message_deliveries SET provider_message_id = $3
+            WHERE tenant_id = $1 AND delivery_id = $2",
+        )
+        .bind(tx.tenant().0)
+        .bind(delivery.delivery_id)
+        .bind(provider_message_id)
+        .execute(tx.conn())
+        .await?;
+        delivery.provider_message_id = Some(provider_message_id.to_owned());
+    }
+    Ok(Some(delivery))
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EventOutcome {
     /// First time this provider event was seen; state folded.
@@ -513,6 +610,44 @@ pub async fn record_reconciliation(
     .execute(tx.conn())
     .await?;
     Ok(())
+}
+
+/// Claim at most `limit` due provider GETs. Commit before resolving credentials
+/// or doing network IO; this works with a one-connection pool and many workers.
+pub async fn claim_reconciliation_checks(
+    tx: &mut TenantTx<'_>,
+    now: DateTime<Utc>,
+    limit: i64,
+) -> Result<Vec<DeliveryRecord>, StoreError> {
+    let q = format!("SELECT {DCOLS} FROM kernel.message_deliveries
+        WHERE tenant_id = $1 AND provider_message_id IS NOT NULL
+          AND state NOT IN ('delivered','failed')
+          AND submission_started_at <= $2 - interval '30 seconds'
+          AND (reconciliation_checked_at IS NULL OR reconciliation_checked_at <= $2 - interval '60 seconds')
+        ORDER BY reconciliation_checked_at ASC NULLS FIRST, submission_started_at
+        LIMIT $3 FOR UPDATE SKIP LOCKED");
+    let rows = sqlx::query(sqlx::AssertSqlSafe(q))
+        .bind(tx.tenant().0)
+        .bind(now)
+        .bind(limit.clamp(1, 100))
+        .fetch_all(tx.conn())
+        .await?;
+    let deliveries = rows
+        .iter()
+        .map(row_to_delivery)
+        .collect::<Result<Vec<_>, _>>()?;
+    for d in &deliveries {
+        sqlx::query(
+            "UPDATE kernel.message_deliveries SET reconciliation_checked_at = $3
+            WHERE tenant_id = $1 AND delivery_id = $2",
+        )
+        .bind(tx.tenant().0)
+        .bind(d.delivery_id)
+        .bind(now)
+        .execute(tx.conn())
+        .await?;
+    }
+    Ok(deliveries)
 }
 
 // ------------------------------------------------------------ inbound

@@ -15,8 +15,6 @@ import uuid
 
 import pytest
 
-REDIS_PORT = 6391  # dedicated port — never collides with a system Redis
-
 pytestmark = pytest.mark.skipif(
     shutil.which("redis-server") is None,
     reason="redis-server binary not available",
@@ -28,23 +26,60 @@ def _wait_port(port: int, up: bool, timeout: float = 5.0) -> bool:
     while time.monotonic() < deadline:
         with socket.socket() as s:
             s.settimeout(0.2)
-            alive = s.connect_ex(("localhost", port)) == 0
+            alive = s.connect_ex(("127.0.0.1", port)) == 0
         if alive == up:
             return True
         time.sleep(0.1)
     return False
 
 
+class OwnedRedis:
+    """Never issue SHUTDOWN by port: a pre-existing process may own that port."""
+    def __init__(self):
+        with socket.socket() as reservation:
+            reservation.bind(("127.0.0.1", 0))
+            self.port = reservation.getsockname()[1]
+        self.proc = None
+
+    def start(self):
+        assert self.proc is None, "an owned process is already tracked"
+        assert not _wait_port(self.port, up=True, timeout=0.1), "chosen test port is occupied"
+        self.proc = subprocess.Popen(
+            ["redis-server", "--bind", "127.0.0.1", "--port", str(self.port), "--save", "", "--appendonly", "no"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        if not _wait_port(self.port, up=True) or self.proc.poll() is not None:
+            self.stop()
+            raise AssertionError("owned redis-server failed to start")
+
+    def stop(self):
+        if self.proc is not None:
+            if self.proc.poll() is None:
+                self.proc.terminate()
+            self.proc.wait(timeout=5)
+            self.proc = None
+
+
+def test_owned_redis_refuses_an_occupied_port_without_stopping_its_listener():
+    with socket.socket() as unrelated:
+        unrelated.bind(("127.0.0.1", 0))
+        unrelated.listen()
+        server = OwnedRedis()
+        server.port = unrelated.getsockname()[1]
+        with pytest.raises(AssertionError, match="occupied"):
+            server.start()
+        server.stop()
+        assert server.proc is None
+        assert _wait_port(server.port, up=True), "unrelated listener must be untouched"
+
+
 @pytest.fixture()
 def live_redis_client(tmp_path, monkeypatch):
-    """App wired to a real Redis on a dedicated port; caller may kill/revive it."""
-    proc = subprocess.Popen(
-        ["redis-server", "--port", str(REDIS_PORT), "--save", "", "--appendonly", "no"],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-    )
-    assert _wait_port(REDIS_PORT, up=True), "redis-server failed to start"
+    """App wired to the test's own Redis process; caller may kill/revive it."""
+    server = OwnedRedis()
+    server.start()
 
-    monkeypatch.setenv("REDIS_URL", f"redis://localhost:{REDIS_PORT}/0")
+    monkeypatch.setenv("REDIS_URL", f"redis://127.0.0.1:{server.port}/0")
     from app import cache
     from app.config import get_settings
     get_settings.cache_clear()
@@ -54,12 +89,9 @@ def live_redis_client(tmp_path, monkeypatch):
     from app.main import app
     client = TestClient(app)
     try:
-        yield client
+        yield client, server
     finally:
-        proc.terminate()
-        proc.wait(timeout=5)
-        subprocess.run(["redis-cli", "-p", str(REDIS_PORT), "shutdown", "nosave"],
-                       capture_output=True)
+        server.stop()
         get_settings.cache_clear()
         cache.reset_for_tests()
 
@@ -74,7 +106,7 @@ def _signup(client):
 
 
 def test_api_survives_redis_death_and_recovers(live_redis_client):
-    client = live_redis_client
+    client, server = live_redis_client
     email, headers = _signup(client)
 
     from app.cache import get_redis
@@ -87,9 +119,8 @@ def test_api_survives_redis_death_and_recovers(live_redis_client):
         "email": email, "password": "superSecret123!"}).status_code == 200
 
     # Kill Redis for real.
-    subprocess.run(["redis-cli", "-p", str(REDIS_PORT), "shutdown", "nosave"],
-                   capture_output=True)
-    assert _wait_port(REDIS_PORT, up=False), "redis did not die"
+    server.stop()
+    assert _wait_port(server.port, up=False), "owned redis did not die"
 
     # Login must NOT crash — in-process brute-force fallback takes over.
     assert client.post("/api/auth/login", json={
@@ -109,16 +140,12 @@ def test_api_survives_redis_death_and_recovers(live_redis_client):
 
     # Revive Redis — the app must resume Redis-backed limiting on its own,
     # with no restart (connection pool reconnects per call).
-    subprocess.Popen(
-        ["redis-server", "--port", str(REDIS_PORT), "--save", "", "--appendonly", "no"],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-    )
-    assert _wait_port(REDIS_PORT, up=True), "redis did not revive"
+    server.start()
 
     _, headers2 = _signup(client)  # fresh user — not locked out
     assert client.post("/api/chat/stream", headers=headers2,
                        json={"message": "hi", "skill": "assistant"}).status_code == 200
 
     import redis as _redis
-    probe = _redis.from_url(f"redis://localhost:{REDIS_PORT}/0", decode_responses=True)
+    probe = _redis.from_url(f"redis://127.0.0.1:{server.port}/0", decode_responses=True)
     assert probe.keys("rl:*"), "rate-limit keys must be written to Redis again after revival"

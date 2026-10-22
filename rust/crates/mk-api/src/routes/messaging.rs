@@ -105,7 +105,7 @@ async fn authenticate(
             .inc();
         return Err(forbidden("WEBHOOK_SIGNATURE_INVALID", "signature invalid"));
     }
-    if field(&form, "AccountSid").is_some_and(|a| a != sender.account_sid) {
+    if field(&form, "AccountSid") != Some(sender.account_sid.as_str()) {
         return Err(forbidden(
             "WEBHOOK_ACCOUNT_MISMATCH",
             "AccountSid does not belong to this sender",
@@ -123,6 +123,38 @@ fn twiml_ok() -> Response {
         TWIML_EMPTY,
     )
         .into_response()
+}
+
+fn callback_binding(uri: &Uri) -> Result<Option<(mk_domain::ActionId, i32)>, ApiError> {
+    let form: Vec<_> = url::form_urlencoded::parse(uri.query().unwrap_or_default().as_bytes())
+        .into_owned()
+        .collect();
+    let count = |key: &str| form.iter().filter(|(k, _)| k == key).count();
+    if count("mk_action") == 0 && count("mk_attempt") == 0 {
+        return Ok(None);
+    }
+    let invalid = || {
+        ApiError::new(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "CALLBACK_BINDING_INVALID",
+            "Invalid attempt binding",
+        )
+    };
+    if count("mk_action") != 1 || count("mk_attempt") != 1 {
+        return Err(invalid());
+    }
+    let action = field(&form, "mk_action")
+        .unwrap_or_default()
+        .parse()
+        .map_err(|_| invalid())?;
+    let attempt: i32 = field(&form, "mk_attempt")
+        .unwrap_or_default()
+        .parse()
+        .map_err(|_| invalid())?;
+    if attempt < 1 {
+        return Err(invalid());
+    }
+    Ok(Some((action, attempt)))
 }
 
 // ------------------------------------------------------------ status callback
@@ -148,7 +180,7 @@ pub async fn twilio_status(
         .unwrap_or_default()
         .to_owned();
     let error_code = field(&form, "ErrorCode").map(ToOwned::to_owned);
-    if message_sid.is_empty() || status.is_empty() {
+    if !mk_adapters::twilio::valid_message_sid(&message_sid) || status.is_empty() {
         return Err(rid(ApiError::new(
             StatusCode::UNPROCESSABLE_ENTITY,
             "WEBHOOK_FIELDS",
@@ -162,12 +194,12 @@ pub async fn twilio_status(
         .begin(sender.tenant_id)
         .await
         .map_err(|e| rid(e.into()))?;
-    ms::inbound_ok(&mut tx, now)
-        .await
-        .map_err(|e| rid(e.into()))?;
-    let Some(delivery) = ms::delivery_by_provider_id(&mut tx, &message_sid)
-        .await
-        .map_err(|e| rid(e.into()))?
+    // Outbound callbacks do not test the inbound-reply path (C8).
+    let binding = callback_binding(&uri).map_err(rid)?;
+    let Some(delivery) =
+        ms::delivery_for_callback(&mut tx, &message_sid, sender_identity_id, binding)
+            .await
+            .map_err(|e| rid(e.into()))?
     else {
         // A callback for a message we never recorded as submitted: preserve
         // the fact (audit), do nothing else. Could be a reconciliation clue.
@@ -758,6 +790,48 @@ pub async fn set_registration(
 }
 
 // ------------------------------------------------------------ inbound queue + health (internal)
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DeliveryExceptionQuery {
+    pub after: Option<Uuid>,
+    pub limit: Option<i64>,
+}
+
+/// Read-only queue. A generic "dismiss" never changes provider evidence or
+/// clears the human-resolution requirement for an uncertain submission.
+pub async fn delivery_exceptions(
+    State(st): State<AppState>,
+    p: Principal,
+    headers: HeaderMap,
+    Query(q): Query<DeliveryExceptionQuery>,
+) -> Result<Json<Value>, ApiError> {
+    let rid = |e: ApiError| e.with_request_id(&headers);
+    if !p.has_role("consultant") && !p.has_role("manager") && !p.has_role("tenant_admin") {
+        return Err(rid(forbidden(
+            "ROLE_REQUIRED",
+            "A human manager is required",
+        )));
+    }
+    let limit = q.limit.unwrap_or(50).clamp(1, 100);
+    let mut tx = st.store.begin(p.tenant).await.map_err(|e| rid(e.into()))?;
+    let mut items = ms::delivery_exceptions(
+        &mut tx,
+        p.user,
+        p.has_role("tenant_admin"),
+        q.after,
+        limit + 1,
+    )
+    .await
+    .map_err(|e| rid(e.into()))?;
+    let next = if items.len() > usize::try_from(limit).unwrap_or(100) {
+        items.pop();
+        items.last().map(|i| i["delivery_id"].clone())
+    } else {
+        None
+    };
+    Ok(Json(json!({"items":items, "next_cursor":next})))
+}
 
 #[derive(Debug, Deserialize)]
 pub struct PendingQuery {

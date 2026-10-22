@@ -176,6 +176,25 @@ def test_inbound_event_schema_matches_contract_fields_and_message_state_vocabula
         assert list(validator.iter_errors(bad)), "malformed or plaintext event must not validate"
 
 
+def test_message_definitions_are_identical_in_api_ui_support_and_marketing():
+    import ast
+    definitions = _load("action/v1/message-state-definitions.json")
+    assert list(definitions) == _load("action/v1/action-result.schema.json")["properties"]["message_state"]["enum"]
+    repo = ROOT.parent
+    tree = ast.parse((repo / "backend/app/routes/outreach.py").read_text(encoding="utf-8"))
+    api = next(ast.literal_eval(node.value) for node in tree.body if isinstance(node, ast.Assign)
+               and any(isinstance(target, ast.Name) and target.id == "MESSAGE_STATE_DEFINITIONS" for target in node.targets))
+    assert api == definitions
+    sdk = (repo / "packages/sdk/src/message-states.ts").read_text(encoding="utf-8")
+    assert json.loads(sdk.split(" = ", 1)[1].split(" as const;")[0]) == definitions
+    ui = (repo / "web/src/components/Common.tsx").read_text(encoding="utf-8")
+    assert "MESSAGE_STATE_DEFINITIONS[state as keyof typeof MESSAGE_STATE_DEFINITIONS]" in ui
+    for audience in ("support", "marketing"):
+        doc = (repo / f"docs/{audience}-message-states.md").read_text(encoding="utf-8")
+        for state, definition in definitions.items():
+            assert f"| `{state}` | {definition} |" in doc
+
+
 if __name__ == "__main__":
     failures = 0
     for name, fn in sorted(globals().items()):

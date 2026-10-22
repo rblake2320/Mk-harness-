@@ -24,12 +24,12 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from .commitments import aware
 from .foundation import audit, seal, utcnow
-from .models import ApprovedClaim, Commitment, Customer, DraftVersion, ExceptionRecord, KnowledgeSource
+from .models import ApprovedClaim, ClaimFact, Commitment, Customer, DraftVersion, ExceptionRecord, KnowledgeSource
 
 PLACEHOLDER = re.compile(r"\{claim:([A-Za-z0-9_.-]{1,64})\}")
 # Words that indicate an efficacy/benefit claim. Relationship text may not contain them
@@ -109,6 +109,7 @@ class ClaimCandidate:
     approved_text: str
     source_version: str
     row_id: str
+    facts: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -121,17 +122,18 @@ class DraftOutcome:
     source_versions: dict[str, str] = field(default_factory=dict)
 
 
-def live_claims(db: Session, tenant_id: str, product_ids: list[str] | None, market: str = "US",
-                now: datetime | None = None) -> list[ClaimCandidate]:
-    """Approved, in-market, effective, unexpired claims whose source is approved and
-    unexpired. Tenant-specific rows override platform rows with the same claim_id."""
+def reviewed_claims(db: Session, tenant_id: str, product_ids: list[str] | None, market: str = "US",
+                    now: datetime | None = None) -> list[ClaimCandidate]:
+    """Read current reviewed rows before conflict detection; never silently override."""
     now = now or utcnow()
     q = select(ApprovedClaim, KnowledgeSource).join(KnowledgeSource, KnowledgeSource.id == ApprovedClaim.source_id).where(
         ApprovedClaim.review_status == "approved", KnowledgeSource.review_status == "approved",
-        ApprovedClaim.market == market)
+        ApprovedClaim.market == market, KnowledgeSource.market == market,
+        or_(ApprovedClaim.tenant_id.is_(None), ApprovedClaim.tenant_id == tenant_id),
+        or_(KnowledgeSource.tenant_id.is_(None), KnowledgeSource.tenant_id == tenant_id))
     if product_ids:
         q = q.where(ApprovedClaim.product_id.in_(product_ids))
-    out: dict[str, ClaimCandidate] = {}
+    out = []
     for claim, src in db.execute(q):
         if claim.tenant_id not in (None, tenant_id):
             continue
@@ -139,10 +141,62 @@ def live_claims(db: Session, tenant_id: str, product_ids: list[str] | None, mark
             continue
         if aware(src.effective_at) > now or (src.expires_at and aware(src.expires_at) <= now):
             continue
-        cand = ClaimCandidate(claim.claim_id, claim.product_id, claim.approved_text, claim.source_version, claim.id)
-        if claim.claim_id not in out or claim.tenant_id == tenant_id:
-            out[claim.claim_id] = cand
-    return sorted(out.values(), key=lambda c: c.claim_id)
+        out.append(ClaimCandidate(claim.claim_id, claim.product_id, claim.approved_text, claim.source_version, claim.id))
+    by_row = {c.row_id: c for c in out}
+    if by_row:
+        for fact in db.scalars(select(ClaimFact).where(ClaimFact.claim_row_id.in_(by_row))):
+            by_row[fact.claim_row_id].facts[fact.name] = fact.value
+    return sorted(out, key=lambda c: (c.claim_id, c.row_id))
+
+
+def select_claims(db: Session, tenant_id: str, product_ids: list[str] | None,
+                  market: str = "US", now: datetime | None = None) -> tuple[list[ClaimCandidate], dict[str, str]]:
+    """Fail closed on contradictory facts, missing annotation and ambiguous versions."""
+    rows = reviewed_claims(db, tenant_id, product_ids, market, now)
+    blocked: dict[str, str] = {}
+    values: dict[tuple[str, str], set[str]] = {}
+    ids: dict[str, list[ClaimCandidate]] = {}
+    for c in rows:
+        if not c.facts:
+            blocked[c.product_id] = "reviewed product facts are missing; re-review is required"
+        ids.setdefault(c.claim_id, []).append(c)
+        for name, value in c.facts.items():
+            values.setdefault((c.product_id, name), set()).add(value)
+    for (product_id, fact), observed in values.items():
+        if len(observed) > 1:
+            blocked[product_id] = f"approved sources conflict on product fact {fact}"
+    for versions in ids.values():
+        if len(versions) > 1:
+            for c in versions:
+                blocked[c.product_id] = "multiple active versions conflict for the same claim identity"
+    return [c for c in rows if c.product_id not in blocked], blocked
+
+
+def live_claims(db: Session, tenant_id: str, product_ids: list[str] | None, market: str = "US",
+                now: datetime | None = None) -> list[ClaimCandidate]:
+    return select_claims(db, tenant_id, product_ids, market, now)[0]
+
+
+def require_current_draft_claims(db: Session, tenant_id: str, draft: DraftVersion) -> None:
+    """An existing draft cannot bypass a later conflict/withdrawal/expiry."""
+    used = json.loads(draft.claim_ids_json)
+    versions = json.loads(draft.source_versions_json)
+    current = {c.claim_id: c for c in live_claims(db, tenant_id, None)}
+    if any(cid not in current or versions.get(cid) != current[cid].source_version for cid in used):
+        raise HTTPException(409, {"code": "DRAFT_CLAIMS_CHANGED",
+                                 "detail": "Product sources changed or conflict. Re-review the sources and create a new draft."})
+
+
+def refuse_draft(db: Session, *, tenant_id: str, user_id: str, customer: Customer,
+                 commitment: Commitment | None, brief_item_id: str | None,
+                 reason: str, kind: str = "unsupported_claim") -> DraftOutcome:
+    aref = audit(db, tenant_id, user_id, "draft.refused", {"customer_id": customer.id, "reason": reason, "kind": kind})
+    ex = ExceptionRecord(tenant_id=tenant_id, customer_id=customer.id, kind="draft_review",
+                         source_reference=commitment.id if commitment else (brief_item_id or ""),
+                         detail_enc=seal(tenant_id, "exception", reason), audit_ref=aref)
+    db.add(ex)
+    db.flush()
+    return DraftOutcome(draft=None, text=None, limitation=reason, review_task_id=ex.id)
 
 
 def drafting_system_prompt(candidates: list[ClaimCandidate], opt_out_phrase: str) -> str:
@@ -194,13 +248,8 @@ def assemble(db: Session, *, tenant_id: str, user_id: str, customer: Customer, c
              generated_by: str, opt_out_phrase: str) -> DraftOutcome:
     """Validate model output and assemble the draft, or refuse with a review task."""
     def refuse(reason: str, kind: str = "unsupported_claim") -> DraftOutcome:
-        aref = audit(db, tenant_id, user_id, "draft.refused", {"customer_id": customer.id, "reason": reason, "kind": kind})
-        ex = ExceptionRecord(tenant_id=tenant_id, customer_id=customer.id, kind="draft_review",
-                             source_reference=commitment.id if commitment else (brief_item_id or ""),
-                             detail_enc=seal(tenant_id, "exception", reason), audit_ref=aref)
-        db.add(ex)
-        db.flush()
-        return DraftOutcome(draft=None, text=None, limitation=reason, review_task_id=ex.id)
+        return refuse_draft(db, tenant_id=tenant_id, user_id=user_id, customer=customer,
+                            commitment=commitment, brief_item_id=brief_item_id, reason=reason, kind=kind)
 
     try:
         data = json.loads(model_output)
@@ -262,7 +311,10 @@ def consultant_edit(db: Session, *, tenant_id: str, user_id: str, prior: DraftVe
     """A consultant may rewrite relationship language freely but may not introduce claim
     language that is not an exact approved claim. Produces a new version (W5: the old
     digest is a different digest; approvals bound to it are invalid by construction)."""
-    candidates = live_claims(db, tenant_id, None)
+    candidates, blocked = select_claims(db, tenant_id, None)
+    if any(c.product_id in blocked and c.approved_text in new_text for c in reviewed_claims(db, tenant_id, None)):
+        raise HTTPException(422, {"code": "CLAIM_CONFLICT",
+                                 "detail": "Conflicting or unannotated product claims require source review before reuse."})
     stripped = new_text
     for c in candidates:
         stripped = stripped.replace(c.approved_text, "")

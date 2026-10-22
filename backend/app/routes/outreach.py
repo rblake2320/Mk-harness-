@@ -18,13 +18,14 @@ import uuid
 from datetime import timedelta
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..db import get_db
+from ..drafting import require_current_draft_claims
 from ..foundation import audit, own_customer, preference_for, unseal, utcnow
 from ..kernel import KernelClient, KernelUnavailable, get_kernel_client
 from ..kernel.assertions import roles_for
@@ -59,6 +60,7 @@ async def propose_draft(did: str, body: ProposeDraftIn, p: Principal = Depends(p
     if not dv or dv.tenant_id != user.tenant_id:
         raise HTTPException(404, "Draft not found")
     cust = own_customer(db, user.tenant_id, user.id, dv.customer_id)
+    require_current_draft_claims(db, user.tenant_id, dv)
     pref = preference_for(db, cust)
     if not pref or not pref.timezone:
         raise HTTPException(422, {"code": "TIMEZONE_UNKNOWN", "detail": "set the customer's timezone before proposing outreach"})
@@ -120,6 +122,36 @@ async def propose_draft(did: str, body: ProposeDraftIn, p: Principal = Depends(p
 
 def _link_for(db: Session, tenant_id: str, action_id: str) -> ActionLink | None:
     return db.scalar(select(ActionLink).where(ActionLink.tenant_id == tenant_id, ActionLink.kernel_action_id == action_id))
+
+
+@router.get("/delivery-exceptions")
+async def delivery_exceptions(after: uuid.UUID | None = None, limit: int = Query(default=50, ge=1, le=100),
+                              p: Principal = Depends(principal), user: User = Depends(check_rate),
+                              client: KernelClient = Depends(get_kernel_client), db: Session = Depends(get_db)):
+    """Live kernel uncertainty, not a dismissible copy of delivery truth."""
+    path = f"/deliveries/exceptions?limit={limit}" + (f"&after={after}" if after else "")
+    try:
+        response = await client.call("GET", path, user_id=p.user_id, tenant_id=p.tenant_id,
+                                     roles=roles_for(p.app_role), session_id=p.session_id)
+    except KernelUnavailable as e:
+        raise HTTPException(503, {"code": e.code, "detail": e.detail})
+    if response.status_code != 200:
+        raise HTTPException(response.status_code, response.body)
+    items = []
+    for item in (response.body or {}).get("items", []):
+        link = _link_for(db, user.tenant_id, item["action_id"])
+        if link:
+            try:
+                customer = own_customer(db, user.tenant_id, user.id, link.customer_id)
+            except HTTPException:
+                continue
+        else:
+            customer = None  # kernel still enforces the sender's owner
+        items.append({**item, "customer_id": customer.id if customer else None,
+                      "customer_name": customer.name if customer else None,
+                      "message_state": "submission_unknown" if item["action_state"] == "reconciliation_required" else item["delivery_state"],
+                      "replacement_allowed": False})
+    return {"items": items, "next_cursor": (response.body or {}).get("next_cursor")}
 
 
 @router.get("/approvals/pending")

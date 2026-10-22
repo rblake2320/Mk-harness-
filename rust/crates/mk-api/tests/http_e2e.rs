@@ -2072,6 +2072,109 @@ async fn ambiguous_submission_becomes_submission_unknown_and_inbound_pause_defer
     assert!(matches!(out, DispatchOutcome::Skipped { .. }), "{out:?}");
     assert_eq!(r.sim.created_messages().await.len(), 1);
 
+    let (_, exceptions) = h
+        .call(
+            "GET",
+            "/internal/v1/deliveries/exceptions?limit=1",
+            Some(&h.token(r.manager, &["consultant"])),
+            None,
+        )
+        .await;
+    assert_eq!(exceptions["items"][0]["action_id"], aid);
+    let (status, private) = h
+        .call(
+            "GET",
+            "/internal/v1/deliveries/exceptions",
+            Some(&h.token(UserId::new(), &["consultant"])),
+            None,
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(private["items"], json!([]));
+    let (status, _) = h
+        .call(
+            "GET",
+            "/internal/v1/deliveries/exceptions",
+            Some(&h.token(r.admin, &["agent"])),
+            None,
+        )
+        .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+
+    let stats = mk_worker::reconciliation::run_once(
+        &r.ctx,
+        &[h.tenant],
+        chrono::Utc::now() + chrono::Duration::seconds(31),
+    )
+    .await
+    .unwrap_or_else(|e| panic!("{e:?}"));
+    assert_eq!(
+        stats.checked, 0,
+        "no recorded SID: do not promote a body/date candidate"
+    );
+
+    // Signed attempt URL recovers the SID even when the POST response was lost.
+    let message = r.sim.created_messages().await.remove(0);
+    let public = message["status_callback"].as_str().unwrap_or_default();
+    let parsed = url::Url::parse(public).unwrap_or_else(|e| panic!("{e}"));
+    let path = format!("{}?{}", parsed.path(), parsed.query().unwrap_or_default());
+    assert!(path.contains(&format!("mk_action={aid}")));
+    let form = vec![
+        ("AccountSid".to_owned(), ACCOUNT_SID.to_owned()),
+        (
+            "MessageSid".to_owned(),
+            message["sid"].as_str().unwrap_or_default().to_owned(),
+        ),
+        ("MessageStatus".to_owned(), "delivered".to_owned()),
+    ];
+    let sig = mk_adapters::twilio::twilio_signature(&AdapterSecret::new(TOKEN), public, &form);
+    let body = url::form_urlencoded::Serializer::new(String::new())
+        .extend_pairs(&form)
+        .finish();
+    for (target, expected) in [
+        (
+            path.replace("mk_attempt=1", "mk_attempt=2"),
+            StatusCode::FORBIDDEN,
+        ),
+        (path.clone(), StatusCode::OK),
+        (path.clone(), StatusCode::OK),
+    ] {
+        let request = Request::builder()
+            .method("POST")
+            .uri(&target)
+            .header("content-type", "application/x-www-form-urlencoded")
+            .header("x-twilio-signature", &sig)
+            .body(Body::from(body.clone()))
+            .unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!(
+            h.app
+                .clone()
+                .oneshot(request)
+                .await
+                .unwrap_or_else(|e| panic!("{e}"))
+                .status(),
+            expected
+        );
+    }
+    let (_, exceptions) = h
+        .call(
+            "GET",
+            "/internal/v1/deliveries/exceptions",
+            Some(&h.token(r.manager, &["consultant"])),
+            None,
+        )
+        .await;
+    assert_eq!(exceptions["items"][0]["delivery_state"], "delivered");
+    assert_eq!(
+        exceptions["items"][0]["provider_message_id"],
+        message["sid"]
+    );
+    assert!(matches!(
+        run_dispatch(&r, h.tenant, &aid).await,
+        DispatchOutcome::Skipped { .. }
+    ));
+    assert_eq!(r.sim.calls(), 1, "recovery never creates a replacement");
+
     // C8: pause → defer; resume refused while a check is stale or events pending; resume after ok.
     let (s, _) = h
         .call(
@@ -2144,6 +2247,91 @@ async fn ambiguous_submission_becomes_submission_unknown_and_inbound_pause_defer
         ),
         "{out:?}"
     );
+}
+
+#[tokio::test]
+async fn automatic_provider_reconciliation_recovers_missing_callbacks_without_resending() {
+    let Some(h) = harness().await else {
+        panic!("MK_TEST_DATABASE_URL is required");
+    };
+    let mut r = provider_rig(&h, mk_adapters::twilio_sim::TwilioSimMode::Accept).await;
+    health_ok(&h, r.admin).await;
+    // Exercise the real worker role with RLS and one connection, not an owner
+    // identity that masks missing migration grants or nested-pool deadlocks.
+    let worker_pool = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(1)
+        .after_connect(|conn, _| {
+            Box::pin(async move {
+                sqlx::query("SET ROLE mk_kernel_worker")
+                    .execute(conn)
+                    .await?;
+                Ok(())
+            })
+        })
+        .connect(&mk_testkit::test_database_url().unwrap_or_default())
+        .await
+        .unwrap_or_else(|e| panic!("{e}"));
+    r.ctx.store = Store::from_pool(worker_pool);
+    r.ctx.registry.twilio = Some(
+        mk_adapters::twilio::TwilioAdapter::new(
+            EgressAllowlist::new([r.sim.authority().as_str()], true),
+            &r.sim.api_base(),
+            Box::new(StoreSenderRes(r.ctx.store.clone(), h.state.keyring.clone())),
+        )
+        .unwrap_or_else(|e| panic!("{e}")),
+    );
+    let (aid, _) = approved_action(
+        &h,
+        &mut r,
+        "Reconcile. Reply STOP to opt out.",
+        "+15555550100",
+    )
+    .await;
+    assert!(matches!(
+        run_dispatch(&r, h.tenant, &aid).await,
+        DispatchOutcome::Dispatched {
+            pending_callback: true
+        }
+    ));
+    let messages = r.sim.created_messages().await;
+    let sid = messages[0]["sid"].as_str().unwrap_or_default();
+    r.sim.set_message_status(sid, "delivered").await;
+    let now = chrono::Utc::now() + chrono::Duration::seconds(31);
+    let stats = mk_worker::reconciliation::run_once(&r.ctx, &[h.tenant], now)
+        .await
+        .unwrap_or_else(|e| panic!("{e:?}"));
+    assert_eq!(
+        (stats.checked, stats.observed, stats.unavailable),
+        (1, 1, 0)
+    );
+    let (_, result) = h
+        .call(
+            "GET",
+            &format!("/internal/v1/actions/{aid}"),
+            Some(&h.token(r.manager, &["manager"])),
+            None,
+        )
+        .await;
+    assert_eq!(result["message_state"], "delivered");
+    assert_eq!(result["state"], "completed");
+    assert_eq!(result["read_status"], "unknown");
+    r.sim.set_message_status(sid, "queued").await;
+    let stats = mk_worker::reconciliation::run_once(
+        &r.ctx,
+        &[h.tenant],
+        now + chrono::Duration::seconds(61),
+    )
+    .await
+    .unwrap_or_else(|e| panic!("{e:?}"));
+    assert_eq!(
+        stats.checked, 0,
+        "terminal evidence is not polled or regressed"
+    );
+    assert!(matches!(
+        run_dispatch(&r, h.tenant, &aid).await,
+        DispatchOutcome::Skipped { .. }
+    ));
+    assert_eq!(r.sim.calls(), 1);
 }
 
 /// O2: per-tenant limits refuse with 429 + Retry-After after the assertion

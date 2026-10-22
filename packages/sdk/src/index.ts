@@ -65,6 +65,12 @@ export interface ExceptionItem {
   id: string; customer_id: string | null; kind: string; state: string; source_reference: string; detail: string;
   created_at: string; resolved_at: string | null;
 }
+export interface DeliveryException {
+  delivery_id: string; action_id: string; action_state: string; delivery_state: string;
+  message_state: MessageState; provider_message_id: string | null; read_status: string;
+  customer_id: string | null; customer_name: string | null; created_at: string;
+  reconciled_at: string | null; replacement_allowed: false;
+}
 export interface WebAuthnAssertion { credential_id: string; client_data_json: string; authenticator_data: string; signature: string }
 
 export function b64url(bytes: ArrayBuffer | Uint8Array): string {
@@ -366,6 +372,9 @@ export class MKClient {
     return this.request<ExceptionItem>(`/api/exceptions/${id}/resolve`, { method: 'POST', body: JSON.stringify({ resolution, note }) });
   }
   inboundHealth() { return this.request<any>('/api/agent-ops/inbound/health'); }
+  deliveryExceptions(after?: string) {
+    return this.request<{ items: DeliveryException[]; next_cursor: string | null }>(`/api/delivery-exceptions?limit=50${after ? `&after=${encodeURIComponent(after)}` : ''}`);
+  }
   senders() { return this.request<any[]>('/api/agent-ops/senders'); }
   registerSender(body: { owner_user_id: string; display_name: string; account_sid: string; auth_token: string; from_number?: string; messaging_service_sid?: string }) {
     return this.request<any>('/api/agent-ops/senders', { method: 'POST', body: JSON.stringify(body) });

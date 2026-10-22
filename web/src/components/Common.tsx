@@ -1,4 +1,5 @@
 import { ApiError } from '../../../packages/sdk/src/index.ts';
+import { MESSAGE_STATE_DEFINITIONS } from '../../../packages/sdk/src/message-states.ts';
 
 /**
  * Plain-language errors with a recovery step (contract: "plain-language errors
@@ -74,16 +75,16 @@ export function HumanSteps({ steps }: { steps: string[] }) {
 }
 
 export const STATE_LABEL: Record<string, string> = {
-  proposed: 'Proposed', awaiting_approval: 'Awaiting your approval', approved: 'Approved', queued: 'Queued',
-  dispatch_authorized: 'Authorized to send', submission_started: 'Submitting', provider_accepted: 'Accepted by provider',
-  sent: 'Sent', delivered: 'Delivered', failed: 'Failed', delivery_unknown: 'Delivery unknown', submission_unknown: 'Submission unknown — needs a person',
-  cancelled: 'Cancelled', denied: 'Denied by policy', expired: 'Expired',
+  proposed: 'proposed', awaiting_approval: 'awaiting_approval', approved: 'approved', queued: 'queued',
+  dispatch_authorized: 'dispatch_authorized', submission_started: 'submission_started', provider_accepted: 'provider_accepted',
+  sent: 'sent', delivered: 'delivered', failed: 'failed', delivery_unknown: 'delivery_unknown', submission_unknown: 'submission_unknown',
+  cancelled: 'cancelled', denied: 'denied', expired: 'expired',
 };
 
 export function StateBadge({ state, definitions }: { state: string | null | undefined; definitions?: Record<string, string> }) {
   if (!state) return null;
-  const title = definitions?.[state];
-  return <span className={`badge state-${state}`} title={title}>{STATE_LABEL[state] ?? state}</span>;
+  const title = definitions?.[state] ?? MESSAGE_STATE_DEFINITIONS[state as keyof typeof MESSAGE_STATE_DEFINITIONS];
+  return <span className={`badge state-${state}`} title={title} aria-label={title ? `${state}: ${title}` : state}>{STATE_LABEL[state] ?? state}</span>;
 }
 
 export function fmtWhen(iso: string | null | undefined) {

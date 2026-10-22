@@ -38,7 +38,8 @@ def _registry(client, h, claim_text="Our TimeWise 3D Day Cream is formulated wit
                                                    "approved_text": claim_text, "source_id": sid, "market": market,
                                                    "expires_at": expires}, headers=h)
     assert c.status_code == 201, c.text
-    client.post(f"/api/knowledge/claims/{c.json()['id']}/review", json={"decision": claim_status, "reviewer": "QA"}, headers=h)
+    client.post(f"/api/knowledge/v2/claims/{c.json()['id']}/review", json={
+        "decision": claim_status, "reviewer": "QA", "facts": {"composition.vitamin_c": "present"}}, headers=h)
     return sid, c.json()["id"]
 
 

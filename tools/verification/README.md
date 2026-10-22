@@ -38,3 +38,16 @@ search-desktop.png and search-360.png. Tokens are neither printed nor saved.
 Keep the disposable database out of version control and stop the two owned
 servers after the check. Do not treat this check as full mobile-app parity or a
 manual screen-reader review.
+
+## Uncertain-delivery browser component
+
+With the production web preview running on port 4189:
+
+```text
+python tools/verification/delivery_queue_browser.py --output local-verification
+```
+
+This uses explicit API fixtures (not the live kernel) and native Python Playwright.
+It checks pagination, visible uncertainty, no resend/dismiss, fail-visible refresh,
+and 360px layout. The real PostgreSQL/provider-simulator path is tested separately
+by `mk-api::http_e2e`; do not present the fixture browser check as a live-provider run.
