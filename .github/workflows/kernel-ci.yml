@@ -69,7 +69,11 @@ jobs:
           MK_TEST_POOL_SIZE: "1"
       - run: cargo test --doc --workspace
       - run: cargo deny check
-      - run: cargo audit --ignore RUSTSEC-2023-0071  # justified in deny.toml (rsa: public-key verification only)
+      # RUSTSEC-2023-0071: justified in deny.toml (rsa: public-key verification only).
+      # RUSTSEC-2026-0459 (libsqlite3-sys): present in Cargo.lock only through sqlx's optional
+      # sqlite driver, which no crate enables — `cargo tree -i libsqlite3-sys` prints nothing
+      # (never compiled). Fixed only in sqlx 0.9; revisit on that upgrade.
+      - run: cargo audit --ignore RUSTSEC-2023-0071 --ignore RUSTSEC-2026-0459
       - name: SBOM
         run: cargo cyclonedx --format json --all
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
