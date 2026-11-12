@@ -23,6 +23,8 @@ def init_engine(url: str | None = None):
     engine = create_engine(target, pool_pre_ping=True, **kwargs)
     if settings.db_create_all:
         Base.metadata.create_all(engine)
+        from .tools.migrate import establish_owners   # dev path: same data migration as the job
+        establish_owners(engine)
     if settings.db_require_least_privilege:
         problem = privilege_problem(engine)
         if problem:

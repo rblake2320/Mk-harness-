@@ -34,6 +34,7 @@ export default function App() {
   useEffect(() => {
     client.tokens = tokens;
     client.onAuthExpired = () => setTokens(null);
+    client.onTokensChanged = t => setTokens(prev => (prev ? t : prev));
     client.onStepUpRequired = methods => new Promise<boolean>(resolve => setStepUp({ methods, resolve }));
   }, [tokens]);
   const signOut = useCallback(() => { client.logout().catch(() => {}).finally(() => setTokens(null)); }, []);

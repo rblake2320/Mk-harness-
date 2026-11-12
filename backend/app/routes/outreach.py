@@ -145,8 +145,8 @@ async def pending_approvals(p: Principal = Depends(principal), user: User = Depe
         aid = str(res.get("action_id", ""))
         link = _link_for(db, user.tenant_id, aid)
         cust = db.get(Customer, link.customer_id) if link else None
-        if cust and cust.user_id != book_of(user) and not sees_whole_tenant(user):
-            continue  # another consultant's customer: not this approver's to see
+        if not sees_whole_tenant(user) and (cust is None or cust.user_id != book_of(user)):
+            continue  # another consultant's customer, or a tenant-level action: owners/admins only
         commitment = db.get(Commitment, link.commitment_id) if link and link.commitment_id else None
         perm = None
         if link and link.brief_item_id:

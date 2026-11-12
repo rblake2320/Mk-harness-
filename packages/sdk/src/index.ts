@@ -204,14 +204,19 @@ export class MKClient {
 
   /** fetch with auth headers and one refresh-and-retry on 401. Never throws for HTTP status. */
   private async send(path: string, init: RequestInit = {}, retry = true): Promise<Response> {
+    const used = this.tokens?.access_token;
     const r = await fetch(this.baseUrl + path, { ...init, headers: { ...this.headers(!(init.body instanceof FormData)), ...(init.headers ?? {}) } });
     if (r.status === 401 && retry && this.tokens?.refresh_token) {
-      const ok = await this.refresh();
+      // Another request may already have rotated the tokens while this one was in
+      // flight: retry with the new access token instead of spending the refresh
+      // token again (a reused refresh token revokes the whole session).
+      const ok = this.tokens.access_token !== used ? true : await this.refresh();
       if (ok) return this.send(path, init, false);
       this.onAuthExpired?.();
     }
     return r;
   }
+
 
   private static async body(r: Response): Promise<unknown> {
     try { return await r.json(); } catch { return undefined; }
@@ -315,16 +320,29 @@ export class MKClient {
   breakGlassDecide(id: string, decision: 'approve' | 'deny' | 'revoke') {
     return this.request(`/api/security/break-glass/${id}/${decision}`, { method: 'POST' });
   }
-  async refresh(): Promise<boolean> {
-    try {
-      const r = await fetch(this.baseUrl + '/api/auth/refresh', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refresh_token: this.tokens?.refresh_token }) });
-      if (!r.ok) return false;
-      this.tokens = await r.json();
-      return true;
-    } catch { return false; }
+  /** Exactly one refresh in flight: concurrent 401s share it. Refresh tokens rotate
+   *  and reuse revokes the session, so two parallel refreshes would sign the user out. */
+  private refreshing: Promise<boolean> | null = null;
+  /** Called with the rotated tokens so the app can persist them (a stale stored
+   *  refresh token would be "reused" on the next load and end the session). */
+  onTokensChanged: ((t: Tokens) => void) | null = null;
+  refresh(): Promise<boolean> {
+    if (!this.refreshing) {
+      this.refreshing = (async () => {
+        try {
+          const r = await fetch(this.baseUrl + '/api/auth/refresh', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ refresh_token: this.tokens?.refresh_token }) });
+          if (!r.ok) return false;
+          this.tokens = await r.json();
+          if (this.tokens) this.onTokensChanged?.(this.tokens);
+          return true;
+        } catch { return false; } finally { this.refreshing = null; }
+      })();
+    }
+    return this.refreshing;
   }
+
   me() { return this.request<any>('/api/auth/me'); }
   addMember(email: string, password: string, role = 'consultant', works_for?: string | null) {
     return this.request('/api/auth/members', {

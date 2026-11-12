@@ -146,3 +146,45 @@ test('dispatchSummary: every gate open → allowed (team switch still not report
   const unbound = dispatchSummary({ ...ok, approval_binding: 'unbound' }, healthy);
   assert.equal(unbound.allowed, false, 'approvals without a kernel-verified passkey are never "allowed"');
 });
+
+test('concurrent expired requests share ONE refresh (rotation reuse would revoke the session)', async () => {
+  const seen: string[] = [];
+  let refreshes = 0;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input); const auth = new Headers(init?.headers).get('Authorization');
+    if (url.endsWith('/api/auth/refresh')) {
+      refreshes++;
+      assert.deepEqual(JSON.parse(String(init?.body)), { refresh_token: 'r' });
+      await new Promise(r => setTimeout(r, 20));
+      return res(200, { access_token: 'new', refresh_token: 'r2', role: 'consultant', display_name: 'A', tenant_id: 't' });
+    }
+    seen.push(`${url.split('/api/')[1]} ${auth}`);
+    return auth === 'Bearer new' ? res(200, { ok: url }) : res(401, { detail: 'Token expired' });
+  }) as typeof fetch;
+  const c = client();
+  const persisted: string[] = [];
+  c.onTokensChanged = t => persisted.push(t.refresh_token);
+  let expired = 0; c.onAuthExpired = () => { expired++; };
+  const out = await Promise.all(['a', 'b', 'c', 'd'].map(x => c.me().catch(() => x)));
+  assert.equal(refreshes, 1);
+  assert.equal(expired, 0);
+  assert.deepEqual(persisted, ['r2']);
+  assert.equal(out.length, 4);
+  assert.ok(seen.filter(s => s.endsWith('Bearer new')).length === 4, seen.join(','));
+});
+
+test('a 401 that arrives after another request already refreshed retries without refreshing again', async () => {
+  let refreshes = 0;
+  const c = client();
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input); const auth = new Headers(init?.headers).get('Authorization');
+    if (url.endsWith('/api/auth/refresh')) { refreshes++; return res(200, {}); }
+    if (auth === 'Bearer old') {
+      c.tokens = { ...c.tokens!, access_token: 'new', refresh_token: 'r2' };   // rotated meanwhile
+      return res(401, { detail: 'Token expired' });
+    }
+    return res(200, { ok: true });
+  }) as typeof fetch;
+  assert.deepEqual(await c.me(), { ok: true });
+  assert.equal(refreshes, 0);
+});

@@ -54,6 +54,7 @@ export default function App() {
     if (tokens) sessionStorage.setItem(TOKEN_KEY, JSON.stringify(tokens));
     else sessionStorage.removeItem(TOKEN_KEY);
     client.onAuthExpired = () => setTokens(null);
+    client.onTokensChanged = t => setTokens(prev => (prev ? { ...t, mfa_enrollment_required: prev.mfa_enrollment_required && t.mfa_enrollment_required } : prev));
   }, [tokens]);
 
   async function signOut() {

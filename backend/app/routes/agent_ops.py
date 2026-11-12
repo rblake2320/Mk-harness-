@@ -33,6 +33,7 @@ from ..kernel import KernelClient, KernelUnavailable, get_kernel_client
 from ..kernel.assertions import ROLE_PLATFORM_OPERATOR, roles_for
 from ..models import Customer, User
 from ..ratelimit import check_rate
+from ..rbac import book_of, sees_whole_tenant
 from ..security import get_current_user
 
 router = APIRouter(prefix="/agent-ops", tags=["agent-ops"])
@@ -290,9 +291,32 @@ async def reject(action_id: str, body: DecisionIn, p: Principal = Depends(princi
 
 
 @router.get("/approvals/pending")
-async def pending(p: Principal = Depends(principal),
-                  client: KernelClient = Depends(get_kernel_client)):
-    return await forward(client, p, "GET", "/approvals/pending")
+async def pending(p: Principal = Depends(principal), user: User = Depends(check_rate),
+                  client: KernelClient = Depends(get_kernel_client), db: Session = Depends(get_db)):
+    """The kernel lists the whole tenant's pending actions (message text included).
+    Only owners/admins see all of them; everyone else sees the actions linked to a
+    customer in their own book (assistants/viewers: the book they work in). Actions
+    with no application link are tenant-level and shown to owners/admins only."""
+    r = await forward(client, p, "GET", "/approvals/pending")
+    if r.status_code != 200 or sees_whole_tenant(user):
+        return r
+    import json as _json
+    items = _json.loads(r.body or b"[]")
+    if not isinstance(items, list):
+        return r
+    return JSONResponse(status_code=200, content=[i for i in items if _in_book(db, user, i)],
+                        headers={"X-Request-Id": r.headers.get("X-Request-Id", "")})
+
+
+def _in_book(db: Session, user: User, item: Any) -> bool:
+    from sqlalchemy import select
+
+    from ..models import ActionLink
+    aid = str(((item or {}).get("result") or {}).get("action_id", "")) if isinstance(item, dict) else ""
+    link = db.scalar(select(ActionLink).where(ActionLink.tenant_id == user.tenant_id,
+                                              ActionLink.kernel_action_id == aid)) if aid else None
+    cust = db.get(Customer, link.customer_id) if link else None
+    return bool(cust and cust.tenant_id == user.tenant_id and cust.user_id == book_of(user))
 
 
 # --------------------------------------------------------------------------- #

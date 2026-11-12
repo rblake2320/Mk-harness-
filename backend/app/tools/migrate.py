@@ -11,6 +11,7 @@ from __future__ import annotations
 import os
 import re
 import sys
+import uuid
 
 from sqlalchemy import create_engine, inspect, text
 
@@ -49,6 +50,28 @@ def add_missing_columns(engine) -> list[tuple[str, str]]:
     return added
 
 
+def establish_owners(engine) -> int:
+    """Data migration for tenants created before the owner role existed: their founding
+    user was signed up as `admin`, owner-only permissions (billing) would be
+    unreachable, and only an owner may appoint one. For each tenant without an active
+    owner, promote its earliest active admin. Idempotent; returns tenants changed."""
+    with engine.begin() as c:
+        rows = c.execute(text(
+            "SELECT u.tenant_id, (SELECT a.id FROM users a WHERE a.tenant_id = u.tenant_id AND a.role = 'admin' "
+            "AND a.is_active ORDER BY a.created_at, a.id LIMIT 1) AS promote "
+            "FROM users u GROUP BY u.tenant_id "
+            "HAVING SUM(CASE WHEN u.role = 'owner' AND u.is_active THEN 1 ELSE 0 END) = 0")).all()
+        n = 0
+        for tenant_id, promote in rows:
+            if promote:
+                c.execute(text("UPDATE users SET role = 'owner' WHERE id = :id"), {"id": promote})
+                c.execute(text("INSERT INTO audit_logs (id, tenant_id, user_id, action, detail, created_at) "
+                               "VALUES (:id, :t, :u, 'role.migrated_owner', 'founding admin promoted to owner', "
+                               "CURRENT_TIMESTAMP)"), {"id": uuid.uuid4().hex, "t": tenant_id, "u": promote})
+                n += 1
+    return n
+
+
 def main() -> int:
     url = get_settings().database_url
     runtime = os.environ.get("APP_RUNTIME_ROLE", "mk_app")
@@ -60,6 +83,9 @@ def main() -> int:
     added = add_missing_columns(engine)
     for t, c in added:
         print(f"added column {t}.{c}")
+    owners = establish_owners(engine)
+    if owners:
+        print(f"promoted founding admin to owner in {owners} tenant(s)")
     if engine.dialect.name != "postgresql":
         print(f"schema created ({engine.dialect.name}); no roles to grant")
         return 0
