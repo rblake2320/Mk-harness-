@@ -181,3 +181,6 @@ th { color: var(--muted); font-weight: 500; font-size: 12.5px; text-transform: u
 .commit-row { padding: 8px 0; border-bottom: 1px solid var(--edge); }
 .timeline li { padding: 4px 0; }
 button:disabled { cursor: not-allowed; }
+
+/* identity screens */
+.stack { display: grid; gap: 10px; }

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { client } from '../App.tsx';
+import { isAdminRole } from './Security.tsx';
 import { ErrorNote, HumanSteps, fmtWhen } from '../components/Common.tsx';
 
 /**
@@ -64,7 +65,7 @@ export default function GovernanceSettings({ role, userId }: { role: string; use
           {senders.map(s => <li key={s.sender_identity_id}>{s.display_name} · {s.from_number ?? s.messaging_service_sid} · <strong>{s.registration_status}</strong> · {s.status}</li>)}
           {senders.length === 0 && <li className="muted">No sending number registered for this team.</li>}
         </ul>
-        {role === 'admin' && (
+        {isAdminRole(role) && (
           <details>
             <summary>Register a sending number (admin)</summary>
             <p className="muted small">The provider token is passed once to the kernel, which seals it. It is never stored by this app.</p>
@@ -93,7 +94,7 @@ export default function GovernanceSettings({ role, userId }: { role: string; use
         <div className="row">
           <button className="btn ghost" onClick={() => client.exportAccount().then(d => download('my-data.json', JSON.stringify(d, null, 2))).catch(setErr)}>Export my data (JSON)</button>
           <button className="btn ghost" onClick={() => client.exportCustomersCsv().then(t => download('customers.csv', t, 'text/csv')).catch(setErr)}>Export customers (CSV)</button>
-          {role === 'admin' && <button className="btn ghost" onClick={() => client.exportAudit().then(t => download('audit.jsonl', t, 'application/x-ndjson')).catch(setErr)}>Export audit log (admin)</button>}
+          {isAdminRole(role) && <button className="btn ghost" onClick={() => client.exportAudit().then(t => download('audit.jsonl', t, 'application/x-ndjson')).catch(setErr)}>Export audit log (admin)</button>}
           <button className="btn ghost" onClick={() => run(() => client.revokeMySession('user requested'), 'Session revoked. Pending approvals you made were cancelled. Sign in again to continue.')}>Revoke my kernel session</button>
         </div>
         <details style={{ marginTop: 10 }}>

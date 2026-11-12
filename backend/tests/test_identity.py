@@ -137,7 +137,7 @@ def test_change_password_needs_step_up(client):
     _, t = _raw_signup(client)
     r = client.post("/api/auth/change-password", json={"current_password": PW, "new_password": "aNewPassw0rd!!"},
                     headers=auth_headers(t))
-    assert r.status_code == 401 and r.json()["detail"]["code"] == "STEP_UP_REQUIRED"
+    assert r.status_code == 403 and r.json()["detail"]["code"] == "STEP_UP_REQUIRED"
 
 
 def test_session_list_is_coarse_and_revocation_is_scoped_to_the_owner(client):
@@ -232,16 +232,18 @@ def test_step_up_window_expires_and_needs_a_factor(client, mfa_on, frozen_clock)
     assert client.get("/api/customers/export.csv", headers=h).status_code == 200   # fresh MFA counts
     frozen_clock("2026-11-12T12:12:00+00:00")
     stale = client.get("/api/customers/export.csv", headers=h)
-    assert stale.status_code == 401 and stale.json()["detail"]["code"] == "STEP_UP_REQUIRED"
+    assert stale.status_code == 403 and stale.json()["detail"]["code"] == "STEP_UP_REQUIRED"
     assert stale.json()["detail"]["methods"] == ["totp"]
-    assert client.post("/api/security/step-up", json={"method": "totp", "code": "999999"}, headers=h).status_code == 401
+    bad = client.post("/api/security/step-up", json={"method": "totp", "code": "999999"}, headers=h)
+    assert bad.status_code == 403 and bad.json()["detail"]["code"] == "SECOND_FACTOR_INVALID"
     assert client.post("/api/security/step-up", json={"method": "totp", "code": _totp_now(secret)},
                        headers=h).status_code == 200
     assert client.get("/api/customers/export.csv", headers=h).status_code == 200
     # A step-up time in the future (clock skew/forgery) never counts: at 12:11 the
     # sign-in factor (12:00:40) is stale and the 12:12 step-up lies in the future.
     frozen_clock("2026-11-12T12:11:00+00:00")
-    assert client.get("/api/customers/export.csv", headers=h).status_code == 401
+    fut = client.get("/api/customers/export.csv", headers=h)
+    assert fut.status_code == 403 and fut.json()["detail"]["code"] == "STEP_UP_REQUIRED"
 
 
 def test_adding_a_second_factor_needs_step_up_and_the_last_factor_cannot_be_removed(client, mfa_on, frozen_clock):
@@ -252,8 +254,10 @@ def test_adding_a_second_factor_needs_step_up_and_the_last_factor_cannot_be_remo
     factors = client.get("/api/security/mfa", headers=h).json()["factors"]
     assert len(factors) == 1
     frozen_clock("2026-11-12T13:20:00+00:00")   # step-up from enrollment has lapsed
-    assert client.post("/api/security/mfa/totp/begin", headers=h).status_code == 401
-    assert client.post(f"/api/security/mfa/{factors[0]['id']}/revoke", headers=h).status_code == 401
+    nb = client.post("/api/security/mfa/totp/begin", headers=h)
+    assert nb.status_code == 403 and nb.json()["detail"]["code"] == "STEP_UP_REQUIRED"
+    rv = client.post(f"/api/security/mfa/{factors[0]['id']}/revoke", headers=h)
+    assert rv.status_code == 403 and rv.json()["detail"]["code"] == "STEP_UP_REQUIRED"
     step = client.post("/api/security/step-up", json={"method": "totp", "code": _totp_now(secret)}, headers=h)
     assert step.status_code == 200
     last = client.post(f"/api/security/mfa/{factors[0]['id']}/revoke", headers=h)

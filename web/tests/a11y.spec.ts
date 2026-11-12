@@ -6,11 +6,11 @@ import { mockApi } from './fixtures';
  *  keyboard / screen-reader assessment is a separate, human-run acceptance step. */
 const SCREENS: Array<[string, RegExp]> = [
   ["Today's brief", /Today's brief/], ['Approvals', /Approvals/], ['Inbox & exceptions', /Inbox & exceptions/],
-  ['My customers', /My customers/], ['Settings', /Governance/],
+  ['My customers', /My customers/], ['Settings', /Governance/], ['Settings', /Sign-in security/],
 ];
 
 for (const [nav, heading] of SCREENS) {
-  test(`${nav} has no WCAG 2.2 A/AA violations`, async ({ page }) => {
+  test(`${nav} (${heading.source}) has no WCAG 2.2 A/AA violations`, async ({ page }) => {
     await mockApi(page);
     await page.goto('/');
     await page.getByRole('navigation', { name: 'Main' }).getByRole('button', { name: nav }).click();

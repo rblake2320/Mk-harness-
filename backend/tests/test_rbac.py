@@ -233,7 +233,7 @@ def test_step_up_marked_routes_refuse_a_fresh_password_only_session(client):
     for method, path in [("GET", "/api/customers/export.csv"), ("GET", "/api/audit/export.jsonl"),
                          ("GET", "/api/account/export")]:
         r = client.request(method, path, headers=h)
-        assert r.status_code == 401 and r.json()["detail"]["code"] == "STEP_UP_REQUIRED", path
+        assert r.status_code == 403 and r.json()["detail"]["code"] == "STEP_UP_REQUIRED", path
 
 
 # --------------------------------------------------------------------------- search (F7 / S11)

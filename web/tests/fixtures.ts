@@ -46,6 +46,18 @@ export async function mockApi(page: Page) {
     if (p === '/api/billing/plans') return json({ configured: false, trial_days: 90, plans: [] });
     if (p === '/api/consent/skin') return json({ version: '1', operator_consent: true, operator_granted_at: '2026-10-01T00:00:00Z', operator_text: 'x', customer_text: 'y', ai_disclosure: 'z' });
     if (p === '/api/skin/history') return json([]);
+    // identity (S2/S3/S9)
+    if (p === '/api/security/mfa') return json({ factors: [{ id: 'f1', kind: 'totp', label: 'Authenticator app', created_at: '2026-10-01T00:00:00Z', last_used_at: '2026-10-21T08:00:00Z' }],
+      methods: ['recovery', 'totp'], mfa_required: true, passkeys_available: true });
+    if (p === '/api/auth/sessions') return json([
+      { id: 's1', client: 'Chrome on Windows', created_at: '2026-10-21T08:00:00Z', last_seen_at: '2026-10-21T09:00:00Z', second_factor: true, current: true, revoked: false, revoked_reason: null },
+      { id: 's2', client: 'Safari on iPhone', created_at: '2026-10-19T08:00:00Z', last_seen_at: '2026-10-20T09:00:00Z', second_factor: true, current: false, revoked: false, revoked_reason: null }]);
+    if (p === '/api/security/members') return json([
+      { id: 'u1', email: 'a@x', display_name: 'Angela', role: 'admin', works_for: null, active: true, second_factor: true },
+      { id: 'u2', email: 'pat@x', display_name: 'Pat', role: 'assistant', works_for: 'u1', active: true, second_factor: false }]);
+    if (p === '/api/security/break-glass') return json([{ id: 'g1', status: 'pending', requested_by: 'sup1', subject_user_id: 'u1',
+      reason: 'Customer reports missing brief items since Tuesday', ticket_ref: 'SUP-1042', scope: 'read', duration_minutes: 60,
+      requested_at: '2026-10-21T08:30:00Z', decided_by: null, expires_at: null, access_count: 0 }]);
     return json({ detail: `unmocked ${m} ${p}` }, 404);
   });
   await page.addInitScript((t) => { sessionStorage.setItem('mk_tokens', JSON.stringify(t)); sessionStorage.setItem('cs_ai_notice_seen', '1'); }, TOKENS);

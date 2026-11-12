@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { client } from '../App.tsx';
+import { isAdminRole } from './Security.tsx';
 
 const PROVIDERS = ['anthropic', 'openai', 'gemini', 'ollama'] as const;
 
@@ -13,12 +14,11 @@ export default function SettingsView({ role }: { role: string }) {
   const [err, setErr] = useState('');
   const [usage, setUsage] = useState<any[]>([]);
   const [teamUsage, setTeamUsage] = useState<any[]>([]);
-  const [invite, setInvite] = useState({ email: '', password: '' });
 
   function refresh() {
     client.keyStatus().then(setStatus).catch(e => setErr(e.message));
     client.myUsage().then(setUsage).catch(() => {});
-    if (role === 'admin') client.tenantUsage().then(setTeamUsage).catch(() => {});
+    if (isAdminRole(role)) client.tenantUsage().then(setTeamUsage).catch(() => {});
   }
   useEffect(refresh, []);
 
@@ -30,15 +30,6 @@ export default function SettingsView({ role }: { role: string }) {
       setApiKey(''); setBaseUrl('');
       setMsg(`${provider} key saved (${scope === 'mine' ? 'personal' : 'team'}). Stored encrypted.`);
       refresh();
-    } catch (e: any) { setErr(e.message); }
-  }
-
-  async function sendInvite() {
-    setErr(''); setMsg('');
-    try {
-      await client.addMember(invite.email, invite.password);
-      setMsg(`Added ${invite.email}. Share their starting password securely.`);
-      setInvite({ email: '', password: '' });
     } catch (e: any) { setErr(e.message); }
   }
 
@@ -76,7 +67,7 @@ export default function SettingsView({ role }: { role: string }) {
             <select aria-label="Provider" value={provider} onChange={e => setProvider(e.target.value)} style={{ width: 160 }}>
               {PROVIDERS.map(p => <option key={p} value={p}>{p}</option>)}
             </select>
-            {role === 'admin' && (
+            {isAdminRole(role) && (
               <select aria-label="Key scope" value={scope} onChange={e => setScope(e.target.value as any)} style={{ width: 200 }}>
                 <option value="mine">My personal key</option>
                 <option value="tenant">Team key (everyone)</option>
@@ -119,7 +110,7 @@ export default function SettingsView({ role }: { role: string }) {
         )}
       </div>
 
-      {role === 'admin' && (
+      {isAdminRole(role) && (
         <>
           <div className="card" style={{ maxWidth: 720, marginTop: 18 }}>
             <h3 style={{ marginTop: 0 }}>Team usage</h3>
@@ -138,18 +129,6 @@ export default function SettingsView({ role }: { role: string }) {
             )}
           </div>
 
-          <div className="card" style={{ maxWidth: 720, marginTop: 18, display: 'grid', gap: 10 }}>
-            <h3 style={{ margin: 0 }}>Add a team member</h3>
-            <div className="row">
-              <input placeholder="Email" style={{ flex: 1 }} value={invite.email}
-                     onChange={e => setInvite({ ...invite, email: e.target.value })} />
-              <input placeholder="Starting password (10+ chars)" type="password" style={{ flex: 1 }}
-                     value={invite.password}
-                     onChange={e => setInvite({ ...invite, password: e.target.value })} />
-              <button className="btn" onClick={sendInvite}
-                      disabled={!invite.email || invite.password.length < 10}>Add</button>
-            </div>
-          </div>
         </>
       )}
     </div>

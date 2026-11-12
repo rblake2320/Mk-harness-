@@ -5,7 +5,31 @@
 export interface Tokens {
   access_token: string; refresh_token: string;
   role: string; display_name: string; tenant_id: string;
+  session_id?: string;
+  /** MFA is required and this account has no second factor yet: only enrollment works. */
+  mfa_enrollment_required?: boolean;
 }
+/** Password accepted; a second factor is required before any tokens are issued. */
+export interface MfaChallenge { mfa_required: true; mfa_token: string; methods: string[]; expires_in: number }
+export type LoginResult = Tokens | MfaChallenge;
+export function isMfaChallenge(r: LoginResult): r is MfaChallenge { return (r as MfaChallenge).mfa_required === true }
+export interface MfaFactor { id: string; kind: 'totp' | 'webauthn'; label: string; created_at: string; last_used_at: string | null }
+export interface MfaStatus { factors: MfaFactor[]; methods: string[]; mfa_required: boolean; passkeys_available: boolean }
+export interface AuthSessionInfo {
+  id: string; client: string; created_at: string; last_seen_at: string; second_factor: boolean;
+  current: boolean; revoked: boolean; revoked_reason: string | null;
+}
+export interface Member {
+  id: string; email: string; display_name: string; role: string; works_for: string | null;
+  active: boolean; second_factor: boolean;
+}
+export interface BreakGlassGrant {
+  id: string; subject_user_id: string; requested_by: string; reason: string; ticket_ref: string;
+  scope: string; duration_minutes: number; status: string; requested_at: string; decided_by: string | null;
+  expires_at: string | null; access_count: number;
+}
+/** A WebAuthn credential serialized for JSON (base64url fields), as the API expects. */
+export type PublicKeyCredentialJSON = Record<string, any>;
 export interface SkinObservation { category: string; level: string; note: string }
 export interface SkinResult {
   observations: SkinObservation[]; care_focus: string[];
@@ -101,6 +125,9 @@ export class MKClient {
   baseUrl: string;
   tokens: Tokens | null = null;
   onAuthExpired: (() => void) | null = null;
+  /** Called on 403 STEP_UP_REQUIRED with the methods the account can use; resolve
+   *  true after a successful `stepUp(...)` to have the request retried. */
+  onStepUpRequired: ((methods: string[]) => Promise<boolean>) | null = null;
 
   constructor(baseUrl: string) { this.baseUrl = baseUrl.replace(/\/$/, ''); }
 
@@ -121,9 +148,31 @@ export class MKClient {
     if (!r.ok) {
       let detail: any = `HTTP ${r.status}`;
       try { detail = (await r.json()).detail ?? detail; } catch { /* keep status */ }
+      // Sensitive change on a session whose factor is not fresh: ask the app to run
+      // step-up (403 STEP_UP_REQUIRED), then retry the original request once.
+      if (r.status === 403 && retry && detail?.code === 'STEP_UP_REQUIRED' && this.onStepUpRequired) {
+        if (await this.onStepUpRequired(detail.methods ?? [])) return this.request<T>(path, init, false);
+      }
       throw new ApiError(r.status, detail);
     }
     return r.json() as Promise<T>;
+  }
+
+  private async requestText(path: string, retry = true): Promise<string> {
+    const r = await fetch(this.baseUrl + path, { headers: this.headers(false) });
+    if (r.status === 401 && retry && this.tokens?.refresh_token) {
+      if (await this.refresh()) return this.requestText(path, false);
+      this.onAuthExpired?.();
+    }
+    if (!r.ok) {
+      let detail: any = `HTTP ${r.status}`;
+      try { detail = (await r.json()).detail ?? detail; } catch { /* keep status */ }
+      if (r.status === 403 && retry && detail?.code === 'STEP_UP_REQUIRED' && this.onStepUpRequired) {
+        if (await this.onStepUpRequired(detail.methods ?? [])) return this.requestText(path, false);
+      }
+      throw new ApiError(r.status, detail);
+    }
+    return r.text();
   }
 
   // ---- auth ----
@@ -134,10 +183,72 @@ export class MKClient {
         org_name, email, password, key_policy: opts.key_policy ?? 'both', ref: opts.ref }) });
     return this.tokens;
   }
-  async login(email: string, password: string) {
-    this.tokens = await this.request<Tokens>('/api/auth/login', {
-      method: 'POST', body: JSON.stringify({ email, password }) });
+  /** Password step. Returns tokens, or an MFA challenge to answer with `verifyMfa`. */
+  async login(email: string, password: string): Promise<LoginResult> {
+    this.tokens = null;
+    const r = await this.request<LoginResult>('/api/auth/login', {
+      method: 'POST', body: JSON.stringify({ email, password }) }, false);
+    if (!isMfaChallenge(r)) this.tokens = r;
+    return r;
+  }
+  async verifyMfa(mfa_token: string, method: 'totp' | 'recovery' | 'webauthn',
+                  answer: { code?: string; credential?: PublicKeyCredentialJSON }) {
+    this.tokens = await this.request<Tokens>('/api/auth/mfa/verify', {
+      method: 'POST', body: JSON.stringify({ mfa_token, method, ...answer }) }, false);
     return this.tokens;
+  }
+  loginPasskeyOptions(mfa_token: string) {
+    return this.request<any>('/api/auth/mfa/passkey/options', { method: 'POST', body: JSON.stringify({ mfa_token }) }, false);
+  }
+  async logout() {
+    try { if (this.tokens) await this.request('/api/auth/logout', { method: 'POST' }, false); }
+    finally { this.tokens = null; }
+  }
+  changePassword(current_password: string, new_password: string) {
+    return this.request<Tokens>('/api/auth/change-password', {
+      method: 'POST', body: JSON.stringify({ current_password, new_password }) })
+      .then(t => { if ((t as any)?.access_token) this.tokens = t; return t; });
+  }
+  // ---- MFA factors (S2) ----
+  mfaStatus() { return this.request<MfaStatus>('/api/security/mfa'); }
+  totpBegin() {
+    return this.request<{ factor_id: string; secret: string; otpauth_uri: string; human_steps: string[] }>(
+      '/api/security/mfa/totp/begin', { method: 'POST' });
+  }
+  totpConfirm(factor_id: string, code: string, label = 'Authenticator app') {
+    return this.request<{ factor: MfaFactor; recovery_codes: string[] | null }>('/api/security/mfa/totp/confirm', {
+      method: 'POST', body: JSON.stringify({ factor_id, code, label }) });
+  }
+  passkeyBegin() { return this.request<any>('/api/security/mfa/passkey/begin', { method: 'POST' }); }
+  passkeyFinish(credential: PublicKeyCredentialJSON, label = 'Passkey') {
+    return this.request<{ factor: MfaFactor; recovery_codes: string[] | null }>('/api/security/mfa/passkey/finish', {
+      method: 'POST', body: JSON.stringify({ credential, label }) });
+  }
+  revokeFactor(id: string) { return this.request(`/api/security/mfa/${id}/revoke`, { method: 'POST' }); }
+  regenerateRecoveryCodes() {
+    return this.request<{ recovery_codes: string[] }>('/api/security/mfa/recovery-codes', { method: 'POST' });
+  }
+  // ---- step-up ----
+  stepUp(method: 'totp' | 'webauthn' | 'password', answer: { code?: string; credential?: PublicKeyCredentialJSON; password?: string }) {
+    return this.request<{ ok: boolean }>('/api/security/step-up', {
+      method: 'POST', body: JSON.stringify({ method, ...answer }) }, false);
+  }
+  stepUpPasskeyOptions() { return this.request<any>('/api/security/step-up/passkey/options', { method: 'POST' }); }
+  // ---- sessions ----
+  sessions() { return this.request<AuthSessionInfo[]>('/api/auth/sessions'); }
+  revokeSession(id: string) { return this.request(`/api/auth/sessions/${id}/revoke`, { method: 'POST' }); }
+  revokeOtherSessions() { return this.request<{ revoked: number }>('/api/auth/sessions/revoke-others', { method: 'POST' }); }
+  // ---- members, roles (S3) ----
+  members() { return this.request<Member[]>('/api/security/members'); }
+  setMemberRole(uid: string, role: string, works_for?: string | null) {
+    return this.request(`/api/security/members/${uid}/role`, { method: 'POST', body: JSON.stringify({ role, works_for: works_for ?? null }) });
+  }
+  deactivateMember(uid: string) { return this.request(`/api/security/members/${uid}/deactivate`, { method: 'POST' }); }
+  revokeMemberSessions(uid: string) { return this.request(`/api/security/members/${uid}/sessions/revoke`, { method: 'POST' }); }
+  // ---- break-glass, tenant side (S9) ----
+  breakGlassGrants() { return this.request<BreakGlassGrant[]>('/api/security/break-glass'); }
+  breakGlassDecide(id: string, decision: 'approve' | 'deny' | 'revoke') {
+    return this.request(`/api/security/break-glass/${id}/${decision}`, { method: 'POST' });
   }
   async refresh(): Promise<boolean> {
     try {
@@ -150,9 +261,9 @@ export class MKClient {
     } catch { return false; }
   }
   me() { return this.request<any>('/api/auth/me'); }
-  addMember(email: string, password: string, role = 'consultant') {
+  addMember(email: string, password: string, role = 'consultant', works_for?: string | null) {
     return this.request('/api/auth/members', {
-      method: 'POST', body: JSON.stringify({ email, password, role }) });
+      method: 'POST', body: JSON.stringify({ email, password, role, works_for: works_for ?? null }) });
   }
 
   // ---- chat (SSE over fetch) ----
@@ -324,6 +435,37 @@ export class MKClient {
   revokePasskey(row_id: string) { return this.request<any>(`/api/agent-ops/approval-credentials/${row_id}/revoke`, { method: 'POST', body: '{}' }); }
   revokeMySession(reason = '') { return this.request<any>('/api/agent-ops/revocations', { method: 'POST', body: JSON.stringify({ reason }) }); }
 
+  /** Sign-in passkeys (S2), separate from the kernel's approval passkeys: the app
+   *  server issues and verifies these challenges (py_webauthn JSON options). */
+  async addSignInPasskey(label = 'Passkey') {
+    const o = await this.passkeyBegin();
+    const cred = await navigator.credentials.create({ publicKey: {
+      ...o, challenge: b64urlDecode(o.challenge), user: { ...o.user, id: b64urlDecode(o.user.id) },
+      excludeCredentials: (o.excludeCredentials ?? []).map((c: any) => ({ ...c, id: b64urlDecode(c.id) })),
+    } }) as PublicKeyCredential | null;
+    if (!cred) throw new Error('No passkey was created.');
+    const att = cred.response as AuthenticatorAttestationResponse;
+    return this.passkeyFinish({ id: cred.id, rawId: b64url(cred.rawId), type: cred.type,
+      response: { clientDataJSON: b64url(att.clientDataJSON), attestationObject: b64url(att.attestationObject) } }, label);
+  }
+  private async getAssertion(o: any): Promise<PublicKeyCredentialJSON> {
+    const cred = await navigator.credentials.get({ publicKey: {
+      ...o, challenge: b64urlDecode(o.challenge),
+      allowCredentials: (o.allowCredentials ?? []).map((c: any) => ({ ...c, id: b64urlDecode(c.id) })),
+    } }) as PublicKeyCredential | null;
+    if (!cred) throw new Error('The passkey prompt was cancelled.');
+    const a = cred.response as AuthenticatorAssertionResponse;
+    return { id: cred.id, rawId: b64url(cred.rawId), type: cred.type,
+      response: { clientDataJSON: b64url(a.clientDataJSON), authenticatorData: b64url(a.authenticatorData),
+                  signature: b64url(a.signature), userHandle: a.userHandle ? b64url(a.userHandle) : null } };
+  }
+  async signInWithPasskey(mfa_token: string) {
+    return this.verifyMfa(mfa_token, 'webauthn', { credential: await this.getAssertion(await this.loginPasskeyOptions(mfa_token)) });
+  }
+  async stepUpWithPasskey() {
+    return this.stepUp('webauthn', { credential: await this.getAssertion(await this.stepUpPasskeyOptions()) });
+  }
+
   /** Full passkey registration ceremony in the browser. The kernel issued the challenge and verifies the result. */
   async registerPasskey(label: string) {
     const b = await this.passkeyRegisterBegin();
@@ -369,7 +511,9 @@ export class MKClient {
 
   // ---- exports & deletion (account) ----
   exportAccount() { return this.request<any>('/api/account/export'); }
-  exportAudit() { return fetch(this.baseUrl + '/api/audit/export.jsonl', { headers: this.headers(false) }).then(r => r.text()); }
-  exportCustomersCsv() { return fetch(this.baseUrl + '/api/customers/export.csv', { headers: this.headers(false) }).then(r => r.text()); }
+  // Exports need step-up: they go through the same refresh/step-up/error path as JSON
+  // calls (a raw fetch returned the error body as if it were the export).
+  exportAudit() { return this.requestText('/api/audit/export.jsonl'); }
+  exportCustomersCsv() { return this.requestText('/api/customers/export.csv'); }
   deleteAccount(body: { password: string }) { return this.request<any>('/api/account', { method: 'DELETE', body: JSON.stringify(body) }); }
 }

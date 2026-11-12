@@ -12,6 +12,9 @@ import CustomerDetail from './views/CustomerDetail.tsx';
 import GovernanceSettings from './views/Governance.tsx';
 import type { Customer } from '../../packages/sdk/src/index.ts';
 import { AiNoticeModal } from './components/AiDisclosure.tsx';
+import { StepUpHost, explainFactor } from './components/StepUp.tsx';
+import SecurityView, { EnrollFactor } from './views/Security.tsx';
+import { isMfaChallenge, type MfaChallenge } from '../../packages/sdk/src/index.ts';
 import './styles.css';
 
 export const client = new MKClient(import.meta.env.VITE_API_URL ?? '');
@@ -45,12 +48,32 @@ export default function App() {
     client.onAuthExpired = () => setTokens(null);
   }, [tokens]);
 
+  async function signOut() {
+    try { await client.logout(); } catch { /* the session is dropped locally either way */ }
+    setTokens(null);
+  }
+
   if (!tokens) return <AuthScreen onAuthed={setTokens} />;
+  // MFA is required and this account has no second factor: the session can only enroll.
+  if (tokens.mfa_enrollment_required) return (
+    <div className="auth-wrap">
+      <div className="card auth-card">
+        <h1 className="display" style={{ fontSize: 28 }}>Protect your account</h1>
+        <p className="muted" style={{ margin: 0 }}>
+          Your business requires a second step at sign-in. Set it up once; it takes a minute.
+        </p>
+        <EnrollFactor passkeysAvailable={typeof window !== 'undefined' && !!window.PublicKeyCredential}
+                      onDone={() => setTokens({ ...tokens, mfa_enrollment_required: false })} />
+        <button className="btn ghost" onClick={signOut}>Sign out</button>
+      </div>
+    </div>
+  );
 
   return (
     <div className="shell">
       <a className="skip-link" href="#main">Skip to content</a>
       <AiNoticeModal />
+      <StepUpHost />
       <nav className="rail" aria-label="Main">
         <div className="brand display">Consultant <em>Studio</em></div>
         {([['brief', "Today's brief"], ['approvals', 'Approvals'], ['inbox', 'Inbox & exceptions'],
@@ -65,7 +88,7 @@ export default function App() {
         <div className="who">
           {tokens.display_name} · {tokens.role}
           <div><button className="btn ghost" style={{ marginTop: 8, padding: '6px 12px' }}
-            onClick={() => setTokens(null)}>Sign out</button></div>
+            onClick={signOut}>Sign out</button></div>
         </div>
       </nav>
       <main className="main" id="main">
@@ -79,6 +102,7 @@ export default function App() {
           : <CustomersView onOpen={c => setOpenCustomer(c)} />)}
         {view === 'billing' && <BillingView />}
         {view === 'settings' && (<>
+          <SecurityView role={tokens.role} userId={me?.id ?? ''} />
           <SettingsView role={tokens.role} />
           <GovernanceSettings role={tokens.role} userId={me?.id ?? ''} />
         </>)}
@@ -95,16 +119,19 @@ function AuthScreen({ onAuthed }: { onAuthed: (t: Tokens) => void }) {
   const [pw, setPw] = useState('');
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
+  const [challenge, setChallenge] = useState<MfaChallenge | null>(null);
 
   async function submit() {
     setErr(''); setBusy(true);
     try {
-      const t = mode === 'login'
-        ? await client.login(email, pw)
-        : await client.signup(org, email, pw, { ref });
-      onAuthed(t);
+      if (mode === 'login') {
+        const r = await client.login(email, pw);
+        if (isMfaChallenge(r)) { setChallenge(r); setPw(''); } else onAuthed(r);
+      } else onAuthed(await client.signup(org, email, pw, { ref }));
     } catch (e: any) { setErr(e.message); } finally { setBusy(false); }
   }
+
+  if (challenge) return <SecondStep challenge={challenge} onAuthed={onAuthed} onRestart={() => { setChallenge(null); setErr(''); }} />;
 
   return (
     <div className="auth-wrap">
@@ -132,6 +159,54 @@ function AuthScreen({ onAuthed }: { onAuthed: (t: Tokens) => void }) {
         <button className="btn ghost" onClick={() => { setMode(m => m === 'login' ? 'signup' : 'login'); setErr(''); }}>
           {mode === 'login' ? 'New team? Create one' : 'Have an account? Sign in'}
         </button>
+      </div>
+    </div>
+  );
+}
+
+/** Second sign-in step: authenticator code, passkey, or a one-time recovery code. */
+function SecondStep({ challenge, onAuthed, onRestart }:
+                    { challenge: MfaChallenge; onAuthed: (t: Tokens) => void; onRestart: () => void }) {
+  const [method, setMethod] = useState<'totp' | 'recovery'>(challenge.methods.includes('totp') ? 'totp' : 'recovery');
+  const [code, setCode] = useState('');
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+  async function run(fn: () => Promise<Tokens>) {
+    setErr(''); setBusy(true);
+    try { onAuthed(await fn()); }
+    catch (e: any) {
+      const d = e?.detail;
+      if (d === 'Sign in again' || d?.code === 'SESSION_ENDED') { onRestart(); return; }
+      setErr(explainFactor(e));
+    } finally { setBusy(false); }
+  }
+  const verify = () => run(() => client.verifyMfa(challenge.mfa_token, method, { code: code.trim() }));
+  return (
+    <div className="auth-wrap">
+      <div className="card auth-card">
+        <h1 className="display" style={{ fontSize: 28 }}>Second step</h1>
+        {challenge.methods.includes('webauthn') && (
+          <button className="btn" disabled={busy} onClick={() => run(() => client.signInWithPasskey(challenge.mfa_token))}>
+            Use your passkey
+          </button>
+        )}
+        <label className="small" htmlFor="mfa-code">
+          {method === 'totp' ? 'Code from your authenticator app' : 'One of your recovery codes'}
+        </label>
+        <input id="mfa-code" autoFocus inputMode={method === 'totp' ? 'numeric' : 'text'} autoComplete="one-time-code"
+               maxLength={method === 'totp' ? 6 : 32} value={code}
+               onChange={e => setCode(method === 'totp' ? e.target.value.replace(/\D/g, '') : e.target.value)}
+               onKeyDown={e => e.key === 'Enter' && verify()} />
+        {err && <div className="error" role="alert">{err}</div>}
+        <button className={challenge.methods.includes('webauthn') ? 'btn ghost' : 'btn'} disabled={busy || !code} onClick={verify}>
+          Verify
+        </button>
+        {challenge.methods.includes('recovery') && challenge.methods.includes('totp') && (
+          <button className="btn ghost" onClick={() => { setMethod(m => m === 'totp' ? 'recovery' : 'totp'); setCode(''); setErr(''); }}>
+            {method === 'totp' ? 'Use a recovery code instead' : 'Use my authenticator app'}
+          </button>
+        )}
+        <button className="btn ghost" onClick={onRestart}>Start over</button>
       </div>
     </div>
   );

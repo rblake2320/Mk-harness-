@@ -87,7 +87,7 @@ def totp_confirm(body: TotpConfirmIn, request: Request, user: User = Depends(get
             f.revoked_at = utcnow()
             session.mfa_failures = 0
         db.commit()
-        raise HTTPException(401, {"code": "SECOND_FACTOR_INVALID", "detail": "that code was not accepted"})
+        raise HTTPException(403, {"code": "SECOND_FACTOR_INVALID", "detail": "that code was not accepted"})
     codes = _first_factor_completed(db, user, request)
     f.confirmed_at, f.label = utcnow(), body.label or f.label
     audit(db, user.tenant_id, user.id, "mfa.factor_added", {"factor": f.id, "kind": "totp"})

@@ -236,7 +236,9 @@ def require_step_up(db: Session, user, session: AuthSession) -> None:
         t = _aware(t)
         if t is not None and timedelta(0) <= now - t <= window:
             return
-    raise HTTPException(401, {"code": "STEP_UP_REQUIRED",
+    # 403, not 401: the caller IS authenticated. A 401 here made clients refresh the
+    # token, retry, fail again and sign the user out instead of prompting for step-up.
+    raise HTTPException(403, {"code": "STEP_UP_REQUIRED",
                               "detail": "confirm it's you with your second factor to make this change",
                               "methods": [m for m in methods_for(db, user) if m != "recovery"]})
 
@@ -574,7 +576,10 @@ def verify_second_factor(db: Session, user: User, session: AuthSession, *, metho
             db.commit()
             raise HTTPException(401, {"code": "SESSION_ENDED", "detail": "too many failed attempts — sign in again"})
         db.commit()
-        raise HTTPException(401, {"code": "SECOND_FACTOR_INVALID", "detail": "that code or passkey was not accepted",
+        # Login challenge (no session token yet) → 401; inside an authenticated session
+        # (step-up) → 403 so clients do not treat a mistyped code as an expired token.
+        raise HTTPException(401 if purpose == "login" else 403,
+                            {"code": "SECOND_FACTOR_INVALID", "detail": "that code or passkey was not accepted",
                                   "attempts_left": MAX_FACTOR_FAILURES - session.mfa_failures})
     session.mfa_failures = 0
     now = utcnow()

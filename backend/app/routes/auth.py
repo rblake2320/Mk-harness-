@@ -369,7 +369,7 @@ def change_password(body: ChangePasswordIn, request: Request, user: User = Depen
     """Requires the current password and a fresh second factor (step-up). Every other
     session is revoked — locally and in the kernel — and this session gets new tokens."""
     if not verify_password(body.current_password, user.password_hash):
-        raise HTTPException(401, "Current password is incorrect")
+        raise HTTPException(403, "Current password is incorrect")   # authenticated: not a token problem
     user.password_hash = hash_password(body.new_password)
     current = request.state.auth_session
     n = identity.revoke_user_sessions(db, user, by=user.id, reason="password_changed", except_sid=current.id)
