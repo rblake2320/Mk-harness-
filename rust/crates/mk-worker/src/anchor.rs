@@ -248,7 +248,13 @@ pub fn sigv4_authorization(
         .map(|(k, v)| (k.to_ascii_lowercase(), v.trim().to_owned()))
         .collect();
     hs.sort();
-    let canonical_headers: String = hs.iter().map(|(k, v)| format!("{k}:{v}\n")).collect();
+    let mut canonical_headers = String::new();
+    for (k, v) in &hs {
+        canonical_headers.push_str(k);
+        canonical_headers.push(':');
+        canonical_headers.push_str(v);
+        canonical_headers.push('\n');
+    }
     let signed: String = hs
         .iter()
         .map(|(k, _)| k.as_str())
