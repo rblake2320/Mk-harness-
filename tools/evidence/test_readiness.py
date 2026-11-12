@@ -79,3 +79,19 @@ class Verdict(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ChecklistMapsToTheRightRows(unittest.TestCase):
+    """The support/economics rows were swapped in both the matrix and this checklist
+    (economics → M3). Each question must point at the row whose requirement it asks."""
+
+    def test_support_and_economics_questions_name_their_rows(self):
+        matrix = (pathlib.Path(__file__).resolve().parents[2] / "docs/production-acceptance.md").read_text()
+        req = {r: next(l for l in matrix.splitlines() if l.startswith(f"| {r} |")).split("|")[2].strip()
+               for r in ("M3", "M4")}
+        self.assertTrue(req["M3"].startswith("Support"), req["M3"])
+        self.assertTrue(req["M4"].startswith("Economics"), req["M4"])
+        q = dict(readiness.CHECKLIST)
+        self.assertIn("M4", q["Are economics viable at the approved price?"])
+        self.assertNotIn("M3", q["Are economics viable at the approved price?"])
+        self.assertIn("M3", q["Are monitoring, support, and incident responsibilities staffed?"])
