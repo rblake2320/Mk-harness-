@@ -43,7 +43,7 @@ trap cleanup EXIT
 log "building release binaries"
 (cd "$ROOT/rust" && cargo build --release -q --bin mk-action-api --bin mk-outbox-relay \
    --bin mk-action-worker --bin mk-audit-verifier --bin mk-devkeys --bin mk-softauthn --bin mk-twilio-sim \
-   --bin mk-keyctl --bin mk-restore-gate)
+   --bin mk-keyctl --bin mk-restore-gate --bin mk-audit-anchor)
 BIN="$ROOT/rust/target/release"
 
 log "fresh database"
@@ -263,6 +263,21 @@ grep -q "dry_run_no_device\|callback" "$WORK/api.log" || true
 
 log "gate 6: kernel audit chain verifies (read-only identity)"
 MK_DATABASE_URL="$(url_for mk_readonly_login readonly)" "$BIN/mk-audit-verifier" 2>&1 | tee "$WORK/verifier.log" | tail -3
+
+log "gate 6b: audit heads anchored outside the database (S14): signed, verifies, tampering refused"
+ANCHOR_SEED=$(python3 -c 'import os,base64;print(base64.urlsafe_b64encode(os.urandom(32)).rstrip(b"=").decode())')
+ANCHOR_PUB=$(python3 -c "import base64,sys;from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey as K;s=base64.urlsafe_b64decode('$ANCHOR_SEED'+'=');print(base64.urlsafe_b64encode(K.from_private_bytes(s).public_key().public_bytes_raw()).rstrip(b'=').decode())")
+MK_DATABASE_URL="$(url_for mk_readonly_login readonly)" MK_ANCHOR_SIGNING_KEY="$ANCHOR_SEED" MK_ANCHOR_KEY_ID=a1 \
+  MK_ANCHOR_SINK="file:$WORK/anchors.jsonl" "$BIN/mk-audit-anchor" anchor >/dev/null || die "anchor"
+MK_DATABASE_URL="$(url_for mk_readonly_login readonly)" MK_ANCHOR_PUBLIC_KEYS="a1=$ANCHOR_PUB" \
+  "$BIN/mk-audit-anchor" verify "$WORK/anchors.jsonl" > "$WORK/anchor-verify.log" || { cat "$WORK/anchor-verify.log"; die "anchor verify"; }
+python3 - "$WORK/anchors.jsonl" "$WORK/anchors-tampered.jsonl" <<'PY'
+import json, sys
+a = json.loads(open(sys.argv[1]).read().splitlines()[-1]); a["leaves"][0]["count"] += 1
+open(sys.argv[2], "w").write(json.dumps(a) + "\n")
+PY
+if MK_DATABASE_URL="$(url_for mk_readonly_login readonly)" MK_ANCHOR_PUBLIC_KEYS="a1=$ANCHOR_PUB" \
+     "$BIN/mk-audit-anchor" verify "$WORK/anchors-tampered.jsonl" >/dev/null 2>&1; then die "tampered anchor accepted"; fi
 
 log "gate 7: identities are least-privilege (API cannot claim outbox; relay cannot read approvals; readonly cannot write)"
 ! psql -q "$(url_for mk_api_login api)" -c "UPDATE kernel.outbox_events SET leased_by='x' WHERE false" >/dev/null 2>&1 || die "api login can touch outbox claims"

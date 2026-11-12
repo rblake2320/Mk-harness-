@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
-from ..crypto import encrypt_secret, key_aad
+from ..crypto import key_aad, seal_value
 from ..db import get_db
 from ..models import AuditLog, ProviderKey, Tenant, User
 from ..providers.router import ADAPTERS, _env_key
@@ -32,8 +32,7 @@ def _upsert(db: Session, tenant_id: str, user_id: str | None, body: KeyIn, scope
         ProviderKey.tenant_id == tenant_id,
         ProviderKey.user_id == user_id if user_id else ProviderKey.user_id.is_(None),
         ProviderKey.provider == body.provider))
-    ct = encrypt_secret(s.master_key_bytes, body.api_key,
-                        key_aad(tenant_id, user_id, body.provider))
+    ct = seal_value(body.api_key, key_aad(tenant_id, user_id, body.provider))
     if row:
         row.ciphertext, row.base_url = ct, body.base_url
     else:

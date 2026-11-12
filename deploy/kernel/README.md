@@ -196,6 +196,30 @@ Retiring the **legacy** master-key seal (version 0): after `reencrypt` reports
 Technical controls here do not by themselves establish legal compliance for
 outreach (`docs/release/legal-provider-gate.md`).
 
+### Audit anchoring (`mk-audit-anchor`, contract S14)
+
+The hash chain detects edits made through the database; it cannot detect an
+operator with owner access rebuilding a tenant's chain consistently. Anchoring
+fixes every tenant head outside the database:
+
+1. Create an S3 bucket with **Object Lock enabled** (COMPLIANCE mode) in an AWS
+   account the database operators do not administer. Grant the anchor job
+   `s3:PutObject` + `s3:PutObjectRetention` on `<bucket>/anchors/*` only.
+2. Generate the anchor key (Ed25519 seed): `mk-devkeys gen` → use the
+   `DEV_PRIVATE_KEY` value as `MK_ANCHOR_SIGNING_KEY`; keep the public half
+   (`MK_ASSERTION_KEYS` value without the kid) as `MK_ANCHOR_PUBLIC_KEYS=a1=<pub>`.
+   The seed lives only in the anchor job's secret; never in the API, worker or DB.
+3. Schedule hourly, under the **read-only** DB identity:
+   `MK_ANCHOR_SINK=s3:https://<bucket>.s3.<region>.amazonaws.com/anchors/ MK_ANCHOR_KEY_ID=a1 mk-audit-anchor anchor`
+   (retention `MK_ANCHOR_RETENTION_DAYS`, default 800).
+4. Verify (daily, and before any enable after a restore): sync the bucket to a
+   local directory, then `mk-audit-anchor verify <dir>` — exits non-zero if any
+   anchored event was rewritten, a chain shrank or disappeared, or an anchor's
+   signature/root fails. Pre-flight `--for-enable` requires an `s3:` sink.
+
+Residual: anchors bound history up to the last anchor; changes made within one
+anchoring interval are bounded by the interval (hourly).
+
 ### Restore (never re-send)
 
 `docs/runbooks/restore-without-resend.md`. The gate binary is

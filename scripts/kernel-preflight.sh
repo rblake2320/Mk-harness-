@@ -147,6 +147,8 @@ if [ "$FOR_ENABLE" = 1 ]; then
   # Not observable from the kernel API; checked against the env file the tasks receive.
   case "${MK_DB_SSLROOTCERT:-}" in "") fail "MK_DB_SSLROOTCERT unset — database TLS would not be verify-full against the RDS CA";; *) [ -r "$MK_DB_SSLROOTCERT" ] && ok "MK_DB_SSLROOTCERT present" || fail "MK_DB_SSLROOTCERT not readable: $MK_DB_SSLROOTCERT";; esac
   [ "${MK_TWILIO_API_BASE:-}" = "https://api.twilio.com" ] && ok "worker MK_TWILIO_API_BASE is the live provider" || fail "MK_TWILIO_API_BASE is '${MK_TWILIO_API_BASE:-}' — production must point at the live provider, staging must not enable dispatch"
+  # S14: audit heads anchored outside the database operator's reach (Object Lock bucket).
+  case "${MK_ANCHOR_SINK:-}" in s3:https://*) ok "audit anchors go to an Object Lock bucket (MK_ANCHOR_SINK)";; *) fail "MK_ANCHOR_SINK must be s3:https://<bucket>… in production (got '${MK_ANCHOR_SINK:-unset}')";; esac
   # Destination fingerprints (migrations 0008/0009): every tenant's rows checked
   # inside that tenant's transaction (RLS-safe), with the kids the kernel runs.
   KC="${MK_KEYCTL:-$ROOT/rust/target/release/mk-keyctl}"

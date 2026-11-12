@@ -12,6 +12,7 @@
 //! 6. In a new transaction persist the outcome (complete / retry / dead-letter /
 //!    reconcile), release the lease, commit, then ack.
 
+pub mod anchor;
 pub mod config;
 pub mod dispatch;
 pub mod housekeeping;

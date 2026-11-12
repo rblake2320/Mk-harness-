@@ -72,7 +72,8 @@ class Settings(BaseSettings):
     # S13: append-only, hash-chained erasure ledger kept OUTSIDE the database (own
     # volume / bucket) so a restore can be followed by an erasure replay.
     erasure_ledger_path: str = "/var/lib/mk/erasure-ledger.jsonl"
-    erasure_ledger_key: str = ""     # HMAC key; empty = derived from MASTER_KEY (dev)
+    erasure_ledger_key: str = ""
+    sealing_keys: str = ""           # S10: versioned application sealing keys (see sealing_key_list)     # HMAC key; empty = derived from MASTER_KEY (dev)
     # Schema creation at startup. Production runs the app with a DML-only runtime
     # login and creates/migrates the schema in a separate one-shot job (S3).
     db_create_all: bool = True
@@ -108,6 +109,28 @@ class Settings(BaseSettings):
             raw = self.master_key_bytes if val.strip() == "master" else base64.b64decode(val.strip(), validate=True)
             if len(raw) != 32:
                 raise RuntimeError("FINGERPRINT_KEYS keys must decode to exactly 32 bytes")
+            out.append((kid, raw))
+        return out
+
+    @property
+    def sealing_key_list(self) -> list[tuple[str, bytes]]:
+        """SEALING_KEYS = "kid=base64,…" (first = current; `master` = MASTER_KEY). Empty =
+        MASTER_KEY alone as `m0`. Ciphertext written before versioning (no prefix) is
+        m0's. Rotation: put the new key first, run `python -m app.tools.rekey rekey`,
+        confirm `status` is clean, then drop the old kid (S10)."""
+        import re
+        spec = self.sealing_keys.strip()
+        if not spec:
+            return [("m0", self.master_key_bytes)]
+        out: list[tuple[str, bytes]] = []
+        for part in (p.strip() for p in spec.split(",") if p.strip()):
+            kid, sep, val = part.partition("=")
+            kid = kid.strip()
+            if not sep or not re.fullmatch(r"[a-z0-9_-]{1,16}", kid) or any(k == kid for k, _ in out):
+                raise RuntimeError("SEALING_KEYS entries must be unique kid=base64 with kid [a-z0-9_-]{1,16}")
+            raw = self.master_key_bytes if val.strip() == "master" else base64.b64decode(val.strip(), validate=True)
+            if len(raw) != 32:
+                raise RuntimeError("SEALING_KEYS keys must decode to exactly 32 bytes")
             out.append((kid, raw))
         return out
 
