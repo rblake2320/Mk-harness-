@@ -135,9 +135,8 @@ def roles_for(app_role: str, *, as_agent: bool = False) -> list[str]:
     """
     if as_agent:
         return [ROLE_AGENT]
-    if app_role == "admin":
-        return [ROLE_CONSULTANT, ROLE_TENANT_ADMIN]
-    return [ROLE_CONSULTANT]
+    from ..rbac import kernel_roles   # one mapping for the whole app (owner/admin/consultant/assistant/viewer)
+    return kernel_roles(app_role)
 
 
 def build_minter(kid: str, seed_b64url: str) -> AssertionMinter | None:

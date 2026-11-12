@@ -162,6 +162,7 @@ EXTRACTOR_SYSTEM = (
 
 
 def create_draft(db: Session, *, tenant_id: str, user_id: str, customer: Customer, kind: str, text: str,
+                 actor_id: str | None = None,
                  source_type: str, source_reference: str, source_version: str, evidence_text: str,
                  created_by: str, relative_window: str = "unspecified", absolute_date: str | None = None,
                  now: datetime | None = None) -> Commitment:
@@ -177,7 +178,7 @@ def create_draft(db: Session, *, tenant_id: str, user_id: str, customer: Custome
     else:
         ws, we = window_for(relative_window, now_local)
     digest = "sha256:" + hashlib.sha256(evidence_text.encode()).hexdigest()
-    aref = audit(db, tenant_id, user_id, "commitment.draft",
+    aref = audit(db, tenant_id, actor_id or user_id, "commitment.draft",
                  {"customer_id": customer.id, "kind": kind, "source_type": source_type,
                   "source_reference": source_reference, "evidence_digest": digest, "created_by": created_by})
     c = Commitment(tenant_id=tenant_id, customer_id=customer.id, owner_user_id=user_id, kind=kind,

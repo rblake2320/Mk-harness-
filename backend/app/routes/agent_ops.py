@@ -17,7 +17,6 @@ another tenant. Cross-tenant reads come back as the kernel's 404.
 """
 from __future__ import annotations
 
-import hashlib
 import uuid
 from typing import Any
 
@@ -49,9 +48,11 @@ class Principal:
         self.user_id = user.id
         self.tenant_id = user.tenant_id
         self.app_role = user.role
-        # Session id = stable fingerprint of the bearer token (never the token).
-        auth = request.headers.get("Authorization", "")
-        self.session_id = "jwt:" + hashlib.sha256(auth.encode()).hexdigest()[:24]
+        # The server-side session id (stable across token refresh), so a session
+        # revocation in the app (logout, password change, admin action) revokes the
+        # same session in the kernel and cascades to its pending approvals (H9).
+        from ..identity import kernel_session_id
+        self.session_id = kernel_session_id(request.state.auth_session.id)
 
 
 def principal(request: Request, user: User = Depends(check_rate)) -> Principal:
@@ -189,7 +190,11 @@ async def propose(body: ProposeIn, p: Principal = Depends(principal),
     req.pop("action_id", None)
     # Wire name per contracts/action/v1/action-request.schema.json is `type`.
     origin = dict(req.get("origin") or {})
-    origin["type"] = body.origin
+    # A non-approving principal (assistant/viewer) can only raise agent-origin
+    # proposals: they always need a consultant's human approval.
+    from ..rbac import has_perm
+    origin_type = body.origin if has_perm(p.app_role, "actions.approve") else "agent"
+    origin["type"] = origin_type
     origin.setdefault("session_id", p.session_id)
     req["origin"] = origin
     # Secrets never ride in arguments (the kernel schema also forbids them).
@@ -199,7 +204,7 @@ async def propose(body: ProposeIn, p: Principal = Depends(principal),
             if k in args:
                 raise HTTPException(422, f"arguments.{k} is forbidden")
     return await forward(client, p, "POST", "/actions", json=req,
-                         as_agent=(body.origin == "agent"))
+                         as_agent=(origin_type == "agent"))
 
 
 async def _select_sender(client: KernelClient, p: Principal, requested: Any) -> str:
@@ -529,8 +534,12 @@ class KillSwitchIn(BaseModel):
 
 
 @router.post("/kill-switch/tenant")
-async def tenant_kill_switch(body: KillSwitchIn, p: Principal = Depends(principal),
-                             client: KernelClient = Depends(get_kernel_client)):
+async def tenant_kill_switch(body: KillSwitchIn, request: Request, p: Principal = Depends(principal),
+                             client: KernelClient = Depends(get_kernel_client), db: Session = Depends(get_db)):
+    # Stopping is always allowed; turning dispatch back ON is a security change.
+    if body.dispatch_enabled:
+        from ..identity import step_up_fresh
+        step_up_fresh(db, request)
     return await forward(client, p, "POST", "/kill-switch/tenant", json=body.model_dump(exclude_none=True))
 
 

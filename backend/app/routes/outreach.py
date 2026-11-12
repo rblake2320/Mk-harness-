@@ -24,6 +24,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ..rbac import book_of, sees_whole_tenant
 from ..db import get_db
 from ..foundation import audit, own_customer, preference_for, unseal, utcnow
 from ..kernel import KernelClient, KernelUnavailable, get_kernel_client
@@ -58,7 +59,7 @@ async def propose_draft(did: str, body: ProposeDraftIn, p: Principal = Depends(p
     dv = db.get(DraftVersion, did)
     if not dv or dv.tenant_id != user.tenant_id:
         raise HTTPException(404, "Draft not found")
-    cust = own_customer(db, user.tenant_id, user.id, dv.customer_id)
+    cust = own_customer(db, user.tenant_id, book_of(user), dv.customer_id)
     pref = preference_for(db, cust)
     if not pref or not pref.timezone:
         raise HTTPException(422, {"code": "TIMEZONE_UNKNOWN", "detail": "set the customer's timezone before proposing outreach"})
@@ -143,7 +144,7 @@ async def pending_approvals(p: Principal = Depends(principal), user: User = Depe
         aid = str(res.get("action_id", ""))
         link = _link_for(db, user.tenant_id, aid)
         cust = db.get(Customer, link.customer_id) if link else None
-        if cust and cust.user_id != user.id and user.role != "admin":
+        if cust and cust.user_id != book_of(user) and not sees_whole_tenant(user):
             continue  # another consultant's customer: not this approver's to see
         commitment = db.get(Commitment, link.commitment_id) if link and link.commitment_id else None
         perm = None
@@ -153,7 +154,7 @@ async def pending_approvals(p: Principal = Depends(principal), user: User = Depe
                     "note": "historical observation; the kernel re-checks consent and suppression at send time"} if it else None
         sender = None
         for sid, sv in senders.items():
-            if sv.get("owner_user_id", "").replace("-", "") == (cust.user_id if cust else user.id):
+            if sv.get("owner_user_id", "").replace("-", "") == (cust.user_id if cust else book_of(user)):
                 sender = {"sender_identity_id": sid, "display_name": sv.get("display_name"), "from_number": sv.get("from_number"),
                           "registration_status": sv.get("registration_status")}
                 break
@@ -191,7 +192,7 @@ async def action_status(action_id: str, p: Principal = Depends(principal), user:
         raise HTTPException(r.status_code, r.body)
     link = _link_for(db, user.tenant_id, action_id)
     if link:
-        own_customer(db, user.tenant_id, user.id, link.customer_id) if user.role != "admin" else None
+        own_customer(db, user.tenant_id, book_of(user), link.customer_id) if not sees_whole_tenant(user) else None
         st = str((r.body or {}).get("state", link.last_known_state))
         if st != link.last_known_state:
             link.last_known_state, link.version = st, link.version + 1

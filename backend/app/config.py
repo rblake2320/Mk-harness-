@@ -54,6 +54,28 @@ class Settings(BaseSettings):
     # Only operators may flip the global kill switch; comma-separated user ids.
     kernel_platform_operators: str = ""
 
+    # ---- Identity (S2, S3, S9) ----
+    # MFA for every role. Production pre-flight refuses MFA_REQUIRED=false; the test
+    # suite turns it off for legacy fixtures and on for the identity tests.
+    mfa_required: bool = True
+    step_up_window_minutes: int = 10          # sender/permission/export/security changes
+    session_max_days: int = 14                # absolute session lifetime (refresh cannot extend it)
+    mfa_challenge_minutes: int = 5            # password-verified login waiting for its second factor
+    # Passkey second factor for app sign-in/step-up (separate registry from the
+    # kernel's approval passkeys). Empty RP id = passkeys unavailable; TOTP still works.
+    app_webauthn_rp_id: str = ""
+    app_webauthn_rp_name: str = "Consultant Studio"
+    app_webauthn_origins: str = ""            # comma list, e.g. https://app.example.com
+    # Platform support staff who may REQUEST break-glass access (user ids, comma list).
+    platform_support_users: str = ""
+    breakglass_max_minutes: int = 240
+    # Schema creation at startup. Production runs the app with a DML-only runtime
+    # login and creates/migrates the schema in a separate one-shot job (S3).
+    db_create_all: bool = True
+    # Refuse to start when the runtime login is a superuser, can bypass RLS, or owns
+    # application tables (compose/IaC set true; tests/dev SQLite leave it false).
+    db_require_least_privilege: bool = False
+
     model_config = {"env_file": ".env", "extra": "ignore"}
 
     @property
@@ -100,6 +122,14 @@ class Settings(BaseSettings):
     @property
     def platform_operator_ids(self) -> frozenset[str]:
         return frozenset(x.strip() for x in self.kernel_platform_operators.split(",") if x.strip())
+
+    @property
+    def platform_support_ids(self) -> frozenset[str]:
+        return frozenset(x.strip() for x in self.platform_support_users.split(",") if x.strip())
+
+    @property
+    def app_webauthn_origin_list(self) -> list[str]:
+        return [o.strip() for o in self.app_webauthn_origins.split(",") if o.strip()]
 
     @property
     def cors_origin_list(self) -> list[str]:

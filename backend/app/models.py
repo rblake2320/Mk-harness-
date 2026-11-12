@@ -45,7 +45,11 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(255), index=True)
     password_hash: Mapped[str] = mapped_column(String(255))
     display_name: Mapped[str] = mapped_column(String(120), default="")
-    role: Mapped[str] = mapped_column(String(20), default="consultant")  # admin | consultant
+    # owner | admin | consultant | assistant | viewer — see app/rbac.py for the matrix.
+    role: Mapped[str] = mapped_column(String(20), default="consultant")
+    # assistant/viewer act inside one consultant's customer book (that user's id);
+    # null for every other role. Enforced by rbac.book_of().
+    works_for: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     # Referral program: every user gets a shareable code; referred_by points at the referrer.
     referral_code: Mapped[str | None] = mapped_column(String(16), unique=True, nullable=True, index=True)
@@ -582,3 +586,108 @@ class ApprovedClaim(Base):
     version: Mapped[int] = mapped_column(Integer, default=1)
     audit_ref: Mapped[str] = mapped_column(String(32), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+# --------------------------------------------------------------------------- #
+# Identity (S2, S3, S9): server-side sessions, second factors, step-up,
+# break-glass. Tokens carry only the session id; the row is the authority.
+# --------------------------------------------------------------------------- #
+class AuthSession(Base):
+    __tablename__ = "auth_sessions"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=uid)
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    kind: Mapped[str] = mapped_column(String(12), default="user")         # user | breakglass
+    breakglass_grant_id: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    # Second factor verified for this session (None = password only).
+    mfa_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    step_up_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    methods: Mapped[str] = mapped_column(String(64), default="pwd")       # comma list: pwd,totp,webauthn,recovery
+    mfa_failures: Mapped[int] = mapped_column(Integer, default=0)
+    refresh_counter: Mapped[int] = mapped_column(Integer, default=0)
+    client_label: Mapped[str] = mapped_column(String(40), default="")    # coarse "Chrome on Windows"; never raw UA/IP
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoked_by: Mapped[str] = mapped_column(String(32), default="")
+    revoked_reason: Mapped[str] = mapped_column(String(40), default="")
+
+
+class MfaFactor(Base):
+    __tablename__ = "mfa_factors"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=uid)
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    kind: Mapped[str] = mapped_column(String(12))                          # totp | webauthn
+    label: Mapped[str] = mapped_column(String(60), default="")
+    secret_enc: Mapped[str] = mapped_column(Text, default="")              # TOTP secret, sealed (AAD binds user+factor)
+    last_used_step: Mapped[int] = mapped_column(Integer, default=-1)        # TOTP replay barrier
+    credential_id: Mapped[str] = mapped_column(String(512), default="", index=True)  # WebAuthn, b64url
+    public_key: Mapped[str] = mapped_column(Text, default="")              # WebAuthn COSE key, b64url
+    sign_count: Mapped[int] = mapped_column(Integer, default=0)
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class MfaRecoveryCode(Base):
+    __tablename__ = "mfa_recovery_codes"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=uid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    code_hash: Mapped[str] = mapped_column(String(255))                    # argon2id; codes shown once
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class WebAuthnChallenge(Base):
+    __tablename__ = "webauthn_challenges"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=uid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    session_id: Mapped[str] = mapped_column(String(32), index=True)
+    purpose: Mapped[str] = mapped_column(String(12))                       # register | login | step_up
+    challenge: Mapped[str] = mapped_column(String(128))                    # b64url
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class BreakGlassGrant(Base):
+    """Time-boxed, tenant-approved, read-only platform support access (S9). Support
+    acts as itself (never as the customer's user); every request is audited in the
+    target tenant."""
+    __tablename__ = "break_glass_grants"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=uid)
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), index=True)       # target tenant
+    subject_user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)  # whose book may be read
+    requested_by: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)     # platform support user
+    reason: Mapped[str] = mapped_column(Text)
+    ticket_ref: Mapped[str] = mapped_column(String(64))
+    scope: Mapped[str] = mapped_column(String(12), default="read")
+    duration_minutes: Mapped[int] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(12), default="pending")   # pending | approved | denied | revoked | expired
+    requested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    decided_by: Mapped[str] = mapped_column(String(32), default="")
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoked_by: Mapped[str] = mapped_column(String(32), default="")
+    access_count: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class KernelRevocationOutbox(Base):
+    """Session/user revocations still to be acknowledged by the kernel (H9). Written
+    in the same transaction as the local revocation; delivered synchronously when the
+    kernel is reachable and retried otherwise (app.identity.deliver_kernel_revocations)."""
+    __tablename__ = "kernel_revocation_outbox"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=uid)
+    tenant_id: Mapped[str] = mapped_column(String(32), index=True)
+    actor_user_id: Mapped[str] = mapped_column(String(32))    # principal the kernel call is made as
+    actor_role: Mapped[str] = mapped_column(String(20))
+    target_user_id: Mapped[str] = mapped_column(String(32))
+    session_id: Mapped[str] = mapped_column(String(64), default="")   # "" = whole user
+    reason: Mapped[str] = mapped_column(String(120), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    last_error: Mapped[str] = mapped_column(String(200), default="")

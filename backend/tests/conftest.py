@@ -16,6 +16,9 @@ os.environ["STRIPE_WEBHOOK_SECRET"] = "whsec_test_dummy"
 os.environ["STRIPE_PRICES"] = (
     '{"solo:month":"price_solo_m","solo:year":"price_solo_y","director:year":"price_dir_y"}')
 os.environ["BILLING_TRIAL_DAYS"] = "90"
+# Identity: the legacy suites exercise features, not sign-in; they run with MFA
+# optional. tests/test_identity.py turns it on (production pre-flight refuses off).
+os.environ["MFA_REQUIRED"] = "false"
 # Prevent host-level provider keys from leaking into tests. Tests that need a
 # provider key add one explicitly via the /api/keys endpoint. Without this,
 # any developer machine with ANTHROPIC_API_KEY / OPENAI_API_KEY set will cause
@@ -66,10 +69,29 @@ def client():
 
 def signup(client, org="Pink Org", email="admin@example.com", pw="superSecret123!",
            key_policy="both"):
+    """A fresh owner whose session has completed step-up (password method — the
+    development path with MFA optional), so feature tests can reach step-up routes.
+    Step-up enforcement itself is tested in tests/test_identity.py."""
     r = client.post("/api/auth/signup", json={
         "org_name": org, "email": email, "password": pw, "key_policy": key_policy})
     assert r.status_code == 201, r.text
-    return r.json()
+    tokens = r.json()
+    step_up(client, tokens, pw)
+    return tokens
+
+
+def step_up(client, tokens, password="superSecret123!"):
+    r = client.post("/api/security/step-up", json={"method": "password", "password": password},
+                    headers=auth_headers(tokens))
+    assert r.status_code == 200, r.text
+    return tokens
+
+
+def login(client, email, password="superSecret123!", *, stepped_up=True):
+    r = client.post("/api/auth/login", json={"email": email, "password": password})
+    assert r.status_code == 200, r.text
+    tokens = r.json()
+    return step_up(client, tokens, password) if stepped_up else tokens
 
 
 def auth_headers(tokens):

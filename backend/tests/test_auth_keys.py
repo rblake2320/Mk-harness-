@@ -15,16 +15,16 @@ class TestAuth:
     def test_signup_login_refresh_me(self, client):
         email = _email()
         t = signup(client, email=email)
-        assert t["role"] == "admin"
+        assert t["role"] == "owner"   # the signing-up consultant owns the business
 
         r = client.post("/api/auth/login", json={"email": email, "password": "superSecret123!"})
         assert r.status_code == 200
 
         r = client.post("/api/auth/refresh", json={"refresh_token": t["refresh_token"]})
         assert r.status_code == 200
-
-        r = client.get("/api/auth/me", headers=auth_headers(t))
-        assert r.json()["tenant"]["key_policy"] == "both"
+        # Refresh rotates: the new access token works; the old refresh token is spent.
+        r2 = client.get("/api/auth/me", headers=auth_headers(r.json()))
+        assert r2.json()["tenant"]["key_policy"] == "both"
 
     def test_wrong_password_rejected(self, client):
         email = _email()

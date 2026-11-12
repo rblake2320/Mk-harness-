@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ..rbac import book_of, sees_whole_tenant
 from ..commitments import aware
 from ..db import get_db
 from ..drafting import assemble, consultant_edit, drafting_system_prompt, live_claims
@@ -137,21 +138,21 @@ def _draft_view(db: Session, dv: DraftVersion, user: User) -> dict:
 
 @router.post("/drafts", status_code=201)
 async def generate_draft(body: DraftIn, user: User = Depends(check_rate), db: Session = Depends(get_db)):
-    cust = own_customer(db, user.tenant_id, user.id, body.customer_id)
+    cust = own_customer(db, user.tenant_id, book_of(user), body.customer_id)
     commitment = None
     if body.commitment_id:
         commitment = db.get(Commitment, body.commitment_id)
-        if not commitment or commitment.owner_user_id != user.id or commitment.customer_id != cust.id:
+        if not commitment or commitment.owner_user_id != book_of(user) or commitment.customer_id != cust.id:
             raise HTTPException(404, "Commitment not found")
     if body.brief_item_id:
         it = db.get(BriefItem, body.brief_item_id)
-        if not it or it.user_id != user.id or it.customer_id != cust.id:
+        if not it or it.user_id != book_of(user) or it.customer_id != cust.id:
             raise HTTPException(404, "Brief item not found")
     candidates = live_claims(db, user.tenant_id, body.product_ids or None)
     if body.product_ids and not candidates:
         # P2: no authorized, current source → no recommendation; explain; review task.
         from ..drafting import assemble as _asm
-        out = _asm(db, tenant_id=user.tenant_id, user_id=user.id, customer=cust, commitment=commitment,
+        out = _asm(db, tenant_id=user.tenant_id, user_id=user.id, book_id=book_of(user), customer=cust, commitment=commitment,
                    brief_item_id=body.brief_item_id, model_output="{}", candidates=[], generated_by="system",
                    opt_out_phrase=OPT_OUT)
         db.commit()
@@ -170,7 +171,7 @@ async def generate_draft(body: DraftIn, user: User = Depends(check_rate), db: Se
         result = await complete_with_failover(db, user, req, provider=body.provider, kind="draft")
     except ProviderError as e:
         raise HTTPException(502, str(e))
-    out = assemble(db, tenant_id=user.tenant_id, user_id=user.id, customer=cust, commitment=commitment,
+    out = assemble(db, tenant_id=user.tenant_id, user_id=user.id, book_id=book_of(user), customer=cust, commitment=commitment,
                    brief_item_id=body.brief_item_id, model_output=result.text, candidates=candidates,
                    generated_by=f"ai:{result.provider}:{result.model}", opt_out_phrase=OPT_OUT)
     if out.draft is None:
@@ -199,8 +200,9 @@ def edit_draft(did: str, body: EditIn, user: User = Depends(check_rate), db: Ses
     prior = db.get(DraftVersion, did)
     if not prior or prior.tenant_id != user.tenant_id:
         raise HTTPException(404, "Draft not found")
-    own_customer(db, user.tenant_id, user.id, prior.customer_id)
-    out = consultant_edit(db, tenant_id=user.tenant_id, user_id=user.id, prior=prior, new_text=body.text)
+    own_customer(db, user.tenant_id, book_of(user), prior.customer_id)
+    out = consultant_edit(db, tenant_id=user.tenant_id, user_id=user.id, prior=prior, new_text=body.text,
+                          book_id=book_of(user))
     if prior.brief_item_id:
         it = db.get(BriefItem, prior.brief_item_id)
         if it:
@@ -214,5 +216,5 @@ def get_draft(did: str, user: User = Depends(check_rate), db: Session = Depends(
     dv = db.get(DraftVersion, did)
     if not dv or dv.tenant_id != user.tenant_id:
         raise HTTPException(404, "Draft not found")
-    own_customer(db, user.tenant_id, user.id, dv.customer_id)
+    own_customer(db, user.tenant_id, book_of(user), dv.customer_id)
     return _draft_view(db, dv, user)

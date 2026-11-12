@@ -196,7 +196,10 @@ def test_app_readiness_reflects_kernel_and_needs_no_token(client, kernel_env):
     with respx.mock() as m:
         m.get(f"{KERNEL}/health/ready").mock(return_value=httpx.Response(200, json={"ok": 1}))
         r = client.get("/api/health/ready")
-    assert r.status_code == 200 and r.json()["checks"] == {"database": "ok", "kernel": "ok"}
+    assert r.status_code == 200 and r.json()["checks"] == {"database": "ok", "kernel": "ok",
+                                                           "kernel_revocations_backlog": "0",
+                                                           "mfa_required": "false",
+                                                           "db_least_privilege": "off"}
     with respx.mock() as m:
         m.get(f"{KERNEL}/health/ready").mock(return_value=httpx.Response(503, json={"db": "down"}))
         r = client.get("/api/health/ready")

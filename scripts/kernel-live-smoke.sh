@@ -92,19 +92,39 @@ curl -fsS "$API/health/ready" >/dev/null || die "kernel api not ready"
 
 log "starting FastAPI with the kernel wired in (no Python fallback)"
 export RUST_ACTION_KERNEL_URL="$API" KERNEL_ASSERTION_PRIVATE_KEY="$DEV_PRIVATE_KEY" KERNEL_ASSERTION_KID=k1
-export DATABASE_URL="sqlite:///$WORK/app.db" JWT_SECRET=dev-secret-dev-secret-dev-secret-123 \
-       MASTER_KEY="$MK_MASTER_KEY" MK_ALLOW_DEV_SECRETS=1 RATE_LIMIT_PER_MINUTE=1000
+# Application database as in production (S3): its own PostgreSQL database, the
+# shipped init script creates owner + runtime roles, the migrate job builds the
+# schema as owner, and the API runs as the DML-only runtime login with the
+# least-privilege gate and MFA on.
+APPDB=mk_app_smoke; APP_OWNER=mk_app_owner_smoke; APP_RT=mk_app_smoke
+psql "${PGURL%/*}/postgres" -qc "DROP DATABASE IF EXISTS $APPDB" -c "DROP ROLE IF EXISTS $APP_RT" \
+     -c "DROP ROLE IF EXISTS $APP_OWNER" -c "CREATE DATABASE $APPDB"
+PGADMIN_HOST="${HOSTDB%/*}"; PGADMIN_CRED="${PGURL#postgres://}"; PGADMIN_CRED="${PGADMIN_CRED%@*}"
+POSTGRES_USER="${PGADMIN_CRED%%:*}" PGPASSWORD="${PGADMIN_CRED#*:}" POSTGRES_DB=$APPDB \
+  PGHOST="${PGADMIN_HOST%:*}" PGPORT="${PGADMIN_HOST##*:}" \
+  APP_DB_OWNER_ROLE=$APP_OWNER APP_DB_RUNTIME_ROLE=$APP_RT \
+  APP_DB_OWNER_PASSWORD="owner-$PW" APP_DB_RUNTIME_PASSWORD="rt-$PW" \
+  sh "$ROOT/deploy/app/initdb/10-app-roles.sh" >/dev/null || die "app role init"
+export JWT_SECRET=dev-secret-dev-secret-dev-secret-123 MASTER_KEY="$MK_MASTER_KEY" MK_ALLOW_DEV_SECRETS=1 \
+       RATE_LIMIT_PER_MINUTE=1000
+(cd "$ROOT/backend" && DATABASE_URL="postgresql+psycopg://$APP_OWNER:owner-$PW@$PGADMIN_HOST/$APPDB" \
+   APP_RUNTIME_ROLE=$APP_RT python3 -m app.tools.migrate >/dev/null) || die "app migrate job"
+export DATABASE_URL="postgresql+psycopg://$APP_RT:rt-$PW@$PGADMIN_HOST/$APPDB" \
+       DB_CREATE_ALL=false DB_REQUIRE_LEAST_PRIVILEGE=true MFA_REQUIRED=true
 (cd "$ROOT/backend" && exec python3 -m uvicorn app.main:app --port 8000 >"$WORK/app.log" 2>&1) & PIDS+=($!)
 for i in $(seq 1 30); do [ "$(curl -s -o /dev/null -w '%{http_code}' "$APP/docs" || true)" != 000 ] && break; sleep 1; done
 
-TOK=$(curl -fsS "$APP/api/auth/signup" -H 'content-type: application/json' \
-  -d '{"org_name":"Smoke Org","email":"admin@smoke.example.com","password":"superSecret123!","key_policy":"both"}' \
-  | python3 -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')
+curl -fsS "$APP/api/auth/signup" -H 'content-type: application/json' \
+  -d '{"org_name":"Smoke Org","email":"admin@smoke.example.com","password":"superSecret123!","key_policy":"both"}' >/dev/null \
+  || die "signup"
+# Every human login goes through MFA (TOTP enrolled on first login, challenged after).
+session() { python3 "$ROOT/scripts/app_session.py" "$APP" "$1" 'superSecret123!' "$WORK/$1.totp" || die "login $1"; }
+TOK=$(session admin@smoke.example.com)
 H=(-H "authorization: Bearer $TOK" -H 'content-type: application/json')
 # Separate approver: outreach forbids self-approval by default, so a second
 # consultant in the same tenant approves what the admin's agent proposed.
 curl -fsS "$APP/api/auth/members" "${H[@]}" -d '{"email":"approver@smoke.example.com","password":"superSecret123!","role":"consultant"}' >/dev/null
-TOK2=$(curl -fsS "$APP/api/auth/login" -H 'content-type: application/json' -d '{"email":"approver@smoke.example.com","password":"superSecret123!"}' | python3 -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')
+TOK2=$(session approver@smoke.example.com)
 H2=(-H "authorization: Bearer $TOK2" -H 'content-type: application/json')
 TENANT=$(python3 -c "import jwt,sys,uuid;print(uuid.UUID(jwt.decode('$TOK',options={'verify_signature':False})['tid']))")
 # The default tenant policy evaluates contact hours (08–21) in America/Chicago, which made
@@ -270,11 +290,12 @@ log "gate 10: production SMS path — registered sender, provider submission, au
 [ "$(ops -X POST "$APP/api/agent-ops/senders" -d "{\"owner_user_id\":\"$(python3 -c "import jwt,uuid;print(uuid.UUID(jwt.decode('$TOK',options={'verify_signature':False})['sub']))")\",\"display_name\":\"Smoke Business\",\"account_sid\":\"$TW_ACCOUNT\",\"auth_token\":\"$TW_TOKEN\",\"from_number\":\"+15005550006\"}")" = 201 ] || die "register sender: $(cat "$WORK/out.json")"
 SENDER=$(j 'd["sender_identity_id"]')
 # Secrets never reach FastAPI storage; the kernel sealed the token.
-! grep -q "$TW_TOKEN" "$WORK/app.db" 2>/dev/null || die "provider token found in the application database"
+pg_dump --data-only "${PGURL%/*}/$APPDB" > "$WORK/appdb.sql" || die "app db dump"
+! grep -q "$TW_TOKEN" "$WORK/appdb.sql" || die "provider token found in the application database"
 ! grep -q "$TW_TOKEN" "$WORK/api.log" "$WORK/worker.log" "$WORK/app.log" || die "provider token leaked to logs"
 # Third approver (the earlier one's session is revoked): register a passkey.
 curl -fsS "$APP/api/auth/members" "${H[@]}" -d '{"email":"approver3@smoke.example.com","password":"superSecret123!","role":"consultant"}' >/dev/null
-TOK3=$(curl -fsS "$APP/api/auth/login" -H 'content-type: application/json' -d '{"email":"approver3@smoke.example.com","password":"superSecret123!"}' | python3 -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')
+TOK3=$(session approver3@smoke.example.com)
 H2=(-H "authorization: Bearer $TOK3" -H 'content-type: application/json')
 SA="$WORK/softauthn3.json"; "$BIN/mk-softauthn" new "$SA" es256 >/dev/null
 [ "$(ops2 -X POST "$APP/api/agent-ops/approval-credentials/register/begin")" = 200 ] || die "register/begin 3"
@@ -385,6 +406,7 @@ log "gate 8: production pre-flight passes against this stack (and refuses --for-
 export KERNEL_URL="$API" APP_URL="$APP" PG_HOST="${HOSTDB%/*}" PG_DB="${HOSTDB##*/}" PG_ADMIN_URL="$PGURL" \
   MK_DB_API_PASSWORD="api-$PW" MK_DB_WORKER_PASSWORD="worker-$PW" MK_DB_RELAY_PASSWORD="relay-$PW" MK_DB_READONLY_PASSWORD="readonly-$PW" \
   MK_PREFLIGHT_EMAIL=admin@smoke.example.com MK_PREFLIGHT_PASSWORD='superSecret123!' \
+  MK_PREFLIGHT_TOTP_FILE="$WORK/admin@smoke.example.com.totp" \
   MK_AUDIT_VERIFIER="$BIN/mk-audit-verifier" MK_EGRESS_AUTHORITIES=127.0.0.1:8787 MK_MOBILE_INTAKE_URL="https://127.0.0.1:8787/work-orders"
 bash "$ROOT/scripts/kernel-preflight.sh" > "$WORK/preflight.log" 2>&1 || { cat "$WORK/preflight.log"; die "pre-flight failed"; }
 grep -E "passed, 0 failed" "$WORK/preflight.log" >/dev/null || { cat "$WORK/preflight.log"; die "pre-flight"; }

@@ -111,6 +111,34 @@ class KernelClient:
             "KERNEL_UNREACHABLE",
             f"action kernel unreachable: {type(last_exc).__name__}")
 
+    def call_sync(
+        self,
+        method: str,
+        path: str,
+        *,
+        user_id: str,
+        tenant_id: str,
+        roles: list[str],
+        session_id: str,
+        json: Any | None = None,
+        request_id: str | None = None,
+    ) -> KernelResponse:
+        """Synchronous twin of `call` for code that is not running on the event loop
+        (revocation outbox delivery, CLI jobs). Same minting, same single attempt
+        for non-GET requests."""
+        minter = self._require_configured()
+        rid = request_id or str(uuid.uuid4())
+        token = minter.mint(user_id=user_id, tenant_id=tenant_id, roles=roles,
+                            session_id=session_id, request_id=rid)
+        headers = {"Authorization": f"Bearer {token}", "X-Request-Id": rid, "Accept": "application/json"}
+        try:
+            with httpx.Client(timeout=self.timeout) as http:
+                r = http.request(method.upper(), f"{self.base_url}{INTERNAL_PREFIX}{path}", headers=headers, json=json)
+        except httpx.TransportError as e:
+            raise KernelUnavailable("KERNEL_UNREACHABLE", f"action kernel unreachable: {type(e).__name__}")
+        return KernelResponse(status_code=r.status_code, body=_json_or_none(r), request_id=rid,
+                              retry_after=r.headers.get("retry-after"))
+
     async def health_ready(self) -> KernelResponse:
         """Unauthenticated readiness probe; used by /api/agent-ops/health."""
         if not self.base_url:

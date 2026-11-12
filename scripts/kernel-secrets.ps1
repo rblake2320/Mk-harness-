@@ -65,6 +65,9 @@ foreach ($kv in $existing.GetEnumerator()) { $out[$kv.Key] = $kv.Value }
 
 # -- core app secrets (main compose) -------------------------------------------
 if (Need "POSTGRES_PASSWORD") { $out["POSTGRES_PASSWORD"] = New-Hex 24 }
+# S3: the API never connects as the bootstrap superuser. Owner = migrate job only.
+if (Need "APP_DB_OWNER_PASSWORD")   { $out["APP_DB_OWNER_PASSWORD"]   = New-Hex 24 }
+if (Need "APP_DB_RUNTIME_PASSWORD") { $out["APP_DB_RUNTIME_PASSWORD"] = New-Hex 24 }
 if (Need "JWT_SECRET")        { $out["JWT_SECRET"]        = New-Hex 48 }
 $haveMaster = $existing.ContainsKey("MASTER_KEY") -and -not [string]::IsNullOrWhiteSpace($existing["MASTER_KEY"])
 if (-not $haveMaster) { $out["MASTER_KEY"] = New-B64 32 }

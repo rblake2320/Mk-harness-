@@ -5,16 +5,42 @@ services:
       POSTGRES_USER: mk
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in .env}
       POSTGRES_DB: mkharness
-    volumes: [pgdata:/var/lib/postgresql/data]
+      # S3: the bootstrap superuser is never an application login. The init script
+      # creates mk_app_owner (schema owner, migrate job only) and mk_app (runtime DML).
+      APP_DB_OWNER_PASSWORD: ${APP_DB_OWNER_PASSWORD:?set in .env}
+      APP_DB_RUNTIME_PASSWORD: ${APP_DB_RUNTIME_PASSWORD:?set in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./deploy/app/initdb:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U mk -d mkharness"]
       interval: 5s
       retries: 10
 
+  api-migrate:
+    # One-shot schema job: owner login creates/upgrades the schema and grants DML
+    # to the runtime role, then exits. The API never holds the owner credential.
+    build: ./backend
+    command: ["python", "-m", "app.tools.migrate"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://mk_app_owner:${APP_DB_OWNER_PASSWORD}@db:5432/mkharness
+      APP_RUNTIME_ROLE: mk_app
+      JWT_SECRET: ${JWT_SECRET:?set in .env}
+      MASTER_KEY: ${MASTER_KEY:?set in .env}
+    depends_on:
+      db: { condition: service_healthy }
+    restart: "no"
+
   api:
     build: ./backend
     environment:
-      DATABASE_URL: postgresql+psycopg://mk:${POSTGRES_PASSWORD}@db:5432/mkharness
+      DATABASE_URL: postgresql+psycopg://mk_app:${APP_DB_RUNTIME_PASSWORD}@db:5432/mkharness
+      DB_CREATE_ALL: "false"
+      DB_REQUIRE_LEAST_PRIVILEGE: "true"
+      MFA_REQUIRED: ${MFA_REQUIRED:-true}
+      APP_WEBAUTHN_RP_ID: ${APP_WEBAUTHN_RP_ID:-}
+      APP_WEBAUTHN_ORIGINS: ${APP_WEBAUTHN_ORIGINS:-}
+      PLATFORM_SUPPORT_USERS: ${PLATFORM_SUPPORT_USERS:-}
       JWT_SECRET: ${JWT_SECRET:?set in .env}
       MASTER_KEY: ${MASTER_KEY:?set in .env}
       # Destination-fingerprint keys: MUST be the same value the kernel gets as
@@ -28,6 +54,7 @@ services:
       RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-30}
     depends_on:
       db: { condition: service_healthy }
+      api-migrate: { condition: service_completed_successfully }
 
   web:
     build:

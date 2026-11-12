@@ -1,15 +1,16 @@
 """MK Consultant Harness API."""
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 
 from .config import get_settings, require_secret
 from .db import init_engine
+from .rbac import route_guard
 from .routes import (
     account, agent_ops, auth, billing, chat, commitments, consent, customers, drafting, foundation, inbound, outreach,
-    keys, profile, skin, skindata, usage,
+    keys, profile, security, skin, skindata, usage,
 )
 
 _PRIVACY_HTML = """<!DOCTYPE html>
@@ -137,10 +138,13 @@ app.add_middleware(
 
 # foundation before customers: its /customers/import/* and /customers/export.csv paths
 # must win over customers' /customers/{cid}.
-for r in (auth.router, chat.router, skin.router, foundation.router, commitments.router, drafting.router, inbound.router, outreach.router, customers.router,
+# Every /api router runs rbac.route_guard first: authentication, MFA state, role
+# permission, step-up and break-glass scope from ONE policy table (default deny).
+for r in (auth.router, security.router, chat.router, skin.router, foundation.router, commitments.router,
+          drafting.router, inbound.router, outreach.router, customers.router,
           keys.router, usage.router, profile.router, consent.router, skindata.router,
           billing.router, account.router, agent_ops.router):
-    app.include_router(r, prefix="/api")
+    app.include_router(r, prefix="/api", dependencies=[Depends(route_guard)])
 
 
 @app.get("/api/health")
@@ -168,6 +172,18 @@ async def ready():
         db = next(get_db())
         try:
             db.execute(text("SELECT 1"))
+            # H9 propagation backlog: revocations the kernel has not acknowledged for
+            # more than a minute (count only — no tenant data). Alerted on in ops.
+            from datetime import timedelta
+
+            from sqlalchemy import func, select
+
+            from .foundation import utcnow
+            from .models import KernelRevocationOutbox
+            stale = db.scalar(select(func.count()).select_from(KernelRevocationOutbox).where(
+                KernelRevocationOutbox.delivered_at.is_(None),
+                KernelRevocationOutbox.created_at < utcnow() - timedelta(seconds=60))) or 0
+            checks["kernel_revocations_backlog"] = str(stale)
         finally:
             db.close()
         checks["database"] = "ok"
@@ -185,6 +201,12 @@ async def ready():
             ok = False
     else:
         checks["kernel"] = "not_configured"
+    # Security posture flags (booleans only) so pre-flight can refuse a production
+    # deployment that runs without MFA or with an over-privileged database login.
+    from .config import get_settings
+    st = get_settings()
+    checks["mfa_required"] = "true" if st.mfa_required else "false"
+    checks["db_least_privilege"] = "enforced" if st.db_require_least_privilege else "off"
     return JSONResponse(status_code=200 if ok else 503, content={"status": "ready" if ok else "not_ready", "checks": checks})
 
 

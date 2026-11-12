@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ..rbac import book_of, sees_whole_tenant
 from ..commitments import (
     EXTRACTOR_SYSTEM, KINDS, OUTCOME_KINDS, RELATIVE_WINDOWS, brief_for, confirm, create_draft, defer,
     generate_brief, parse_extractor_output, record_outcome,
@@ -64,7 +65,7 @@ class CommitmentIn(BaseModel):
 
 @router.post("/commitments", status_code=201)
 def create_commitment(body: CommitmentIn, user: User = Depends(check_rate), db: Session = Depends(get_db)):
-    cust = own_customer(db, user.tenant_id, user.id, body.customer_id)
+    cust = own_customer(db, user.tenant_id, book_of(user), body.customer_id)
     if body.relative_window not in RELATIVE_WINDOWS:
         raise HTTPException(422, "unknown relative_window")
     if body.absolute_date:
@@ -72,7 +73,8 @@ def create_commitment(body: CommitmentIn, user: User = Depends(check_rate), db: 
             date.fromisoformat(body.absolute_date)
         except ValueError:
             raise HTTPException(422, "absolute_date must be YYYY-MM-DD")
-    c = create_draft(db, tenant_id=user.tenant_id, user_id=user.id, customer=cust, kind=body.kind, text=body.text,
+    c = create_draft(db, tenant_id=user.tenant_id, user_id=book_of(user), actor_id=user.id, customer=cust,
+                     kind=body.kind, text=body.text,
                      source_type=body.source_type, source_reference=body.source_reference, source_version="",
                      evidence_text=body.evidence_text, created_by=user.id,
                      relative_window=body.relative_window, absolute_date=body.absolute_date)
@@ -94,7 +96,7 @@ class ExtractIn(BaseModel):
 async def extract_commitments(body: ExtractIn, user: User = Depends(check_rate), db: Session = Depends(get_db)):
     """Bounded extraction: the model proposes; every item is a DRAFT the consultant must
     confirm. Invented dates are dropped; quotes must be verbatim spans of the source."""
-    cust = own_customer(db, user.tenant_id, user.id, body.customer_id)
+    cust = own_customer(db, user.tenant_id, book_of(user), body.customer_id)
     req = ChatRequest(messages=[ChatMessage(role="user", content=body.conversation_text)],
                       system=EXTRACTOR_SYSTEM, model=body.model, max_tokens=800, temperature=0.0, json_mode=True)
     try:
@@ -104,7 +106,7 @@ async def extract_commitments(body: ExtractIn, user: User = Depends(check_rate),
     drafts = parse_extractor_output(result.text, body.conversation_text)
     created = []
     for d in drafts:
-        c = create_draft(db, tenant_id=user.tenant_id, user_id=user.id, customer=cust, kind=d.kind,
+        c = create_draft(db, tenant_id=user.tenant_id, user_id=book_of(user), actor_id=user.id, customer=cust, kind=d.kind,
                          text=d.commitment_text, source_type="conversation", source_reference=body.source_reference,
                          source_version=f"{result.provider}:{result.model}", evidence_text=d.evidence_quote,
                          created_by="ai", relative_window=d.relative_window, absolute_date=d.absolute_date)
@@ -157,9 +159,9 @@ def cancel_commitment(cid: str, user: User = Depends(check_rate), db: Session = 
 @router.get("/commitments")
 def list_commitments(customer_id: str | None = None, status: str | None = None,
                      user: User = Depends(check_rate), db: Session = Depends(get_db)):
-    q = select(Commitment).where(Commitment.tenant_id == user.tenant_id, Commitment.owner_user_id == user.id)
+    q = select(Commitment).where(Commitment.tenant_id == user.tenant_id, Commitment.owner_user_id == book_of(user))
     if customer_id:
-        own_customer(db, user.tenant_id, user.id, customer_id)
+        own_customer(db, user.tenant_id, book_of(user), customer_id)
         q = q.where(Commitment.customer_id == customer_id)
     if status:
         q = q.where(Commitment.status == status)
@@ -193,7 +195,7 @@ def daily_brief(brief_date: str | None = Query(default=None, alias="date"),
         d = date.fromisoformat(brief_date) if brief_date else utcnow().date()
     except ValueError:
         raise HTTPException(422, "date must be YYYY-MM-DD")
-    generate_brief(db, tenant_id=user.tenant_id, user_id=user.id, brief_date=d)
+    generate_brief(db, tenant_id=user.tenant_id, user_id=book_of(user), brief_date=d)
     db.commit()
     items = brief_for(db, user.tenant_id, user.id, d)
     return {"date": d.isoformat(), "items": [_item_view(db, it) for it in items],
@@ -263,7 +265,7 @@ class OutcomeIn(BaseModel):
 
 @router.post("/outcomes", status_code=201)
 def create_outcome(body: OutcomeIn, user: User = Depends(check_rate), db: Session = Depends(get_db)):
-    own_customer(db, user.tenant_id, user.id, body.customer_id)
+    own_customer(db, user.tenant_id, book_of(user), body.customer_id)
     c = _own_commitment(db, user, body.commitment_id) if body.commitment_id else None
     o = record_outcome(db, tenant_id=user.tenant_id, user_id=user.id, customer_id=body.customer_id, kind=body.kind,
                        commitment=c, action_link_id=body.action_link_id, note=body.note)
@@ -275,7 +277,7 @@ def create_outcome(body: OutcomeIn, user: User = Depends(check_rate), db: Sessio
 
 @router.get("/customers/{cid}/timeline")
 def timeline(cid: str, user: User = Depends(check_rate), db: Session = Depends(get_db)):
-    own_customer(db, user.tenant_id, user.id, cid)
+    own_customer(db, user.tenant_id, book_of(user), cid)
     events = []
     for c in db.scalars(select(Commitment).where(Commitment.customer_id == cid)):
         events.append({"at": c.created_at.isoformat(), "type": "commitment", "data": _view(c)})

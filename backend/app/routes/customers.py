@@ -1,10 +1,13 @@
 """CRM-lite: customer book. Follow-ups come from the brief; drafting from /api/drafts."""
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ..foundation import fingerprints_all, normalize, utcnow
+
+from ..rbac import book_of, sees_whole_tenant
 from ..db import get_db
 from ..models import Customer, User
 from ..ratelimit import check_rate
@@ -22,7 +25,7 @@ class CustomerIn(BaseModel):
 
 def _own(db: Session, user: User, cid: str) -> Customer:
     c = db.get(Customer, cid)
-    if not c or c.user_id != user.id:
+    if not c or c.tenant_id != user.tenant_id or c.user_id != book_of(user):
         raise HTTPException(404, "Customer not found")
     return c
 
@@ -43,8 +46,45 @@ def _customer_dict(c: Customer) -> dict:
 
 @router.get("")
 def list_customers(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    rows = db.scalars(select(Customer).where(Customer.user_id == user.id)
+    rows = db.scalars(select(Customer).where(Customer.user_id == book_of(user))
                       .order_by(Customer.name))
+    return [_customer_dict(c) for c in rows]
+
+
+@router.get("/search")
+def search_customers(q: str = Query(min_length=2, max_length=100), user: User = Depends(get_current_user),
+                     db: Session = Depends(get_db)):
+    """Search the caller's book (F7): name substring, or an exact phone/email match
+    through the destination fingerprint (raw destinations are never queried in
+    plaintext). Scoped to the tenant AND the book; another book's or tenant's
+    customers can never appear, whatever the query."""
+    from ..models import CustomerDestination
+    book, tid = book_of(user), user.tenant_id
+    term = q.strip()
+    escaped = term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    ids: dict[str, None] = {}
+    for c in db.scalars(select(Customer.id).where(
+            Customer.tenant_id == tid, Customer.user_id == book,
+            Customer.name.ilike(f"%{escaped}%", escape="\\")).order_by(Customer.name).limit(50)):
+        ids[c] = None
+    fps: list[str] = []
+    for channel in ("sms", "email"):
+        if channel == "email" and "@" not in term:
+            continue
+        if channel == "sms" and sum(ch.isdigit() for ch in term) < 7:
+            continue
+        try:
+            fps += fingerprints_all(tid, channel, normalize(channel, term))
+        except HTTPException:
+            continue   # not a usable destination: name search only
+    if fps:
+        for cid in db.scalars(select(CustomerDestination.customer_id).join(
+                Customer, Customer.id == CustomerDestination.customer_id).where(
+                CustomerDestination.tenant_id == tid, Customer.user_id == book,
+                CustomerDestination.fingerprint.in_(fps), CustomerDestination.retired_at.is_(None))):
+            ids[cid] = None
+    rows = db.scalars(select(Customer).where(Customer.id.in_(list(ids)[:50]), Customer.tenant_id == tid,
+                                             Customer.user_id == book).order_by(Customer.name)).all()
     return [_customer_dict(c) for c in rows]
 
 
@@ -66,7 +106,7 @@ def get_customer(cid: str, user: User = Depends(get_current_user),
 @router.post("", status_code=201)
 def create_customer(body: CustomerIn, user: User = Depends(get_current_user),
                     db: Session = Depends(get_db)):
-    c = Customer(tenant_id=user.tenant_id, user_id=user.id, **body.model_dump())
+    c = Customer(tenant_id=user.tenant_id, user_id=book_of(user), **body.model_dump())
     db.add(c)
     db.commit()
     return {"id": c.id}
@@ -94,7 +134,7 @@ def delete_customer(cid: str, user: User = Depends(get_current_user),
 def mark_contacted(cid: str, user: User = Depends(get_current_user),
                    db: Session = Depends(get_db)):
     c = _own(db, user, cid)
-    c.last_contact = datetime.now(timezone.utc)
+    c.last_contact = utcnow()
     db.commit()
     return {"ok": True}
 

@@ -14,7 +14,7 @@ required.
 mk-harness/
 ├── backend/          FastAPI · Postgres · multi-tenant · JWT auth
 │   ├── app/providers/   The harness core: 4 adapters + router + failover
-│   └── tests/           165 tests (auth, crypto, isolation, adapters, e2e, red team)
+│   └── tests/           auth, MFA, RBAC, crypto, isolation, adapters, e2e, red team
 ├── packages/sdk/     Shared TypeScript SDK (web + mobile)
 ├── web/              React + Vite web client (dark "vanity mirror" UI)
 ├── mobile/           Expo React Native client (camera skin analysis)
@@ -61,10 +61,16 @@ after being saved.
 
 ```bash
 cd mk-harness
-cat > .env << 'ENV'
+cat > .env << ENV
 POSTGRES_PASSWORD=$(openssl rand -hex 24)
+# Application DB identities (S3): schema owner (migrate job only) and runtime DML login
+APP_DB_OWNER_PASSWORD=$(openssl rand -hex 24)
+APP_DB_RUNTIME_PASSWORD=$(openssl rand -hex 24)
 JWT_SECRET=$(openssl rand -hex 48)
 MASTER_KEY=$(python3 -c "import os,base64;print(base64.b64encode(os.urandom(32)).decode())")
+# Passkeys for consultant login/step-up: the web app's domain and origin
+APP_WEBAUTHN_RP_ID=localhost
+APP_WEBAUTHN_ORIGINS=http://localhost:8080
 # Optional central keys (leave blank to require BYO):
 ANTHROPIC_API_KEY=
 OPENAI_API_KEY=
@@ -72,7 +78,8 @@ GEMINI_API_KEY=
 OLLAMA_BASE_URL=
 ENV
 docker compose up --build
-# Web app: http://localhost:8080  (create your team on first visit)
+# Web app: http://localhost:8080  (create your team on first visit; every account
+# enrolls an authenticator app or passkey on first sign-in — MFA_REQUIRED=true)
 ```
 
 Local development without Docker:
@@ -80,6 +87,7 @@ Local development without Docker:
 ```bash
 cd backend && pip install -r requirements.txt
 MK_ALLOW_DEV_SECRETS=1 JWT_SECRET=dev-secret-dev-secret-dev-secret-123 \
+  MFA_REQUIRED=false \
   MASTER_KEY=$(python3 -c "import os,base64;print(base64.b64encode(os.urandom(32)).decode())") \
   uvicorn app.main:app --reload --port 8000
 cd ../web && npm install && npm run dev   # http://localhost:5173 (proxies /api)
@@ -96,7 +104,7 @@ npx expo start
 ## Tests
 
 ```bash
-cd backend && python -m pytest -v    # 165 tests
+cd backend && python -m pytest -v
 ```
 
 Provider adapters are tested against each vendor's documented wire format
@@ -139,7 +147,7 @@ EXIF stripping, and skin-compliance rejection.
 
 ## Honest constraints
 
-Built and verified in a sandboxed container: backend test suite (165/165),
+Built and verified in a sandboxed container: backend test suite (all passing),
 live server smoke test, and web production build all pass here. What I could
 not do from the container: hit OpenAI/Gemini live endpoints (network
 egress), run an iOS/Android simulator (Expo client is code-complete and
