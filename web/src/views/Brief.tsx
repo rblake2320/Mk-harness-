@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { client } from '../App.tsx';
-import { BRIEF_SECTIONS, briefRuleLabel, permissionLabel } from '../../../packages/sdk/src/index.ts';
+import { BRIEF_SECTIONS, briefRuleLabel, localDay, permissionLabel } from '../../../packages/sdk/src/index.ts';
 import type { BriefItem, Draft } from '../../../packages/sdk/src/index.ts';
 import { ErrorNote, HumanSteps, fmtWhen } from '../components/Common.tsx';
 import { AiBadge } from '../components/AiDisclosure.tsx';
@@ -10,7 +10,8 @@ function sectionTitle(rank: number) { return BRIEF_SECTIONS.find(s => s.rank ===
 
 export default function BriefView({ onOpenCustomer }: { onOpenCustomer: (id: string) => void }) {
   const [items, setItems] = useState<BriefItem[]>([]);
-  const [date, setDate] = useState<string>(new Date().toISOString().slice(0, 10));
+  // The brief is per LOCAL day; toISOString() would pick the UTC day (tomorrow, in US evenings).
+  const [date, setDate] = useState<string>(() => localDay());
   const [err, setErr] = useState<unknown>(null);
   const [busy, setBusy] = useState('');
   const [draftFor, setDraftFor] = useState<{ item: BriefItem; draft: Draft | null; limitation: string | null; neutral?: string } | null>(null);
