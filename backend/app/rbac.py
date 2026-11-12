@@ -221,6 +221,8 @@ ROUTE_POLICY: dict[tuple[str, str], Policy] = {
     ("DELETE", "/api/keys/mine/{provider}"): P("keys.own"),
     ("GET", "/api/usage/me"): P(),
     ("GET", "/api/usage/tenant"): P("members.manage"),
+    ("GET", "/api/usage/budget"): P(),
+    ("PUT", "/api/usage/budget"): P("billing.manage", step_up=True),
     ("GET", "/api/profile/me"): P(),
     ("PATCH", "/api/profile/me"): P(),
     ("GET", "/api/billing/plans"): PUBLIC,

@@ -265,7 +265,18 @@ class OutcomeIn(BaseModel):
 
 @router.post("/outcomes", status_code=201)
 def create_outcome(body: OutcomeIn, user: User = Depends(check_rate), db: Session = Depends(get_db)):
-    own_customer(db, user.tenant_id, book_of(user), body.customer_id)
+    customer = own_customer(db, user.tenant_id, book_of(user), body.customer_id)
+    if body.kind == "opted_out":
+        # An opt-out recorded as an outcome alone suppressed nothing (the customer stayed
+        # contactable). The outcome may only record an opt-out that is already in force:
+        # the do-not-contact action (POST /api/suppressions) is the one path that stops sending.
+        from ..foundation import active_suppressions
+        from ..models import CustomerDestination
+        dests = db.scalars(select(CustomerDestination).where(CustomerDestination.customer_id == customer.id)).all()
+        if not any(active_suppressions(db, user.tenant_id, d.fingerprint, d.channel) for d in dests):
+            raise HTTPException(409, {"code": "SUPPRESSION_REQUIRED",
+                                      "detail": "record the opt-out with 'mark do not contact' first; an outcome "
+                                                "alone does not stop messages"})
     c = _own_commitment(db, user, body.commitment_id) if body.commitment_id else None
     o = record_outcome(db, tenant_id=user.tenant_id, user_id=user.id, customer_id=body.customer_id, kind=body.kind,
                        commitment=c, action_link_id=body.action_link_id, note=body.note)

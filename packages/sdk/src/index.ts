@@ -86,6 +86,8 @@ export interface PendingApproval {
   supporting: { commitment: { id: string; text: string; status: string; evidence_digest: string } | null; draft_version_id: string | null; evidence_count: number };
   permission: { state: string; checked_at: string | null; note: string } | null;
   scheduled_for: string | null; approval_expires_at: string; approval_lifetime_minutes: number; human_steps: string[];
+  /** M4: segment count and (when a price is configured) the estimated charge, shown before approval. */
+  charge?: { segments: number; encoding: string; price_per_segment_millicents: number | null; estimated_millicents: number | null; note: string } | null;
 }
 export interface ExceptionItem {
   id: string; customer_id: string | null; kind: string; state: string; source_reference: string; detail: string;

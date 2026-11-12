@@ -11,7 +11,7 @@
 import type { PendingApproval } from './index';
 import { permissionLabel } from './labels';
 
-export type H1Key = 'to' | 'from' | 'purpose' | 'because' | 'permission' | 'when' | 'expiry' | 'digest';
+export type H1Key = 'to' | 'from' | 'purpose' | 'because' | 'permission' | 'when' | 'expiry' | 'digest' | 'charge';
 
 export interface H1Row {
   key: H1Key;
@@ -210,6 +210,11 @@ export function approvalView(it: PendingApproval, opts: { nowMs: number; formatW
     warning: p && p.state !== 'active' ? 'Permission is not active on the last observation; the kernel will refuse unless it is.' : undefined });
 
   rows.push({ key: 'when', label: 'When', value: it.scheduled_for ? when(it.scheduled_for) : 'As soon as policy allows (inside the customer’s contact hours)' });
+  const ch = (it as any).charge as { segments: number; estimated_millicents: number | null; note: string } | null | undefined;
+  if (ch) {
+    const est = typeof ch.estimated_millicents === 'number' ? ` · about $${(ch.estimated_millicents / 100000).toFixed(4)}` : '';
+    rows.push({ key: 'charge', label: 'Charge', value: `${ch.segments} SMS segment${ch.segments === 1 ? '' : 's'}${est}${est ? '' : ' · price not configured'}` });
+  }
 
   const lifetime = Number.isInteger(it.approval_lifetime_minutes) && it.approval_lifetime_minutes > 0 ? it.approval_lifetime_minutes : 15;
   rows.push({ key: 'expiry', label: 'Expires', value: `${expiry.text}${expiry.status !== 'unknown' && typeof it.approval_expires_at === 'string' ? ` (${when(it.approval_expires_at)})` : ''} · once approved, the approval is single-use and lasts ${lifetime} minutes`,

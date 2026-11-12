@@ -32,6 +32,8 @@ class Tenant(Base):
     key_policy: Mapped[str] = mapped_column(String(10), default="both")
     # Brand config identifier — drives system prompts and product catalog.
     brand: Mapped[str] = mapped_column(String(40), default="mary_kay")
+    # M4: monthly AI spend cap (cents) for company-paid keys; None = platform default.
+    monthly_ai_budget_cents: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
     users: Mapped[list["User"]] = relationship(back_populates="tenant")

@@ -149,6 +149,15 @@ def health():
     return {"status": "ok"}
 
 
+from .spend import SpendLimitReached  # noqa: E402
+
+
+@app.exception_handler(SpendLimitReached)
+async def _spend_limit(_request, exc: SpendLimitReached):
+    from fastapi.responses import JSONResponse
+    return JSONResponse(status_code=402, content={"detail": {"code": exc.code, "detail": exc.detail}})
+
+
 @app.get("/api/health/ready")
 async def ready():
     """Readiness of the core workflow path: database reachable and, when the

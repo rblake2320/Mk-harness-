@@ -73,7 +73,12 @@ class Settings(BaseSettings):
     # volume / bucket) so a restore can be followed by an erasure replay.
     erasure_ledger_path: str = "/var/lib/mk/erasure-ledger.jsonl"
     erasure_ledger_key: str = ""
-    sealing_keys: str = ""           # S10: versioned application sealing keys (see sealing_key_list)     # HMAC key; empty = derived from MASTER_KEY (dev)
+    sealing_keys: str = ""
+    # M4: monthly cap on what a business spends on AI through CENTRAL (company-paid) keys;
+    # a tenant row can override it. 0 = no cap (refused by nothing — set it in production).
+    tenant_ai_budget_cents_default: int = 5000
+    # M4: SMS price per segment shown before approval; 0 = unknown (the screen says so).
+    sms_price_per_segment_millicents: int = 0           # S10: versioned application sealing keys (see sealing_key_list)     # HMAC key; empty = derived from MASTER_KEY (dev)
     # Schema creation at startup. Production runs the app with a DML-only runtime
     # login and creates/migrates the schema in a separate one-shot job (S3).
     db_create_all: bool = True

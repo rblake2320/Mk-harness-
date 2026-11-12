@@ -26,6 +26,7 @@ from sqlalchemy.orm import Session
 
 from ..rbac import book_of, sees_whole_tenant
 from ..db import get_db
+from ..spend import charge_disclosure
 from ..foundation import audit, own_customer, preference_for, unseal, utcnow
 from ..kernel import KernelClient, KernelUnavailable, get_kernel_client
 from ..kernel.assertions import roles_for
@@ -171,6 +172,7 @@ async def pending_approvals(p: Principal = Depends(principal), user: User = Depe
             "scheduled_for": None,  # v1 sends as soon as policy allows; scheduling is recorded on the proposal when supplied
             "approval_expires_at": disp.get("expires_at"),
             "approval_lifetime_minutes": 15,
+            "charge": charge_disclosure(disp.get("rendered_text")) if disp.get("channel") == "sms" else None,
             "human_steps": ["Your passkey signs this exact text (digest shown); any edit creates a new draft that needs a new approval.",
                             "Approval is single-use and expires; the kernel re-checks policy at send time."],
         })

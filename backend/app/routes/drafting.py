@@ -14,7 +14,7 @@ from __future__ import annotations
 import json
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -195,20 +195,76 @@ class EditIn(BaseModel):
     text: str = Field(min_length=1, max_length=480)
 
 
+TERMINAL_KERNEL_STATES = {"denied", "completed", "failed_final", "cancelled", "expired", "suppressed",
+                          "reconciliation_required"}
+
+
+def _withdraw_earlier_proposals(db: Session, request: Request, user: User, prior: DraftVersion) -> int:
+    """H2: an edited message must not leave the earlier text approvable. Every kernel
+    action proposed from this draft (or for the same brief item / commitment) that is
+    not final is cancelled BEFORE the edit is saved; if the kernel cannot be reached
+    the edit is refused (503) rather than leaving the old digest live. A 409 from the
+    kernel means the action already reached a final state."""
+    from sqlalchemy import or_
+
+    from ..identity import kernel_session_id
+    from ..kernel.client import KernelUnavailable, get_kernel_client
+    from ..models import ActionLink
+    from ..rbac import kernel_roles
+    from ..foundation import tenant_uuid
+    conds = [ActionLink.draft_version_id == prior.id]
+    if prior.brief_item_id:
+        conds.append(ActionLink.brief_item_id == prior.brief_item_id)
+    if prior.commitment_id:
+        conds.append(ActionLink.commitment_id == prior.commitment_id)
+    links = [x for x in db.scalars(select(ActionLink).where(ActionLink.tenant_id == user.tenant_id, or_(*conds)))
+             if x.last_known_state not in TERMINAL_KERNEL_STATES]
+    if not links:
+        return 0
+    client = get_kernel_client()
+    n = 0
+    for link in links:
+        try:
+            r = client.call_sync("POST", f"/actions/{link.kernel_action_id}/cancel",
+                                 user_id=tenant_uuid(user.id), tenant_id=tenant_uuid(user.tenant_id),
+                                 roles=kernel_roles(user.role),
+                                 session_id=kernel_session_id(request.state.auth_session.id))
+        except KernelUnavailable:
+            raise HTTPException(503, {"code": "KERNEL_UNAVAILABLE",
+                                      "detail": "the earlier version could not be withdrawn; the edit was not saved"})
+        if r.status_code == 200:
+            link.last_known_state, link.version = "cancelled", link.version + 1
+            n += 1
+        elif r.status_code == 409:
+            link.last_known_state, link.version = "final", link.version + 1
+        else:
+            raise HTTPException(502, {"code": "WITHDRAW_FAILED",
+                                      "detail": f"the earlier version could not be withdrawn (kernel {r.status_code}); "
+                                                "the edit was not saved"})
+    return n
+
+
 @router.post("/drafts/{did}/edit", status_code=201)
-def edit_draft(did: str, body: EditIn, user: User = Depends(check_rate), db: Session = Depends(get_db)):
+def edit_draft(did: str, body: EditIn, request: Request, user: User = Depends(check_rate),
+               db: Session = Depends(get_db)):
     prior = db.get(DraftVersion, did)
     if not prior or prior.tenant_id != user.tenant_id:
         raise HTTPException(404, "Draft not found")
     own_customer(db, user.tenant_id, book_of(user), prior.customer_id)
+    # Validate the edit first (claims, leaks), then withdraw the earlier version, then
+    # commit both together; any failure leaves the earlier version exactly as it was.
     out = consultant_edit(db, tenant_id=user.tenant_id, user_id=user.id, prior=prior, new_text=body.text,
                           book_id=book_of(user))
+    withdrawn = _withdraw_earlier_proposals(db, request, user, prior)
     if prior.brief_item_id:
         it = db.get(BriefItem, prior.brief_item_id)
         if it:
             it.draft_version_id = out.draft.id
     db.commit()
-    return _draft_view(db, out.draft, user)
+    view = _draft_view(db, out.draft, user)
+    if isinstance(view, dict):
+        view["withdrawn_proposals"] = withdrawn
+    return view
 
 
 @router.get("/drafts/{did}")

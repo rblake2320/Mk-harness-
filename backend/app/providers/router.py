@@ -75,6 +75,8 @@ def resolve(db: Session, user: User, provider: str) -> ResolvedProvider:
                 f"Your team requires a personal {provider} API key. Add one in Settings.")
 
     if policy in ("central", "both"):
+        from ..spend import require_ai_budget
+        require_ai_budget(db, user.tenant_id)   # M4: company-paid spend is capped per month
         row = db.scalar(select(ProviderKey).where(
             ProviderKey.tenant_id == user.tenant_id, ProviderKey.user_id.is_(None),
             ProviderKey.provider == provider))
