@@ -69,13 +69,7 @@ stored with an integrity hash of the exact text agreed to. You may withdraw cons
 time via the app settings, which immediately blocks further processing.</p>
 
 <h2>5. Data retention</h2>
-<ul>
-  <li>Account and customer data: retained while your account is active, deleted within
-      30 days of account deletion.</li>
-  <li>Conversation history: retained for 12 months, then auto-purged.</li>
-  <li>Skin analysis scores: retained while the associated customer record exists.</li>
-  <li>Audit logs: retained for 7 years (legal / compliance requirement).</li>
-</ul>
+{RETENTION_LIST}
 
 <h2>6. Your rights</h2>
 <p>Depending on your location, you may have the right to:</p>
@@ -84,9 +78,11 @@ time via the app settings, which immediately blocks further processing.</p>
       <code>GET /api/account/export</code> (authenticated).</li>
   <li><strong>Portability</strong> — the export endpoint returns a machine-readable JSON
       file containing your complete account data.</li>
-  <li><strong>Deletion</strong> — contact us at the address below to request account
-      deletion. We will delete your data within 30 days, subject to legal holds on
-      audit logs.</li>
+  <li><strong>Deletion</strong> — erase a customer from their page, or delete your
+      account in Settings (or contact us at the address below). Erasure is immediate in
+      the application; copies held by our sending system and SMS provider are erased
+      within 30 days. Minimal opt-out and permission evidence is kept so an opted-out
+      customer is never contacted again.</li>
   <li><strong>Correction</strong> — update your profile or customer records in-app at
       any time.</li>
 </ul>
@@ -184,6 +180,12 @@ async def ready():
                 KernelRevocationOutbox.delivered_at.is_(None),
                 KernelRevocationOutbox.created_at < utcnow() - timedelta(seconds=60))) or 0
             checks["kernel_revocations_backlog"] = str(stale)
+            # S13: erasures not acknowledged by the kernel past their 30-day due date.
+            from .models import ErasureRequest
+            overdue = db.scalar(select(func.count()).select_from(ErasureRequest).where(
+                ErasureRequest.kernel_acknowledged_at.is_(None), ErasureRequest.legal_hold.is_(False),
+                ErasureRequest.due_by < utcnow())) or 0
+            checks["erasures_overdue"] = str(overdue)
         finally:
             db.close()
         checks["database"] = "ok"
@@ -213,4 +215,6 @@ async def ready():
 @app.get("/privacy", response_class=HTMLResponse, include_in_schema=False)
 def privacy_policy():
     """Public privacy policy — required by App Store and GDPR/CCPA."""
-    return HTMLResponse(content=_PRIVACY_HTML)
+    from .retention import policy_html
+    # Generated from the same table the purge job enforces (no hand-written periods).
+    return HTMLResponse(content=_PRIVACY_HTML.replace("{RETENTION_LIST}", policy_html()))

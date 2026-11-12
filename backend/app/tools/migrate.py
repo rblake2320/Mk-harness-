@@ -12,10 +12,41 @@ import os
 import re
 import sys
 
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, inspect, text
 
 from ..config import get_settings
 from ..models import Base
+
+
+def add_missing_columns(engine) -> list[tuple[str, str]]:
+    """Additive schema evolution: create_all() creates missing TABLES but never adds
+    columns to existing ones. Add each missing column that is nullable or has a
+    scalar default; refuse (raise) anything else, so a non-additive change cannot
+    be applied silently — that needs a reviewed migration."""
+    insp = inspect(engine)
+    added: list[tuple[str, str]] = []
+    for table in Base.metadata.sorted_tables:
+        if not insp.has_table(table.name):
+            continue
+        have = {c["name"] for c in insp.get_columns(table.name)}
+        for col in table.columns:
+            if col.name in have:
+                continue
+            default = col.default.arg if col.default is not None and col.default.is_scalar else None
+            if not col.nullable and default is None:
+                raise SystemExit(f"non-additive schema change: {table.name}.{col.name} is NOT NULL without a "
+                                 "scalar default — write a reviewed migration")
+            ddl = col.type.compile(dialect=engine.dialect)
+            clause = ""
+            if default is not None:
+                lit = ("TRUE" if default else "FALSE") if isinstance(default, bool) else (
+                    str(default) if isinstance(default, (int, float)) else "'" + str(default).replace("'", "''") + "'")
+                clause = f" DEFAULT {lit}"
+            null = "" if col.nullable else " NOT NULL"
+            with engine.begin() as c:
+                c.execute(text(f'ALTER TABLE "{table.name}" ADD COLUMN "{col.name}" {ddl}{clause}{null}'))
+            added.append((table.name, col.name))
+    return added
 
 
 def main() -> int:
@@ -26,6 +57,9 @@ def main() -> int:
         return 2
     engine = create_engine(url)
     Base.metadata.create_all(engine)
+    added = add_missing_columns(engine)
+    for t, c in added:
+        print(f"added column {t}.{c}")
     if engine.dialect.name != "postgresql":
         print(f"schema created ({engine.dialect.name}); no roles to grant")
         return 0

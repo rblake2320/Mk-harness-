@@ -25,7 +25,7 @@ class CustomerIn(BaseModel):
 
 def _own(db: Session, user: User, cid: str) -> Customer:
     c = db.get(Customer, cid)
-    if not c or c.tenant_id != user.tenant_id or c.user_id != book_of(user):
+    if not c or c.tenant_id != user.tenant_id or c.user_id != book_of(user) or c.erased_at is not None:
         raise HTTPException(404, "Customer not found")
     return c
 
@@ -46,7 +46,8 @@ def _customer_dict(c: Customer) -> dict:
 
 @router.get("")
 def list_customers(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    rows = db.scalars(select(Customer).where(Customer.user_id == book_of(user))
+    rows = db.scalars(select(Customer).where(Customer.tenant_id == user.tenant_id,
+                                             Customer.user_id == book_of(user), Customer.erased_at.is_(None))
                       .order_by(Customer.name))
     return [_customer_dict(c) for c in rows]
 
@@ -64,7 +65,7 @@ def search_customers(q: str = Query(min_length=2, max_length=100), user: User = 
     escaped = term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
     ids: dict[str, None] = {}
     for c in db.scalars(select(Customer.id).where(
-            Customer.tenant_id == tid, Customer.user_id == book,
+            Customer.tenant_id == tid, Customer.user_id == book, Customer.erased_at.is_(None),
             Customer.name.ilike(f"%{escaped}%", escape="\\")).order_by(Customer.name).limit(50)):
         ids[c] = None
     fps: list[str] = []
@@ -84,7 +85,8 @@ def search_customers(q: str = Query(min_length=2, max_length=100), user: User = 
                 CustomerDestination.fingerprint.in_(fps), CustomerDestination.retired_at.is_(None))):
             ids[cid] = None
     rows = db.scalars(select(Customer).where(Customer.id.in_(list(ids)[:50]), Customer.tenant_id == tid,
-                                             Customer.user_id == book).order_by(Customer.name)).all()
+                                             Customer.user_id == book, Customer.erased_at.is_(None))
+                      .order_by(Customer.name)).all()
     return [_customer_dict(c) for c in rows]
 
 
@@ -125,9 +127,22 @@ def update_customer(cid: str, body: CustomerIn, user: User = Depends(get_current
 @router.delete("/{cid}")
 def delete_customer(cid: str, user: User = Depends(get_current_user),
                     db: Session = Depends(get_db)):
-    db.delete(_own(db, user, cid))
+    """Erase this customer (S13). A hard DELETE left destinations, drafts, commitments
+    and skin analyses behind (SQLite) or failed on foreign keys (PostgreSQL); the
+    erasure empties every content field and queues the kernel/provider part."""
+    from ..erasure import deliver_to_kernel, erase_customer
+    c = _own(db, user, cid)
+    if c.erased_at is not None:
+        raise HTTPException(404, "Customer not found")
+    req = erase_customer(db, tenant_id=user.tenant_id, customer_id=c.id, requested_by=user.id)
     db.commit()
-    return {"ok": True}
+    try:
+        deliver_to_kernel(db, tenant_id=user.tenant_id, limit=5)
+    except Exception:  # noqa: BLE001 — delivery is retried; the request row is durable
+        db.rollback()
+    db.refresh(req)
+    return {"ok": True, "erasure_request": req.id, "due_by": req.due_by.isoformat(),
+            "kernel_acknowledged": req.kernel_acknowledged_at is not None}
 
 
 @router.post("/{cid}/touch")

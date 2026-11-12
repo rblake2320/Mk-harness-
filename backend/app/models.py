@@ -117,6 +117,9 @@ class Customer(Base):
     skin_profile_json: Mapped[str] = mapped_column(Text, default="")  # latest 7-dim scores
     skin_profile_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    # Set when the subject was erased (S13): the row stays as a content-free anchor
+    # for counts, suppression and audit references; every content field is empty.
+    erased_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class SkinAnalysis(Base):
@@ -691,3 +694,29 @@ class KernelRevocationOutbox(Base):
     delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     attempts: Mapped[int] = mapped_column(Integer, default=0)
     last_error: Mapped[str] = mapped_column(String(200), default="")
+
+
+class ErasureRequest(Base):
+    """Subject erasure (S13): one row per request, content-free. Mirrored to the
+    separately stored, hash-chained erasure ledger (app.erasure) so a database
+    restore can be followed by a replay that re-erases before dispatch resumes."""
+    __tablename__ = "erasure_requests"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=uid)
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), index=True)
+    subject_type: Mapped[str] = mapped_column(String(16))           # customer | account
+    subject_id: Mapped[str] = mapped_column(String(32), index=True)
+    requested_by: Mapped[str] = mapped_column(String(32))
+    requested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    due_by: Mapped[datetime] = mapped_column(DateTime(timezone=True))  # requested_at + 30 days
+    app_completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Kernel copies (action payloads, inbound bodies) and provider copies are erased by
+    # the kernel; the app delivers the request and records the acknowledgement.
+    kernel_fingerprints_json: Mapped[str] = mapped_column(Text, default="[]")
+    kernel_action_ids_json: Mapped[str] = mapped_column(Text, default="[]")
+    kernel_acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    kernel_result_json: Mapped[str] = mapped_column(Text, default="")
+    kernel_attempts: Mapped[int] = mapped_column(Integer, default=0)
+    kernel_last_error: Mapped[str] = mapped_column(String(200), default="")
+    legal_hold: Mapped[bool] = mapped_column(Boolean, default=False)
+    legal_hold_reason: Mapped[str] = mapped_column(String(200), default="")
+    ledger_seq: Mapped[int | None] = mapped_column(Integer, nullable=True)

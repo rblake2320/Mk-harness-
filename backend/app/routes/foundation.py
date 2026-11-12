@@ -466,7 +466,8 @@ def export_csv(user: User = Depends(check_rate), db: Session = Depends(get_db)):
     buf = io.StringIO()
     w = csv.writer(buf)
     w.writerow(["name", "phone_masked", "email_masked", "notes", "created_at"])
-    for c in db.scalars(select(Customer).where(Customer.user_id == book_of(user)).order_by(Customer.name)):
+    for c in db.scalars(select(Customer).where(Customer.tenant_id == user.tenant_id, Customer.user_id == book_of(user),
+                                                 Customer.erased_at.is_(None)).order_by(Customer.name)):
         phone = email = ""
         for d in db.scalars(select(CustomerDestination).where(CustomerDestination.customer_id == c.id,
                                                               CustomerDestination.retired_at.is_(None))):

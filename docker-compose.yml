@@ -41,6 +41,8 @@ services:
       APP_WEBAUTHN_RP_ID: ${APP_WEBAUTHN_RP_ID:-}
       APP_WEBAUTHN_ORIGINS: ${APP_WEBAUTHN_ORIGINS:-}
       PLATFORM_SUPPORT_USERS: ${PLATFORM_SUPPORT_USERS:-}
+      ERASURE_LEDGER_PATH: /var/lib/mk/erasure/ledger.jsonl
+      ERASURE_LEDGER_KEY: ${ERASURE_LEDGER_KEY:?set in .env}
       JWT_SECRET: ${JWT_SECRET:?set in .env}
       MASTER_KEY: ${MASTER_KEY:?set in .env}
       # Destination-fingerprint keys: MUST be the same value the kernel gets as
@@ -52,8 +54,25 @@ services:
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-}
       RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-30}
+    volumes: [erasure-ledger:/var/lib/mk/erasure]
     depends_on:
       db: { condition: service_healthy }
+      api-migrate: { condition: service_completed_successfully }
+
+  retention:
+    # S13: daily retention purge + pending erasure delivery (same image, runtime login).
+    build: ./backend
+    command: ["sh", "-c", "while true; do python -m app.tools.retention run; python -m app.tools.erasure deliver; sleep 86400; done"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://mk_app:${APP_DB_RUNTIME_PASSWORD}@db:5432/mkharness
+      DB_CREATE_ALL: "false"
+      DB_REQUIRE_LEAST_PRIVILEGE: "true"
+      JWT_SECRET: ${JWT_SECRET:?set in .env}
+      MASTER_KEY: ${MASTER_KEY:?set in .env}
+      ERASURE_LEDGER_PATH: /var/lib/mk/erasure/ledger.jsonl
+      ERASURE_LEDGER_KEY: ${ERASURE_LEDGER_KEY:?set in .env}
+    volumes: [erasure-ledger:/var/lib/mk/erasure]
+    depends_on:
       api-migrate: { condition: service_completed_successfully }
 
   web:
@@ -65,3 +84,4 @@ services:
 
 volumes:
   pgdata:
+  erasure-ledger:   # separate from pgdata: a database restore must not roll the ledger back

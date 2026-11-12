@@ -69,6 +69,10 @@ class Settings(BaseSettings):
     # Platform support staff who may REQUEST break-glass access (user ids, comma list).
     platform_support_users: str = ""
     breakglass_max_minutes: int = 240
+    # S13: append-only, hash-chained erasure ledger kept OUTSIDE the database (own
+    # volume / bucket) so a restore can be followed by an erasure replay.
+    erasure_ledger_path: str = "/var/lib/mk/erasure-ledger.jsonl"
+    erasure_ledger_key: str = ""     # HMAC key; empty = derived from MASTER_KEY (dev)
     # Schema creation at startup. Production runs the app with a DML-only runtime
     # login and creates/migrates the schema in a separate one-shot job (S3).
     db_create_all: bool = True

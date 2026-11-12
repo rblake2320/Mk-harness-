@@ -19,6 +19,9 @@ os.environ["BILLING_TRIAL_DAYS"] = "90"
 # Identity: the legacy suites exercise features, not sign-in; they run with MFA
 # optional. tests/test_identity.py turns it on (production pre-flight refuses off).
 os.environ["MFA_REQUIRED"] = "false"
+# Erasure ledger (S13) lives outside the database; tests get a private file.
+import tempfile as _tempfile  # noqa: E402
+os.environ["ERASURE_LEDGER_PATH"] = os.path.join(_tempfile.mkdtemp(prefix="mk-erasure-"), "ledger.jsonl")
 # Prevent host-level provider keys from leaking into tests. Tests that need a
 # provider key add one explicitly via the /api/keys endpoint. Without this,
 # any developer machine with ANTHROPIC_API_KEY / OPENAI_API_KEY set will cause

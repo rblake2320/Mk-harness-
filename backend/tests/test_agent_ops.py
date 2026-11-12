@@ -198,6 +198,7 @@ def test_app_readiness_reflects_kernel_and_needs_no_token(client, kernel_env):
         r = client.get("/api/health/ready")
     assert r.status_code == 200 and r.json()["checks"] == {"database": "ok", "kernel": "ok",
                                                            "kernel_revocations_backlog": "0",
+                                                           "erasures_overdue": "0",
                                                            "mfa_required": "false",
                                                            "db_least_privilege": "off"}
     with respx.mock() as m:

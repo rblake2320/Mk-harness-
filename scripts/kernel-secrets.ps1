@@ -68,6 +68,8 @@ if (Need "POSTGRES_PASSWORD") { $out["POSTGRES_PASSWORD"] = New-Hex 24 }
 # S3: the API never connects as the bootstrap superuser. Owner = migrate job only.
 if (Need "APP_DB_OWNER_PASSWORD")   { $out["APP_DB_OWNER_PASSWORD"]   = New-Hex 24 }
 if (Need "APP_DB_RUNTIME_PASSWORD") { $out["APP_DB_RUNTIME_PASSWORD"] = New-Hex 24 }
+# S13: seals the external erasure ledger. Rotating it requires re-sealing the ledger.
+if (Need "ERASURE_LEDGER_KEY")      { $out["ERASURE_LEDGER_KEY"]      = New-Hex 32 }
 if (Need "JWT_SECRET")        { $out["JWT_SECRET"]        = New-Hex 48 }
 $haveMaster = $existing.ContainsKey("MASTER_KEY") -and -not [string]::IsNullOrWhiteSpace($existing["MASTER_KEY"])
 if (-not $haveMaster) { $out["MASTER_KEY"] = New-B64 32 }

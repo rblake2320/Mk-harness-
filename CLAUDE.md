@@ -229,6 +229,7 @@ alembic upgrade head
 | `STEP_UP_WINDOW_MINUTES` | No | Default 10 (clamped 1–15): re-auth window for sensitive routes (`rbac.ROUTE_POLICY`) |
 | `APP_WEBAUTHN_RP_ID` / `APP_WEBAUTHN_ORIGINS` | Passkeys | Web app domain / comma-separated origins; empty → passkeys disabled (TOTP still works) |
 | `PLATFORM_SUPPORT_USERS` | No | Comma-separated user ids that may request break-glass support access |
+| `ERASURE_LEDGER_PATH` / `ERASURE_LEDGER_KEY` | Prod | External, HMAC-sealed erasure ledger (own volume — survives a DB restore); `python -m app.tools.erasure verify\|replay\|deliver\|status` |
 | `BREAKGLASS_MAX_MINUTES` | No | Default 240 — upper bound on an approved support grant |
 | `RATE_LIMIT_PER_MINUTE` | No | Default 30 |
 | `SKIN_ANALYSIS_URL` | No | Local PanDerm endpoint (port 8101); empty = cloud vision |

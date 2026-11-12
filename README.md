@@ -66,6 +66,7 @@ POSTGRES_PASSWORD=$(openssl rand -hex 24)
 # Application DB identities (S3): schema owner (migrate job only) and runtime DML login
 APP_DB_OWNER_PASSWORD=$(openssl rand -hex 24)
 APP_DB_RUNTIME_PASSWORD=$(openssl rand -hex 24)
+ERASURE_LEDGER_KEY=$(openssl rand -hex 32)
 JWT_SECRET=$(openssl rand -hex 48)
 MASTER_KEY=$(python3 -c "import os,base64;print(base64.b64encode(os.urandom(32)).decode())")
 # Passkeys for consultant login/step-up: the web app's domain and origin

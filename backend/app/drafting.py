@@ -163,7 +163,8 @@ def context_leak(db: Session, *, user_id: str, customer: Customer, text: str, al
     False positives create a review task, never a sent message, so the check is deliberately broad."""
     low = text.lower()
     own_first = (customer.name.split()[0].lower() if customer.name else "")
-    others = db.scalars(select(Customer).where(Customer.user_id == user_id, Customer.id != customer.id)).all()
+    others = db.scalars(select(Customer).where(Customer.user_id == user_id, Customer.id != customer.id,
+                                              Customer.erased_at.is_(None))).all()
     for o in others:
         name = (o.name or "").strip().lower()
         if len(name) >= 3 and name in low:

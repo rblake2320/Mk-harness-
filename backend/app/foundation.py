@@ -101,7 +101,7 @@ def audit(db: Session, tenant_id: str, user_id: str, action: str, detail: dict) 
 
 def own_customer(db: Session, tenant_id: str, user_id: str, cid: str) -> Customer:
     c = db.get(Customer, cid)
-    if not c or c.tenant_id != tenant_id or c.user_id != user_id:
+    if not c or c.tenant_id != tenant_id or c.user_id != user_id or c.erased_at is not None:
         raise HTTPException(404, "Customer not found")
     return c
 

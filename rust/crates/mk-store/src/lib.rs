@@ -17,6 +17,7 @@ pub mod approvals;
 pub mod assertions;
 pub mod audit;
 pub mod consent;
+pub mod erasure;
 pub mod error;
 pub mod fingerprint;
 pub mod human_approval;
