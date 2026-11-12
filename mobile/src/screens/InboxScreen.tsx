@@ -50,7 +50,7 @@ export default function InboxScreen({ push }: { push: (r: Route) => void }) {
       )}
       <Button label="Process new replies" busy={busy === 'process'} onPress={process} />
       <HumanSteps steps={[
-        'Possible opt-outs are held, not cleared: decide, and if the customer meant stop, record it permanently.',
+        'Possible opt-outs are held, not cleared: decide, and if the customer meant stop, use "Mark do not contact" on their page.',
         'Product or skin concerns stop sales follow-up until you resolve the exception.',
         'Replies that could not be matched to one customer need you to identify the person.',
       ]} />

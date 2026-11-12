@@ -41,7 +41,7 @@ export default function InboxView({ onOpenCustomer }: { onOpenCustomer: (id: str
         </div>
       )}
       <HumanSteps steps={[
-        'Possible opt-outs are held, not cleared: decide, and if the customer meant stop, record it permanently.',
+        'Possible opt-outs are held, not cleared: decide, and if the customer meant stop, use "mark do not contact" on their page.',
         'Product or skin concerns stop sales follow-up until you resolve the exception.',
         'Replies that could not be matched to one customer need you to identify the person.',
       ]} />

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Text, View } from 'react-native';
+import { Alert, Text, View } from 'react-native';
 import {
   COMMITMENT_KINDS, OUTCOME_KINDS, OUTCOME_SEPARATION_NOTE, RELATIVE_WINDOWS, outcomeLabel,
 } from '../../../packages/sdk/src/index';
@@ -55,6 +55,16 @@ export default function CustomerDetailScreen({ customerId, customerName, push }:
     try { await fn(); setMsg(ok); await load(); } catch (e) { setErr(e); } finally { setBusy(''); }
   }
 
+  function confirmStop(d: CustomerDestination) {
+    Alert.alert('Never message this number?', `${d.value_masked} will be permanently marked do not contact. This cannot be undone from the app.`, [
+      { text: 'Keep', style: 'cancel' },
+      { text: 'Mark do not contact', style: 'destructive', onPress: () => {
+        void run(`stop:${d.id}`, () => client.suppress({ destination_id: d.id, reason: 'customer asked not to be contacted', source: 'consultant', permanent: true }),
+          `${d.value_masked} is marked do not contact.`);
+      } },
+    ]);
+  }
+
   const openCommitments = commitments.filter(c => c.status !== 'resolved' && c.status !== 'cancelled');
   return (
     <Screen refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await load(); setRefreshing(false); }}>
@@ -83,8 +93,15 @@ export default function CustomerDetailScreen({ customerId, customerName, push }:
 
       <H2>Contact details</H2>
       <Card>
-        {dests.map(d => <Fact key={d.id} label={d.channel === 'sms' ? 'Mobile number' : 'Email'}
-                              value={`${d.value_masked}${d.is_primary ? ' · primary' : ''}${d.suppressed ? ' · do not contact' : ''}`} />)}
+        {dests.map(d => (
+          <View key={d.id} style={{ gap: 4 }}>
+            <Fact label={d.channel === 'sms' ? 'Mobile number' : 'Email'}
+                  value={`${d.value_masked}${d.is_primary ? ' · primary' : ''}${d.suppressed ? ' · do not contact' : ''}`} />
+            {!d.suppressed && <Button kind="danger" label={`Mark ${d.value_masked} do not contact`} text="Mark do not contact" disabled={!!busy}
+                                      onPress={() => confirmStop(d)} />}
+          </View>
+        ))}
+        <P small muted>Use "Mark do not contact" when a customer asks you to stop. It is permanent, revokes consent for that number and is enforced by the kernel. A STOP reply is suppressed automatically.</P>
         {dests.length === 0 && <P muted small>No destination on file. Add a mobile number on the web app before proposing messages.</P>}
         <Text style={[s.small, s.muted]}>Timezone (required before any message can be proposed){savedTz ? ` — saved: ${savedTz}` : ''}</Text>
         <Choices label="Customer timezone" options={TZS} value={tz} onChange={setTz} />

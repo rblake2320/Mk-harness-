@@ -53,7 +53,7 @@ export function exceptionKindLabel(kind: unknown): string {
 export const OUTCOME_KINDS: readonly { id: string; label: string; note?: string }[] = Object.freeze([
   { id: 'resolved', label: 'Resolved' },
   { id: 'deferred', label: 'Deferred' },
-  { id: 'opted_out', label: 'Customer opted out' },
+  { id: 'opted_out', label: 'Customer opted out', note: 'Recording this outcome does not stop messages. Use "mark do not contact" on the number; a STOP reply is suppressed automatically.' },
   { id: 'no_response', label: 'No response' },
   { id: 'customer_reported_order', label: 'Customer reported an order', note: 'What the customer said; not a verified order.' },
   { id: 'consultant_confirmed_order', label: 'You confirmed an order', note: 'A consultant-confirmed order is not independently verified revenue.' },

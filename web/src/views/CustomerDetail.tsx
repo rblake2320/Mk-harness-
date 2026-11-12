@@ -22,6 +22,8 @@ export default function CustomerDetail({ customer, onBack }: { customer: Custome
   const [draft, setDraft] = useState<{ draft: Draft | null; limitation: string | null; neutral?: string } | null>(null);
   const [extractText, setExtractText] = useState('');
   const [extracted, setExtracted] = useState<ExtractResult | null>(null);
+  /** Destination awaiting the second, confirming click before it is suppressed. */
+  const [confirmStop, setConfirmStop] = useState<string | null>(null);
   // Consent is recorded for one destination: the primary SMS number that is not suppressed.
   const consentDest = dests.filter(d => d.channel === 'sms' && !d.suppressed).sort((a, b) => Number(b.is_primary) - Number(a.is_primary))[0];
 
@@ -73,7 +75,19 @@ export default function CustomerDetail({ customer, onBack }: { customer: Custome
           </select>
           <button className="btn ghost" disabled={!tz} onClick={() => run(() => client.setPreferences(customer.id, { timezone: tz }))}>Save timezone</button>
           <h4>SMS destinations</h4>
-          <ul className="plain">{dests.map(d => <li key={d.id}>{d.channel} · {d.value_masked} {d.is_primary && <em className="muted small">primary</em>}{d.suppressed && <strong> · do not contact</strong>}</li>)}</ul>
+          <ul className="plain" aria-label="Destinations">{dests.map(d => (
+            <li key={d.id}>{d.channel} · {d.value_masked} {d.is_primary && <em className="muted small">primary</em>}{d.suppressed && <strong> · do not contact</strong>}
+              {!d.suppressed && (confirmStop === d.id
+                ? <div className="row">
+                    <button className="btn ghost small" onClick={() => run(async () => {
+                      await client.suppress({ destination_id: d.id, reason: 'customer asked not to be contacted', source: 'consultant', permanent: true });
+                      setConfirmStop(null);
+                    })}>Confirm: never message {d.value_masked}</button>
+                    <button className="link" onClick={() => setConfirmStop(null)}>keep</button>
+                  </div>
+                : <button className="link" onClick={() => setConfirmStop(d.id)} aria-label={`mark do not contact: ${d.value_masked}`}>mark do not contact</button>)}
+            </li>))}</ul>
+          <p className="muted small">Use "mark do not contact" when a customer asks you to stop (for example a verbal request or a reply held as a possible opt-out). It is permanent, revokes consent for that number and is enforced by the kernel. A STOP reply is suppressed automatically.</p>
           <label className="muted small" htmlFor="dest">Add mobile number (E.164)</label>
           <div className="row">
             <input id="dest" value={newDest} onChange={e => setNewDest(e.target.value)} placeholder="+1 555 555 0100" />
