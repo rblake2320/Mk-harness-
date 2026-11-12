@@ -1,7 +1,13 @@
 /**
  * MK Harness SDK — single client for web (fetch/ReadableStream) and
- * React Native (fetch + XHR streaming fallback).
+ * React Native (fetch + XHR streaming fallback). Every API call either platform makes
+ * goes through `MKClient`; shared interface logic (message-state vocabulary, error
+ * explanations, approval display, the mobile→web passkey hand-off) is exported from the
+ * modules re-exported at the bottom of this file.
  */
+import type { MessageState, ReadStatus } from './vocabulary';
+import { ApiError, apiErrorFrom } from './errors';
+
 export interface Tokens {
   access_token: string; refresh_token: string;
   role: string; display_name: string; tenant_id: string;
@@ -30,11 +36,7 @@ export interface BillingStatus {
 }
 
 
-// ---- WP03–WP08 types (contract vocabulary; definitions come from the API, never paraphrased) ----
-export type MessageState =
-  | 'proposed' | 'awaiting_approval' | 'approved' | 'queued' | 'dispatch_authorized' | 'submission_started'
-  | 'provider_accepted' | 'sent' | 'delivered' | 'failed' | 'delivery_unknown' | 'submission_unknown'
-  | 'cancelled' | 'denied' | 'expired';
+// ---- WP03–WP08 types (shapes of the real routes; message-state words come only from ./vocabulary) ----
 export interface Commitment {
   id: string; customer_id: string; kind: string; text: string; status: string;
   due_at: string | null; due_window: [string | null, string | null]; timezone: string;
@@ -67,6 +69,78 @@ export interface ExceptionItem {
 }
 export interface WebAuthnAssertion { credential_id: string; client_data_json: string; authenticator_data: string; signature: string }
 
+/** Kernel action result (contracts/action/v1/action-result.schema.json). `state` is the
+ *  kernel's internal state and is never shown as a message state; screens use
+ *  `message_state` through `describeMessageState`. */
+export interface ActionResult {
+  schema_version: string; action_id: string; tenant_id: string; state: string; action_digest: string;
+  attempt: number; error_code?: string; updated_at: string; replay_of?: string;
+  receipt?: { adapter_id?: string; external_ref?: string; result_digest?: string };
+  message_state?: MessageState; read_status?: ReadStatus; provider_message_id?: string;
+}
+export interface ApprovalRecord {
+  approval_id: string; action_id: string; action_digest: string; approver_id: string; approver_roles?: string[];
+  decision: 'approved' | 'rejected'; reason?: string; created_at: string; expires_at: string; consumed_at?: string | null;
+  [k: string]: unknown;
+}
+export interface DecisionResponse { approval: ApprovalRecord; result: ActionResult }
+export interface ActionStatus {
+  action: ActionResult;
+  link: { customer_id: string; commitment_id: string | null; draft_version_id: string | null; brief_item_id: string | null } | null;
+  message_state_definitions: Record<MessageState, string>;
+}
+export interface ProposeResult {
+  action_id: string; state: string | null; message_state: MessageState | null; action_digest: string;
+  decision: { code?: string; [k: string]: unknown } | null; human_steps: string[];
+}
+export interface ApprovalChallenge {
+  challenge: string; rp_id: string; action_digest: string; expires_at: string; allow_credentials: string[]; user_verification: string;
+}
+export interface CustomerDestination {
+  id: string; channel: 'sms' | 'email'; value_masked: string; fingerprint: string; is_primary: boolean; source: string; suppressed: boolean;
+}
+export interface ConsentEventView {
+  id: string; channel: string; purposes: string[]; status: string; source: string;
+  effective_at: string; expires_at: string; revoked_at: string | null;
+}
+export interface SuppressionView { id: string; channel: string; reason: string; source: string; created_at: string }
+export interface PermissionView { observed_at: string; note: string; consent_events: ConsentEventView[]; suppressions: SuppressionView[] }
+export type TimelineEvent =
+  | { at: string; type: 'commitment'; data: Commitment }
+  | { at: string; type: 'outcome'; data: { id: string; kind: string; commitment_id: string | null; note: string } };
+export interface ExtractResult { drafts: (Commitment & { evidence_quote: string })[]; note: string }
+export interface OutcomeResult { id: string; kind: string; customer_id: string; commitment_id: string | null; note: string }
+export interface InboundHealth {
+  health: { last_ok_at: string | null; last_failure_at: string | null; last_failure_reason: string; paused_since: string | null; resumed_at: string | null } | null;
+  dispatch_blocked: string | null; pending_events: number; stale_after_secs: number;
+}
+export interface InboundProcessResult {
+  processed: number;
+  events: { event_id: string; class: string; customer_id: string | null; matches: number; created: string[]; hold: number | null; marked_processed?: number | null; retry?: boolean }[];
+}
+export interface SenderIdentity {
+  sender_identity_id: string; owner_user_id: string; provider?: string; display_name: string; account_sid_redacted?: string;
+  from_number: string | null; messaging_service_sid: string | null; registration_status: string; status: string; created_at?: string;
+}
+export interface PasskeyInfo {
+  credential_row_id: string; label: string; alg: string; created_at: string; last_used_at: string | null; revoked_at: string | null;
+}
+/** Read-only governance status assembled from `/api/agent-ops/health` (never throws for 503). */
+export interface GovernanceStatus {
+  /** connected: kernel ready; not_ready: reachable but failing readiness (e.g. database);
+   *  unreachable: no answer; not_configured: this environment has no kernel connection. */
+  kernel: 'connected' | 'not_ready' | 'unreachable' | 'not_configured';
+  code: string | null;
+  /** The platform-wide kill switch: false = sending stopped for everyone. Null when unknown. */
+  global_dispatch_enabled: boolean | null;
+  /** Whether the kernel queues approved actions for execution in this environment. */
+  kernel_execution_enabled: boolean | null;
+  /** `webauthn` when approvals require a kernel-verified passkey. */
+  approval_binding: string | null;
+  /** The team (tenant) switch is not exposed by any read route: always null (unknown). */
+  team_dispatch_enabled: null;
+}
+
 export function b64url(bytes: ArrayBuffer | Uint8Array): string {
   const u = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
   let s = ''; for (const b of u) s += String.fromCharCode(b);
@@ -79,18 +153,6 @@ export function b64urlDecode(s: string): Uint8Array<ArrayBuffer> {
   return out;
 }
 
-/** Structured API error: `status` is the HTTP code, `detail` is the parsed body's
- *  `detail` field — a string, or an object like { code, message } for gated routes. */
-export class ApiError extends Error {
-  status: number; detail: any;
-  constructor(status: number, detail: any) {
-    super(typeof detail === 'string' ? detail : (detail?.message ?? `HTTP ${status}`));
-    this.status = status; this.detail = detail; this.name = 'ApiError';
-  }
-  get code(): string | undefined {
-    return this.detail && typeof this.detail === 'object' ? this.detail.code : undefined;
-  }
-}
 export type StreamEvent =
   | { type: 'meta'; conversation_id: string }
   | { type: 'delta'; text: string }
@@ -111,19 +173,32 @@ export class MKClient {
     return h;
   }
 
-  private async request<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
+  /** fetch with auth headers and one refresh-and-retry on 401. Never throws for HTTP status. */
+  private async send(path: string, init: RequestInit = {}, retry = true): Promise<Response> {
     const r = await fetch(this.baseUrl + path, { ...init, headers: { ...this.headers(!(init.body instanceof FormData)), ...(init.headers ?? {}) } });
     if (r.status === 401 && retry && this.tokens?.refresh_token) {
       const ok = await this.refresh();
-      if (ok) return this.request<T>(path, init, false);
+      if (ok) return this.send(path, init, false);
       this.onAuthExpired?.();
     }
-    if (!r.ok) {
-      let detail: any = `HTTP ${r.status}`;
-      try { detail = (await r.json()).detail ?? detail; } catch { /* keep status */ }
-      throw new ApiError(r.status, detail);
-    }
+    return r;
+  }
+
+  private static async body(r: Response): Promise<unknown> {
+    try { return await r.json(); } catch { return undefined; }
+  }
+
+  private async request<T>(path: string, init: RequestInit = {}): Promise<T> {
+    const r = await this.send(path, init);
+    if (!r.ok) throw apiErrorFrom(r.status, await MKClient.body(r), r.headers.get('Retry-After'));
     return r.json() as Promise<T>;
+  }
+
+  private async text(path: string): Promise<string> {
+    // No init.headers: they would be captured before a token refresh and override the new token.
+    const r = await this.send(path);
+    if (!r.ok) throw apiErrorFrom(r.status, await MKClient.body(r), r.headers.get('Retry-After'));
+    return r.text();
   }
 
   // ---- auth ----
@@ -249,23 +324,29 @@ export class MKClient {
   tenantUsage() { return this.request<any[]>('/api/usage/tenant'); }
 
   // ---- customer foundation (WP03) ----
-  customerTimeline(id: string) { return this.request<any[]>(`/api/customers/${id}/timeline`); }
-  customerPermissions(id: string) { return this.request<any>(`/api/customers/${id}/permissions`); }
-  customerDestinations(id: string) { return this.request<any[]>(`/api/customers/${id}/destinations`); }
+  customerTimeline(id: string) { return this.request<TimelineEvent[]>(`/api/customers/${id}/timeline`); }
+  customerPermissions(id: string) { return this.request<PermissionView>(`/api/customers/${id}/permissions`); }
+  customerDestinations(id: string) { return this.request<CustomerDestination[]>(`/api/customers/${id}/destinations`); }
   addDestination(id: string, channel: string, value: string) {
-    return this.request<any>(`/api/customers/${id}/destinations`, { method: 'POST', body: JSON.stringify({ channel, value }) });
+    return this.request<{ id: string; channel: string; value_masked: string; fingerprint: string; is_primary: boolean }>(
+      `/api/customers/${id}/destinations`, { method: 'POST', body: JSON.stringify({ channel, value }) });
   }
-  setPreferences(id: string, prefs: { timezone?: string; preferred_channel?: string; do_not_contact?: boolean }) {
-    return this.request(`/api/customers/${id}/preferences`, { method: 'PUT', body: JSON.stringify(prefs) });
+  setPreferences(id: string, prefs: { timezone?: string; preferred_channel?: 'sms' | 'email'; window_start_hour?: number; window_end_hour?: number; language?: string }) {
+    return this.request<{ customer_id: string; timezone: string | null; preferred_channel: string; dispatch_blocked_reason: string | null; version: number }>(
+      `/api/customers/${id}/preferences`, { method: 'PUT', body: JSON.stringify(prefs) });
   }
-  recordConsent(id: string, body: { purposes: string[]; source: string; evidence_type: string; evidence_text: string }) {
-    return this.request<any>(`/api/customers/${id}/consent`, { method: 'POST', body: JSON.stringify(body) });
+  /** Consent is recorded for ONE destination (the route requires `destination_id`). */
+  recordConsent(id: string, body: { destination_id: string; purposes: string[]; source: string; evidence_type: string; evidence_text: string; evidence_ref?: string; expires_in_days?: number }) {
+    return this.request<{ id: string; status: string; channel: string; purposes: string[]; effective_at: string; expires_at: string; evidence_digest: string; kernel_permission_id: string }>(
+      `/api/customers/${id}/consent`, { method: 'POST', body: JSON.stringify(body) });
   }
-  revokeConsent(id: string, eid: string, reason = '') {
-    return this.request(`/api/customers/${id}/consent/${eid}/revoke`, { method: 'POST', body: JSON.stringify({ reason }) });
+  /** `reason` is required by the route (1–120 characters). */
+  revokeConsent(id: string, eid: string, reason: string) {
+    return this.request<{ id: string; status: string; revoked_at: string }>(`/api/customers/${id}/consent/${eid}/revoke`, { method: 'POST', body: JSON.stringify({ reason }) });
   }
-  suppress(body: { channel: string; destination?: string; destination_hash?: string; reason: string; permanent: boolean; source: string }) {
-    return this.request<any>('/api/suppressions', { method: 'POST', body: JSON.stringify(body) });
+  /** Suppression is filed against a destination on file (the route requires `destination_id`). */
+  suppress(body: { destination_id: string; reason: string; source: 'consultant' | 'sms_reply' | 'provider' | 'complaint'; permanent?: boolean }) {
+    return this.request<{ id: string; fingerprint: string; channel: string; kernel_suppression_id: string }>('/api/suppressions', { method: 'POST', body: JSON.stringify(body) });
   }
 
   // ---- commitments & brief (WP04) ----
@@ -286,10 +367,10 @@ export class MKClient {
   }
   cancelCommitment(id: string, reason = '') { return this.request<Commitment>(`/api/commitments/${id}/cancel`, { method: 'POST', body: JSON.stringify({ reason }) }); }
   extractCommitments(customer_id: string, text: string, provider?: string) {
-    return this.request<any>('/api/commitments/extract', { method: 'POST', body: JSON.stringify({ customer_id, conversation_text: text, provider }) });
+    return this.request<ExtractResult>('/api/commitments/extract', { method: 'POST', body: JSON.stringify({ customer_id, conversation_text: text, provider }) });
   }
   recordOutcome(body: { customer_id: string; kind: string; commitment_id?: string; note?: string }) {
-    return this.request<any>('/api/outcomes', { method: 'POST', body: JSON.stringify(body) });
+    return this.request<OutcomeResult>('/api/outcomes', { method: 'POST', body: JSON.stringify(body) });
   }
 
   // ---- drafting (WP05) ----
@@ -301,26 +382,32 @@ export class MKClient {
   liveClaims(product_id?: string) { return this.request<any[]>(`/api/knowledge/claims${product_id ? `?product_id=${product_id}` : ''}`); }
 
   // ---- outreach, approvals, passkeys (WP06–WP08) ----
-  proposeDraft(id: string, body: { scheduled_for?: string } = {}) {
-    return this.request<any>(`/api/drafts/${id}/propose`, { method: 'POST', body: JSON.stringify(body) });
+  /** Proposes the exact draft version. Scheduling is deliberately not exposed: the
+   *  approval list does not yet echo a proposal's schedule (see report), so offering it
+   *  would show approvers the wrong "When". */
+  proposeDraft(id: string) {
+    return this.request<ProposeResult>(`/api/drafts/${id}/propose`, { method: 'POST', body: '{}' });
   }
   pendingApprovals() { return this.request<PendingApproval[]>('/api/approvals/pending'); }
-  actionStatus(id: string) { return this.request<{ action: any; link: any; message_state_definitions: Record<MessageState, string> }>(`/api/actions/${id}`); }
+  actionStatus(id: string) { return this.request<ActionStatus>(`/api/actions/${encodeURIComponent(id)}`); }
   approvalChallenge(action_id: string) {
-    return this.request<{ challenge: string; rp_id: string; action_digest: string; expires_at: string; allow_credentials: string[]; user_verification: string }>(
-      `/api/agent-ops/actions/${action_id}/approval-challenge`, { method: 'POST', body: '{}' });
+    return this.request<ApprovalChallenge>(`/api/agent-ops/actions/${encodeURIComponent(action_id)}/approval-challenge`, { method: 'POST', body: '{}' });
   }
   approve(action_id: string, action_digest: string, webauthn: WebAuthnAssertion, reason?: string) {
-    return this.request<any>(`/api/agent-ops/actions/${action_id}/approve`, { method: 'POST', body: JSON.stringify({ action_digest, webauthn, reason }) });
+    return this.request<DecisionResponse>(`/api/agent-ops/actions/${encodeURIComponent(action_id)}/approve`, { method: 'POST', body: JSON.stringify({ action_digest, webauthn, reason }) });
   }
   reject(action_id: string, action_digest: string, reason?: string) {
-    return this.request<any>(`/api/agent-ops/actions/${action_id}/reject`, { method: 'POST', body: JSON.stringify({ action_digest, reason }) });
+    return this.request<DecisionResponse>(`/api/agent-ops/actions/${encodeURIComponent(action_id)}/reject`, { method: 'POST', body: JSON.stringify({ action_digest, reason }) });
+  }
+  /** Withdraw a proposal before it is submitted (the kernel decides whether it still can). */
+  cancelAction(action_id: string) {
+    return this.request<ActionResult>(`/api/agent-ops/actions/${encodeURIComponent(action_id)}/cancel`, { method: 'POST', body: '{}' });
   }
   passkeyRegisterBegin() { return this.request<any>('/api/agent-ops/approval-credentials/register/begin', { method: 'POST', body: '{}' }); }
   passkeyRegisterFinish(body: { client_data_json: string; attestation_object: string; label: string }) {
     return this.request<any>('/api/agent-ops/approval-credentials/register/finish', { method: 'POST', body: JSON.stringify(body) });
   }
-  passkeys() { return this.request<any[]>('/api/agent-ops/approval-credentials'); }
+  passkeys() { return this.request<PasskeyInfo[]>('/api/agent-ops/approval-credentials'); }
   revokePasskey(row_id: string) { return this.request<any>(`/api/agent-ops/approval-credentials/${row_id}/revoke`, { method: 'POST', body: '{}' }); }
   revokeMySession(reason = '') { return this.request<any>('/api/agent-ops/revocations', { method: 'POST', body: JSON.stringify({ reason }) }); }
 
@@ -338,10 +425,15 @@ export class MKClient {
     return this.passkeyRegisterFinish({ client_data_json: b64url(att.clientDataJSON), attestation_object: b64url(att.attestationObject), label });
   }
 
-  /** One explicit approval gesture: fetch the digest-bound challenge, sign it with the passkey, submit. */
+  /** One explicit approval gesture: fetch the digest-bound challenge, sign it with the passkey, submit.
+   *  If the kernel's challenge is for a different digest than the one displayed, no passkey
+   *  prompt is shown and nothing is submitted: the caller gets the same APPROVAL_DIGEST_MISMATCH
+   *  the kernel would return, so web and mobile handle both paths identically. */
   async approveWithPasskey(action_id: string, action_digest: string, reason?: string) {
     const ch = await this.approvalChallenge(action_id);
-    if (ch.action_digest !== action_digest) throw new Error('This message changed since it was displayed. Review it again before approving.');
+    if (ch.action_digest !== action_digest) {
+      throw new ApiError(409, { code: 'APPROVAL_DIGEST_MISMATCH', message: 'This message changed since it was displayed.', detected: 'client' });
+    }
     const cred = await navigator.credentials.get({ publicKey: {
       challenge: b64urlDecode(ch.challenge), rpId: ch.rp_id, userVerification: ch.user_verification as UserVerificationRequirement,
       allowCredentials: ch.allow_credentials.map(id => ({ type: 'public-key', id: b64urlDecode(id) })),
@@ -355,21 +447,63 @@ export class MKClient {
   }
 
   // ---- inbound, exceptions (WP07) ----
-  processInbound(limit = 50) { return this.request<any>('/api/inbound/process', { method: 'POST', body: JSON.stringify({ limit }) }); }
+  processInbound(limit = 50) { return this.request<InboundProcessResult>('/api/inbound/process', { method: 'POST', body: JSON.stringify({ limit }) }); }
   listExceptions(state: 'open' | 'resolved' | 'dismissed' | 'all' = 'open') { return this.request<ExceptionItem[]>(`/api/exceptions?state=${state}`); }
   resolveException(id: string, resolution: 'resolved' | 'dismissed', note = '') {
     return this.request<ExceptionItem>(`/api/exceptions/${id}/resolve`, { method: 'POST', body: JSON.stringify({ resolution, note }) });
   }
-  inboundHealth() { return this.request<any>('/api/agent-ops/inbound/health'); }
-  senders() { return this.request<any[]>('/api/agent-ops/senders'); }
+  inboundHealth() { return this.request<InboundHealth>('/api/agent-ops/inbound/health'); }
+  senders() { return this.request<SenderIdentity[]>('/api/agent-ops/senders'); }
   registerSender(body: { owner_user_id: string; display_name: string; account_sid: string; auth_token: string; from_number?: string; messaging_service_sid?: string }) {
     return this.request<any>('/api/agent-ops/senders', { method: 'POST', body: JSON.stringify(body) });
   }
   kernelHealth() { return this.request<any>('/api/agent-ops/health'); }
 
+  /**
+   * Read-only governance status: is the kernel reachable and ready, is the platform kill
+   * switch on, does the kernel queue approved actions here. A 503 is a status to show,
+   * not an exception; 401 and other failures still throw ApiError.
+   */
+  async governanceStatus(): Promise<GovernanceStatus> {
+    const r = await this.send('/api/agent-ops/health');
+    const body = await MKClient.body(r);
+    return governanceStatusFrom(r.status, body);
+  }
+
   // ---- exports & deletion (account) ----
   exportAccount() { return this.request<any>('/api/account/export'); }
-  exportAudit() { return fetch(this.baseUrl + '/api/audit/export.jsonl', { headers: this.headers(false) }).then(r => r.text()); }
-  exportCustomersCsv() { return fetch(this.baseUrl + '/api/customers/export.csv', { headers: this.headers(false) }).then(r => r.text()); }
+  exportAudit() { return this.text('/api/audit/export.jsonl'); }
+  exportCustomersCsv() { return this.text('/api/customers/export.csv'); }
   deleteAccount(body: { password: string }) { return this.request<any>('/api/account', { method: 'DELETE', body: JSON.stringify(body) }); }
 }
+
+/** Pure mapping of `/api/agent-ops/health` responses (exported for tests). */
+export function governanceStatusFrom(status: number, body: unknown): GovernanceStatus {
+  const unknownStatus = (kernel: GovernanceStatus['kernel'], code: string | null): GovernanceStatus =>
+    ({ kernel, code, global_dispatch_enabled: null, kernel_execution_enabled: null, approval_binding: null, team_dispatch_enabled: null });
+  const rec = (v: unknown): Record<string, unknown> | null => (typeof v === 'object' && v !== null && !Array.isArray(v) ? v as Record<string, unknown> : null);
+  const b = rec(body);
+  const k = rec(b?.kernel);
+  const bool = (v: unknown) => (typeof v === 'boolean' ? v : null);
+  if ((status === 200 || status === 503) && k) {
+    const configured = b?.configured !== false;
+    const ready = status === 200 && k.database === true;
+    return {
+      kernel: !configured ? 'not_configured' : ready ? 'connected' : 'not_ready', code: null,
+      global_dispatch_enabled: bool(k.dispatch_enabled), kernel_execution_enabled: bool(k.rust_kernel_enabled),
+      approval_binding: typeof rec(k.effective)?.approval_binding === 'string' ? rec(k.effective)!.approval_binding as string : null,
+      team_dispatch_enabled: null,
+    };
+  }
+  if (status === 401) throw apiErrorFrom(status, body);
+  const err = apiErrorFrom(status, body);
+  if (status === 503) return unknownStatus(err.code === 'KERNEL_NOT_CONFIGURED' ? 'not_configured' : 'unreachable', err.code ?? null);
+  throw err;
+}
+
+export * from './vocabulary';
+export * from './labels';
+export * from './errors';
+export * from './handoff';
+export * from './approval';
+export * from './governance';
