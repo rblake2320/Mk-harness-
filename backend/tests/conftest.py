@@ -43,6 +43,22 @@ dbmod._SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commi
 
 
 @pytest.fixture
+def frozen_clock():
+    """Freeze app time (foundation.utcnow) for date-relative logic. Usage:
+    frozen_clock("2026-10-20T15:00:00+00:00"). Always reset after the test."""
+    from datetime import datetime
+
+    from app import foundation
+
+    def _freeze(iso: str):
+        foundation._frozen_now = datetime.fromisoformat(iso)
+        return foundation._frozen_now
+
+    yield _freeze
+    foundation._frozen_now = None
+
+
+@pytest.fixture
 def client():
     with TestClient(app) as c:
         yield c

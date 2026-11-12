@@ -88,7 +88,8 @@ def test_extractor_output_is_validated_not_repaired():
 # W1 lifecycle via API
 # --------------------------------------------------------------------------- #
 @respx.mock
-def test_extraction_creates_drafts_only_and_confirmation_is_explicit(client):
+def test_extraction_creates_drafts_only_and_confirmation_is_explicit(client, frozen_clock):
+    frozen_clock("2026-10-20T15:00:00+00:00")  # "next month" = November 2026
     h = _user_with_key(client)
     cid, _, _ = _customer(client, h, phone="+15555551001")
     client.put(f"/api/customers/{cid}/preferences", json={"timezone": "America/Chicago"}, headers=h)
@@ -142,7 +143,8 @@ def _commit(client, h, cid, text, **kw):
     return r.json()
 
 
-def test_golden_brief_candidates_and_ordering(client):
+def test_golden_brief_candidates_and_ordering(client, frozen_clock):
+    frozen_clock("2026-10-20T15:00:00+00:00")  # windows ("this_week") resolve against the golden date
     h = _user(client)
     tz = "America/Chicago"
     customers = {}

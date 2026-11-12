@@ -184,5 +184,10 @@ def csv_cell(value: str) -> str:
     return value
 
 
+# Test seam: the frozen_clock fixture (tests/conftest.py) sets this so date-relative
+# logic ("next month", "this week", overdue) is deterministic. Never set by app code.
+_frozen_now: datetime | None = None
+
+
 def utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return _frozen_now or datetime.now(timezone.utc)
