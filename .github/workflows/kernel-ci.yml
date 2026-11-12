@@ -134,7 +134,8 @@ jobs:
           curl -sSL -o gl.tgz "https://github.com/gitleaks/gitleaks/releases/download/v${V}/gitleaks_${V}_linux_x64.tar.gz"
           tar xzf gl.tgz gitleaks
           sudo install gitleaks /usr/local/bin/gitleaks
-      - run: gitleaks detect --source . --redact --no-banner --config .gitleaks.toml
+      # --verbose prints each finding (values redacted) so a failure names file, line and rule.
+      - run: gitleaks detect --source . --redact --verbose --no-banner --config .gitleaks.toml
 
   # End-to-end through the application: real binaries, Postgres, Redis, FastAPI,
   # the device agent in dry-run, per-process DB logins, and the production
