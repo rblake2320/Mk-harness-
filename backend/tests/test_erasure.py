@@ -95,7 +95,9 @@ def test_erasure_empties_every_content_table_and_keeps_only_minimal_records(clie
     assert (c.name, c.phone, c.email, c.notes, c.skin_profile_json) == ("Erased customer", "", "", "", "")
     assert c.erased_at is not None
     dests = db.scalars(select(CustomerDestination).where(CustomerDestination.customer_id == cid)).all()
-    assert all(d.value_enc == "" and d.retired_at is not None for d in dests)
+    assert all(d.retired_at is not None for d in dests)
+    # Only the opted-out number keeps its sealed value (for key rotation); the other is gone.
+    assert {d.fingerprint for d in dests if d.value_enc} == {fp_suppressed}
     fps = {d.fingerprint for d in dests}
     assert fp_suppressed in fps and fp_plain not in fps     # suppression keeps its key; the other is tombstoned
     assert all(f == fp_suppressed or f.startswith("erased:") for f in fps)
@@ -257,7 +259,8 @@ def test_restore_then_replay_reerases_and_requeues_the_kernel(client):
     db.expire_all()
     c = db.get(Customer, cid)
     assert c.name == "Erased customer" and c.erased_at is not None
-    assert all(d.value_enc == "" for d in db.scalars(select(CustomerDestination).where(CustomerDestination.customer_id == cid)))
+    assert [d.fingerprint for d in db.scalars(select(CustomerDestination).where(
+        CustomerDestination.customer_id == cid)) if d.value_enc] == [fp1]       # only the opt-out keeps its seal
     req = db.scalar(select(ErasureRequest).where(ErasureRequest.subject_id == cid))
     assert req.kernel_acknowledged_at is None and fp1 in json.loads(req.kernel_fingerprints_json)
     # Replay twice is a no-op on content.
@@ -406,3 +409,29 @@ def test_migrate_adds_nullable_columns_and_refuses_non_additive(tmp_path):
             add_missing_columns(eng)
     finally:
         mig.Base.metadata = real
+
+
+def test_opt_out_of_an_erased_customer_survives_fingerprint_key_rotation(client, monkeypatch):
+    """Erasure must not strand a suppression: after a new fingerprint key becomes
+    current and the old one is removed, the erased customer's opted-out number is
+    still suppressed — and the erased rows do not show up as unreadable."""
+    import base64
+    from app.config import get_settings
+    from app.tools import refingerprint as rf
+    _, h = _owner(client)
+    cid, fp_suppressed, _, tid = _rich_customer(client, h)
+    assert client.delete(f"/api/customers/{cid}", headers=h).status_code == 200
+    k9 = base64.b64encode(bytes([9]) * 32).decode()
+    try:
+        monkeypatch.setenv("FINGERPRINT_KEYS", f"k9={k9},m0=master"); get_settings.cache_clear()
+        db = _db()
+        rep = rf.rekey(db)
+        assert rep.suppressions_unmapped == 0 and rep.destinations_unreadable == 0, rep
+        db.close()
+        monkeypatch.setenv("FINGERPRINT_KEYS", f"k9={k9}"); get_settings.cache_clear()
+        db = _db()
+        new_fp = fingerprint(tid, "sms", normalize("sms", PHONE))
+        assert new_fp != fp_suppressed and active_suppressions(db, tid, new_fp, "sms")
+        db.close()
+    finally:
+        get_settings.cache_clear()

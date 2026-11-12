@@ -1,18 +1,17 @@
 import { useEffect, useState } from 'react';
 import { client } from '../App.tsx';
+import { BRIEF_SECTIONS, briefRuleLabel, localDay, permissionLabel } from '../../../packages/sdk/src/index.ts';
 import type { BriefItem, Draft } from '../../../packages/sdk/src/index.ts';
 import { ErrorNote, HumanSteps, fmtWhen } from '../components/Common.tsx';
 import { AiBadge } from '../components/AiDisclosure.tsx';
 import DraftEditor from './DraftEditor.tsx';
 
-const RULE_LABEL: Record<string, string> = {
-  exception: 'Needs attention', overdue: 'Overdue promise', due_today: 'Due today',
-  unanswered: 'Unanswered request', future: 'Coming up', customer_date: 'Customer date',
-};
+function sectionTitle(rank: number) { return BRIEF_SECTIONS.find(s => s.rank === rank)?.title ?? 'Other'; }
 
 export default function BriefView({ onOpenCustomer }: { onOpenCustomer: (id: string) => void }) {
   const [items, setItems] = useState<BriefItem[]>([]);
-  const [date, setDate] = useState<string>(new Date().toISOString().slice(0, 10));
+  // The brief is per LOCAL day; toISOString() would pick the UTC day (tomorrow, in US evenings).
+  const [date, setDate] = useState<string>(() => localDay());
   const [err, setErr] = useState<unknown>(null);
   const [busy, setBusy] = useState('');
   const [draftFor, setDraftFor] = useState<{ item: BriefItem; draft: Draft | null; limitation: string | null; neutral?: string } | null>(null);
@@ -65,7 +64,7 @@ export default function BriefView({ onOpenCustomer }: { onOpenCustomer: (id: str
           <li key={it.id} className="card brief-item">
             <div className="row" style={{ justifyContent: 'space-between' }}>
               <div>
-                <span className={`tag rank-${it.rank_category}`}>{RULE_LABEL[it.rule] ?? it.rule}</span>
+                <span className={`tag rank-${it.rank_category}`}>{sectionTitle(it.rank_category)} · {briefRuleLabel(it.rule)}</span>
                 {it.customer && <button className="link" onClick={() => onOpenCustomer(it.customer!.id)}>{it.customer.name}</button>}
               </div>
               <span className="muted small">{it.due_at ? `due ${fmtWhen(it.due_at)}` : ''}</span>
@@ -73,7 +72,7 @@ export default function BriefView({ onOpenCustomer }: { onOpenCustomer: (id: str
             {it.source && <p className="quote">“{it.source.text}” <span className="muted small">— {it.source.kind.replace('_', ' ')}, {it.source.status}</span></p>}
             <p style={{ margin: '6px 0' }}>{it.suggested_step}</p>
             <div className="muted small">
-              Permission: <strong>{it.permission_state}</strong> (checked {fmtWhen(it.permission_checked_at)}) — {it.permission_note}
+              Permission: <strong>{permissionLabel(it.permission_state)}</strong> (checked {fmtWhen(it.permission_checked_at)}) — {it.permission_note}
             </div>
             <div className="row" style={{ marginTop: 10 }}>
               {it.customer && it.permission_state === 'active' && (

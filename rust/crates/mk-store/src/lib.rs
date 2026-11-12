@@ -146,6 +146,11 @@ pub fn migrator() -> sqlx::migrate::Migrator {
             "tenant directory",
             include_str!("../../../../migrations/kernel/0009_tenant_directory.sql"),
         ),
+        (
+            10,
+            "subject erasures",
+            include_str!("../../../../migrations/kernel/0010_subject_erasures.sql"),
+        ),
     ];
     let migrations: Vec<Migration> = FILES
         .iter()

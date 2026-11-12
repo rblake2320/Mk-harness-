@@ -6,8 +6,9 @@ one customer, in one transaction, and keeps only what the data map says must sta
   kept, content-free   customer row (anchor: erased_at, empty fields), action links
                        (ids + digests), inbound application ids, audit rows
   kept, minimal legal  consent evidence (who / purpose / when / evidence digest — the
-                       free-text evidence reference is cleared), suppression rows and
-                       the fingerprints they need (a suppression must keep blocking)
+                       free-text evidence reference is cleared), suppression rows, the
+                       fingerprints they need and — for an opted-out number only — its
+                       sealed value, so key rotation can re-key the opt-out
   emptied              destinations (ciphertext; fingerprint tombstoned unless a
                        suppression needs it), preferences, commitment / draft /
                        exception / outcome text, import rows, skin analyses and the
@@ -68,11 +69,18 @@ def _apply(db: Session, tenant_id: str, customer_id: str) -> dict:
         SuppressionEvent.tenant_id == tenant_id)).all())
     fingerprints: list[str] = []
     for d in db.scalars(select(CustomerDestination).where(CustomerDestination.customer_id == c.id)):
+        keep_for_opt_out = d.fingerprint in suppressed
         if not d.fingerprint.startswith("erased:"):
             fingerprints.append(d.fingerprint)
-            if d.fingerprint not in suppressed:
+            if not keep_for_opt_out:
                 d.fingerprint = f"erased:{d.id}"   # irreversible tombstone; nothing to look up
-        d.value_enc, d.label, d.source_ref, d.is_primary = "", "", "", False
+        if not keep_for_opt_out:
+            d.value_enc = ""
+        # An opted-out number keeps its SEALED value (never shown; no read path returns an
+        # erased customer): fingerprint-key rotation must be able to re-key the opt-out,
+        # or the old key's removal would let the number be contacted again. Same rule as
+        # the kernel's suppressions.destination_sealed.
+        d.label, d.source_ref, d.is_primary = "", "", False
         d.retired_at = d.retired_at or now
     for e in db.scalars(select(ConsentEvent).where(ConsentEvent.customer_id == c.id)):
         e.evidence_ref = ""                         # minimal legal record: digest, purpose, time stay

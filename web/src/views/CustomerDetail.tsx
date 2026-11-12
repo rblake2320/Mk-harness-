@@ -1,18 +1,18 @@
 import { useEffect, useState } from 'react';
 import { client } from '../App.tsx';
-import type { Commitment, Customer, Draft } from '../../../packages/sdk/src/index.ts';
+import { OUTCOME_KINDS, OUTCOME_SEPARATION_NOTE, outcomeLabel } from '../../../packages/sdk/src/index.ts';
+import type { Commitment, Customer, CustomerDestination, Draft, ExtractResult, PermissionView, TimelineEvent } from '../../../packages/sdk/src/index.ts';
 import { ErrorNote, HumanSteps, fmtWhen } from '../components/Common.tsx';
 import DraftEditor from './DraftEditor.tsx';
 
 const TZS = ['America/New_York', 'America/Chicago', 'America/Denver', 'America/Phoenix', 'America/Los_Angeles', 'America/Anchorage', 'Pacific/Honolulu'];
-const OUTCOMES = ['resolved', 'deferred', 'opted_out', 'no_response', 'customer_reported_order', 'consultant_confirmed_order', 'exception_open', 'cancelled'];
 
 /** Customer page: timeline, commitments, permission & suppression view, destinations, outcomes. */
 export default function CustomerDetail({ customer, onBack }: { customer: Customer; onBack: () => void }) {
-  const [timeline, setTimeline] = useState<any[]>([]);
+  const [timeline, setTimeline] = useState<TimelineEvent[]>([]);
   const [commitments, setCommitments] = useState<Commitment[]>([]);
-  const [perm, setPerm] = useState<any>(null);
-  const [dests, setDests] = useState<any[]>([]);
+  const [perm, setPerm] = useState<PermissionView | null>(null);
+  const [dests, setDests] = useState<CustomerDestination[]>([]);
   const [err, setErr] = useState<unknown>(null);
   const [tz, setTz] = useState('');
   const [newDest, setNewDest] = useState('');
@@ -21,7 +21,11 @@ export default function CustomerDetail({ customer, onBack }: { customer: Custome
   const [outcome, setOutcome] = useState({ kind: 'resolved', commitment_id: '', note: '' });
   const [draft, setDraft] = useState<{ draft: Draft | null; limitation: string | null; neutral?: string } | null>(null);
   const [extractText, setExtractText] = useState('');
-  const [extracted, setExtracted] = useState<any>(null);
+  const [extracted, setExtracted] = useState<ExtractResult | null>(null);
+  /** Destination awaiting the second, confirming click before it is suppressed. */
+  const [confirmStop, setConfirmStop] = useState<string | null>(null);
+  // Consent is recorded for one destination: the primary SMS number that is not suppressed.
+  const consentDest = dests.filter(d => d.channel === 'sms' && !d.suppressed).sort((a, b) => Number(b.is_primary) - Number(a.is_primary))[0];
 
   function load() {
     setErr(null);
@@ -43,21 +47,22 @@ export default function CustomerDetail({ customer, onBack }: { customer: Custome
         <div className="card">
           <h3 style={{ marginTop: 0 }}>Permission & suppression</h3>
           <p className="muted small">{perm?.note ?? 'Historical observation; the kernel re-checks at send time.'}</p>
-          {perm?.suppressions?.length > 0 && (
-            <div className="limitation" role="status"><strong>Do not contact.</strong> {perm.suppressions.map((s: any) => `${s.channel}: ${s.reason} (${s.source}, ${fmtWhen(s.created_at)})`).join('; ')}
+          {perm && perm.suppressions.length > 0 && (
+            <div className="limitation" role="status"><strong>Do not contact.</strong> {perm.suppressions.map(s => `${s.channel}: ${s.reason} (${s.source}, ${fmtWhen(s.created_at)})`).join('; ')}
               <div className="small">Suppression is never cleared by a reply. Re-consent needs fresh, purpose-specific evidence through this form.</div></div>
           )}
           <ul className="plain">
-            {(perm?.consent_events ?? []).map((e: any) => (
+            {(perm?.consent_events ?? []).map(e => (
               <li key={e.id}><strong>{e.status}</strong> · {e.channel} · {e.purposes.join(', ')} · from {e.source} · {fmtWhen(e.effective_at)} → {fmtWhen(e.expires_at)}
                 {e.status === 'active' && <button className="link" onClick={() => run(() => client.revokeConsent(customer.id, e.id, 'consultant'))}>revoke</button>}</li>
             ))}
             {(perm?.consent_events ?? []).length === 0 && <li className="muted">No consent recorded. An imported number is not permission.</li>}
           </ul>
-          <label className="muted small" htmlFor="consent-text">Record consent (what the customer actually said or signed)</label>
+          <label className="muted small" htmlFor="consent-text">Record consent (what the customer actually said or signed){consentDest ? ` for ${consentDest.value_masked}` : ''}</label>
           <textarea id="consent-text" rows={2} value={consentText} onChange={e => setConsentText(e.target.value)} placeholder="e.g. 'Yes, text me about my orders' — verbal, confirmed at the party on 10/18" />
-          <button className="btn ghost" disabled={consentText.trim().length < 8} onClick={() => run(async () => {
-            await client.recordConsent(customer.id, { purposes: ['customer_requested_follow_up'], source: 'verbal_confirmed', evidence_type: 'consultant_attestation', evidence_text: consentText });
+          {!consentDest && <div className="muted small">Add a mobile number that is not suppressed before recording consent — consent always covers one number.</div>}
+          <button className="btn ghost" disabled={!consentDest || consentText.trim().length < 8} onClick={() => consentDest && run(async () => {
+            await client.recordConsent(customer.id, { destination_id: consentDest.id, purposes: ['customer_requested_follow_up'], source: 'verbal_confirmed', evidence_type: 'consultant_attestation', evidence_text: consentText });
             setConsentText('');
           })}>Record consent for order follow-ups</button>
         </div>
@@ -70,7 +75,19 @@ export default function CustomerDetail({ customer, onBack }: { customer: Custome
           </select>
           <button className="btn ghost" disabled={!tz} onClick={() => run(() => client.setPreferences(customer.id, { timezone: tz }))}>Save timezone</button>
           <h4>SMS destinations</h4>
-          <ul className="plain">{dests.map(d => <li key={d.id}>{d.channel} · {d.masked ?? d.label ?? 'on file'} {d.is_primary && <em className="muted small">primary</em>}</li>)}</ul>
+          <ul className="plain" aria-label="Destinations">{dests.map(d => (
+            <li key={d.id}>{d.channel} · {d.value_masked} {d.is_primary && <em className="muted small">primary</em>}{d.suppressed && <strong> · do not contact</strong>}
+              {!d.suppressed && (confirmStop === d.id
+                ? <div className="row">
+                    <button className="btn ghost small" onClick={() => run(async () => {
+                      await client.suppress({ destination_id: d.id, reason: 'customer asked not to be contacted', source: 'consultant', permanent: true });
+                      setConfirmStop(null);
+                    })}>Confirm: never message {d.value_masked}</button>
+                    <button className="link" onClick={() => setConfirmStop(null)}>keep</button>
+                  </div>
+                : <button className="link" onClick={() => setConfirmStop(d.id)} aria-label={`mark do not contact: ${d.value_masked}`}>mark do not contact</button>)}
+            </li>))}</ul>
+          <p className="muted small">Use "mark do not contact" when a customer asks you to stop (for example a verbal request or a reply held as a possible opt-out). It is permanent, revokes consent for that number and is enforced by the kernel. A STOP reply is suppressed automatically.</p>
           <label className="muted small" htmlFor="dest">Add mobile number (E.164)</label>
           <div className="row">
             <input id="dest" value={newDest} onChange={e => setNewDest(e.target.value)} placeholder="+1 555 555 0100" />
@@ -118,15 +135,16 @@ export default function CustomerDetail({ customer, onBack }: { customer: Custome
           <summary>Extract commitments from a conversation (AI, drafts only)</summary>
           <textarea rows={4} aria-label="Conversation text" value={extractText} onChange={e => setExtractText(e.target.value)} placeholder="Paste the conversation. Only verbatim quotes become evidence; dates are never invented." />
           <button className="btn ghost" disabled={extractText.length < 10} onClick={() => client.extractCommitments(customer.id, extractText).then(r => { setExtracted(r); load(); }).catch(setErr)}>Extract drafts</button>
-          {extracted && <div className="muted small">Created {extracted.created?.length ?? extracted.length ?? 0} draft(s). Confirm each one above.</div>}
+          {extracted && <div className="muted small" role="status">Created {extracted.drafts.length} draft commitment{extracted.drafts.length === 1 ? '' : 's'}. Confirm each one above.</div>}
         </details>
       </section>
 
       <section className="grid-2" style={{ marginTop: 16 }}>
         <div className="card">
           <h3 style={{ marginTop: 0 }}>Record an outcome</h3>
-          <p className="muted small">Business outcomes are separate from delivery. A delivered text is not a resolved commitment.</p>
-          <select aria-label="Outcome" value={outcome.kind} onChange={e => setOutcome({ ...outcome, kind: e.target.value })}>{OUTCOMES.map(k => <option key={k}>{k}</option>)}</select>
+          <p className="muted small">{OUTCOME_SEPARATION_NOTE}</p>
+          <select aria-label="Outcome" value={outcome.kind} onChange={e => setOutcome({ ...outcome, kind: e.target.value })}>{OUTCOME_KINDS.map(k => <option key={k.id} value={k.id}>{k.label}</option>)}</select>
+          {OUTCOME_KINDS.find(k => k.id === outcome.kind)?.note && <div className="muted small">{OUTCOME_KINDS.find(k => k.id === outcome.kind)?.note}</div>}
           <select aria-label="Related commitment" value={outcome.commitment_id} onChange={e => setOutcome({ ...outcome, commitment_id: e.target.value })}>
             <option value="">(no commitment)</option>{commitments.map(c => <option key={c.id} value={c.id}>{c.text.slice(0, 60)}</option>)}
           </select>
@@ -137,7 +155,7 @@ export default function CustomerDetail({ customer, onBack }: { customer: Custome
           <h3 style={{ marginTop: 0 }}>Timeline</h3>
           <ol className="plain timeline">
             {timeline.map((e, i) => (
-              <li key={i}><span className="muted small">{fmtWhen(e.at)}</span> · <strong>{e.type}</strong> · {e.type === 'commitment' ? `${e.data.kind}: ${e.data.text} (${e.data.status})` : `${e.data.kind}${e.data.note ? ` — ${e.data.note}` : ''}`}</li>
+              <li key={i}><span className="muted small">{fmtWhen(e.at)}</span> · <strong>{e.type}</strong> · {e.type === 'commitment' ? `${e.data.kind}: ${e.data.text} (${e.data.status})` : `${outcomeLabel(e.data.kind)}${e.data.note ? ` — ${e.data.note}` : ''}`}</li>
             ))}
             {timeline.length === 0 && <li className="muted">Nothing yet.</li>}
           </ol>

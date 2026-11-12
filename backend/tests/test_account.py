@@ -201,7 +201,7 @@ class TestDeleteAccount:
     def test_wrong_password_blocked(self, client):
         t = signup(client, email=_email())
         r = _del(client, "/api/account", {"password": "wrongPassword999"}, auth_headers(t))
-        assert r.status_code == 401
+        assert r.status_code == 403   # valid session, wrong password: not a token problem
 
     def test_requires_auth(self, client):
         r = _del(client, "/api/account", {"password": "superSecret123!"}, {})

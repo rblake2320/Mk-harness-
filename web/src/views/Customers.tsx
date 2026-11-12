@@ -59,17 +59,18 @@ export default function CustomersView({ onOpen }: { onOpen: (c: Customer) => voi
         </div>
       )}
 
-      <table style={{ marginTop: 14 }}>
-        <thead><tr><th>Name</th><th>Contact</th><th>Notes</th><th>Last contact</th><th></th></tr></thead>
-        <tbody>
+      {/* Explicit ARIA table roles keep the semantics when narrow screens restyle rows as cards. */}
+      <table className="responsive" role="table" style={{ marginTop: 14 }}>
+        <thead role="rowgroup"><tr role="row"><th role="columnheader">Name</th><th role="columnheader">Contact</th><th role="columnheader">Notes</th><th role="columnheader">Last contact</th><th role="columnheader"><span className="visually-hidden">Actions</span></th></tr></thead>
+        <tbody role="rowgroup">
           {list.map(c => (
-            <tr key={c.id}>
-              <td><button className="link" onClick={() => onOpen(c)}><strong>{c.name}</strong></button></td>
-              <td>{[c.phone, c.email].filter(Boolean).join(' · ') || '—'}</td>
-              <td className="muted" style={{ maxWidth: 320 }}>{c.notes || '—'}</td>
-              <td>{c.last_contact ? new Date(c.last_contact).toLocaleDateString() : 'never'}</td>
-              <td>
-                <div className="row" style={{ flexWrap: 'nowrap' }}>
+            <tr key={c.id} role="row">
+              <td role="cell"><button className="link" onClick={() => onOpen(c)}><strong>{c.name}</strong></button></td>
+              <td role="cell" data-label="Contact">{[c.phone, c.email].filter(Boolean).join(' · ') || '—'}</td>
+              <td role="cell" data-label="Notes" className="muted" style={{ maxWidth: 320 }}>{c.notes || '—'}</td>
+              <td role="cell" data-label="Last contact">{c.last_contact ? new Date(c.last_contact).toLocaleDateString() : 'never'}</td>
+              <td role="cell">
+                <div className="row actions">
                   <button className="btn ghost" onClick={() => onOpen(c)}>Open</button>
                   <button className="btn ghost"
                           onClick={() => { setForm({ ...c }); setEditing(true); }}>Edit</button>
@@ -82,7 +83,7 @@ export default function CustomersView({ onOpen }: { onOpen: (c: Customer) => voi
             </tr>
           ))}
           {list.length === 0 && (
-            <tr><td colSpan={5} className="muted">
+            <tr role="row"><td role="cell" colSpan={5} className="muted">
               No customers yet. Add your first one. Notes stay private to you; they are context, never quoted to a customer.
             </td></tr>
           )}

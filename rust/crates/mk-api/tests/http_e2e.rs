@@ -2433,14 +2433,14 @@ async fn lease_expiry_completes_provider_accepted_and_reconciles_only_the_unknow
 /// a human tenant administrator can ask for it.
 #[tokio::test]
 async fn subject_erasure_strips_content_cancels_queued_sends_and_keeps_the_chain() {
+    const SENT: &str = "Brenda, your lanolin-free kit shipped. Reply STOP to opt out.";
+    const QUEUED: &str = "Brenda, second note about your order. Reply STOP to opt out.";
     let Some(h) = harness().await else {
         eprintln!("skipping");
         return;
     };
     let mut r = provider_rig(&h, mk_adapters::twilio_sim::TwilioSimMode::Accept).await;
     health_ok(&h, r.admin).await;
-    const SENT: &str = "Brenda, your lanolin-free kit shipped. Reply STOP to opt out.";
-    const QUEUED: &str = "Brenda, second note about your order. Reply STOP to opt out.";
     let (a1, _) = approved_action(&h, &mut r, SENT, "+15555550100").await;
     let out = run_dispatch(&r, h.tenant, &a1).await;
     assert!(matches!(out, DispatchOutcome::Dispatched { .. }), "{out:?}");
@@ -2458,14 +2458,14 @@ async fn subject_erasure_strips_content_cancels_queued_sends_and_keeps_the_chain
         ))
         .bind(h.tenant.0)
         .bind(a1.parse::<Uuid>().unwrap_or_default())
-        .fetch_one(tx.conn())
+        .fetch_one(tx.raw_conn())
         .await
         .unwrap_or_else(|e| panic!("{e:?}"));
         tx.commit().await.unwrap_or_else(|e| panic!("{e:?}"));
         v
     };
     let body = json!({"request_ref": "erase-req-1", "destination_hashes": [dest_hash], "action_ids": [a1]});
-    let admin = h.token(r.admin, &["tenant_admin"]);
+    let admin = || h.token(r.admin, &["tenant_admin"]); // assertions are single-use
     // Only a human tenant administrator; malformed scope refused before any work.
     for (tok, want) in [
         (h.token(r.admin, &["agent"]), StatusCode::FORBIDDEN),
@@ -2488,7 +2488,7 @@ async fn subject_erasure_strips_content_cancels_queued_sends_and_keeps_the_chain
         json!({"request_ref": "x", "action_ids": [a1], "extra": 1}),
     ] {
         let (s, v) = h
-            .call("POST", "/internal/v1/erasures", Some(&admin), Some(bad))
+            .call("POST", "/internal/v1/erasures", Some(&admin()), Some(bad))
             .await;
         assert!(
             s == StatusCode::UNPROCESSABLE_ENTITY || s == StatusCode::BAD_REQUEST,
@@ -2516,7 +2516,7 @@ async fn subject_erasure_strips_content_cancels_queued_sends_and_keeps_the_chain
             .call(
                 "POST",
                 "/internal/v1/erasures",
-                Some(&admin),
+                Some(&admin()),
                 Some(body.clone()),
             )
             .await;
@@ -2550,7 +2550,7 @@ async fn subject_erasure_strips_content_cancels_queued_sends_and_keeps_the_chain
         .call(
             "POST",
             "/internal/v1/erasures",
-            Some(&admin),
+            Some(&admin()),
             Some(body.clone()),
         )
         .await;
@@ -2565,7 +2565,7 @@ async fn subject_erasure_strips_content_cancels_queued_sends_and_keeps_the_chain
         .call(
             "POST",
             "/internal/v1/erasures",
-            Some(&admin),
+            Some(&admin()),
             Some(body.clone()),
         )
         .await;
@@ -2586,7 +2586,7 @@ async fn subject_erasure_strips_content_cancels_queued_sends_and_keeps_the_chain
             "SELECT canonical_request, state, erased_at FROM kernel.actions WHERE tenant_id = $1 AND action_id = ANY($2)"))
             .bind(h.tenant.0)
             .bind(vec![a1.parse::<Uuid>().unwrap_or_default(), a2.parse::<Uuid>().unwrap_or_default()])
-            .fetch_all(tx.conn())
+            .fetch_all(tx.raw_conn())
             .await
             .unwrap_or_else(|e| panic!("{e:?}"));
         assert_eq!(rows.len(), 2);
@@ -2612,13 +2612,13 @@ async fn subject_erasure_strips_content_cancels_queued_sends_and_keeps_the_chain
         let perm: String = sqlx::query_scalar(q("SELECT status FROM kernel.contact_permissions WHERE tenant_id = $1 AND contact_id = $2"))
             .bind(h.tenant.0)
             .bind(r.contact.0)
-            .fetch_one(tx.conn())
+            .fetch_one(tx.raw_conn())
             .await
             .unwrap_or_else(|e| panic!("{e:?}"));
         assert_eq!(perm, "revoked");
         let pending: i64 = sqlx::query_scalar(q("SELECT count(*) FROM kernel.provider_erasures WHERE tenant_id = $1 AND state = 'pending' AND direction = 'outbound'"))
             .bind(h.tenant.0)
-            .fetch_one(tx.conn())
+            .fetch_one(tx.raw_conn())
             .await
             .unwrap_or_else(|e| panic!("{e:?}"));
         assert!(pending >= 1);
@@ -2628,13 +2628,13 @@ async fn subject_erasure_strips_content_cancels_queued_sends_and_keeps_the_chain
             .unwrap_or_else(|e| panic!("{e:?}"));
         let ev: i64 = sqlx::query_scalar(q("SELECT count(*) FROM kernel.audit_events WHERE tenant_id = $1 AND event_type = 'subject_erased'"))
             .bind(h.tenant.0)
-            .fetch_one(tx.conn())
+            .fetch_one(tx.raw_conn())
             .await
             .unwrap_or_else(|e| panic!("{e:?}"));
         assert_eq!(ev, 1);
         let leaked: i64 = sqlx::query_scalar(q("SELECT count(*) FROM kernel.audit_events WHERE tenant_id = $1 AND payload_redacted::text ~ '(Brenda|5555550100|lanolin)'"))
             .bind(h.tenant.0)
-            .fetch_one(tx.conn())
+            .fetch_one(tx.raw_conn())
             .await
             .unwrap_or_else(|e| panic!("{e:?}"));
         assert_eq!(leaked, 0);
@@ -2647,7 +2647,7 @@ async fn subject_erasure_strips_content_cancels_queued_sends_and_keeps_the_chain
         .call(
             "POST",
             &format!("/internal/v1/actions/{a1}/replay"),
-            Some(&admin),
+            Some(&admin()),
             None,
         )
         .await;

@@ -17,7 +17,7 @@ mk-harness/
 │   └── tests/           auth, MFA, RBAC, crypto, isolation, adapters, e2e, red team
 ├── packages/sdk/     Shared TypeScript SDK (web + mobile)
 ├── web/              React + Vite web client (dark "vanity mirror" UI)
-├── mobile/           Expo React Native client (camera skin analysis)
+├── mobile/           Expo React Native client (brief, drafts, approvals via the web passkey page, inbox, customers, status; chat, skin)
 └── docker-compose.yml
 ```
 
@@ -98,14 +98,23 @@ Mobile:
 
 ```bash
 cd mobile && npm install
-# set extra.apiUrl in app.json to your API host, then:
+# set extra.apiUrl (API host) and extra.webUrl (HTTPS web app that hosts the passkey
+# approval page; its origin must be in the kernel's MK_APPROVAL_ORIGINS) in app.json, then:
 npx expo start
 ```
+
+Approving on mobile opens the web approval page in an auth session and returns to
+`consultantstudio://approvals/done`; that needs a development or store build (Expo Go
+cannot receive the app's own scheme). The app never approves by itself: it re-reads the
+action from the API after the page closes.
 
 ## Tests
 
 ```bash
-cd backend && python -m pytest -v
+cd backend && python -m pytest -v                 # backend
+cd web && npm run build && npm run test:unit      # SDK unit tests + message-state vocabulary lint
+cd web && npx playwright test                     # UI: approvals (H1/H2/H4/H8), hand-off, WCAG + 360 px
+cd mobile && npm run typecheck && npm test        # mobile logic, accessibility and approval-path guards
 ```
 
 Provider adapters are tested against each vendor's documented wire format
@@ -151,9 +160,10 @@ EXIF stripping, and skin-compliance rejection.
 Built and verified in a sandboxed container: backend test suite (all passing),
 live server smoke test, and web production build all pass here. What I could
 not do from the container: hit OpenAI/Gemini live endpoints (network
-egress), run an iOS/Android simulator (Expo client is code-complete and
-mirrors the tested web flows through the same SDK, but needs a device run),
-or deploy to your infrastructure. First-run checklist is in "Run it" above.
+egress), run an iOS/Android simulator (the Expo client typechecks and its
+logic, accessibility and approval-path checks are tested offline, but it has
+not been run on a device or simulator), or deploy to your infrastructure.
+First-run checklist is in "Run it" above.
 
 
 ## Rust action kernel

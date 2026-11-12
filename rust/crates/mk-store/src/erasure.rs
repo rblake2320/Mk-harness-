@@ -119,9 +119,15 @@ pub async fn erase_subject(
         let st = ActionState::parse(&s).map_err(|_| StoreError::Corrupt("state"))?;
         states.push((ActionId::from_uuid(id), st));
     }
+    // A send already handed to a transport is in flight even where the state machine
+    // would allow `Cancel` (it does from Dispatching): cancelling it would record a
+    // message the provider may already have delivered as "cancelled".
     let in_flight = states
         .iter()
-        .filter(|(_, s)| !s.is_terminal() && s.apply(Transition::Cancel).is_err())
+        .filter(|(_, s)| {
+            *s == ActionState::Dispatching
+                || (!s.is_terminal() && s.apply(Transition::Cancel).is_err())
+        })
         .count();
     if in_flight > 0 {
         return Err(ErasureError::InFlight(in_flight));

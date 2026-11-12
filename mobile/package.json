@@ -2,17 +2,27 @@
   "name": "mk-harness-mobile",
   "version": "1.0.0",
   "main": "expo/AppEntry.js",
-  "scripts": { "start": "expo start", "android": "expo start --android", "ios": "expo start --ios" },
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
+    "test": "node --import tsx --test src/logic/*.test.ts"
+  },
   "dependencies": {
     "expo": "~52.0.0",
+    "expo-constants": "~17.0.8",
     "expo-image-picker": "~16.0.4",
     "expo-status-bar": "~2.0.0",
+    "expo-web-browser": "~14.0.2",
     "react": "18.3.1",
     "react-native": "0.76.5"
   },
   "devDependencies": {
     "@babel/core": "^7.25.0",
+    "@types/node": "^22.20.5",
     "@types/react": "~18.3.12",
+    "tsx": "^4.23.15",
     "typescript": "^5.7.2"
   },
   "private": true

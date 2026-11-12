@@ -1,13 +1,8 @@
 import { useEffect, useState } from 'react';
 import { client } from '../App.tsx';
-import type { ExceptionItem } from '../../../packages/sdk/src/index.ts';
+import { exceptionKindLabel, inboundBlockLabel } from '../../../packages/sdk/src/index.ts';
+import type { ExceptionItem, InboundHealth, InboundProcessResult } from '../../../packages/sdk/src/index.ts';
 import { ErrorNote, HumanSteps, fmtWhen } from '../components/Common.tsx';
-
-const KIND_LABEL: Record<string, string> = {
-  product_concern: 'Product or skin concern — sales follow-up stopped', complaint: 'Complaint', wrong_number: 'Wrong number — follow-up stopped',
-  identity_ambiguity: 'Could not tell which customer this is', delivery_uncertain: 'Delivery uncertain', missing_permission: 'Missing permission',
-  ambiguous_reply: 'Ambiguous reply', ambiguous_opt_out: 'Possible opt-out — on hold until you decide', draft_review: 'Draft needs review',
-};
 
 /** Conversation inbox + exception queue (C7). Inbound messages are received and
  *  classified by the kernel/application; here a person processes and resolves. */
@@ -15,8 +10,8 @@ export default function InboxView({ onOpenCustomer }: { onOpenCustomer: (id: str
   const [exceptions, setExceptions] = useState<ExceptionItem[]>([]);
   const [state, setState] = useState<'open' | 'resolved' | 'dismissed'>('open');
   const [err, setErr] = useState<unknown>(null);
-  const [last, setLast] = useState<any>(null);
-  const [health, setHealth] = useState<any>(null);
+  const [last, setLast] = useState<InboundProcessResult | null>(null);
+  const [health, setHealth] = useState<InboundHealth | null>(null);
   const [busy, setBusy] = useState(false);
 
   function load() {
@@ -41,12 +36,12 @@ export default function InboxView({ onOpenCustomer }: { onOpenCustomer: (id: str
         commitments, exceptions and outcomes — it never sends anything.</p>
       {health && (
         <div className={`card small ${health.dispatch_blocked ? 'limitation' : ''}`} role="status">
-          Inbound path: {health.dispatch_blocked ? <strong>sending paused ({health.dispatch_blocked})</strong> : <strong>healthy</strong>} · {health.pending_events} unprocessed
+          Reply path: {health.dispatch_blocked ? <strong>sending paused — {inboundBlockLabel(health.dispatch_blocked)}</strong> : <strong>healthy</strong>} · {health.pending_events} unprocessed
           {health.health?.last_ok_at && <> · last check {fmtWhen(health.health.last_ok_at)}</>}
         </div>
       )}
       <HumanSteps steps={[
-        'Possible opt-outs are held, not cleared: decide, and if the customer meant stop, record it permanently.',
+        'Possible opt-outs are held, not cleared: decide, and if the customer meant stop, use "mark do not contact" on their page.',
         'Product or skin concerns stop sales follow-up until you resolve the exception.',
         'Replies that could not be matched to one customer need you to identify the person.',
       ]} />
@@ -54,7 +49,7 @@ export default function InboxView({ onOpenCustomer }: { onOpenCustomer: (id: str
       {last && (
         <div className="ok-note" role="status">
           Processed {last.processed} new repl{last.processed === 1 ? 'y' : 'ies'}.
-          {last.events?.length > 0 && <ul className="plain small">{last.events.map((e: any) => <li key={e.event_id}>{e.class.replace('_', ' ')}{e.customer_id ? '' : ' (no single customer match)'}{e.created?.length ? ` → ${e.created.join(', ')}` : ''}{e.hold === 201 ? ' · follow-up held' : ''}</li>)}</ul>}
+          {last.events?.length > 0 && <ul className="plain small">{last.events.map(e => <li key={e.event_id}>{e.class.replace(/_/g, ' ')}{e.customer_id ? '' : ' (no single customer match)'}{e.created?.length ? ` → ${e.created.join(', ')}` : ''}{e.hold === 201 ? ' · follow-up held' : ''}{e.retry ? ' · will be retried' : ''}</li>)}</ul>}
         </div>
       )}
       <div className="row" role="tablist" aria-label="Exception state">
@@ -67,7 +62,7 @@ export default function InboxView({ onOpenCustomer }: { onOpenCustomer: (id: str
         {exceptions.map(x => (
           <li key={x.id} className="card exception">
             <div className="row" style={{ justifyContent: 'space-between' }}>
-              <strong>{KIND_LABEL[x.kind] ?? x.kind}</strong>
+              <strong>{exceptionKindLabel(x.kind)}</strong>
               <span className="muted small">{fmtWhen(x.created_at)}</span>
             </div>
             <div className="small">{x.detail}</div>

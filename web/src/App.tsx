@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { MKClient, Tokens } from '../../packages/sdk/src/index.ts';
+import { MKClient, Tokens, readApprovalPageParams } from '../../packages/sdk/src/index.ts';
 import ChatView from './views/Chat.tsx';
 import SkinView from './views/Skin.tsx';
 import CustomersView from './views/Customers.tsx';
@@ -31,9 +31,17 @@ function refFromUrl(): string | undefined {
   catch { return undefined; }
 }
 
+/** `?view=approvals&action=<id>&return_to=…` — the mobile passkey hand-off. Read once;
+ *  `return_to` is kept only when it exactly matches the allowlist (SDK `handoff.ts`). */
+const HANDOFF = (() => {
+  try { return readApprovalPageParams(window.location.search); }
+  catch { return { view: null, actionId: null, returnTo: null, returnToRefused: false }; }
+})();
+
 export default function App() {
   const [tokens, setTokens] = useState<Tokens | null>(loadTokens);
-  const [view, setView] = useState<'brief' | 'approvals' | 'inbox' | 'customers' | 'chat' | 'skin' | 'billing' | 'settings'>('brief');
+  const [view, setView] = useState<'brief' | 'approvals' | 'inbox' | 'customers' | 'chat' | 'skin' | 'billing' | 'settings'>(
+    HANDOFF.view === 'approvals' ? 'approvals' : 'brief');
   const [openCustomer, setOpenCustomer] = useState<Customer | null>(null);
   const [me, setMe] = useState<{ id: string } | null>(null);
   useEffect(() => { if (tokens) client.me().then(setMe).catch(() => {}); }, [tokens]);
@@ -93,7 +101,7 @@ export default function App() {
       </nav>
       <main className="main" id="main">
         {view === 'brief' && <BriefView onOpenCustomer={goCustomer} />}
-        {view === 'approvals' && <ApprovalsView />}
+        {view === 'approvals' && <ApprovalsView handoff={HANDOFF.view === 'approvals' ? HANDOFF : undefined} />}
         {view === 'inbox' && <InboxView onOpenCustomer={goCustomer} />}
         {view === 'chat' && <ChatView />}
         {view === 'skin' && <SkinView />}
@@ -142,6 +150,9 @@ function AuthScreen({ onAuthed }: { onAuthed: (t: Tokens) => void }) {
         </p>
         {ref && mode === 'signup' && (
           <div className="invited" role="note">You were invited — your referrer gets credit when you join.</div>
+        )}
+        {HANDOFF.view === 'approvals' && HANDOFF.actionId && (
+          <div className="invited" role="note">Sign in to review and approve the message you opened from the mobile app.</div>
         )}
         {mode === 'signup' && (
           <input placeholder="Team or unit name" value={org} onChange={e => setOrg(e.target.value)} />
