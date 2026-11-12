@@ -25,7 +25,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .config import get_settings
-from .crypto import decrypt_secret, encrypt_secret
+from .crypto import open_value, seal_value
 from .models import AuditLog, ContactPreference, Customer, CustomerDestination, SuppressionEvent
 
 E164 = re.compile(r"^\+[1-9][0-9]{6,14}$")
@@ -79,11 +79,11 @@ def _aad(tenant_id: str, kind: str) -> str:
 
 
 def seal(tenant_id: str, kind: str, plaintext: str) -> str:
-    return encrypt_secret(get_settings().master_key_bytes, plaintext, _aad(tenant_id, kind))
+    return seal_value(plaintext, _aad(tenant_id, kind))
 
 
 def unseal(tenant_id: str, kind: str, ciphertext: str) -> str:
-    return decrypt_secret(get_settings().master_key_bytes, ciphertext, _aad(tenant_id, kind))
+    return open_value(ciphertext, _aad(tenant_id, kind))
 
 
 def audit(db: Session, tenant_id: str, user_id: str, action: str, detail: dict) -> str:
@@ -101,7 +101,7 @@ def audit(db: Session, tenant_id: str, user_id: str, action: str, detail: dict) 
 
 def own_customer(db: Session, tenant_id: str, user_id: str, cid: str) -> Customer:
     c = db.get(Customer, cid)
-    if not c or c.tenant_id != tenant_id or c.user_id != user_id:
+    if not c or c.tenant_id != tenant_id or c.user_id != user_id or c.erased_at is not None:
         raise HTTPException(404, "Customer not found")
     return c
 
@@ -184,5 +184,10 @@ def csv_cell(value: str) -> str:
     return value
 
 
+# Test seam: the frozen_clock fixture (tests/conftest.py) sets this so date-relative
+# logic ("next month", "this week", overdue) is deterministic. Never set by app code.
+_frozen_now: datetime | None = None
+
+
 def utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return _frozen_now or datetime.now(timezone.utc)

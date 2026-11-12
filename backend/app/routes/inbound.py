@@ -21,6 +21,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ..rbac import book_of, sees_whole_tenant
 from ..commitments import create_draft, record_outcome
 from ..db import get_db
 from ..foundation import audit, seal
@@ -132,7 +133,8 @@ async def process_inbound(body: ProcessIn, p: Principal = Depends(principal), us
                 record_outcome(db, tenant_id=user.tenant_id, user_id=user.id, customer_id=customer.id,
                                kind="exception_open", commitment=None, action_link_id=None, note="")
         if label == "date_request" and customer:
-            cm = create_draft(db, tenant_id=user.tenant_id, user_id=user.id, customer=customer, kind="customer_date",
+            cm = create_draft(db, tenant_id=user.tenant_id, user_id=customer.user_id, actor_id=user.id, customer=customer,
+                              kind="customer_date",
                               text=f"Customer asked to be contacted later: \"{klass.evidence}\"", source_type="inbound_message",
                               source_reference=source_ref, source_version="1", evidence_text=text,
                               created_by="inbound_rules", relative_window="unspecified")
@@ -198,7 +200,7 @@ def list_exceptions(state: str = "open", user: User = Depends(check_rate), db: S
     for ex in db.scalars(q.order_by(ExceptionRecord.created_at)):
         if ex.customer_id:
             try:
-                own_customer(db, user.tenant_id, user.id, ex.customer_id)
+                own_customer(db, user.tenant_id, book_of(user), ex.customer_id)
             except HTTPException:
                 continue  # another consultant's customer: not visible
         out.append(_ex_view(user.tenant_id, ex))
@@ -216,7 +218,7 @@ def resolve_exception(eid: str, body: ResolveIn, user: User = Depends(check_rate
     if not ex or ex.tenant_id != user.tenant_id:
         raise HTTPException(404, "Exception not found")
     if ex.customer_id:
-        own_customer(db, user.tenant_id, user.id, ex.customer_id)
+        own_customer(db, user.tenant_id, book_of(user), ex.customer_id)
     if body.resolution not in ("resolved", "dismissed"):
         raise HTTPException(422, "resolution must be resolved or dismissed")
     if ex.state != "open":

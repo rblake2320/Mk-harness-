@@ -25,6 +25,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ..rbac import book_of, sees_whole_tenant
 from ..db import get_db
 from ..foundation import (
     CHANNELS, CONSENT_SOURCES, EVIDENCE_TYPES, PURPOSES, active_suppressions, add_destination,
@@ -47,7 +48,8 @@ def _mask(v: str) -> str:
 
 
 def _session_id(request: Request) -> str:
-    return "jwt:" + hashlib.sha256(request.headers.get("Authorization", "").encode()).hexdigest()[:24]
+    from ..identity import kernel_session_id
+    return kernel_session_id(request.state.auth_session.id)
 
 
 async def _kernel(client: KernelClient, user: User, request: Request, method: str, path: str, body=None):
@@ -72,7 +74,7 @@ class DestinationIn(BaseModel):
 @router.post("/customers/{cid}/destinations", status_code=201)
 def add_customer_destination(cid: str, body: DestinationIn, user: User = Depends(check_rate),
                              db: Session = Depends(get_db)):
-    c = own_customer(db, user.tenant_id, user.id, cid)
+    c = own_customer(db, user.tenant_id, book_of(user), cid)
     d = add_destination(db, user.tenant_id, user.id, c, body.channel, body.value,
                         source="manual", label=body.label, is_primary=body.is_primary)
     db.commit()
@@ -82,7 +84,7 @@ def add_customer_destination(cid: str, body: DestinationIn, user: User = Depends
 
 @router.get("/customers/{cid}/destinations")
 def list_destinations(cid: str, user: User = Depends(check_rate), db: Session = Depends(get_db)):
-    c = own_customer(db, user.tenant_id, user.id, cid)
+    c = own_customer(db, user.tenant_id, book_of(user), cid)
     rows = db.scalars(select(CustomerDestination).where(
         CustomerDestination.customer_id == c.id, CustomerDestination.retired_at.is_(None)))
     out = []
@@ -105,7 +107,7 @@ class PreferenceIn(BaseModel):
 @router.put("/customers/{cid}/preferences")
 def set_preferences(cid: str, body: PreferenceIn, user: User = Depends(check_rate),
                     db: Session = Depends(get_db)):
-    c = own_customer(db, user.tenant_id, user.id, cid)
+    c = own_customer(db, user.tenant_id, book_of(user), cid)
     tz = validate_timezone(body.timezone)
     pref = preference_for(db, c)
     aref = audit(db, user.tenant_id, user.id, "preference.set",
@@ -141,7 +143,7 @@ class ConsentIn(BaseModel):
 @router.post("/customers/{cid}/consent", status_code=201)
 async def record_consent(cid: str, body: ConsentIn, request: Request, user: User = Depends(check_rate),
                          db: Session = Depends(get_db), client: KernelClient = Depends(get_kernel_client)):
-    c = own_customer(db, user.tenant_id, user.id, cid)
+    c = own_customer(db, user.tenant_id, book_of(user), cid)
     if body.source not in CONSENT_SOURCES or body.evidence_type not in EVIDENCE_TYPES:
         raise HTTPException(422, "unsupported consent source or evidence type")
     if body.source == "import" or body.evidence_type == "import":
@@ -190,7 +192,7 @@ class RevokeIn(BaseModel):
 @router.post("/customers/{cid}/consent/{eid}/revoke")
 async def revoke_consent(cid: str, eid: str, body: RevokeIn, request: Request, user: User = Depends(check_rate),
                          db: Session = Depends(get_db), client: KernelClient = Depends(get_kernel_client)):
-    c = own_customer(db, user.tenant_id, user.id, cid)
+    c = own_customer(db, user.tenant_id, book_of(user), cid)
     ev = db.get(ConsentEvent, eid)
     if not ev or ev.customer_id != c.id:
         raise HTTPException(404, "Consent event not found")
@@ -211,7 +213,7 @@ async def revoke_consent(cid: str, eid: str, body: RevokeIn, request: Request, u
 @router.get("/customers/{cid}/permissions")
 def permission_view(cid: str, user: User = Depends(check_rate), db: Session = Depends(get_db)):
     """Historical observation only (F4). Execution re-checks the kernel."""
-    c = own_customer(db, user.tenant_id, user.id, cid)
+    c = own_customer(db, user.tenant_id, book_of(user), cid)
     events = db.scalars(select(ConsentEvent).where(ConsentEvent.customer_id == c.id)
                         .order_by(ConsentEvent.created_at)).all()
     dests = db.scalars(select(CustomerDestination).where(
@@ -249,7 +251,7 @@ async def add_suppression(body: SuppressIn, request: Request, user: User = Depen
     d = db.get(CustomerDestination, body.destination_id)
     if not d or d.tenant_id != user.tenant_id:
         raise HTTPException(404, "Destination not found")
-    c = own_customer(db, user.tenant_id, user.id, d.customer_id)
+    c = own_customer(db, user.tenant_id, book_of(user), d.customer_id)
     # The channel is the destination's. A caller-supplied channel that differs would file the
     # fingerprint under the wrong channel (locally and in the kernel) and leave the real
     # destination contactable — refused, never reinterpreted.
@@ -327,7 +329,7 @@ def import_preview(body: ImportPreviewIn, user: User = Depends(check_rate), db: 
     # Fingerprints are channel-keyed, so one set covers both sms and email destinations.
     known_fps = {fp for (fp,) in db.execute(
         select(CustomerDestination.fingerprint).join(Customer, Customer.id == CustomerDestination.customer_id)
-        .where(Customer.user_id == user.id, CustomerDestination.retired_at.is_(None)))}
+        .where(Customer.user_id == book_of(user), CustomerDestination.retired_at.is_(None)))}
     seen_in_file: set[str] = set()
     for i, r in enumerate(rows):
         name = (r.get(body.mapping["name"]) or "").strip()
@@ -405,7 +407,7 @@ def import_commit(job_id: str, user: User = Depends(check_rate), db: Session = D
     created = 0
     for r in db.scalars(select(ImportRow).where(ImportRow.job_id == job.id, ImportRow.status == "create")
                         .order_by(ImportRow.row_index)):
-        c = Customer(tenant_id=user.tenant_id, user_id=user.id, name=r.name, notes=r.notes or "")
+        c = Customer(tenant_id=user.tenant_id, user_id=book_of(user), name=r.name, notes=r.notes or "")
         db.add(c)
         db.flush()
         if r.phone_fingerprint:
@@ -464,7 +466,8 @@ def export_csv(user: User = Depends(check_rate), db: Session = Depends(get_db)):
     buf = io.StringIO()
     w = csv.writer(buf)
     w.writerow(["name", "phone_masked", "email_masked", "notes", "created_at"])
-    for c in db.scalars(select(Customer).where(Customer.user_id == user.id).order_by(Customer.name)):
+    for c in db.scalars(select(Customer).where(Customer.tenant_id == user.tenant_id, Customer.user_id == book_of(user),
+                                                 Customer.erased_at.is_(None)).order_by(Customer.name)):
         phone = email = ""
         for d in db.scalars(select(CustomerDestination).where(CustomerDestination.customer_id == c.id,
                                                               CustomerDestination.retired_at.is_(None))):

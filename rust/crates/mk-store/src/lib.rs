@@ -17,6 +17,7 @@ pub mod approvals;
 pub mod assertions;
 pub mod audit;
 pub mod consent;
+pub mod erasure;
 pub mod error;
 pub mod fingerprint;
 pub mod human_approval;
@@ -144,6 +145,11 @@ pub fn migrator() -> sqlx::migrate::Migrator {
             9,
             "tenant directory",
             include_str!("../../../../migrations/kernel/0009_tenant_directory.sql"),
+        ),
+        (
+            10,
+            "subject erasures",
+            include_str!("../../../../migrations/kernel/0010_subject_erasures.sql"),
         ),
     ];
     let migrations: Vec<Migration> = FILES

@@ -54,6 +54,38 @@ class Settings(BaseSettings):
     # Only operators may flip the global kill switch; comma-separated user ids.
     kernel_platform_operators: str = ""
 
+    # ---- Identity (S2, S3, S9) ----
+    # MFA for every role. Production pre-flight refuses MFA_REQUIRED=false; the test
+    # suite turns it off for legacy fixtures and on for the identity tests.
+    mfa_required: bool = True
+    step_up_window_minutes: int = 10          # sender/permission/export/security changes
+    session_max_days: int = 14                # absolute session lifetime (refresh cannot extend it)
+    mfa_challenge_minutes: int = 5            # password-verified login waiting for its second factor
+    # Passkey second factor for app sign-in/step-up (separate registry from the
+    # kernel's approval passkeys). Empty RP id = passkeys unavailable; TOTP still works.
+    app_webauthn_rp_id: str = ""
+    app_webauthn_rp_name: str = "Consultant Studio"
+    app_webauthn_origins: str = ""            # comma list, e.g. https://app.example.com
+    # Platform support staff who may REQUEST break-glass access (user ids, comma list).
+    platform_support_users: str = ""
+    breakglass_max_minutes: int = 240
+    # S13: append-only, hash-chained erasure ledger kept OUTSIDE the database (own
+    # volume / bucket) so a restore can be followed by an erasure replay.
+    erasure_ledger_path: str = "/var/lib/mk/erasure-ledger.jsonl"
+    erasure_ledger_key: str = ""
+    sealing_keys: str = ""
+    # M4: monthly cap on what a business spends on AI through CENTRAL (company-paid) keys;
+    # a tenant row can override it. 0 = no cap (refused by nothing — set it in production).
+    tenant_ai_budget_cents_default: int = 5000
+    # M4: SMS price per segment shown before approval; 0 = unknown (the screen says so).
+    sms_price_per_segment_millicents: int = 0           # S10: versioned application sealing keys (see sealing_key_list)     # HMAC key; empty = derived from MASTER_KEY (dev)
+    # Schema creation at startup. Production runs the app with a DML-only runtime
+    # login and creates/migrates the schema in a separate one-shot job (S3).
+    db_create_all: bool = True
+    # Refuse to start when the runtime login is a superuser, can bypass RLS, or owns
+    # application tables (compose/IaC set true; tests/dev SQLite leave it false).
+    db_require_least_privilege: bool = False
+
     model_config = {"env_file": ".env", "extra": "ignore"}
 
     @property
@@ -86,6 +118,28 @@ class Settings(BaseSettings):
         return out
 
     @property
+    def sealing_key_list(self) -> list[tuple[str, bytes]]:
+        """SEALING_KEYS = "kid=base64,…" (first = current; `master` = MASTER_KEY). Empty =
+        MASTER_KEY alone as `m0`. Ciphertext written before versioning (no prefix) is
+        m0's. Rotation: put the new key first, run `python -m app.tools.rekey rekey`,
+        confirm `status` is clean, then drop the old kid (S10)."""
+        import re
+        spec = self.sealing_keys.strip()
+        if not spec:
+            return [("m0", self.master_key_bytes)]
+        out: list[tuple[str, bytes]] = []
+        for part in (p.strip() for p in spec.split(",") if p.strip()):
+            kid, sep, val = part.partition("=")
+            kid = kid.strip()
+            if not sep or not re.fullmatch(r"[a-z0-9_-]{1,16}", kid) or any(k == kid for k, _ in out):
+                raise RuntimeError("SEALING_KEYS entries must be unique kid=base64 with kid [a-z0-9_-]{1,16}")
+            raw = self.master_key_bytes if val.strip() == "master" else base64.b64decode(val.strip(), validate=True)
+            if len(raw) != 32:
+                raise RuntimeError("SEALING_KEYS keys must decode to exactly 32 bytes")
+            out.append((kid, raw))
+        return out
+
+    @property
     def master_key_bytes(self) -> bytes:
         if not self.master_key:
             raise RuntimeError("MASTER_KEY is not set. Generate 32 random bytes (base64).")
@@ -100,6 +154,14 @@ class Settings(BaseSettings):
     @property
     def platform_operator_ids(self) -> frozenset[str]:
         return frozenset(x.strip() for x in self.kernel_platform_operators.split(",") if x.strip())
+
+    @property
+    def platform_support_ids(self) -> frozenset[str]:
+        return frozenset(x.strip() for x in self.platform_support_users.split(",") if x.strip())
+
+    @property
+    def app_webauthn_origin_list(self) -> list[str]:
+        return [o.strip() for o in self.app_webauthn_origins.split(",") if o.strip()]
 
     @property
     def cors_origin_list(self) -> list[str]:

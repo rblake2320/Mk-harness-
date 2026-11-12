@@ -460,7 +460,65 @@ impl ActionAdapter for TwilioAdapter {
     }
 }
 
+/// Result of asking the provider to delete one stored message (S13 erasure).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProviderDeletion {
+    Deleted,
+    /// The provider holds no such message (already deleted, or aged out).
+    NotFound,
+}
+
+/// `SM`/`MM` + 32 lowercase-or-uppercase hex: the only shape ever put in a URL path.
+#[must_use]
+pub fn valid_message_sid(sid: &str) -> bool {
+    sid.len() == 34
+        && (sid.starts_with("SM") || sid.starts_with("MM"))
+        && sid[2..].bytes().all(|b| b.is_ascii_hexdigit())
+}
+
 impl TwilioAdapter {
+    /// Delete a stored message (body and metadata) at the provider through its
+    /// documented `DELETE …/Messages/{sid}.json`. 204 → deleted, 404 → not found;
+    /// 401/403 and other 4xx are permanent; 429/5xx/transport are transient.
+    pub async fn delete_message(
+        &self,
+        tenant: TenantId,
+        sender_identity_id: uuid::Uuid,
+        message_sid: &str,
+    ) -> Result<ProviderDeletion, AdapterError> {
+        if !valid_message_sid(message_sid) {
+            return Err(AdapterError::permanent("message_sid_invalid"));
+        }
+        let sender = self
+            .resolver
+            .resolve(tenant, sender_identity_id)
+            .await
+            .ok_or(AdapterError::permanent("sender_not_registered"))?;
+        let base = self.messages_url(&sender.account_sid)?;
+        let url = base
+            .join(&format!("Messages/{message_sid}.json"))
+            .map_err(|_| AdapterError::permanent("url"))?;
+        self.egress
+            .check(url.as_str())
+            .map_err(|_| AdapterError::permanent("egress_denied"))?;
+        let resp = self
+            .client
+            .delete(url)
+            .basic_auth(
+                &sender.account_sid,
+                Some(std::str::from_utf8(sender.auth_token.expose_bytes()).unwrap_or_default()),
+            )
+            .send()
+            .await
+            .map_err(|_| AdapterError::transient("provider_unreachable"))?;
+        match resp.status().as_u16() {
+            200 | 204 => Ok(ProviderDeletion::Deleted),
+            404 => Ok(ProviderDeletion::NotFound),
+            429 | 500..=599 => Err(AdapterError::transient("provider_delete_failed")),
+            _ => Err(AdapterError::permanent("provider_delete_refused")),
+        }
+    }
+
     /// Search the provider for a message matching an ambiguous submission.
     /// Returns the provider sid when exactly one matching message exists.
     pub async fn reconcile_submission(
@@ -970,5 +1028,29 @@ mod tests {
             n += 1;
         }
         assert!(n > 400, "synthetic set present ({n})");
+    }
+}
+
+#[cfg(test)]
+mod delete_tests {
+    use super::valid_message_sid;
+
+    #[test]
+    fn only_message_sids_reach_the_url_path() {
+        let hex = "0123456789abcdef0123456789ABCDEF";
+        assert!(valid_message_sid(&format!("SM{hex}")));
+        assert!(valid_message_sid(&format!("MM{hex}")));
+        for bad in [
+            String::new(),
+            format!("AC{hex}"),
+            format!("SM{}", &hex[..31]),
+            format!("SM{hex}0"),
+            format!("SM{}/..", &hex[..29]),
+            format!("SM{}%2F", &hex[..29]),
+            "SM../../Accounts/ACxx/Messages".to_owned(),
+            format!("sm{hex}"),
+        ] {
+            assert!(!valid_message_sid(&bad), "{bad}");
+        }
     }
 }

@@ -47,6 +47,25 @@ block dispatch of actions approved under the revoked session where the approval 
 yet been consumed. MFA/passkey required for consultant and privileged access (S2);
 step-up for sender, permission, export and security changes.
 
+## Application identity (S2, S3, S9) — implementation
+
+| Control | Implementation | Where |
+|---|---|---|
+| Server-side sessions | `auth_sessions` row per login; JWT carries `sid`; every request re-checks the row (revoked/expired → 401). Refresh tokens rotate; reuse of a spent refresh token revokes the session. | `identity.authenticate`, `routes/auth.py` |
+| MFA | TOTP (RFC 6238, ±1 step, per-factor replay barrier, ASCII digits only), passkeys (py_webauthn, UV required, counter regression refused, single-use challenges), 10 argon2 recovery codes (login only). `MFA_REQUIRED=true` by default: a password-only session reaches enrollment routes and nothing else. 5 failed factor attempts revoke the session. | `identity.py`, `routes/security.py` |
+| Step-up | Routes marked `step_up` in `rbac.ROUTE_POLICY` need a fresh factor (or password where no factor exists and MFA is off) within `STEP_UP_WINDOW_MINUTES` (default 10, max 15). | `identity.require_step_up` |
+| Revocation reaches the kernel | Logout, password change, role change, deactivation and admin revocation write `kernel_revocation_outbox` rows delivered to the kernel (`app:<sid>` session ids, stable across refresh); undelivered rows older than 60 s show in `/api/health/ready` as `kernel_revocations_backlog`. | `identity.revoke_*`, `deliver_kernel_revocations` |
+| RBAC | Roles owner / admin / consultant / assistant / viewer; one default-deny `ROUTE_POLICY` table applied as a router dependency to every `/api` router; assistants and viewers act inside the book they are assigned to (`works_for`); an assistant's governed proposals are forced to `origin.type=agent` and the kernel receives `agent` only — it cannot approve. | `rbac.py`, `main.py` |
+| Runtime DB identity | API connects as `mk_app` (DML only); schema built by the one-shot `api-migrate` job as `mk_app_owner`; `DB_REQUIRE_LEAST_PRIVILEGE=true` makes the API refuse to start as a superuser, BYPASSRLS, CREATEROLE/CREATEDB or table-owning login. | `deploy/app/initdb/10-app-roles.sh`, `app/tools/migrate.py`, `db.privilege_problem` |
+| Break-glass support | Platform support user requests (reason ≥ 20 chars, ticket ref, ≤ `BREAKGLASS_MAX_MINUTES`); a tenant admin approves with step-up (never self-approved); the support session is non-refreshable, requires the support user's own MFA, is read-only (`BREAKGLASS_READ` allowlist), never impersonates a user, and every access or refusal is audited in the target tenant. | `routes/security.py`, `rbac.BREAKGLASS_READ` |
+
+Evidence (author-run, **Implemented** only): `tests/test_identity.py` (24),
+`tests/test_rbac.py` (25 incl. 12 parametrized forbidden role/route combinations),
+`tests/test_db_roles.py` (17, real PostgreSQL: DML allowed; DDL/role/database/schema/
+function creation, `SET ROLE` owner and re-grants refused; startup gate refuses owner and
+superuser), live smoke: the app runs on PostgreSQL as `mk_app` with `MFA_REQUIRED=true`,
+every human login enrolls/answers TOTP, and pre-flight checks both flags.
+
 ## Implementation (WP06)
 
 | Piece | Where |

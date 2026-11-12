@@ -53,7 +53,8 @@ class TestChangePassword:
             "current_password": "wrongPassword999",
             "new_password": "newPasswordABC$99",
         }, headers=auth_headers(t))
-        assert r.status_code == 401
+        # 403, not 401: the session is valid; a 401 would make clients refresh and sign out.
+        assert r.status_code == 403
 
     def test_new_password_too_short(self, client):
         t = signup(client, email=_email())
@@ -200,7 +201,7 @@ class TestDeleteAccount:
     def test_wrong_password_blocked(self, client):
         t = signup(client, email=_email())
         r = _del(client, "/api/account", {"password": "wrongPassword999"}, auth_headers(t))
-        assert r.status_code == 401
+        assert r.status_code == 403   # valid session, wrong password: not a token problem
 
     def test_requires_auth(self, client):
         r = _del(client, "/api/account", {"password": "superSecret123!"}, {})

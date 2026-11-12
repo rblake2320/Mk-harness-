@@ -95,10 +95,24 @@ def test_draft_to_proposal_to_approval_screen(client, kernel_env):
     assert r.json()["message_state_definitions"]["sent"] == "Provider reports outbound network submission."
     assert len(r.json()["message_state_definitions"]) == 15
 
-    # W5: editing produces a new version/digest; the pending approval's digest no longer matches.
-    e = client.post(f"/api/drafts/{d['id']}/edit", json={"text": d["text"].replace("Hi Angela!", "Hi Angela —")}, headers=h).json()
+    # W5/H2: an edit is refused while the earlier version cannot be withdrawn (kernel down),
+    # and the draft is unchanged; once withdrawn, the new version gets its own digest.
+    down = respx.post(f"{KERNEL}/internal/v1/actions/{aid}/cancel").mock(side_effect=httpx.ConnectError("down"))
+    new_text = d["text"].replace("Hi Angela!", "Hi Angela —")
+    r = client.post(f"/api/drafts/{d['id']}/edit", json={"text": new_text}, headers=h)
+    assert r.status_code == 503 and r.json()["detail"]["code"] == "KERNEL_UNAVAILABLE" and down.called
+    assert client.get(f"/api/drafts/{d['id']}", headers=h).json()["text"] == d["text"]
+    cancel = respx.post(f"{KERNEL}/internal/v1/actions/{aid}/cancel").mock(
+        side_effect=None, return_value=httpx.Response(200, json={"action_id": aid, "state": "cancelled"}))
+    before = cancel.call_count          # respx reuses the route object: count from here
+    e = client.post(f"/api/drafts/{d['id']}/edit", json={"text": new_text}, headers=h).json()
+    assert cancel.call_count == before + 1 and e["withdrawn_proposals"] == 1
+    assert "agent" not in verify_assertion(cancel.calls.last.request)["roles"]   # the consultant withdraws
     assert e["text_digest"] != d["text_digest"] and e["version"] == 2
     assert item["action_digest"] != e["text_digest"]
+    # A second edit has nothing left to withdraw (the link is final): no kernel call.
+    e2 = client.post(f"/api/drafts/{e['id']}/edit", json={"text": new_text + " "}, headers=h)
+    assert e2.status_code == 201 and cancel.call_count == before + 1 and e2.json()["withdrawn_proposals"] == 0
 
     # Cross-tenant: another tenant cannot propose this draft or see this action.
     h2, _ = _user(client)

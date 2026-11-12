@@ -163,7 +163,8 @@ def context_leak(db: Session, *, user_id: str, customer: Customer, text: str, al
     False positives create a review task, never a sent message, so the check is deliberately broad."""
     low = text.lower()
     own_first = (customer.name.split()[0].lower() if customer.name else "")
-    others = db.scalars(select(Customer).where(Customer.user_id == user_id, Customer.id != customer.id)).all()
+    others = db.scalars(select(Customer).where(Customer.user_id == user_id, Customer.id != customer.id,
+                                              Customer.erased_at.is_(None))).all()
     for o in others:
         name = (o.name or "").strip().lower()
         if len(name) >= 3 and name in low:
@@ -190,6 +191,7 @@ def _digest(text: str) -> str:
 
 
 def assemble(db: Session, *, tenant_id: str, user_id: str, customer: Customer, commitment: Commitment | None,
+             book_id: str | None = None,
              brief_item_id: str | None, model_output: str, candidates: list[ClaimCandidate],
              generated_by: str, opt_out_phrase: str) -> DraftOutcome:
     """Validate model output and assemble the draft, or refuse with a review task."""
@@ -230,7 +232,7 @@ def assemble(db: Session, *, tenant_id: str, user_id: str, customer: Customer, c
         return refuse("relationship text contains a phone number, address or link; destinations are never chosen in text",
                       "destination_in_text")
     allowed = " ".join([commitment.commitment_text if commitment else ""] + [c.approved_text for c in candidates])
-    leak = context_leak(db, user_id=user_id, customer=customer, text=rel_only, allowed_text=allowed)
+    leak = context_leak(db, user_id=book_id or user_id, customer=customer, text=rel_only, allowed_text=allowed)
     if leak:
         return refuse(leak, "context_leak")
     text = PLACEHOLDER.sub(lambda m: by_id[m.group(1)].approved_text, rel).strip()
@@ -258,7 +260,8 @@ def assemble(db: Session, *, tenant_id: str, user_id: str, customer: Customer, c
     return DraftOutcome(draft=dv, text=text, claims_used=sorted(set(placeholders)), source_versions=source_versions)
 
 
-def consultant_edit(db: Session, *, tenant_id: str, user_id: str, prior: DraftVersion, new_text: str) -> DraftOutcome:
+def consultant_edit(db: Session, *, tenant_id: str, user_id: str, prior: DraftVersion, new_text: str,
+                    book_id: str | None = None) -> DraftOutcome:
     """A consultant may rewrite relationship language freely but may not introduce claim
     language that is not an exact approved claim. Produces a new version (W5: the old
     digest is a different digest; approvals bound to it are invalid by construction)."""
@@ -275,7 +278,7 @@ def consultant_edit(db: Session, *, tenant_id: str, user_id: str, prior: DraftVe
     if len(new_text) > MAX_SMS_CHARS:
         raise HTTPException(422, f"draft exceeds {MAX_SMS_CHARS} characters")
     cust = db.get(Customer, prior.customer_id)
-    leak = context_leak(db, user_id=user_id, customer=cust, text=stripped,
+    leak = context_leak(db, user_id=book_id or user_id, customer=cust, text=stripped,
                         allowed_text=" ".join(c.approved_text for c in candidates)) if cust else None
     if leak:
         raise HTTPException(422, {"code": "CONTEXT_LEAK", "detail": leak})

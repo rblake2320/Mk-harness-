@@ -53,6 +53,8 @@ def _scan(db: Session, apply: bool) -> Report:
     moves: dict[tuple[str, str], str] = {}
     current_fps: set[tuple[str, str]] = set()
     for d in db.scalars(select(CustomerDestination)):
+        if not d.value_enc:
+            continue   # erased (S13): content removed, fingerprint tombstoned — nothing to re-key
         rep.destinations_total += 1
         try:
             fps = fingerprints_all(d.tenant_id, d.channel, destination_value(d))

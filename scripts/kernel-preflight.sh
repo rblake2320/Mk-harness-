@@ -37,16 +37,22 @@ q_fails(){ ! q "$1" "$2" >/dev/null 2>&1 && ! psql -qtAX "$1" -c "$2" >/dev/null
 
 echo "== 1. liveness"
 check "kernel /health/ready is 200"      http_is 200 "$KERNEL_URL/health/ready"
-metrics_ok() { curl -fsS "$KERNEL_URL/metrics" | grep -q mk_; }
+# Read the whole body first: `curl | grep -q` under pipefail fails when grep exits early
+# (SIGPIPE to curl once /metrics outgrows the pipe buffer).
+metrics_ok() { local m; m=$(curl -fsS "$KERNEL_URL/metrics") && grep -q mk_ <<<"$m"; }
 check "kernel /metrics served"           metrics_ok
 check "kernel internal API not reachable without assertion (401)" http_is 401 "$KERNEL_URL/internal/v1/approvals/pending"
 
 echo "== 2. FastAPI ↔ kernel assertion pairing"
-TOK=$(curl -fsS "$APP_URL/api/auth/login" -H 'content-type: application/json' \
-  -d "{\"email\":\"$MK_PREFLIGHT_EMAIL\",\"password\":\"$MK_PREFLIGHT_PASSWORD\"}" 2>/dev/null \
-  | python3 -c 'import sys,json;print(json.load(sys.stdin).get("access_token",""))' 2>/dev/null)
+# Real login path, MFA included: MK_PREFLIGHT_TOTP_FILE holds the pre-flight user's
+# TOTP state (created by scripts/app_session.py on first enrollment; keep it in ~/.secrets).
+TOK=$(python3 "$ROOT/scripts/app_session.py" "$APP_URL" "$MK_PREFLIGHT_EMAIL" "$MK_PREFLIGHT_PASSWORD" \
+  "${MK_PREFLIGHT_TOTP_FILE:-$HOME/.secrets/mk-preflight-totp.json}" 2>/dev/null)
 if [ -z "$TOK" ]; then fail "app login for pre-flight user"; else ok "app login"; fi
 H=(-H "authorization: Bearer $TOK")
+ready_flag() { curl -fsS "$APP_URL/api/health/ready" | python3 -c "import sys,json;sys.exit(0 if json.load(sys.stdin)['checks'].get('$1')=='$2' else 1)"; }
+check "app requires MFA (MFA_REQUIRED=true)"                          ready_flag mfa_required true
+check "app refuses an over-privileged DB login (DB_REQUIRE_LEAST_PRIVILEGE)" ready_flag db_least_privilege enforced
 check "app → kernel health 200 (kernel configured in app)"          http_is 200 "${H[@]}" "$APP_URL/api/agent-ops/health"
 check "app-minted assertion accepted by kernel (GET pending → 200)"  http_is 200 "${H[@]}" "$APP_URL/api/agent-ops/approvals/pending"
 check "app never falls back: bogus action id → kernel 404, not 200"  http_is 404 "${H[@]}" "$APP_URL/api/agent-ops/actions/00000000-0000-7000-8000-000000000000"
@@ -141,6 +147,8 @@ if [ "$FOR_ENABLE" = 1 ]; then
   # Not observable from the kernel API; checked against the env file the tasks receive.
   case "${MK_DB_SSLROOTCERT:-}" in "") fail "MK_DB_SSLROOTCERT unset — database TLS would not be verify-full against the RDS CA";; *) [ -r "$MK_DB_SSLROOTCERT" ] && ok "MK_DB_SSLROOTCERT present" || fail "MK_DB_SSLROOTCERT not readable: $MK_DB_SSLROOTCERT";; esac
   [ "${MK_TWILIO_API_BASE:-}" = "https://api.twilio.com" ] && ok "worker MK_TWILIO_API_BASE is the live provider" || fail "MK_TWILIO_API_BASE is '${MK_TWILIO_API_BASE:-}' — production must point at the live provider, staging must not enable dispatch"
+  # S14: audit heads anchored outside the database operator's reach (Object Lock bucket).
+  case "${MK_ANCHOR_SINK:-}" in s3:https://*) ok "audit anchors go to an Object Lock bucket (MK_ANCHOR_SINK)";; *) fail "MK_ANCHOR_SINK must be s3:https://<bucket>… in production (got '${MK_ANCHOR_SINK:-unset}')";; esac
   # Destination fingerprints (migrations 0008/0009): every tenant's rows checked
   # inside that tenant's transaction (RLS-safe), with the kids the kernel runs.
   KC="${MK_KEYCTL:-$ROOT/rust/target/release/mk-keyctl}"

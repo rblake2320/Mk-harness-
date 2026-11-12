@@ -2425,3 +2425,277 @@ async fn lease_expiry_completes_provider_accepted_and_reconciles_only_the_unknow
     // Exactly one provider message for the accepted action; nothing re-sent.
     assert_eq!(r.sim.created_messages().await.len(), 1);
 }
+
+/// S13 kernel side: erasure refuses while a matching send is in flight, then
+/// cancels queued sends, strips message content from every matching action,
+/// closes the permission, queues the provider copy for deletion, is idempotent,
+/// blocks replay of erased actions, keeps the audit chain verifiable — and only
+/// a human tenant administrator can ask for it.
+#[tokio::test]
+async fn subject_erasure_strips_content_cancels_queued_sends_and_keeps_the_chain() {
+    const SENT: &str = "Brenda, your lanolin-free kit shipped. Reply STOP to opt out.";
+    const QUEUED: &str = "Brenda, second note about your order. Reply STOP to opt out.";
+    let Some(h) = harness().await else {
+        eprintln!("skipping");
+        return;
+    };
+    let mut r = provider_rig(&h, mk_adapters::twilio_sim::TwilioSimMode::Accept).await;
+    health_ok(&h, r.admin).await;
+    let (a1, _) = approved_action(&h, &mut r, SENT, "+15555550100").await;
+    let out = run_dispatch(&r, h.tenant, &a1).await;
+    assert!(matches!(out, DispatchOutcome::Dispatched { .. }), "{out:?}");
+    let (a2, _) = approved_action(&h, &mut r, QUEUED, "+15555550100").await;
+    let q = |sql: &'static str| sql;
+    let dest_hash: String = {
+        let mut tx = h
+            .state
+            .store
+            .begin(h.tenant)
+            .await
+            .unwrap_or_else(|e| panic!("{e:?}"));
+        let v: String = sqlx::query_scalar(q(
+            "SELECT destination_hash FROM kernel.actions WHERE tenant_id = $1 AND action_id = $2",
+        ))
+        .bind(h.tenant.0)
+        .bind(a1.parse::<Uuid>().unwrap_or_default())
+        .fetch_one(tx.raw_conn())
+        .await
+        .unwrap_or_else(|e| panic!("{e:?}"));
+        tx.commit().await.unwrap_or_else(|e| panic!("{e:?}"));
+        v
+    };
+    let body = json!({"request_ref": "erase-req-1", "destination_hashes": [dest_hash], "action_ids": [a1]});
+    let admin = || h.token(r.admin, &["tenant_admin"]); // assertions are single-use
+    // Only a human tenant administrator; malformed scope refused before any work.
+    for (tok, want) in [
+        (h.token(r.admin, &["agent"]), StatusCode::FORBIDDEN),
+        (h.token(r.manager, &["manager"]), StatusCode::FORBIDDEN),
+    ] {
+        let (s, v) = h
+            .call(
+                "POST",
+                "/internal/v1/erasures",
+                Some(&tok),
+                Some(body.clone()),
+            )
+            .await;
+        assert_eq!(s, want, "{v}");
+    }
+    for bad in [
+        json!({"request_ref": "x", "destination_hashes": ["+15555550100"]}),
+        json!({"request_ref": "", "action_ids": [a1]}),
+        json!({"request_ref": "x"}),
+        json!({"request_ref": "x", "action_ids": [a1], "extra": 1}),
+    ] {
+        let (s, v) = h
+            .call("POST", "/internal/v1/erasures", Some(&admin()), Some(bad))
+            .await;
+        assert!(
+            s == StatusCode::UNPROCESSABLE_ENTITY || s == StatusCode::BAD_REQUEST,
+            "{s} {v}"
+        );
+    }
+    // a1 is awaiting its provider callback: a send in flight is never torn out from under it.
+    let state_of = |aid: String| {
+        let h = &h;
+        async move {
+            let (_, v) = h
+                .call(
+                    "GET",
+                    &format!("/internal/v1/actions/{aid}"),
+                    Some(&h.token(UserId::new(), &["tenant_admin"])),
+                    None,
+                )
+                .await;
+            v
+        }
+    };
+    let s1 = state_of(a1.clone()).await;
+    if s1["state"] == json!("dispatching") {
+        let (s, v) = h
+            .call(
+                "POST",
+                "/internal/v1/erasures",
+                Some(&admin()),
+                Some(body.clone()),
+            )
+            .await;
+        assert_eq!(s, StatusCode::CONFLICT, "{v}");
+        assert_eq!(v["code"], json!("DISPATCH_IN_FLIGHT"));
+        // The provider settles it (as the status callback / lease sweep would).
+        let mut tx = h
+            .state
+            .store
+            .begin(h.tenant)
+            .await
+            .unwrap_or_else(|e| panic!("{e:?}"));
+        mk_store::actions::transition(
+            &mut tx,
+            a1.parse().unwrap_or_default(),
+            mk_domain::Transition::Complete,
+            None,
+            mk_store::actions::Actor {
+                actor_type: mk_audit::ActorType::System,
+                actor_id: "test",
+                trace_id: None,
+                policy_version: mk_policy::POLICY_VERSION.0,
+            },
+            chrono::Utc::now(),
+        )
+        .await
+        .unwrap_or_else(|e| panic!("{e:?}"));
+        tx.commit().await.unwrap_or_else(|e| panic!("{e:?}"));
+    }
+    let (s, v) = h
+        .call(
+            "POST",
+            "/internal/v1/erasures",
+            Some(&admin()),
+            Some(body.clone()),
+        )
+        .await;
+    assert_eq!(s, StatusCode::OK, "{v}");
+    assert_eq!(v["replayed"], json!(false));
+    assert_eq!(v["actions_erased"], json!(2), "{v}"); // a1 by link, a2 by destination
+    assert_eq!(v["actions_cancelled"], json!(1), "{v}"); // a2 was queued
+    assert!(v["provider_copies"].as_i64().unwrap_or(0) >= 1, "{v}");
+    let erasure_id = v["erasure_id"].clone();
+    // Idempotent: the same request returns the first result, nothing re-done.
+    let (s, again) = h
+        .call(
+            "POST",
+            "/internal/v1/erasures",
+            Some(&admin()),
+            Some(body.clone()),
+        )
+        .await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(
+        (again["erasure_id"].clone(), again["replayed"].clone()),
+        (erasure_id, json!(true))
+    );
+    // Content is gone from the kernel; ids, digests, states stay; the queued send is cancelled.
+    {
+        let mut tx = h
+            .state
+            .store
+            .begin(h.tenant)
+            .await
+            .unwrap_or_else(|e| panic!("{e:?}"));
+        let rows: Vec<(Vec<u8>, String, Option<chrono::DateTime<chrono::Utc>>)> = sqlx::query_as(q(
+            "SELECT canonical_request, state, erased_at FROM kernel.actions WHERE tenant_id = $1 AND action_id = ANY($2)"))
+            .bind(h.tenant.0)
+            .bind(vec![a1.parse::<Uuid>().unwrap_or_default(), a2.parse::<Uuid>().unwrap_or_default()])
+            .fetch_all(tx.raw_conn())
+            .await
+            .unwrap_or_else(|e| panic!("{e:?}"));
+        assert_eq!(rows.len(), 2);
+        for (canon, _, erased_at) in &rows {
+            let text = String::from_utf8_lossy(canon);
+            assert!(
+                !text.contains("Brenda")
+                    && !text.contains("5555550100")
+                    && !text.contains("lanolin"),
+                "{text}"
+            );
+            assert!(
+                text.contains("\"erased\": true") || text.contains("\"erased\":true"),
+                "{text}"
+            );
+            assert!(erased_at.is_some());
+        }
+        assert!(
+            rows.iter().any(|(_, st, _)| st == "cancelled"),
+            "{:?}",
+            rows.iter().map(|r| &r.1).collect::<Vec<_>>()
+        );
+        let perm: String = sqlx::query_scalar(q("SELECT status FROM kernel.contact_permissions WHERE tenant_id = $1 AND contact_id = $2"))
+            .bind(h.tenant.0)
+            .bind(r.contact.0)
+            .fetch_one(tx.raw_conn())
+            .await
+            .unwrap_or_else(|e| panic!("{e:?}"));
+        assert_eq!(perm, "revoked");
+        let pending: i64 = sqlx::query_scalar(q("SELECT count(*) FROM kernel.provider_erasures WHERE tenant_id = $1 AND state = 'pending' AND direction = 'outbound'"))
+            .bind(h.tenant.0)
+            .fetch_one(tx.raw_conn())
+            .await
+            .unwrap_or_else(|e| panic!("{e:?}"));
+        assert!(pending >= 1);
+        // The chain still verifies after content removal (it never covered plaintext).
+        mk_store::audit::verify_tenant(&mut tx)
+            .await
+            .unwrap_or_else(|e| panic!("{e:?}"));
+        let ev: i64 = sqlx::query_scalar(q("SELECT count(*) FROM kernel.audit_events WHERE tenant_id = $1 AND event_type = 'subject_erased'"))
+            .bind(h.tenant.0)
+            .fetch_one(tx.raw_conn())
+            .await
+            .unwrap_or_else(|e| panic!("{e:?}"));
+        assert_eq!(ev, 1);
+        let leaked: i64 = sqlx::query_scalar(q("SELECT count(*) FROM kernel.audit_events WHERE tenant_id = $1 AND payload_redacted::text ~ '(Brenda|5555550100|lanolin)'"))
+            .bind(h.tenant.0)
+            .fetch_one(tx.raw_conn())
+            .await
+            .unwrap_or_else(|e| panic!("{e:?}"));
+        assert_eq!(leaked, 0);
+        tx.commit().await.unwrap_or_else(|e| panic!("{e:?}"));
+    }
+    // Provider copies: the worker deletes them through the provider API (simulator).
+    assert_eq!(r.sim.created_messages().await.len(), 1);
+    let st = mk_worker::housekeeping::provider_erasures_once(
+        &h.state.store,
+        r.ctx.registry.twilio.as_ref(),
+        &[h.tenant],
+        chrono::Utc::now(),
+    )
+    .await
+    .unwrap_or_else(|e| panic!("{e:?}"));
+    assert_eq!((st.deleted, st.failed), (1, 0), "{st:?}");
+    assert!(
+        r.sim.created_messages().await.is_empty(),
+        "provider copy still held"
+    );
+    // Nothing left to do; a second pass is a no-op (and without an adapter, rows wait).
+    let again = mk_worker::housekeeping::provider_erasures_once(
+        &h.state.store,
+        r.ctx.registry.twilio.as_ref(),
+        &[h.tenant],
+        chrono::Utc::now(),
+    )
+    .await
+    .unwrap_or_else(|e| panic!("{e:?}"));
+    assert_eq!(
+        again,
+        mk_worker::housekeeping::ProviderErasureStats::default()
+    );
+    // An erased action still reads (content-free) and can never be replayed.
+    let v1 = state_of(a1.clone()).await;
+    assert!(v1["action_id"].is_string(), "{v1}");
+    let (s, v) = h
+        .call(
+            "POST",
+            &format!("/internal/v1/actions/{a1}/replay"),
+            Some(&admin()),
+            None,
+        )
+        .await;
+    assert_eq!(s, StatusCode::CONFLICT, "{v}");
+    // A new proposal to the erased subject has no permission left.
+    let (s, v) = h
+        .call(
+            "POST",
+            "/internal/v1/actions",
+            Some(&h.token(r.admin, &["agent"])),
+            Some(provider_proposal(
+                r.contact,
+                r.sender_id,
+                "Hello again",
+                "+15555550100",
+            )),
+        )
+        .await;
+    assert!(
+        s != StatusCode::ACCEPTED || v["result"]["state"] == json!("denied"),
+        "{s} {v}"
+    );
+}

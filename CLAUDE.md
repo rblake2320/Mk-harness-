@@ -21,13 +21,15 @@ cd backend
 pip install -r requirements.txt
 
 # Dev server (SQLite, no Docker needed)
-MK_ALLOW_DEV_SECRETS=1 \
+MK_ALLOW_DEV_SECRETS=1 MFA_REQUIRED=false \
 JWT_SECRET=dev-secret-dev-secret-dev-secret-123 \
 MASTER_KEY=$(python3 -c "import os,base64;print(base64.b64encode(os.urandom(32)).decode())") \
 uvicorn app.main:app --reload --port 8000
 
-# Tests (165 tests, all in-process — no live endpoints required)
+# Tests (all in-process — no live endpoints required)
 python -m pytest -v
+# + real-PostgreSQL role separation tests (CI sets this):
+MK_TEST_PG_ADMIN_URL=postgresql+psycopg://postgres:…@127.0.0.1:5432/postgres python -m pytest tests/test_db_roles.py
 ```
 
 ### Web
@@ -91,9 +93,11 @@ a copied row will not decrypt in a different scope.
 | Anthropic + OpenAI adapters | `backend/app/providers/anthropic_openai.py` |
 | Gemini + Ollama adapters | `backend/app/providers/gemini_ollama.py` |
 | Skills (system prompts) | `backend/app/skills.py` |
-| DB models (9 tables) | `backend/app/models.py` |
+| DB models | `backend/app/models.py` |
 | API key crypto | `backend/app/crypto.py` |
-| JWT auth | `backend/app/security.py` |
+| JWT auth → server-side sessions, MFA, step-up | `backend/app/security.py` → `backend/app/identity.py` |
+| Roles, permissions, route policy (default deny) | `backend/app/rbac.py` (`ROUTE_POLICY`) |
+| MFA / members / sessions / break-glass routes | `backend/app/routes/security.py` |
 | Skin compliance rules | `backend/app/skills.py` (`SKIN_FORBIDDEN_TERMS`) |
 | Shared TS SDK | `packages/sdk/src/index.ts` |
 | Web views | `web/src/views/` |
@@ -107,8 +111,9 @@ a copied row will not decrypt in a different scope.
 - Provider wire-format tests use `respx` HTTP mocking (no live endpoints); product code
   always talks to real endpoints — never add `respx` outside `tests/`.
 - Every new route needs a test for: happy path, auth failure (401), and cross-tenant
-  isolation (second user/tenant gets 404).
-- Run `python -m pytest -v` — all 165 must pass before any commit.
+  isolation (second user/tenant gets 404) — and an entry in `rbac.ROUTE_POLICY`
+  (unlisted routes are denied; `test_rbac.py` fails on a missing or stale entry).
+- Run `python -m pytest -v` — all must pass before any commit.
 
 ---
 
@@ -152,7 +157,7 @@ kernel (`rust/`). Rules:
   real binaries, FastAPI, device agent in dry-run, per-process DB logins,
   production pre-flight). CI runs it (`live-smoke` job) on every kernel PR.
 - Production: `scripts/kernel-secrets.ps1` → `docker compose … up` →
-  `scripts/kernel-preflight.sh` (28 base checks; `--for-enable` adds production key/approval/TLS/fingerprint/restore-gate checks). `RUST_ACTION_KERNEL_ENABLED=1`
+  `scripts/kernel-preflight.sh` (30 base checks, including app MFA and DB least-privilege; `--for-enable` adds production key/approval/TLS/fingerprint/restore-gate checks). `RUST_ACTION_KERNEL_ENABLED=1`
   only after `kernel-preflight.sh --for-enable` passes, which requires a
   reviewed `deploy/kernel/ACCEPTANCE.md` (real-device run). Runbook:
   `deploy/kernel/README.md`.
@@ -217,6 +222,16 @@ alembic upgrade head
 | `GEMINI_API_KEY` | No | Central key mode |
 | `OLLAMA_BASE_URL` | No | Local model endpoint |
 | `MK_ALLOW_DEV_SECRETS` | Dev only | Disables secret-length enforcement |
+| `APP_DB_OWNER_PASSWORD` / `APP_DB_RUNTIME_PASSWORD` | Prod | `mk_app_owner` (migrate job only) / `mk_app` (API runtime, DML only) — `deploy/app/initdb/10-app-roles.sh` |
+| `DB_CREATE_ALL` | No | Default true (dev/tests); compose sets false — schema comes from `python -m app.tools.migrate` |
+| `DB_REQUIRE_LEAST_PRIVILEGE` | Prod | true → API refuses to start as superuser/owner/bypassrls login; pre-flight requires it |
+| `MFA_REQUIRED` | No | Default true; false is dev/test only and pre-flight refuses it |
+| `STEP_UP_WINDOW_MINUTES` | No | Default 10 (clamped 1–15): re-auth window for sensitive routes (`rbac.ROUTE_POLICY`) |
+| `APP_WEBAUTHN_RP_ID` / `APP_WEBAUTHN_ORIGINS` | Passkeys | Web app domain / comma-separated origins; empty → passkeys disabled (TOTP still works) |
+| `PLATFORM_SUPPORT_USERS` | No | Comma-separated user ids that may request break-glass support access |
+| `ERASURE_LEDGER_PATH` / `ERASURE_LEDGER_KEY` | Prod | External, HMAC-sealed erasure ledger (own volume — survives a DB restore); `python -m app.tools.erasure verify\|replay\|deliver\|status` |
+| `SEALING_KEYS` | No | S10 versioned sealing keys `kid=base64,…` (first = current, `master` = MASTER_KEY); rotate with `python -m app.tools.rekey status\|rekey` |
+| `BREAKGLASS_MAX_MINUTES` | No | Default 240 — upper bound on an approved support grant |
 | `RATE_LIMIT_PER_MINUTE` | No | Default 30 |
 | `SKIN_ANALYSIS_URL` | No | Local PanDerm endpoint (port 8101); empty = cloud vision |
 | `STRIPE_SECRET_KEY` | Billing | `sk_live_…`/`sk_test_…`; empty = billing routes 503 |

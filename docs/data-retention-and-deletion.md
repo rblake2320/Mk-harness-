@@ -42,3 +42,22 @@ digests' plaintext, or public audit roots. S7/S12 are read this way.
 
 Acceptance (S13): deletion test covering primary storage, indexes, caches, object storage,
 exports and a backup restore, with chain verification before and after.
+
+## Implementation (WP09/WP11) — status: Implemented (author-run)
+
+| Step | Implementation |
+|---|---|
+| 1 Requester | `DELETE /api/customers/{id}` (step-up required, book-scoped) and `DELETE /api/account` (password + step-up) |
+| 2 App content | `app/erasure.py::_apply` empties customer, destinations, preferences, commitments, drafts, exceptions, outcomes, import rows, skin analyses, brief items; keeps minimal consent evidence (digest/purpose/time), suppressions, and — for an opted-out number only — its sealed value so key rotation can re-key the opt-out |
+| 3 Indexes / caches | none hold customer content (Redis: rate-limit and sign-in counters only); erased customers are excluded from every list/search/export path |
+| 4 Exports | streamed, never stored |
+| 5 Kernel + provider copies | `erasure_requests` outbox → kernel `POST /internal/v1/erasures` (refuses while a matching send is in flight; cancels queued sends; strips `arguments`/`evidence`; empties inbound bodies; closes permissions) → `provider_erasures` → worker deletes through Twilio `DELETE …/Messages/{sid}.json` with backoff (12 attempts, then `failed`, visible to operators) |
+| 6 Preserved | suppressions (app + kernel, incl. sealed destination for re-keying), consent digests, content-free audit events; kernel chain verifies after erasure |
+| 7 Restore safety | HMAC-sealed, hash-chained ledger outside the database (`ERASURE_LEDGER_PATH`, own volume); `python -m app.tools.erasure verify|replay|deliver|status`; restore runbook step 5a |
+| 8 Legal hold | `erase_customer(..., legal_hold_reason=…)` records the request, erases nothing, no ledger entry; not exposed in the UI (operator-only) |
+| Retention | `app/retention.py` — one table drives the daily purge (`retention` compose service) and the published privacy policy (`/privacy`) |
+
+Not done / residual: legal review of every period (M1); a timed restore drill with a
+real snapshot proving replay (O9 evidence); kernel `audit_events` 24-month retention is
+not enforced (append-only table; needs a reviewed archival design); provider-side
+deletion of copies older than the provider's own retention is reported `not_found`.

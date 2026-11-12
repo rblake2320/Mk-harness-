@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..entitlements import require_active_subscription
+from ..spend import SpendLimitReached
 from ..models import ConsultantProfile, Conversation, Message, Tenant, User
 from ..providers.base import ChatMessage, ChatRequest, MODEL_CATALOG, ProviderError
 from ..providers.router import DEFAULT_CHAIN, NoKeyAvailable, record_usage, resolve
@@ -153,6 +154,9 @@ async def chat_stream(body: ChatIn, user: User = Depends(check_rate),
             except NoKeyAvailable as e:
                 errors.append(str(e))
                 continue
+            except SpendLimitReached as e:
+                yield f"data: {json.dumps({'type': 'error', 'code': e.code, 'message': e.detail})}\n\n"
+                return
             model = req.model if req.model and \
                 MODEL_CATALOG.get(req.model, {}).get("provider") == name \
                 else resolved.adapter.default_model()

@@ -454,3 +454,20 @@ def test_fingerprint_keys_config_rejects_nonsense(monkeypatch):
             continue
         raise AssertionError(f"accepted {bad!r}")
     monkeypatch.delenv("FINGERPRINT_KEYS"); get_settings.cache_clear()
+
+
+def test_opt_out_outcome_requires_the_suppression_that_actually_stops_sending(client, kernel_env):
+    """An 'opted_out' outcome alone suppressed nothing (found in UI review): it is refused
+    until the do-not-contact suppression is in force, then accepted as a record."""
+    h = _user(client)
+    cid, did, fp = _customer(client, h, phone="+15555550166")
+    r = client.post("/api/outcomes", json={"customer_id": cid, "kind": "opted_out"}, headers=h)
+    assert r.status_code == 409 and r.json()["detail"]["code"] == "SUPPRESSION_REQUIRED"
+    with kernel_ok():
+        assert client.post("/api/suppressions", json={"destination_id": did, "reason": "asked in person",
+                                                      "source": "consultant"}, headers=h).status_code == 201
+    r = client.post("/api/outcomes", json={"customer_id": cid, "kind": "opted_out"}, headers=h)
+    assert r.status_code == 201, r.text
+    # Other outcome kinds are unaffected.
+    cid2, _, _ = _customer(client, h, name="Bea", phone="+15555550167")
+    assert client.post("/api/outcomes", json={"customer_id": cid2, "kind": "no_response"}, headers=h).status_code == 201

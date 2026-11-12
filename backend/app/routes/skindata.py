@@ -28,7 +28,7 @@ def export_skin_data(user: User = Depends(get_current_user), db: Session = Depen
     """Everything stored that relates to skin analysis for this consultant's book."""
     analyses = db.scalars(select(SkinAnalysis).where(SkinAnalysis.user_id == user.id)
                           .order_by(SkinAnalysis.created_at.desc())).all()
-    customers = db.scalars(select(Customer).where(Customer.user_id == user.id)).all()
+    customers = db.scalars(select(Customer).where(Customer.user_id == user.id, Customer.erased_at.is_(None))).all()
     consents = db.scalars(select(ConsentRecord).where(ConsentRecord.user_id == user.id,
                                                       ConsentRecord.scope == "skin")).all()
     return {
@@ -65,7 +65,7 @@ def delete_skin_data(customer_id: str | None = None,
     """Delete stored skin data. Scope to one customer with ?customer_id=, else all of the
     consultant's. Returns a deletion receipt."""
     analysis_q = select(SkinAnalysis).where(SkinAnalysis.user_id == user.id)
-    customer_q = select(Customer).where(Customer.user_id == user.id)
+    customer_q = select(Customer).where(Customer.user_id == user.id, Customer.erased_at.is_(None))
     if customer_id:
         cust = db.get(Customer, customer_id)
         if not cust or cust.user_id != user.id:

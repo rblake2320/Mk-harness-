@@ -1,15 +1,16 @@
 """MK Consultant Harness API."""
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 
 from .config import get_settings, require_secret
 from .db import init_engine
+from .rbac import route_guard
 from .routes import (
     account, agent_ops, auth, billing, chat, commitments, consent, customers, drafting, foundation, inbound, outreach,
-    keys, profile, skin, skindata, usage,
+    keys, profile, security, skin, skindata, usage,
 )
 
 _PRIVACY_HTML = """<!DOCTYPE html>
@@ -68,13 +69,7 @@ stored with an integrity hash of the exact text agreed to. You may withdraw cons
 time via the app settings, which immediately blocks further processing.</p>
 
 <h2>5. Data retention</h2>
-<ul>
-  <li>Account and customer data: retained while your account is active, deleted within
-      30 days of account deletion.</li>
-  <li>Conversation history: retained for 12 months, then auto-purged.</li>
-  <li>Skin analysis scores: retained while the associated customer record exists.</li>
-  <li>Audit logs: retained for 7 years (legal / compliance requirement).</li>
-</ul>
+{RETENTION_LIST}
 
 <h2>6. Your rights</h2>
 <p>Depending on your location, you may have the right to:</p>
@@ -83,9 +78,11 @@ time via the app settings, which immediately blocks further processing.</p>
       <code>GET /api/account/export</code> (authenticated).</li>
   <li><strong>Portability</strong> — the export endpoint returns a machine-readable JSON
       file containing your complete account data.</li>
-  <li><strong>Deletion</strong> — contact us at the address below to request account
-      deletion. We will delete your data within 30 days, subject to legal holds on
-      audit logs.</li>
+  <li><strong>Deletion</strong> — erase a customer from their page, or delete your
+      account in Settings (or contact us at the address below). Erasure is immediate in
+      the application; copies held by our sending system and SMS provider are erased
+      within 30 days. Minimal opt-out and permission evidence is kept so an opted-out
+      customer is never contacted again.</li>
   <li><strong>Correction</strong> — update your profile or customer records in-app at
       any time.</li>
 </ul>
@@ -137,16 +134,28 @@ app.add_middleware(
 
 # foundation before customers: its /customers/import/* and /customers/export.csv paths
 # must win over customers' /customers/{cid}.
-for r in (auth.router, chat.router, skin.router, foundation.router, commitments.router, drafting.router, inbound.router, outreach.router, customers.router,
+# Every /api router runs rbac.route_guard first: authentication, MFA state, role
+# permission, step-up and break-glass scope from ONE policy table (default deny).
+for r in (auth.router, security.router, chat.router, skin.router, foundation.router, commitments.router,
+          drafting.router, inbound.router, outreach.router, customers.router,
           keys.router, usage.router, profile.router, consent.router, skindata.router,
           billing.router, account.router, agent_ops.router):
-    app.include_router(r, prefix="/api")
+    app.include_router(r, prefix="/api", dependencies=[Depends(route_guard)])
 
 
 @app.get("/api/health")
 def health():
     """Liveness only (load-balancer target health). Never touches dependencies."""
     return {"status": "ok"}
+
+
+from .spend import SpendLimitReached  # noqa: E402
+
+
+@app.exception_handler(SpendLimitReached)
+async def _spend_limit(_request, exc: SpendLimitReached):
+    from fastapi.responses import JSONResponse
+    return JSONResponse(status_code=402, content={"detail": {"code": exc.code, "detail": exc.detail}})
 
 
 @app.get("/api/health/ready")
@@ -168,6 +177,24 @@ async def ready():
         db = next(get_db())
         try:
             db.execute(text("SELECT 1"))
+            # H9 propagation backlog: revocations the kernel has not acknowledged for
+            # more than a minute (count only — no tenant data). Alerted on in ops.
+            from datetime import timedelta
+
+            from sqlalchemy import func, select
+
+            from .foundation import utcnow
+            from .models import KernelRevocationOutbox
+            stale = db.scalar(select(func.count()).select_from(KernelRevocationOutbox).where(
+                KernelRevocationOutbox.delivered_at.is_(None),
+                KernelRevocationOutbox.created_at < utcnow() - timedelta(seconds=60))) or 0
+            checks["kernel_revocations_backlog"] = str(stale)
+            # S13: erasures not acknowledged by the kernel past their 30-day due date.
+            from .models import ErasureRequest
+            overdue = db.scalar(select(func.count()).select_from(ErasureRequest).where(
+                ErasureRequest.kernel_acknowledged_at.is_(None), ErasureRequest.legal_hold.is_(False),
+                ErasureRequest.due_by < utcnow())) or 0
+            checks["erasures_overdue"] = str(overdue)
         finally:
             db.close()
         checks["database"] = "ok"
@@ -185,10 +212,18 @@ async def ready():
             ok = False
     else:
         checks["kernel"] = "not_configured"
+    # Security posture flags (booleans only) so pre-flight can refuse a production
+    # deployment that runs without MFA or with an over-privileged database login.
+    from .config import get_settings
+    st = get_settings()
+    checks["mfa_required"] = "true" if st.mfa_required else "false"
+    checks["db_least_privilege"] = "enforced" if st.db_require_least_privilege else "off"
     return JSONResponse(status_code=200 if ok else 503, content={"status": "ready" if ok else "not_ready", "checks": checks})
 
 
 @app.get("/privacy", response_class=HTMLResponse, include_in_schema=False)
 def privacy_policy():
     """Public privacy policy — required by App Store and GDPR/CCPA."""
-    return HTMLResponse(content=_PRIVACY_HTML)
+    from .retention import policy_html
+    # Generated from the same table the purge job enforces (no hand-written periods).
+    return HTMLResponse(content=_PRIVACY_HTML.replace("{RETENTION_LIST}", policy_html()))

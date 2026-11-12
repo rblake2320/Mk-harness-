@@ -1,11 +1,41 @@
 /**
  * MK Harness SDK — single client for web (fetch/ReadableStream) and
- * React Native (fetch + XHR streaming fallback).
+ * React Native (fetch + XHR streaming fallback). Every API call either platform makes
+ * goes through `MKClient`; shared interface logic (message-state vocabulary, error
+ * explanations, approval display, the mobile→web passkey hand-off) is exported from the
+ * modules re-exported at the bottom of this file.
  */
+import type { MessageState, ReadStatus } from './vocabulary';
+import { ApiError, apiErrorFrom } from './errors';
+
 export interface Tokens {
   access_token: string; refresh_token: string;
   role: string; display_name: string; tenant_id: string;
+  session_id?: string;
+  /** MFA is required and this account has no second factor yet: only enrollment works. */
+  mfa_enrollment_required?: boolean;
 }
+/** Password accepted; a second factor is required before any tokens are issued. */
+export interface MfaChallenge { mfa_required: true; mfa_token: string; methods: string[]; expires_in: number }
+export type LoginResult = Tokens | MfaChallenge;
+export function isMfaChallenge(r: LoginResult): r is MfaChallenge { return (r as MfaChallenge).mfa_required === true }
+export interface MfaFactor { id: string; kind: 'totp' | 'webauthn'; label: string; created_at: string; last_used_at: string | null }
+export interface MfaStatus { factors: MfaFactor[]; methods: string[]; mfa_required: boolean; passkeys_available: boolean }
+export interface AuthSessionInfo {
+  id: string; client: string; created_at: string; last_seen_at: string; second_factor: boolean;
+  current: boolean; revoked: boolean; revoked_reason: string | null;
+}
+export interface Member {
+  id: string; email: string; display_name: string; role: string; works_for: string | null;
+  active: boolean; second_factor: boolean;
+}
+export interface BreakGlassGrant {
+  id: string; subject_user_id: string; requested_by: string; reason: string; ticket_ref: string;
+  scope: string; duration_minutes: number; status: string; requested_at: string; decided_by: string | null;
+  expires_at: string | null; access_count: number;
+}
+/** A WebAuthn credential serialized for JSON (base64url fields), as the API expects. */
+export type PublicKeyCredentialJSON = Record<string, any>;
 export interface SkinObservation { category: string; level: string; note: string }
 export interface SkinResult {
   observations: SkinObservation[]; care_focus: string[];
@@ -30,11 +60,7 @@ export interface BillingStatus {
 }
 
 
-// ---- WP03–WP08 types (contract vocabulary; definitions come from the API, never paraphrased) ----
-export type MessageState =
-  | 'proposed' | 'awaiting_approval' | 'approved' | 'queued' | 'dispatch_authorized' | 'submission_started'
-  | 'provider_accepted' | 'sent' | 'delivered' | 'failed' | 'delivery_unknown' | 'submission_unknown'
-  | 'cancelled' | 'denied' | 'expired';
+// ---- WP03–WP08 types (shapes of the real routes; message-state words come only from ./vocabulary) ----
 export interface Commitment {
   id: string; customer_id: string; kind: string; text: string; status: string;
   due_at: string | null; due_window: [string | null, string | null]; timezone: string;
@@ -60,12 +86,86 @@ export interface PendingApproval {
   supporting: { commitment: { id: string; text: string; status: string; evidence_digest: string } | null; draft_version_id: string | null; evidence_count: number };
   permission: { state: string; checked_at: string | null; note: string } | null;
   scheduled_for: string | null; approval_expires_at: string; approval_lifetime_minutes: number; human_steps: string[];
+  /** M4: segment count and (when a price is configured) the estimated charge, shown before approval. */
+  charge?: { segments: number; encoding: string; price_per_segment_millicents: number | null; estimated_millicents: number | null; note: string } | null;
 }
 export interface ExceptionItem {
   id: string; customer_id: string | null; kind: string; state: string; source_reference: string; detail: string;
   created_at: string; resolved_at: string | null;
 }
 export interface WebAuthnAssertion { credential_id: string; client_data_json: string; authenticator_data: string; signature: string }
+
+/** Kernel action result (contracts/action/v1/action-result.schema.json). `state` is the
+ *  kernel's internal state and is never shown as a message state; screens use
+ *  `message_state` through `describeMessageState`. */
+export interface ActionResult {
+  schema_version: string; action_id: string; tenant_id: string; state: string; action_digest: string;
+  attempt: number; error_code?: string; updated_at: string; replay_of?: string;
+  receipt?: { adapter_id?: string; external_ref?: string; result_digest?: string };
+  message_state?: MessageState; read_status?: ReadStatus; provider_message_id?: string;
+}
+export interface ApprovalRecord {
+  approval_id: string; action_id: string; action_digest: string; approver_id: string; approver_roles?: string[];
+  decision: 'approved' | 'rejected'; reason?: string; created_at: string; expires_at: string; consumed_at?: string | null;
+  [k: string]: unknown;
+}
+export interface DecisionResponse { approval: ApprovalRecord; result: ActionResult }
+export interface ActionStatus {
+  action: ActionResult;
+  link: { customer_id: string; commitment_id: string | null; draft_version_id: string | null; brief_item_id: string | null } | null;
+  message_state_definitions: Record<MessageState, string>;
+}
+export interface ProposeResult {
+  action_id: string; state: string | null; message_state: MessageState | null; action_digest: string;
+  decision: { code?: string; [k: string]: unknown } | null; human_steps: string[];
+}
+export interface ApprovalChallenge {
+  challenge: string; rp_id: string; action_digest: string; expires_at: string; allow_credentials: string[]; user_verification: string;
+}
+export interface CustomerDestination {
+  id: string; channel: 'sms' | 'email'; value_masked: string; fingerprint: string; is_primary: boolean; source: string; suppressed: boolean;
+}
+export interface ConsentEventView {
+  id: string; channel: string; purposes: string[]; status: string; source: string;
+  effective_at: string; expires_at: string; revoked_at: string | null;
+}
+export interface SuppressionView { id: string; channel: string; reason: string; source: string; created_at: string }
+export interface PermissionView { observed_at: string; note: string; consent_events: ConsentEventView[]; suppressions: SuppressionView[] }
+export type TimelineEvent =
+  | { at: string; type: 'commitment'; data: Commitment }
+  | { at: string; type: 'outcome'; data: { id: string; kind: string; commitment_id: string | null; note: string } };
+export interface ExtractResult { drafts: (Commitment & { evidence_quote: string })[]; note: string }
+export interface OutcomeResult { id: string; kind: string; customer_id: string; commitment_id: string | null; note: string }
+export interface InboundHealth {
+  health: { last_ok_at: string | null; last_failure_at: string | null; last_failure_reason: string; paused_since: string | null; resumed_at: string | null } | null;
+  dispatch_blocked: string | null; pending_events: number; stale_after_secs: number;
+}
+export interface InboundProcessResult {
+  processed: number;
+  events: { event_id: string; class: string; customer_id: string | null; matches: number; created: string[]; hold: number | null; marked_processed?: number | null; retry?: boolean }[];
+}
+export interface SenderIdentity {
+  sender_identity_id: string; owner_user_id: string; provider?: string; display_name: string; account_sid_redacted?: string;
+  from_number: string | null; messaging_service_sid: string | null; registration_status: string; status: string; created_at?: string;
+}
+export interface PasskeyInfo {
+  credential_row_id: string; label: string; alg: string; created_at: string; last_used_at: string | null; revoked_at: string | null;
+}
+/** Read-only governance status assembled from `/api/agent-ops/health` (never throws for 503). */
+export interface GovernanceStatus {
+  /** connected: kernel ready; not_ready: reachable but failing readiness (e.g. database);
+   *  unreachable: no answer; not_configured: this environment has no kernel connection. */
+  kernel: 'connected' | 'not_ready' | 'unreachable' | 'not_configured';
+  code: string | null;
+  /** The platform-wide kill switch: false = sending stopped for everyone. Null when unknown. */
+  global_dispatch_enabled: boolean | null;
+  /** Whether the kernel queues approved actions for execution in this environment. */
+  kernel_execution_enabled: boolean | null;
+  /** `webauthn` when approvals require a kernel-verified passkey. */
+  approval_binding: string | null;
+  /** The team (tenant) switch is not exposed by any read route: always null (unknown). */
+  team_dispatch_enabled: null;
+}
 
 export function b64url(bytes: ArrayBuffer | Uint8Array): string {
   const u = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
@@ -79,18 +179,6 @@ export function b64urlDecode(s: string): Uint8Array<ArrayBuffer> {
   return out;
 }
 
-/** Structured API error: `status` is the HTTP code, `detail` is the parsed body's
- *  `detail` field — a string, or an object like { code, message } for gated routes. */
-export class ApiError extends Error {
-  status: number; detail: any;
-  constructor(status: number, detail: any) {
-    super(typeof detail === 'string' ? detail : (detail?.message ?? `HTTP ${status}`));
-    this.status = status; this.detail = detail; this.name = 'ApiError';
-  }
-  get code(): string | undefined {
-    return this.detail && typeof this.detail === 'object' ? this.detail.code : undefined;
-  }
-}
 export type StreamEvent =
   | { type: 'meta'; conversation_id: string }
   | { type: 'delta'; text: string }
@@ -101,6 +189,9 @@ export class MKClient {
   baseUrl: string;
   tokens: Tokens | null = null;
   onAuthExpired: (() => void) | null = null;
+  /** Called on 403 STEP_UP_REQUIRED with the methods the account can use; resolve
+   *  true after a successful `stepUp(...)` to have the request retried. */
+  onStepUpRequired: ((methods: string[]) => Promise<boolean>) | null = null;
 
   constructor(baseUrl: string) { this.baseUrl = baseUrl.replace(/\/$/, ''); }
 
@@ -111,19 +202,47 @@ export class MKClient {
     return h;
   }
 
-  private async request<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
+  /** fetch with auth headers and one refresh-and-retry on 401. Never throws for HTTP status. */
+  private async send(path: string, init: RequestInit = {}, retry = true): Promise<Response> {
+    const used = this.tokens?.access_token;
     const r = await fetch(this.baseUrl + path, { ...init, headers: { ...this.headers(!(init.body instanceof FormData)), ...(init.headers ?? {}) } });
     if (r.status === 401 && retry && this.tokens?.refresh_token) {
-      const ok = await this.refresh();
-      if (ok) return this.request<T>(path, init, false);
+      // Another request may already have rotated the tokens while this one was in
+      // flight: retry with the new access token instead of spending the refresh
+      // token again (a reused refresh token revokes the whole session).
+      const ok = this.tokens.access_token !== used ? true : await this.refresh();
+      if (ok) return this.send(path, init, false);
       this.onAuthExpired?.();
     }
-    if (!r.ok) {
-      let detail: any = `HTTP ${r.status}`;
-      try { detail = (await r.json()).detail ?? detail; } catch { /* keep status */ }
-      throw new ApiError(r.status, detail);
+    return r;
+  }
+
+
+  private static async body(r: Response): Promise<unknown> {
+    try { return await r.json(); } catch { return undefined; }
+  }
+
+  /** Non-2xx → ApiError. A 403 STEP_UP_REQUIRED (sensitive change, factor not fresh)
+   *  asks the app to run step-up and retries the original request exactly once. */
+  private async fail(path: string, r: Response, again: () => Promise<any>, retry: boolean): Promise<any> {
+    const err = apiErrorFrom(r.status, await MKClient.body(r), r.headers.get('Retry-After'));
+    if (r.status === 403 && retry && err.code === 'STEP_UP_REQUIRED' && this.onStepUpRequired) {
+      if (await this.onStepUpRequired((err.detail as any)?.methods ?? [])) return again();
     }
+    throw err;
+  }
+
+  private async request<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
+    const r = await this.send(path, init, retry);
+    if (!r.ok) return this.fail(path, r, () => this.request<T>(path, init, false), retry);
     return r.json() as Promise<T>;
+  }
+
+  private async text(path: string, retry = true): Promise<string> {
+    // No init.headers: they would be captured before a token refresh and override the new token.
+    const r = await this.send(path, {}, retry);
+    if (!r.ok) return this.fail(path, r, () => this.text(path, false), retry);
+    return r.text();
   }
 
   // ---- auth ----
@@ -134,25 +253,100 @@ export class MKClient {
         org_name, email, password, key_policy: opts.key_policy ?? 'both', ref: opts.ref }) });
     return this.tokens;
   }
-  async login(email: string, password: string) {
-    this.tokens = await this.request<Tokens>('/api/auth/login', {
-      method: 'POST', body: JSON.stringify({ email, password }) });
+  /** Password step. Returns tokens, or an MFA challenge to answer with `verifyMfa`. */
+  async login(email: string, password: string): Promise<LoginResult> {
+    this.tokens = null;
+    const r = await this.request<LoginResult>('/api/auth/login', {
+      method: 'POST', body: JSON.stringify({ email, password }) }, false);
+    if (!isMfaChallenge(r)) this.tokens = r;
+    return r;
+  }
+  async verifyMfa(mfa_token: string, method: 'totp' | 'recovery' | 'webauthn',
+                  answer: { code?: string; credential?: PublicKeyCredentialJSON }) {
+    this.tokens = await this.request<Tokens>('/api/auth/mfa/verify', {
+      method: 'POST', body: JSON.stringify({ mfa_token, method, ...answer }) }, false);
     return this.tokens;
   }
-  async refresh(): Promise<boolean> {
-    try {
-      const r = await fetch(this.baseUrl + '/api/auth/refresh', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refresh_token: this.tokens?.refresh_token }) });
-      if (!r.ok) return false;
-      this.tokens = await r.json();
-      return true;
-    } catch { return false; }
+  loginPasskeyOptions(mfa_token: string) {
+    return this.request<any>('/api/auth/mfa/passkey/options', { method: 'POST', body: JSON.stringify({ mfa_token }) }, false);
   }
+  async logout() {
+    try { if (this.tokens) await this.request('/api/auth/logout', { method: 'POST' }, false); }
+    finally { this.tokens = null; }
+  }
+  changePassword(current_password: string, new_password: string) {
+    return this.request<Tokens>('/api/auth/change-password', {
+      method: 'POST', body: JSON.stringify({ current_password, new_password }) })
+      .then(t => { if ((t as any)?.access_token) this.tokens = t; return t; });
+  }
+  // ---- MFA factors (S2) ----
+  mfaStatus() { return this.request<MfaStatus>('/api/security/mfa'); }
+  totpBegin() {
+    return this.request<{ factor_id: string; secret: string; otpauth_uri: string; human_steps: string[] }>(
+      '/api/security/mfa/totp/begin', { method: 'POST' });
+  }
+  totpConfirm(factor_id: string, code: string, label = 'Authenticator app') {
+    return this.request<{ factor: MfaFactor; recovery_codes: string[] | null }>('/api/security/mfa/totp/confirm', {
+      method: 'POST', body: JSON.stringify({ factor_id, code, label }) });
+  }
+  passkeyBegin() { return this.request<any>('/api/security/mfa/passkey/begin', { method: 'POST' }); }
+  passkeyFinish(credential: PublicKeyCredentialJSON, label = 'Passkey') {
+    return this.request<{ factor: MfaFactor; recovery_codes: string[] | null }>('/api/security/mfa/passkey/finish', {
+      method: 'POST', body: JSON.stringify({ credential, label }) });
+  }
+  revokeFactor(id: string) { return this.request(`/api/security/mfa/${id}/revoke`, { method: 'POST' }); }
+  regenerateRecoveryCodes() {
+    return this.request<{ recovery_codes: string[] }>('/api/security/mfa/recovery-codes', { method: 'POST' });
+  }
+  // ---- step-up ----
+  stepUp(method: 'totp' | 'webauthn' | 'password', answer: { code?: string; credential?: PublicKeyCredentialJSON; password?: string }) {
+    return this.request<{ ok: boolean }>('/api/security/step-up', {
+      method: 'POST', body: JSON.stringify({ method, ...answer }) }, false);
+  }
+  stepUpPasskeyOptions() { return this.request<any>('/api/security/step-up/passkey/options', { method: 'POST' }); }
+  // ---- sessions ----
+  sessions() { return this.request<AuthSessionInfo[]>('/api/auth/sessions'); }
+  revokeSession(id: string) { return this.request(`/api/auth/sessions/${id}/revoke`, { method: 'POST' }); }
+  revokeOtherSessions() { return this.request<{ revoked: number }>('/api/auth/sessions/revoke-others', { method: 'POST' }); }
+  // ---- members, roles (S3) ----
+  members() { return this.request<Member[]>('/api/security/members'); }
+  setMemberRole(uid: string, role: string, works_for?: string | null) {
+    return this.request(`/api/security/members/${uid}/role`, { method: 'POST', body: JSON.stringify({ role, works_for: works_for ?? null }) });
+  }
+  deactivateMember(uid: string) { return this.request(`/api/security/members/${uid}/deactivate`, { method: 'POST' }); }
+  revokeMemberSessions(uid: string) { return this.request(`/api/security/members/${uid}/sessions/revoke`, { method: 'POST' }); }
+  // ---- break-glass, tenant side (S9) ----
+  breakGlassGrants() { return this.request<BreakGlassGrant[]>('/api/security/break-glass'); }
+  breakGlassDecide(id: string, decision: 'approve' | 'deny' | 'revoke') {
+    return this.request(`/api/security/break-glass/${id}/${decision}`, { method: 'POST' });
+  }
+  /** Exactly one refresh in flight: concurrent 401s share it. Refresh tokens rotate
+   *  and reuse revokes the session, so two parallel refreshes would sign the user out. */
+  private refreshing: Promise<boolean> | null = null;
+  /** Called with the rotated tokens so the app can persist them (a stale stored
+   *  refresh token would be "reused" on the next load and end the session). */
+  onTokensChanged: ((t: Tokens) => void) | null = null;
+  refresh(): Promise<boolean> {
+    if (!this.refreshing) {
+      this.refreshing = (async () => {
+        try {
+          const r = await fetch(this.baseUrl + '/api/auth/refresh', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ refresh_token: this.tokens?.refresh_token }) });
+          if (!r.ok) return false;
+          this.tokens = await r.json();
+          if (this.tokens) this.onTokensChanged?.(this.tokens);
+          return true;
+        } catch { return false; } finally { this.refreshing = null; }
+      })();
+    }
+    return this.refreshing;
+  }
+
   me() { return this.request<any>('/api/auth/me'); }
-  addMember(email: string, password: string, role = 'consultant') {
+  addMember(email: string, password: string, role = 'consultant', works_for?: string | null) {
     return this.request('/api/auth/members', {
-      method: 'POST', body: JSON.stringify({ email, password, role }) });
+      method: 'POST', body: JSON.stringify({ email, password, role, works_for: works_for ?? null }) });
   }
 
   // ---- chat (SSE over fetch) ----
@@ -249,23 +443,29 @@ export class MKClient {
   tenantUsage() { return this.request<any[]>('/api/usage/tenant'); }
 
   // ---- customer foundation (WP03) ----
-  customerTimeline(id: string) { return this.request<any[]>(`/api/customers/${id}/timeline`); }
-  customerPermissions(id: string) { return this.request<any>(`/api/customers/${id}/permissions`); }
-  customerDestinations(id: string) { return this.request<any[]>(`/api/customers/${id}/destinations`); }
+  customerTimeline(id: string) { return this.request<TimelineEvent[]>(`/api/customers/${id}/timeline`); }
+  customerPermissions(id: string) { return this.request<PermissionView>(`/api/customers/${id}/permissions`); }
+  customerDestinations(id: string) { return this.request<CustomerDestination[]>(`/api/customers/${id}/destinations`); }
   addDestination(id: string, channel: string, value: string) {
-    return this.request<any>(`/api/customers/${id}/destinations`, { method: 'POST', body: JSON.stringify({ channel, value }) });
+    return this.request<{ id: string; channel: string; value_masked: string; fingerprint: string; is_primary: boolean }>(
+      `/api/customers/${id}/destinations`, { method: 'POST', body: JSON.stringify({ channel, value }) });
   }
-  setPreferences(id: string, prefs: { timezone?: string; preferred_channel?: string; do_not_contact?: boolean }) {
-    return this.request(`/api/customers/${id}/preferences`, { method: 'PUT', body: JSON.stringify(prefs) });
+  setPreferences(id: string, prefs: { timezone?: string; preferred_channel?: 'sms' | 'email'; window_start_hour?: number; window_end_hour?: number; language?: string }) {
+    return this.request<{ customer_id: string; timezone: string | null; preferred_channel: string; dispatch_blocked_reason: string | null; version: number }>(
+      `/api/customers/${id}/preferences`, { method: 'PUT', body: JSON.stringify(prefs) });
   }
-  recordConsent(id: string, body: { purposes: string[]; source: string; evidence_type: string; evidence_text: string }) {
-    return this.request<any>(`/api/customers/${id}/consent`, { method: 'POST', body: JSON.stringify(body) });
+  /** Consent is recorded for ONE destination (the route requires `destination_id`). */
+  recordConsent(id: string, body: { destination_id: string; purposes: string[]; source: string; evidence_type: string; evidence_text: string; evidence_ref?: string; expires_in_days?: number }) {
+    return this.request<{ id: string; status: string; channel: string; purposes: string[]; effective_at: string; expires_at: string; evidence_digest: string; kernel_permission_id: string }>(
+      `/api/customers/${id}/consent`, { method: 'POST', body: JSON.stringify(body) });
   }
-  revokeConsent(id: string, eid: string, reason = '') {
-    return this.request(`/api/customers/${id}/consent/${eid}/revoke`, { method: 'POST', body: JSON.stringify({ reason }) });
+  /** `reason` is required by the route (1–120 characters). */
+  revokeConsent(id: string, eid: string, reason: string) {
+    return this.request<{ id: string; status: string; revoked_at: string }>(`/api/customers/${id}/consent/${eid}/revoke`, { method: 'POST', body: JSON.stringify({ reason }) });
   }
-  suppress(body: { channel: string; destination?: string; destination_hash?: string; reason: string; permanent: boolean; source: string }) {
-    return this.request<any>('/api/suppressions', { method: 'POST', body: JSON.stringify(body) });
+  /** Suppression is filed against a destination on file (the route requires `destination_id`). */
+  suppress(body: { destination_id: string; reason: string; source: 'consultant' | 'sms_reply' | 'provider' | 'complaint'; permanent?: boolean }) {
+    return this.request<{ id: string; fingerprint: string; channel: string; kernel_suppression_id: string }>('/api/suppressions', { method: 'POST', body: JSON.stringify(body) });
   }
 
   // ---- commitments & brief (WP04) ----
@@ -286,10 +486,10 @@ export class MKClient {
   }
   cancelCommitment(id: string, reason = '') { return this.request<Commitment>(`/api/commitments/${id}/cancel`, { method: 'POST', body: JSON.stringify({ reason }) }); }
   extractCommitments(customer_id: string, text: string, provider?: string) {
-    return this.request<any>('/api/commitments/extract', { method: 'POST', body: JSON.stringify({ customer_id, conversation_text: text, provider }) });
+    return this.request<ExtractResult>('/api/commitments/extract', { method: 'POST', body: JSON.stringify({ customer_id, conversation_text: text, provider }) });
   }
   recordOutcome(body: { customer_id: string; kind: string; commitment_id?: string; note?: string }) {
-    return this.request<any>('/api/outcomes', { method: 'POST', body: JSON.stringify(body) });
+    return this.request<OutcomeResult>('/api/outcomes', { method: 'POST', body: JSON.stringify(body) });
   }
 
   // ---- drafting (WP05) ----
@@ -301,28 +501,65 @@ export class MKClient {
   liveClaims(product_id?: string) { return this.request<any[]>(`/api/knowledge/claims${product_id ? `?product_id=${product_id}` : ''}`); }
 
   // ---- outreach, approvals, passkeys (WP06–WP08) ----
-  proposeDraft(id: string, body: { scheduled_for?: string } = {}) {
-    return this.request<any>(`/api/drafts/${id}/propose`, { method: 'POST', body: JSON.stringify(body) });
+  /** Proposes the exact draft version. Scheduling is deliberately not exposed: the
+   *  approval list does not yet echo a proposal's schedule (see report), so offering it
+   *  would show approvers the wrong "When". */
+  proposeDraft(id: string) {
+    return this.request<ProposeResult>(`/api/drafts/${id}/propose`, { method: 'POST', body: '{}' });
   }
   pendingApprovals() { return this.request<PendingApproval[]>('/api/approvals/pending'); }
-  actionStatus(id: string) { return this.request<{ action: any; link: any; message_state_definitions: Record<MessageState, string> }>(`/api/actions/${id}`); }
+  actionStatus(id: string) { return this.request<ActionStatus>(`/api/actions/${encodeURIComponent(id)}`); }
   approvalChallenge(action_id: string) {
-    return this.request<{ challenge: string; rp_id: string; action_digest: string; expires_at: string; allow_credentials: string[]; user_verification: string }>(
-      `/api/agent-ops/actions/${action_id}/approval-challenge`, { method: 'POST', body: '{}' });
+    return this.request<ApprovalChallenge>(`/api/agent-ops/actions/${encodeURIComponent(action_id)}/approval-challenge`, { method: 'POST', body: '{}' });
   }
   approve(action_id: string, action_digest: string, webauthn: WebAuthnAssertion, reason?: string) {
-    return this.request<any>(`/api/agent-ops/actions/${action_id}/approve`, { method: 'POST', body: JSON.stringify({ action_digest, webauthn, reason }) });
+    return this.request<DecisionResponse>(`/api/agent-ops/actions/${encodeURIComponent(action_id)}/approve`, { method: 'POST', body: JSON.stringify({ action_digest, webauthn, reason }) });
   }
   reject(action_id: string, action_digest: string, reason?: string) {
-    return this.request<any>(`/api/agent-ops/actions/${action_id}/reject`, { method: 'POST', body: JSON.stringify({ action_digest, reason }) });
+    return this.request<DecisionResponse>(`/api/agent-ops/actions/${encodeURIComponent(action_id)}/reject`, { method: 'POST', body: JSON.stringify({ action_digest, reason }) });
+  }
+  /** Withdraw a proposal before it is submitted (the kernel decides whether it still can). */
+  cancelAction(action_id: string) {
+    return this.request<ActionResult>(`/api/agent-ops/actions/${encodeURIComponent(action_id)}/cancel`, { method: 'POST', body: '{}' });
   }
   passkeyRegisterBegin() { return this.request<any>('/api/agent-ops/approval-credentials/register/begin', { method: 'POST', body: '{}' }); }
   passkeyRegisterFinish(body: { client_data_json: string; attestation_object: string; label: string }) {
     return this.request<any>('/api/agent-ops/approval-credentials/register/finish', { method: 'POST', body: JSON.stringify(body) });
   }
-  passkeys() { return this.request<any[]>('/api/agent-ops/approval-credentials'); }
+  passkeys() { return this.request<PasskeyInfo[]>('/api/agent-ops/approval-credentials'); }
   revokePasskey(row_id: string) { return this.request<any>(`/api/agent-ops/approval-credentials/${row_id}/revoke`, { method: 'POST', body: '{}' }); }
   revokeMySession(reason = '') { return this.request<any>('/api/agent-ops/revocations', { method: 'POST', body: JSON.stringify({ reason }) }); }
+
+  /** Sign-in passkeys (S2), separate from the kernel's approval passkeys: the app
+   *  server issues and verifies these challenges (py_webauthn JSON options). */
+  async addSignInPasskey(label = 'Passkey') {
+    const o = await this.passkeyBegin();
+    const cred = await navigator.credentials.create({ publicKey: {
+      ...o, challenge: b64urlDecode(o.challenge), user: { ...o.user, id: b64urlDecode(o.user.id) },
+      excludeCredentials: (o.excludeCredentials ?? []).map((c: any) => ({ ...c, id: b64urlDecode(c.id) })),
+    } }) as PublicKeyCredential | null;
+    if (!cred) throw new Error('No passkey was created.');
+    const att = cred.response as AuthenticatorAttestationResponse;
+    return this.passkeyFinish({ id: cred.id, rawId: b64url(cred.rawId), type: cred.type,
+      response: { clientDataJSON: b64url(att.clientDataJSON), attestationObject: b64url(att.attestationObject) } }, label);
+  }
+  private async getAssertion(o: any): Promise<PublicKeyCredentialJSON> {
+    const cred = await navigator.credentials.get({ publicKey: {
+      ...o, challenge: b64urlDecode(o.challenge),
+      allowCredentials: (o.allowCredentials ?? []).map((c: any) => ({ ...c, id: b64urlDecode(c.id) })),
+    } }) as PublicKeyCredential | null;
+    if (!cred) throw new Error('The passkey prompt was cancelled.');
+    const a = cred.response as AuthenticatorAssertionResponse;
+    return { id: cred.id, rawId: b64url(cred.rawId), type: cred.type,
+      response: { clientDataJSON: b64url(a.clientDataJSON), authenticatorData: b64url(a.authenticatorData),
+                  signature: b64url(a.signature), userHandle: a.userHandle ? b64url(a.userHandle) : null } };
+  }
+  async signInWithPasskey(mfa_token: string) {
+    return this.verifyMfa(mfa_token, 'webauthn', { credential: await this.getAssertion(await this.loginPasskeyOptions(mfa_token)) });
+  }
+  async stepUpWithPasskey() {
+    return this.stepUp('webauthn', { credential: await this.getAssertion(await this.stepUpPasskeyOptions()) });
+  }
 
   /** Full passkey registration ceremony in the browser. The kernel issued the challenge and verifies the result. */
   async registerPasskey(label: string) {
@@ -338,10 +575,15 @@ export class MKClient {
     return this.passkeyRegisterFinish({ client_data_json: b64url(att.clientDataJSON), attestation_object: b64url(att.attestationObject), label });
   }
 
-  /** One explicit approval gesture: fetch the digest-bound challenge, sign it with the passkey, submit. */
+  /** One explicit approval gesture: fetch the digest-bound challenge, sign it with the passkey, submit.
+   *  If the kernel's challenge is for a different digest than the one displayed, no passkey
+   *  prompt is shown and nothing is submitted: the caller gets the same APPROVAL_DIGEST_MISMATCH
+   *  the kernel would return, so web and mobile handle both paths identically. */
   async approveWithPasskey(action_id: string, action_digest: string, reason?: string) {
     const ch = await this.approvalChallenge(action_id);
-    if (ch.action_digest !== action_digest) throw new Error('This message changed since it was displayed. Review it again before approving.');
+    if (ch.action_digest !== action_digest) {
+      throw new ApiError(409, { code: 'APPROVAL_DIGEST_MISMATCH', message: 'This message changed since it was displayed.', detected: 'client' });
+    }
     const cred = await navigator.credentials.get({ publicKey: {
       challenge: b64urlDecode(ch.challenge), rpId: ch.rp_id, userVerification: ch.user_verification as UserVerificationRequirement,
       allowCredentials: ch.allow_credentials.map(id => ({ type: 'public-key', id: b64urlDecode(id) })),
@@ -355,21 +597,64 @@ export class MKClient {
   }
 
   // ---- inbound, exceptions (WP07) ----
-  processInbound(limit = 50) { return this.request<any>('/api/inbound/process', { method: 'POST', body: JSON.stringify({ limit }) }); }
+  processInbound(limit = 50) { return this.request<InboundProcessResult>('/api/inbound/process', { method: 'POST', body: JSON.stringify({ limit }) }); }
   listExceptions(state: 'open' | 'resolved' | 'dismissed' | 'all' = 'open') { return this.request<ExceptionItem[]>(`/api/exceptions?state=${state}`); }
   resolveException(id: string, resolution: 'resolved' | 'dismissed', note = '') {
     return this.request<ExceptionItem>(`/api/exceptions/${id}/resolve`, { method: 'POST', body: JSON.stringify({ resolution, note }) });
   }
-  inboundHealth() { return this.request<any>('/api/agent-ops/inbound/health'); }
-  senders() { return this.request<any[]>('/api/agent-ops/senders'); }
+  inboundHealth() { return this.request<InboundHealth>('/api/agent-ops/inbound/health'); }
+  senders() { return this.request<SenderIdentity[]>('/api/agent-ops/senders'); }
   registerSender(body: { owner_user_id: string; display_name: string; account_sid: string; auth_token: string; from_number?: string; messaging_service_sid?: string }) {
     return this.request<any>('/api/agent-ops/senders', { method: 'POST', body: JSON.stringify(body) });
   }
   kernelHealth() { return this.request<any>('/api/agent-ops/health'); }
 
+  /**
+   * Read-only governance status: is the kernel reachable and ready, is the platform kill
+   * switch on, does the kernel queue approved actions here. A 503 is a status to show,
+   * not an exception; 401 and other failures still throw ApiError.
+   */
+  async governanceStatus(): Promise<GovernanceStatus> {
+    const r = await this.send('/api/agent-ops/health');
+    const body = await MKClient.body(r);
+    return governanceStatusFrom(r.status, body);
+  }
+
   // ---- exports & deletion (account) ----
   exportAccount() { return this.request<any>('/api/account/export'); }
-  exportAudit() { return fetch(this.baseUrl + '/api/audit/export.jsonl', { headers: this.headers(false) }).then(r => r.text()); }
-  exportCustomersCsv() { return fetch(this.baseUrl + '/api/customers/export.csv', { headers: this.headers(false) }).then(r => r.text()); }
+  exportAudit() { return this.text('/api/audit/export.jsonl'); }
+  exportCustomersCsv() { return this.text('/api/customers/export.csv'); }
   deleteAccount(body: { password: string }) { return this.request<any>('/api/account', { method: 'DELETE', body: JSON.stringify(body) }); }
 }
+
+/** Pure mapping of `/api/agent-ops/health` responses (exported for tests). */
+export function governanceStatusFrom(status: number, body: unknown): GovernanceStatus {
+  const unknownStatus = (kernel: GovernanceStatus['kernel'], code: string | null): GovernanceStatus =>
+    ({ kernel, code, global_dispatch_enabled: null, kernel_execution_enabled: null, approval_binding: null, team_dispatch_enabled: null });
+  const rec = (v: unknown): Record<string, unknown> | null => (typeof v === 'object' && v !== null && !Array.isArray(v) ? v as Record<string, unknown> : null);
+  const b = rec(body);
+  const k = rec(b?.kernel);
+  const bool = (v: unknown) => (typeof v === 'boolean' ? v : null);
+  if ((status === 200 || status === 503) && k) {
+    const configured = b?.configured !== false;
+    const ready = status === 200 && k.database === true;
+    return {
+      kernel: !configured ? 'not_configured' : ready ? 'connected' : 'not_ready', code: null,
+      global_dispatch_enabled: bool(k.dispatch_enabled), kernel_execution_enabled: bool(k.rust_kernel_enabled),
+      approval_binding: typeof rec(k.effective)?.approval_binding === 'string' ? rec(k.effective)!.approval_binding as string : null,
+      team_dispatch_enabled: null,
+    };
+  }
+  if (status === 401) throw apiErrorFrom(status, body);
+  const err = apiErrorFrom(status, body);
+  if (status === 503) return unknownStatus(err.code === 'KERNEL_NOT_CONFIGURED' ? 'not_configured' : 'unreachable', err.code ?? null);
+  throw err;
+}
+
+export * from './vocabulary';
+export * from './labels';
+export * from './errors';
+export * from './handoff';
+export * from './approval';
+export * from './governance';
+export * from './days';

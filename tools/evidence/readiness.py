@@ -51,11 +51,11 @@ CHECKLIST = [
     ("Are credential rotation and data deletion exercised?", ["S6", "S10", "S13", "F4"]),
     ("Are restore and rollback safe from accidental re-sending?", ["O9", "O10"]),
     ("Are SLO, load, fault, and communications targets met?", ["O2", "O3", "O4", "O5", "C10"]),
-    ("Are monitoring, support, and incident responsibilities staffed?", ["O6", "O7", "M4"]),
+    ("Are monitoring, support, and incident responsibilities staffed?", ["O6", "O7", "M3"]),
     ("Have AI safety and factuality evaluations passed?", ["A1", "A2", "A3", "A4", "A5", "A6"]),
     ("Has the interface passed usability and accessibility acceptance?", ["X5"]),
     ("Are legal, privacy, provider, and branding permissions documented?", ["S1", "S2", "M1", "M2"]),
-    ("Are economics viable at the approved price?", ["M3"]),
+    ("Are economics viable at the approved price?", ["M4"]),
     ("Are all product claims supported?", ["K1", "K2"]),
     ("Is every acceptance result linked to retained, commit-specific evidence?", ["*"]),
 ]

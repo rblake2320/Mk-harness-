@@ -603,9 +603,15 @@ pub mod softauthn {
     impl SoftAuthenticator {
         #[must_use]
         pub fn new_es256() -> Self {
-            Self::with_key(Key::Es256(p256::ecdsa::SigningKey::random(
-                &mut rand::rngs::OsRng,
-            )))
+            // Rejection-sample a valid scalar from the OS RNG (p256 0.14 takes a
+            // rand_core 0.9 RNG; the workspace's rand is older).
+            loop {
+                let mut b = [0u8; 32];
+                rand::RngCore::fill_bytes(&mut rand::rngs::OsRng, &mut b);
+                if let Ok(sk) = p256::ecdsa::SigningKey::from_slice(&b) {
+                    return Self::with_key(Key::Es256(sk));
+                }
+            }
         }
         #[must_use]
         pub fn new_ed25519() -> Self {
@@ -672,7 +678,7 @@ pub mod softauthn {
             use ciborium::Value as V;
             match &self.key {
                 Key::Es256(sk) => {
-                    let p = sk.verifying_key().to_encoded_point(false);
+                    let p = sk.verifying_key().to_sec1_point(false);
                     V::Map(vec![
                         (V::Integer(1.into()), V::Integer(2.into())),
                         (V::Integer(3.into()), V::Integer((-7).into())),

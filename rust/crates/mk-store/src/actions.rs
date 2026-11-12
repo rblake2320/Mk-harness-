@@ -323,6 +323,11 @@ pub async fn insert_replay(
     if !original.state.is_terminal() {
         return Err(StoreError::Conflict("replay requires a terminal original"));
     }
+    if crate::erasure::is_erased_request(&original.request) {
+        return Err(StoreError::Conflict(
+            "the subject of this action was erased; it cannot be replayed",
+        ));
+    }
     let mut req = original.request.clone();
     req.action_id = Some(new_id);
     req.idempotency_key = format!("{}:replay:{}", req.idempotency_key, new_id);

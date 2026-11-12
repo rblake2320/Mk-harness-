@@ -84,6 +84,7 @@ pub enum EventType {
     DeliveryEvent,
     InboundPaused,
     InboundResumed,
+    SubjectErased,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

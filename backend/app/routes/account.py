@@ -42,7 +42,7 @@ def export_account(user: User = Depends(get_current_user),
     prof = db.scalar(select(ConsultantProfile).where(ConsultantProfile.user_id == user.id))
 
     # Customers
-    customers = db.scalars(select(Customer).where(Customer.user_id == user.id)).all()
+    customers = db.scalars(select(Customer).where(Customer.user_id == user.id, Customer.erased_at.is_(None))).all()
     customers_out = []
     for c in customers:
         customers_out.append({
@@ -166,19 +166,28 @@ def delete_account(body: DeleteAccountIn, user: User = Depends(get_current_user)
     the password hash — all JWTs become useless on next use.
     """
     if not verify_password(body.password, user.password_hash):
-        raise HTTPException(401, "Password is incorrect")
+        raise HTTPException(403, "Password is incorrect")   # authenticated: not a token problem
+
+    from .. import identity
+    from ..erasure import deliver_to_kernel, erase_customer
+    from ..models import MfaFactor, MfaRecoveryCode, ProviderKey
 
     uid = user.id
     tid = user.tenant_id
+    owners = db.scalars(select(User.id).where(User.tenant_id == tid, User.role == "owner",
+                                              User.is_active.is_(True))).all()
+    others = db.scalars(select(User.id).where(User.tenant_id == tid, User.id != uid,
+                                              User.is_active.is_(True))).all()
+    if user.role == "owner" and len(owners) <= 1 and others:
+        raise HTTPException(409, {"code": "LAST_OWNER",
+                                  "detail": "make another member an owner before deleting your account"})
 
-    # Delete customers (cascades skin_analyses linkage via nullable FK)
-    customers = db.scalars(select(Customer).where(Customer.user_id == uid)).all()
+    # Customers in this person's book are erased (S13): content emptied, kernel and
+    # provider copies queued, ledgered for restore replay. A hard delete here failed
+    # on foreign keys in PostgreSQL and orphaned encrypted destinations in SQLite.
+    customers = db.scalars(select(Customer).where(Customer.user_id == uid, Customer.erased_at.is_(None))).all()
     for c in customers:
-        # Delete skin analyses for this customer first
-        for sa in db.scalars(select(SkinAnalysis).where(SkinAnalysis.customer_id == c.id)).all():
-            db.delete(sa)
-        db.delete(c)
-
+        erase_customer(db, tenant_id=tid, customer_id=c.id, requested_by=uid)
     # Delete any remaining skin analyses not linked to a customer
     for sa in db.scalars(select(SkinAnalysis).where(
             SkinAnalysis.user_id == uid, SkinAnalysis.customer_id.is_(None))).all():
@@ -187,6 +196,12 @@ def delete_account(body: DeleteAccountIn, user: User = Depends(get_current_user)
     # Delete conversations and their messages (cascade via relationship)
     for conv in db.scalars(select(Conversation).where(Conversation.user_id == uid)).all():
         db.delete(conv)
+
+    # Credentials held for this person: second factors, recovery codes, BYO provider keys.
+    from sqlalchemy import delete as _delete
+    for model in (MfaFactor, MfaRecoveryCode):
+        db.execute(_delete(model).where(model.user_id == uid))
+    db.execute(_delete(ProviderKey).where(ProviderKey.user_id == uid))
 
     # Delete usage records
     for ur in db.scalars(select(UsageRecord).where(UsageRecord.user_id == uid)).all():
@@ -201,7 +216,10 @@ def delete_account(body: DeleteAccountIn, user: User = Depends(get_current_user)
     for cr in db.scalars(select(ConsentRecord).where(ConsentRecord.user_id == uid)).all():
         cr.revoked_at = cr.revoked_at or datetime.now(timezone.utc)
 
-    # Anonymise the user record — invalidate sessions by clearing password hash
+    # Every session ends now, in the app and (via the outbox) in the kernel.
+    identity.revoke_user_sessions(db, user, by=uid, reason="account_deleted")
+    identity.revoke_user_in_kernel(db, user, actor=user, reason="account_deleted")
+    # Anonymise the user record
     user.email = f"deleted_{uid}@deleted"
     user.display_name = ""
     user.password_hash = ""
@@ -210,6 +228,11 @@ def delete_account(body: DeleteAccountIn, user: User = Depends(get_current_user)
 
     # Audit log entry (anonymised — user_id retained as a reference only)
     db.add(AuditLog(tenant_id=tid, user_id=uid,
-                    action="account.delete", detail="gdpr_erasure"))
+                    action="account.delete", detail=f"gdpr_erasure customers={len(customers)}"))
     db.commit()
-    return {"ok": True, "detail": "Account and personal data erased."}
+    try:
+        identity.deliver_kernel_revocations(db, tenant_id=tid)
+        deliver_to_kernel(db, tenant_id=tid)
+    except Exception:  # noqa: BLE001 — both outboxes retry; rows are durable
+        db.rollback()
+    return {"ok": True, "detail": "Account and personal data erased.", "customers_erased": len(customers)}

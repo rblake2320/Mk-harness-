@@ -6,3 +6,38 @@ b5723c7975276078eebd395cbd54322e285b6ba8:infra/terraform/modules/kernel-platform
 b5723c7975276078eebd395cbd54322e285b6ba8:infra/terraform/modules/kernel-platform/kms_secrets.tf:hashicorp-tf-password:59
 b5723c7975276078eebd395cbd54322e285b6ba8:infra/terraform/modules/kernel-platform/kms_secrets.tf:hashicorp-tf-password:60
 c923eb79c8602c31e22de5f5a520028388c6f22b:backend/app/kernel/assertions.py:generic-api-key:68
+
+# Image-scan reports on branch codex/mk-release-acceptance-20261021 quote the python base
+# image's `ENV GPG_KEY=<40 hex>` layer history: a release manager's PUBLIC OpenPGP key id,
+# not a secret. gitleaks scans every fetched ref, so these block every PR. Listed by exact
+# fingerprint (each line verified to contain `GPG_KEY=`).
+10c4cdb989a4dbb6f3ddf12495c4ba2a1280e30b:local-verification/app-security-image-scan-v1/vulnerabilities.json:generic-api-key:193
+10c4cdb989a4dbb6f3ddf12495c4ba2a1280e30b:local-verification/app-security-image-scan-v1/vulnerabilities.json:generic-api-key:57
+10c4cdb989a4dbb6f3ddf12495c4ba2a1280e30b:local-verification/app-security-image-scan-v2/vulnerabilities.json:generic-api-key:193
+10c4cdb989a4dbb6f3ddf12495c4ba2a1280e30b:local-verification/app-security-image-scan-v2/vulnerabilities.json:generic-api-key:57
+228e97b02bd98360b5a609566b78e3888b536967:local-verification/image-security-ci-v2/app/vulnerabilities.json:generic-api-key:193
+228e97b02bd98360b5a609566b78e3888b536967:local-verification/image-security-ci-v2/app/vulnerabilities.json:generic-api-key:57
+991ac76afea7657ebf7b3dab7e1f45b200f17c61:local-verification/billing-restore-image-security-v2/vulnerabilities.json:generic-api-key:193
+991ac76afea7657ebf7b3dab7e1f45b200f17c61:local-verification/billing-restore-image-security-v2/vulnerabilities.json:generic-api-key:57
+991ac76afea7657ebf7b3dab7e1f45b200f17c61:local-verification/billing-restore-image-security/vulnerabilities.json:generic-api-key:193
+991ac76afea7657ebf7b3dab7e1f45b200f17c61:local-verification/billing-restore-image-security/vulnerabilities.json:generic-api-key:57
+c31235645d515269430ced72914abf4e369badad:local-verification/billing-provision-image-security-v2/vulnerabilities.json:generic-api-key:193
+c31235645d515269430ced72914abf4e369badad:local-verification/billing-provision-image-security-v2/vulnerabilities.json:generic-api-key:57
+c31235645d515269430ced72914abf4e369badad:local-verification/billing-provision-image-security-v3/vulnerabilities.json:generic-api-key:193
+c31235645d515269430ced72914abf4e369badad:local-verification/billing-provision-image-security-v3/vulnerabilities.json:generic-api-key:57
+c31235645d515269430ced72914abf4e369badad:local-verification/billing-provision-image-security/vulnerabilities.json:generic-api-key:193
+c31235645d515269430ced72914abf4e369badad:local-verification/billing-provision-image-security/vulnerabilities.json:generic-api-key:57
+d40e7ff22ff7a4df8f0f15504f2ec5f271ce2ebf:local-verification/app-image-vulnerabilities-after-v1.json:generic-api-key:196
+d40e7ff22ff7a4df8f0f15504f2ec5f271ce2ebf:local-verification/app-image-vulnerabilities-after-v1.json:generic-api-key:61
+d40e7ff22ff7a4df8f0f15504f2ec5f271ce2ebf:local-verification/app-image-vulnerabilities-before.json:generic-api-key:196
+d40e7ff22ff7a4df8f0f15504f2ec5f271ce2ebf:local-verification/app-image-vulnerabilities-before.json:generic-api-key:61
+d40e7ff22ff7a4df8f0f15504f2ec5f271ce2ebf:local-verification/app-runtime-security-v4/vulnerabilities.json:generic-api-key:193
+d40e7ff22ff7a4df8f0f15504f2ec5f271ce2ebf:local-verification/app-runtime-security-v4/vulnerabilities.json:generic-api-key:57
+d40e7ff22ff7a4df8f0f15504f2ec5f271ce2ebf:local-verification/image-security-artifact-secrets.json:generic-api-key:109
+d40e7ff22ff7a4df8f0f15504f2ec5f271ce2ebf:local-verification/image-security-artifact-secrets.json:generic-api-key:29
+d40e7ff22ff7a4df8f0f15504f2ec5f271ce2ebf:local-verification/image-security-artifact-secrets.json:generic-api-key:49
+d40e7ff22ff7a4df8f0f15504f2ec5f271ce2ebf:local-verification/image-security-artifact-secrets.json:generic-api-key:69
+d40e7ff22ff7a4df8f0f15504f2ec5f271ce2ebf:local-verification/image-security-artifact-secrets.json:generic-api-key:89
+d40e7ff22ff7a4df8f0f15504f2ec5f271ce2ebf:local-verification/image-security-artifact-secrets.json:generic-api-key:9
+f55def3ce58165c77e8ef80a7ec01426ec3936aa:local-verification/billing-privacy-image-security/vulnerabilities.json:generic-api-key:193
+f55def3ce58165c77e8ef80a7ec01426ec3936aa:local-verification/billing-privacy-image-security/vulnerabilities.json:generic-api-key:57

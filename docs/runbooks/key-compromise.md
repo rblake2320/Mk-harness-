@@ -50,3 +50,15 @@ app `rekey` together with the kernel's `fingerprint-rekey` (step 4) and remove t
 old kid from **both** lists only when both `status` commands are clean.
 Not demonstrated: rotation of the application's *sealing* key (`MASTER_KEY` for
 `seal()`), which needs its own decrypt/re-encrypt job. This blocks S10 from *Independently verified*.
+
+## Application sealing key (`MASTER_KEY` / `SEALING_KEYS`, S10)
+
+Seals destinations, import contacts, drafts, exception details, outcome notes, TOTP
+secrets and provider API keys. Containment for a suspected compromise:
+1. Generate a new 32-byte key; set `SEALING_KEYS=new=<b64>,m0=master` (new first) and restart the API.
+2. `python -m app.tools.rekey rekey` → `python -m app.tools.rekey status` exits 0
+   (every row under `new`, 0 unreadable).
+3. Set `SEALING_KEYS=new=<b64>` and restart; the old key no longer opens anything here.
+4. `MASTER_KEY` also derives the `m0` fingerprint key: rotate fingerprints too
+   (`FINGERPRINT_KEYS` + `python -m app.tools.refingerprint rekey`) before replacing it.
+Tested: `backend/tests/test_rekey.py` (5). Not exercised by a second person.

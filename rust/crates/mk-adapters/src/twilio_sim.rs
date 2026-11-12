@@ -166,6 +166,25 @@ fn futures_stream_err()
     ])
 }
 
+async fn delete_message(
+    State(st): State<Arc<SimState>>,
+    Path((account, sid_json)): Path<(String, String)>,
+    headers: HeaderMap,
+) -> StatusCode {
+    if account != st.account_sid || !basic_ok(&headers, &st.account_sid, &st.auth_token) {
+        return StatusCode::UNAUTHORIZED;
+    }
+    let sid = sid_json.trim_end_matches(".json");
+    let mut msgs = st.messages.lock().await;
+    let before = msgs.len();
+    msgs.retain(|m| m["sid"] != json!(sid));
+    if msgs.len() < before {
+        StatusCode::NO_CONTENT
+    } else {
+        StatusCode::NOT_FOUND
+    }
+}
+
 async fn list_messages(
     State(st): State<Arc<SimState>>,
     Path(account): Path<String>,
@@ -212,6 +231,10 @@ impl TwilioSimulator {
             .route(
                 "/2010-04-01/Accounts/{account}/Messages.json",
                 post(create_message).get(list_messages),
+            )
+            .route(
+                "/2010-04-01/Accounts/{account}/Messages/{sid}",
+                axum::routing::delete(delete_message),
             )
             .with_state(state.clone());
         let listener = tokio::net::TcpListener::bind(bind).await?;

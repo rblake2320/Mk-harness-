@@ -145,3 +145,70 @@ async fn sqlx_release(
 ) -> Result<(), StoreError> {
     outbox::release_lease_any(tx, action_id).await
 }
+
+/// Outcome counts of one provider-erasure pass (contract S13: provider copies).
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct ProviderErasureStats {
+    pub deleted: usize,
+    pub not_found: usize,
+    pub retried: usize,
+    pub failed: usize,
+}
+
+/// Delete provider-held copies queued by subject erasures, through the provider's
+/// documented API, with bounded backoff. Without a configured provider adapter the
+/// rows stay pending (and visible to operators) — never silently dropped.
+pub async fn provider_erasures_once(
+    store: &Store,
+    twilio: Option<&mk_adapters::twilio::TwilioAdapter>,
+    tenants: &[TenantId],
+    now: DateTime<Utc>,
+) -> Result<ProviderErasureStats, StoreError> {
+    use mk_adapters::twilio::ProviderDeletion;
+    use mk_store::erasure;
+    let mut stats = ProviderErasureStats::default();
+    let Some(twilio) = twilio else {
+        return Ok(stats);
+    };
+    for tenant in tenants {
+        let mut tx = store.begin(*tenant).await?;
+        let due = erasure::claim_provider_erasures(&mut tx, now, 20).await?;
+        tx.commit().await?;
+        for d in due {
+            // Provider call outside any transaction (the sender resolver opens its own).
+            let (outcome, err) = if d.provider == "twilio" {
+                match twilio
+                    .delete_message(*tenant, d.sender_identity_id, &d.provider_message_id)
+                    .await
+                {
+                    Ok(ProviderDeletion::Deleted) => ("deleted", None),
+                    Ok(ProviderDeletion::NotFound) => ("not_found", None),
+                    Err(e) if e.class == mk_queue::RetryClass::Transient => {
+                        ("retry", Some(e.code.to_owned()))
+                    }
+                    Err(e) => ("failed", Some(e.code.to_owned())),
+                }
+            } else {
+                ("failed", Some("provider_unsupported".to_owned()))
+            };
+            match outcome {
+                "deleted" => stats.deleted += 1,
+                "not_found" => stats.not_found += 1,
+                "retry" => stats.retried += 1,
+                _ => stats.failed += 1,
+            }
+            let mut tx = store.begin(*tenant).await?;
+            erasure::record_provider_erasure(
+                &mut tx,
+                d.id,
+                outcome,
+                err.as_deref(),
+                d.attempts,
+                now,
+            )
+            .await?;
+            tx.commit().await?;
+        }
+    }
+    Ok(stats)
+}

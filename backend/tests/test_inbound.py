@@ -261,3 +261,30 @@ def test_failed_hold_leaves_the_event_unprocessed_and_records_nothing(client, ke
         ex = client.get("/api/exceptions", headers=h).json()
         assert (len([x for x in ex if x["kind"] == "product_concern"]) == 1) == expect_marked, ex
     assert len(marked) == 1
+
+
+def test_an_inbound_message_is_never_permission(client, kernel_env):
+    """F2: a customer writing in — even enthusiastically ('yes please send me all your
+    deals!') — creates no consent record, no kernel permission grant, and leaves the
+    customer's permission state 'none'; outreach still needs recorded consent."""
+    from sqlalchemy import func, select  # noqa: PLC0415
+    from app.db import get_db  # noqa: PLC0415
+    from app.models import ConsentEvent  # noqa: PLC0415
+    tok = _signup(client, uuid.uuid4().hex[:6])
+    h = auth_headers(tok)
+    cid, _, fp = _customer(client, h, phone="+15555557031")
+    events = [_event(fp, "yes please send me all your deals and specials, text me anytime!", sid="SMyes1"),
+              _event(fp, "YES", sid="SMyes2"), _event(fp, "subscribe me", sid="SMyes3")]
+    with respx.mock(assert_all_called=False) as m:
+        m.get(f"{KERNEL}/internal/v1/inbound/pending?limit=50").mock(return_value=_pending(events))
+        grants = m.post(url__regex=rf"{KERNEL}/internal/v1/contacts/.*/permissions$").mock(
+            return_value=httpx.Response(201, json={"id": str(uuid.uuid4())}))
+        m.post(url__regex=rf"{KERNEL}/internal/v1/inbound/[0-9a-f-]+/processed$").mock(return_value=httpx.Response(204))
+        m.post(f"{KERNEL}/internal/v1/suppressions").mock(return_value=httpx.Response(201, json={"suppression_id": "x"}))
+        r = client.post("/api/inbound/process", json={"limit": 50}, headers=h)
+    assert r.status_code == 200 and r.json()["processed"] == 3, r.text
+    assert not grants.called, "an inbound message must never grant permission in the kernel"
+    db = next(get_db())
+    assert db.scalar(select(func.count()).select_from(ConsentEvent).where(ConsentEvent.customer_id == cid)) == 0
+    perms = client.get(f"/api/customers/{cid}/permissions", headers=h).json()
+    assert perms["consent_events"] == []

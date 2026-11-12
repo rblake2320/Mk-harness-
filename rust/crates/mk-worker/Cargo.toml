@@ -45,6 +45,14 @@ rand = { workspace = true }
 secrecy = { workspace = true }
 prometheus-client = { workspace = true }
 axum = { workspace = true }
+# S14 audit anchoring: Ed25519 signatures, SigV4 to an Object Lock bucket.
+ed25519-dalek = { workspace = true }
+hmac = { workspace = true }
+sha2 = { workspace = true }
+hex = { workspace = true }
+base64 = { workspace = true }
+reqwest = { workspace = true }
+url = { workspace = true }
 
 [dev-dependencies]
 mk-testkit = { workspace = true }
@@ -57,6 +65,10 @@ path = "src/bin/keyctl.rs"
 [[bin]]
 name = "mk-restore-gate"
 path = "src/bin/restore_gate.rs"
+
+[[bin]]
+name = "mk-audit-anchor"
+path = "src/bin/anchor.rs"
 
 [[bin]]
 name = "mk-healthcheck"

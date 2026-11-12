@@ -2,6 +2,7 @@
   "expo": {
     "name": "Consultant Studio",
     "slug": "consultant-studio",
+    "scheme": "consultantstudio",
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
@@ -10,6 +11,6 @@
       "NSCameraUsageDescription": "Take a face photo for cosmetic skin observations.",
       "NSPhotoLibraryUsageDescription": "Choose a face photo for cosmetic skin observations." } },
     "android": { "permissions": ["CAMERA", "READ_MEDIA_IMAGES"] },
-    "extra": { "apiUrl": "https://YOUR-API-HOST" }
+    "extra": { "apiUrl": "https://YOUR-API-HOST", "webUrl": "https://YOUR-WEB-HOST" }
   }
 }

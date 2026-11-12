@@ -3,9 +3,9 @@ name: Rust action kernel
 on:
   push:
     branches: [main]
-    paths: ["rust/**", "contracts/**", "migrations/**", "deploy/**", "evidence/**", "scripts/**", "tools/**", "infra/**", "backend/app/kernel/**", "backend/app/routes/agent_ops.py", "docker-compose.kernel.yml", ".github/workflows/kernel-ci.yml"]
+    paths: ["rust/**", "contracts/**", "migrations/**", "deploy/**", "evidence/**", "scripts/**", "tools/**", "infra/**", "backend/app/**", "backend/requirements.txt", "docker-compose.kernel.yml", ".github/workflows/kernel-ci.yml"]
   pull_request:
-    paths: ["rust/**", "contracts/**", "migrations/**", "deploy/**", "evidence/**", "scripts/**", "tools/**", "infra/**", "backend/app/kernel/**", "backend/app/routes/agent_ops.py", "docker-compose.kernel.yml", ".github/workflows/kernel-ci.yml"]
+    paths: ["rust/**", "contracts/**", "migrations/**", "deploy/**", "evidence/**", "scripts/**", "tools/**", "infra/**", "backend/app/**", "backend/requirements.txt", "docker-compose.kernel.yml", ".github/workflows/kernel-ci.yml"]
 
 permissions:
   contents: read
@@ -69,7 +69,11 @@ jobs:
           MK_TEST_POOL_SIZE: "1"
       - run: cargo test --doc --workspace
       - run: cargo deny check
-      - run: cargo audit --ignore RUSTSEC-2023-0071  # justified in deny.toml (rsa: public-key verification only)
+      # RUSTSEC-2023-0071: justified in deny.toml (rsa: public-key verification only).
+      # RUSTSEC-2026-0459 (libsqlite3-sys): present in Cargo.lock only through sqlx's optional
+      # sqlite driver, which no crate enables — `cargo tree -i libsqlite3-sys` prints nothing
+      # (never compiled). Fixed only in sqlx 0.9; revisit on that upgrade.
+      - run: cargo audit --ignore RUSTSEC-2023-0071 --ignore RUSTSEC-2026-0459
       - name: SBOM
         run: cargo cyclonedx --format json --all
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -134,7 +138,8 @@ jobs:
           curl -sSL -o gl.tgz "https://github.com/gitleaks/gitleaks/releases/download/v${V}/gitleaks_${V}_linux_x64.tar.gz"
           tar xzf gl.tgz gitleaks
           sudo install gitleaks /usr/local/bin/gitleaks
-      - run: gitleaks detect --source . --redact --no-banner --config .gitleaks.toml
+      # --verbose prints each finding (values redacted) so a failure names file, line and rule.
+      - run: gitleaks detect --source . --redact --verbose --no-banner --config .gitleaks.toml
 
   # End-to-end through the application: real binaries, Postgres, Redis, FastAPI,
   # the device agent in dry-run, per-process DB logins, and the production

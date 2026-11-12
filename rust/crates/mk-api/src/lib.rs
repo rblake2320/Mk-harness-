@@ -73,6 +73,7 @@ pub fn router(state: AppState) -> Router {
             post(routes::consent::revoke_permission),
         )
         .route("/suppressions", post(routes::consent::add_suppression))
+        .route("/erasures", post(routes::erasure::erase))
         .route(
             "/suppressions/{suppression_id}",
             delete(routes::consent::lift_suppression),
