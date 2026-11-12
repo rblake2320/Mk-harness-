@@ -296,3 +296,86 @@ pub async fn erase_subject(
 pub fn is_erased_request(req: &mk_contracts::action::ActionRequest) -> bool {
     req.arguments.get("erased") == Some(&serde_json::Value::Bool(true))
 }
+
+/// A provider-held copy due for deletion.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DueProviderErasure {
+    pub id: Uuid,
+    pub sender_identity_id: Uuid,
+    pub provider: String,
+    pub provider_message_id: String,
+    pub attempts: i32,
+}
+
+pub const PROVIDER_ERASURE_MAX_ATTEMPTS: i32 = 12;
+
+/// Claim up to `limit` due rows: each is leased for five minutes (next_attempt_at
+/// pushed forward) in this transaction, so the caller commits BEFORE calling the
+/// provider — no network call ever runs inside a database transaction, and a
+/// second worker cannot pick the same row while the lease holds.
+pub async fn claim_provider_erasures(
+    tx: &mut TenantTx<'_>,
+    now: DateTime<Utc>,
+    limit: i64,
+) -> Result<Vec<DueProviderErasure>, StoreError> {
+    let rows = sqlx::query(
+        "UPDATE kernel.provider_erasures SET next_attempt_at = $2 + interval '5 minutes'
+          WHERE tenant_id = $1 AND provider_erasure_id IN (
+                SELECT provider_erasure_id FROM kernel.provider_erasures
+                 WHERE tenant_id = $1 AND state = 'pending' AND next_attempt_at <= $2
+                 ORDER BY next_attempt_at LIMIT $3 FOR UPDATE SKIP LOCKED)
+          RETURNING provider_erasure_id, sender_identity_id, provider, provider_message_id, attempts",
+    )
+    .bind(tx.tenant().0)
+    .bind(now)
+    .bind(limit)
+    .fetch_all(tx.conn())
+    .await?;
+    rows.iter()
+        .map(|r| {
+            Ok(DueProviderErasure {
+                id: r.try_get("provider_erasure_id")?,
+                sender_identity_id: r.try_get("sender_identity_id")?,
+                provider: r.try_get("provider")?,
+                provider_message_id: r.try_get("provider_message_id")?,
+                attempts: r.try_get("attempts")?,
+            })
+        })
+        .collect()
+}
+
+/// Record the outcome of one provider deletion attempt. `outcome` is
+/// `deleted` / `not_found` (done), `retry` (backoff) or `failed` (permanent).
+pub async fn record_provider_erasure(
+    tx: &mut TenantTx<'_>,
+    id: Uuid,
+    outcome: &str,
+    error: Option<&str>,
+    attempts: i32,
+    now: DateTime<Utc>,
+) -> Result<(), StoreError> {
+    let (state, next) = match outcome {
+        "deleted" | "not_found" => (outcome, now),
+        "retry" if attempts + 1 < PROVIDER_ERASURE_MAX_ATTEMPTS => {
+            // 1, 2, 4 … minutes, capped at 6 hours.
+            let mins = 1i64 << attempts.clamp(0, 9);
+            ("pending", now + chrono::Duration::minutes(mins.min(360)))
+        }
+        _ => ("failed", now),
+    };
+    sqlx::query(
+        "UPDATE kernel.provider_erasures
+            SET state = $3, attempts = attempts + 1, last_error = $4, next_attempt_at = $5,
+                completed_at = CASE WHEN $3 IN ('deleted','not_found','failed') THEN $6 ELSE NULL END
+          WHERE tenant_id = $1 AND provider_erasure_id = $2",
+    )
+    .bind(tx.tenant().0)
+    .bind(id)
+    .bind(state)
+    .bind(error)
+    .bind(next)
+    .bind(now)
+    .execute(tx.conn())
+    .await?;
+    Ok(())
+}

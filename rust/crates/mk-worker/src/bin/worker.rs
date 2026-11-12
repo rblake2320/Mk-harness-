@@ -179,6 +179,21 @@ async fn main() -> anyhow::Result<()> {
                 },
                 Err(e) => tracing::warn!(error = %e, "tenant listing failed"),
             }
+            // S13: delete provider-held copies queued by subject erasures.
+            match mk_store::audit::all_tenants(store.pool()).await {
+                Ok(tenants) => match housekeeping::provider_erasures_once(
+                    &store,
+                    ctx.registry.twilio.as_ref(),
+                    &tenants,
+                    chrono::Utc::now(),
+                )
+                .await
+                {
+                    Ok(stats) => tracing::info!(?stats, "provider erasures"),
+                    Err(e) => tracing::warn!(error = %e, "provider erasures failed"),
+                },
+                Err(e) => tracing::warn!(error = %e, "tenant listing failed"),
+            }
         }
     }
     tracing::info!("worker stopped");

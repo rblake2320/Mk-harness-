@@ -55,9 +55,9 @@ BEGIN
       'CREATE POLICY tenant_isolation ON kernel.%I USING (tenant_id = kernel.current_tenant()) WITH CHECK (tenant_id = kernel.current_tenant())', t);
   END LOOP;
 END $$;
--- The worker discovers due provider deletions across tenants (ids only), then
--- does each one inside that tenant's context.
-CREATE POLICY worker_provider_erasure_sweep ON kernel.provider_erasures FOR SELECT TO mk_kernel_worker USING (true);
+
+
+
 
 GRANT SELECT, INSERT ON kernel.subject_erasures TO mk_kernel_api;
 GRANT SELECT, INSERT ON kernel.provider_erasures TO mk_kernel_api;

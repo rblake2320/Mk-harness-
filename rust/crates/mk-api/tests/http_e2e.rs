@@ -2640,6 +2640,34 @@ async fn subject_erasure_strips_content_cancels_queued_sends_and_keeps_the_chain
         assert_eq!(leaked, 0);
         tx.commit().await.unwrap_or_else(|e| panic!("{e:?}"));
     }
+    // Provider copies: the worker deletes them through the provider API (simulator).
+    assert_eq!(r.sim.created_messages().await.len(), 1);
+    let st = mk_worker::housekeeping::provider_erasures_once(
+        &h.state.store,
+        r.ctx.registry.twilio.as_ref(),
+        &[h.tenant],
+        chrono::Utc::now(),
+    )
+    .await
+    .unwrap_or_else(|e| panic!("{e:?}"));
+    assert_eq!((st.deleted, st.failed), (1, 0), "{st:?}");
+    assert!(
+        r.sim.created_messages().await.is_empty(),
+        "provider copy still held"
+    );
+    // Nothing left to do; a second pass is a no-op (and without an adapter, rows wait).
+    let again = mk_worker::housekeeping::provider_erasures_once(
+        &h.state.store,
+        r.ctx.registry.twilio.as_ref(),
+        &[h.tenant],
+        chrono::Utc::now(),
+    )
+    .await
+    .unwrap_or_else(|e| panic!("{e:?}"));
+    assert_eq!(
+        again,
+        mk_worker::housekeeping::ProviderErasureStats::default()
+    );
     // An erased action still reads (content-free) and can never be replayed.
     let v1 = state_of(a1.clone()).await;
     assert!(v1["action_id"].is_string(), "{v1}");
